@@ -964,12 +964,6 @@ static bool cik_read_bios_from_rom(struct amdgpu_device *adev,
 	return true;
 }
 
-static u32 cik_get_virtual_caps(struct amdgpu_device *adev)
-{
-	/* CIK does not support SR-IOV */
-	return 0;
-}
-
 static const struct amdgpu_allowed_register_entry cik_allowed_read_registers[] = {
 	{mmGRBM_STATUS, false},
 	{mmGB_ADDR_CONFIG, false},
@@ -2552,7 +2546,6 @@ static const struct amdgpu_asic_funcs cik_asic_funcs =
 	.get_xclk = &cik_get_xclk,
 	.set_uvd_clocks = &cik_set_uvd_clocks,
 	.set_vce_clocks = &cik_set_vce_clocks,
-	.get_virtual_caps = &cik_get_virtual_caps,
 };
 
 static int cik_common_early_init(void *handle)

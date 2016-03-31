@@ -111,7 +111,7 @@ void amdgpu_mm_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v,
 		    bool always_indirect)
 {
 	trace_amdgpu_mm_wreg(adev->pdev->device, reg, v);
-	
+
 	if ((reg * 4) < adev->rmmio_size && !always_indirect)
 		writel(v, ((void __iomem *)adev->rmmio) + (reg * 4));
 	else {
@@ -1686,25 +1686,26 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 		goto failed;
 	}
 
-	/* See if the asic supports SR-IOV */
-	adev->virtualization.supports_sr_iov =
-		amdgpu_atombios_has_gpu_virtualization_table(adev);
-
-	/* Check if we are executing in a virtualized environment */
-	adev->virtualization.is_virtual = amdgpu_device_is_virtual();
-	adev->virtualization.caps = amdgpu_asic_get_virtual_caps(adev);
+	/* detect if we are with an SRIOV vbios */
+	if (adev->asic_funcs->detect_sriov_bios)
+		amdgpu_asic_detect_sriov_bios(adev);
 
 	/* Post card if necessary */
-	if (!amdgpu_card_posted(adev) ||
-	    (adev->virtualization.is_virtual &&
-	     !(adev->virtualization.caps & AMDGPU_VIRT_CAPS_SRIOV_EN))) {
+	if (!amdgpu_sriov_vf(adev) &&
+		(!amdgpu_card_posted(adev) || amdgpu_passthrough(adev))) {
 		if (!adev->bios) {
 			dev_err(adev->dev, "Card not posted and no BIOS - ignoring\n");
 			r = -EINVAL;
 			goto failed;
 		}
 		DRM_INFO("GPU not posted. posting now...\n");
-		amdgpu_atom_asic_init(adev->mode_info.atom_context);
+		r = amdgpu_atom_asic_init(adev->mode_info.atom_context);
+		if (r) {
+			dev_err(adev->dev, "gpu post error!\n");
+			goto failed;
+		}
+	} else {
+		DRM_INFO("GPU post is not needed\n");
 	}
 
 	/* Initialize clocks */
