@@ -103,7 +103,7 @@ alloc_fail:
 }
 
 const struct dc_surface_status *dc_surface_get_status(
-		struct dc_surface *dc_surface)
+		const struct dc_surface *dc_surface)
 {
 	struct dc_surface_status *surface_status;
 	struct core_surface *core_surface;

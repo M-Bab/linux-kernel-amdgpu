@@ -83,7 +83,7 @@ struct pipe_ctx *resource_get_head_pipe_for_stream(
 		const struct core_stream *stream);
 
 bool resource_attach_surfaces_to_context(
-		struct dc_surface *surfaces[],
+		const struct dc_surface *const *surfaces,
 		int surface_count,
 		const struct dc_target *dc_target,
 		struct validate_context *context);

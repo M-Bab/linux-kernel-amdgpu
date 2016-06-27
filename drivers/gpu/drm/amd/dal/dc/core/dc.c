@@ -229,6 +229,7 @@ static bool stream_adjust_vmin_vmax(struct dc *dc,
 	return ret;
 }
 
+
 static bool set_gamut_remap(struct dc *dc,
 			const struct dc_stream **stream, int num_streams)
 {
@@ -252,8 +253,53 @@ static bool set_gamut_remap(struct dc *dc,
 	return ret;
 }
 
+
+/* This function is not expected to fail, proper implementation of
+ * validation will prevent this from ever being called for unsupported
+ * configurations.
+ */
+static void stream_update_scaling(
+		const struct dc *dc,
+		const struct dc_stream *dc_stream,
+		const struct rect *src,
+		const struct rect *dst)
+{
+	struct core_stream *stream = DC_STREAM_TO_CORE(dc_stream);
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	struct validate_context *cur_ctx = core_dc->current_context;
+	int i, j;
+
+	if (src)
+		stream->public.src = *src;
+
+	if (dst)
+		stream->public.dst = *dst;
+
+	for (i = 0; i < cur_ctx->target_count; i++) {
+		struct core_target *target = cur_ctx->targets[i];
+		struct dc_target_status *status = &cur_ctx->target_status[i];
+
+		for (j = 0; j < target->public.stream_count; j++) {
+			if (target->public.streams[j] != dc_stream)
+				continue;
+
+			if (status->surface_count)
+				if (!dc_commit_surfaces_to_target(
+						&core_dc->public,
+						status->surfaces,
+						status->surface_count,
+						&target->public))
+					/* Need to debug validation */
+					BREAK_TO_DEBUGGER();
+
+			return;
+		}
+	}
+}
+
 static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 {
+	core_dc->public.stream_funcs.stream_update_scaling = stream_update_scaling;
 	if (core_dc->hwss.set_drr != NULL) {
 		core_dc->public.stream_funcs.adjust_vmin_vmax =
 				stream_adjust_vmin_vmax;
@@ -908,7 +954,7 @@ context_alloc_fail:
 
 bool dc_pre_commit_surfaces_to_target(
 		struct dc *dc,
-		struct dc_surface *new_surfaces[],
+		const struct dc_surface **new_surfaces,
 		uint8_t new_surface_count,
 		struct dc_target *dc_target)
 {
@@ -1037,7 +1083,7 @@ val_ctx_fail:
 
 bool dc_isr_commit_surfaces_to_target(
 		struct dc *dc,
-		struct dc_surface *new_surfaces[],
+		const struct dc_surface **new_surfaces,
 		int new_surface_count,
 		struct dc_target *dc_target)
 {
@@ -1142,7 +1188,7 @@ bool dc_post_commit_surfaces_to_target(struct dc *dc)
 
 bool dc_commit_surfaces_to_target(
 		struct dc *dc,
-		struct dc_surface *new_surfaces[],
+		const struct dc_surface **new_surfaces,
 		uint8_t new_surface_count,
 		struct dc_target *dc_target)
 {
@@ -1165,7 +1211,7 @@ bool dc_commit_surfaces_to_target(
 
 bool dc_update_surfaces_for_target(
 		struct dc *dc,
-		struct dc_surface *new_surfaces[],
+		const struct dc_surface **new_surfaces,
 		uint8_t new_surface_count,
 		struct dc_target *dc_target)
 
@@ -1197,7 +1243,10 @@ bool dc_update_surfaces_for_target(
 	}
 
 	if (!resource_attach_surfaces_to_context(
-			new_surfaces, new_surface_count, dc_target, context)) {
+			new_surfaces,
+			new_surface_count,
+			dc_target,
+			context)) {
 		BREAK_TO_DEBUGGER();
 		return false;
 	}
@@ -1267,7 +1316,7 @@ const struct audio **dc_get_audios(struct dc *dc)
 void dc_flip_surface_addrs_on_context(
 		struct dc *dc,
 		struct validate_context *context,
-		const struct dc_surface *const surfaces[],
+		const struct dc_surface *const *surfaces,
 		struct dc_flip_addrs flip_addrs[],
 		uint32_t count)
 {

@@ -631,7 +631,7 @@ static void release_free_pipes_for_target(
 }
 
 bool resource_attach_surfaces_to_context(
-		struct dc_surface *surfaces[],
+		const struct dc_surface * const *surfaces,
 		int surface_count,
 		const struct dc_target *dc_target,
 		struct validate_context *context)
@@ -664,10 +664,11 @@ bool resource_attach_surfaces_to_context(
 	detach_surfaces_for_target(context, dc_target);
 
 	/* release existing surfaces*/
-	for (i = 0; i < target_status->surface_count; i++) {
+	for (i = 0; i < target_status->surface_count; i++)
 		dc_surface_release(target_status->surfaces[i]);
+
+	for (i = surface_count; i < target_status->surface_count; i++)
 		target_status->surfaces[i] = NULL;
-	}
 
 	target_status->surface_count = 0;
 
@@ -680,8 +681,10 @@ bool resource_attach_surfaces_to_context(
 		struct pipe_ctx *free_pipe = acquire_free_pipe_for_target(
 				&context->res_ctx, dc_target);
 
-		if (!free_pipe)
+		if (!free_pipe) {
+			target_status->surfaces[i] = NULL;
 			return false;
+		}
 
 		free_pipe->surface = surface;
 
@@ -775,8 +778,7 @@ bool resource_validate_attach_surfaces(
 					old_context->targets[j],
 					context->targets[i])) {
 				if (!resource_attach_surfaces_to_context(
-						(struct dc_surface **) old_context->
-							target_status[j].surfaces,
+						old_context->target_status[j].surfaces,
 						old_context->target_status[j].surface_count,
 						&context->targets[i]->public,
 						context))
@@ -785,7 +787,7 @@ bool resource_validate_attach_surfaces(
 			}
 		if (set[i].surface_count != 0)
 			if (!resource_attach_surfaces_to_context(
-					(struct dc_surface **) set[i].surfaces,
+					set[i].surfaces,
 					set[i].surface_count,
 					&context->targets[i]->public,
 					context))

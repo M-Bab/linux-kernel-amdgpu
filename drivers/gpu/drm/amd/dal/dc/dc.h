@@ -55,8 +55,18 @@ struct dc_surface;
 struct validate_context;
 
 struct dc_stream_funcs {
-	bool (*adjust_vmin_vmax)(struct dc *dc,
-			const struct dc_stream **stream, int num_streams, int vmin, int vmax);
+	bool (*adjust_vmin_vmax)(
+			struct dc *dc,
+			const struct dc_stream **stream,
+			int num_streams,
+			int vmin,
+			int vmax);
+
+	void (*stream_update_scaling)(
+			const struct dc *dc,
+			const struct dc_stream *dc_stream,
+			const struct rect *src,
+			const struct rect *dst);
 	bool (*set_gamut_remap)(struct dc *dc,
 			const struct dc_stream **stream, int num_streams);
 };
@@ -176,7 +186,7 @@ struct dc_surface_status {
  */
 struct dc_surface *dc_create_surface(const struct dc *dc);
 const struct dc_surface_status *dc_surface_get_status(
-		struct dc_surface *dc_surface);
+		const struct dc_surface *dc_surface);
 
 void dc_surface_retain(const struct dc_surface *dc_surface);
 void dc_surface_release(const struct dc_surface *dc_surface);
@@ -223,25 +233,25 @@ void dc_flip_surface_addrs(struct dc *dc,
 void dc_flip_surface_addrs_on_context(
 		struct dc *dc,
 		struct validate_context *context,
-		const struct dc_surface *const surfaces[],
+		const struct dc_surface *const *surfaces,
 		struct dc_flip_addrs flip_addrs[],
 		uint32_t count);
 
 bool dc_commit_surfaces_to_target(
 		struct dc *dc,
-		struct dc_surface *dc_surfaces[],
+		const struct dc_surface **dc_surfaces,
 		uint8_t surface_count,
 		struct dc_target *dc_target);
 
 bool dc_pre_commit_surfaces_to_target(
 		struct dc *dc,
-		struct dc_surface *new_surfaces[],
+		const struct dc_surface **new_surfaces,
 		uint8_t new_surface_count,
 		struct dc_target *dc_target);
 
 bool dc_isr_commit_surfaces_to_target(
 		struct dc *dc,
-		struct dc_surface *new_surfaces[],
+		const struct dc_surface **new_surfaces,
 		int new_surface_count,
 		struct dc_target *dc_target);
 
@@ -251,7 +261,7 @@ bool dc_post_commit_surfaces_to_target(
 
 bool dc_update_surfaces_for_target(
 		struct dc *dc,
-		struct dc_surface *dc_surfaces[],
+		const struct dc_surface **dc_surfaces,
 		uint8_t surface_count,
 		struct dc_target *dc_target);
 
@@ -392,9 +402,6 @@ struct dc_stream *dc_create_stream_for_sink(const struct dc_sink *dc_sink);
 
 void dc_stream_retain(const struct dc_stream *dc_stream);
 void dc_stream_release(const struct dc_stream *dc_stream);
-
-void dc_update_stream(const struct dc_stream *dc_stream,
-		struct rect *src, struct rect *dst);
 
 struct dc_stream_status {
 	/*

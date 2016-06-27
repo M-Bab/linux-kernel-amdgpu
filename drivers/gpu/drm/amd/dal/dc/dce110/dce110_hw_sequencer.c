@@ -2103,7 +2103,7 @@ static void dce110_apply_ctx_to_surface(
 static void update_plane_surface(
 	struct core_dc *dc,
 	struct validate_context *context,
-	struct dc_surface *new_surfaces[],
+	const struct dc_surface **new_surfaces,
 	uint8_t new_surface_count)
 {
 	int i, j;

@@ -74,7 +74,7 @@ struct hw_sequencer_funcs {
 	void (*update_plane_surface)(
 		struct core_dc *dc,
 		struct validate_context *context,
-		struct dc_surface *new_surfaces[],
+		const struct dc_surface **new_surfaces,
 		uint8_t new_surface_count);
 
 	bool (*set_gamma_correction)(

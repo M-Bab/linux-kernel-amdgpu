@@ -589,6 +589,7 @@ static void update_stream_scaling_settings(
 		const struct dm_connector_state *dm_state,
 		const struct dc_stream *stream)
 {
+	struct amdgpu_device *adev = dm_state->base.crtc->dev->dev_private;
 	enum amdgpu_rmx_type rmx_type;
 
 	struct rect src = { 0 }; /* viewport in target space*/
@@ -626,7 +627,7 @@ static void update_stream_scaling_settings(
 		dst.height -= dm_state->underscan_vborder;
 	}
 
-	dc_update_stream(stream, &src, &dst);
+	adev->dm.dc->stream_funcs.stream_update_scaling(adev->dm.dc, stream, &src, &dst);
 
 	DRM_DEBUG_KMS("Destination Rectangle x:%d  y:%d  width:%d  height:%d\n",
 			dst.x, dst.y, dst.width, dst.height);
@@ -638,6 +639,7 @@ static void dm_dc_surface_commit(
 		struct drm_crtc *crtc)
 {
 	struct dc_surface *dc_surface;
+	const struct dc_surface *dc_surfaces[1];
 	const struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
 	struct dc_target *dc_target = acrtc->target;
 
@@ -667,9 +669,11 @@ static void dm_dc_surface_commit(
 			~AMDGPU_CRTC_MODE_PRIVATE_FLAGS_GAMMASET;
 	}
 
+	dc_surfaces[0] = dc_surface;
+
 	if (false == dc_commit_surfaces_to_target(
 			dc,
-			&dc_surface,
+			dc_surfaces,
 			1,
 			dc_target)) {
 		dm_error(
@@ -2583,7 +2587,10 @@ int amdgpu_dm_atomic_commit(
 			dm_state = to_dm_connector_state(aconnector->base.state);
 
 			/* Scaling update */
-			update_stream_scaling_settings(&crtc->state->mode, dm_state, acrtc->target->streams[0]);
+			update_stream_scaling_settings(
+					&crtc->state->mode,
+					dm_state,
+					acrtc->target->streams[0]);
 
 			break;
 		}
