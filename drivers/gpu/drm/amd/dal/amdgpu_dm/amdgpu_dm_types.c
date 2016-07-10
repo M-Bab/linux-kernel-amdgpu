@@ -489,13 +489,14 @@ static void fill_plane_attributes_from_fb(
 		fb->pitches[0] / (fb->bits_per_pixel / 8);
 
 	surface->visible = true;
-	surface->scaling_quality.h_taps_c = 2;
-	surface->scaling_quality.v_taps_c = 2;
+	surface->scaling_quality.h_taps_c = 0;
+	surface->scaling_quality.v_taps_c = 0;
 
 	/* TODO: unhardcode */
 	surface->color_space = COLOR_SPACE_SRGB;
-	surface->scaling_quality.h_taps = 2;
-	surface->scaling_quality.v_taps = 2;
+	/* is this needed? is surface zeroed at allocation? */
+	surface->scaling_quality.h_taps = 0;
+	surface->scaling_quality.v_taps = 0;
 	surface->stereo_format = PLANE_STEREO_FORMAT_NONE;
 
 }
