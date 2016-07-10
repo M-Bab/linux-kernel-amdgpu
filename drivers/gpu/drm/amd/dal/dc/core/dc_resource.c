@@ -435,6 +435,21 @@ static void calculate_scaling_ratios(
 	}
 }
 
+void get_optimal_number_of_taps(
+	struct scaling_taps *taps)
+{
+	/*
+	 * TODO fix hard-coding.
+	 * 4 taps preferred but fall
+	 * back to 2 taps if line buffer
+	 * isn't sufficient
+	 */
+	taps->h_taps = 2;
+	taps->v_taps = 2;
+	taps->h_taps_c = 2;
+	taps->v_taps_c = 2;
+}
+
 void resource_build_scaling_params(
 	const struct dc_surface *surface,
 	struct pipe_ctx *pipe_ctx)
@@ -456,25 +471,27 @@ void resource_build_scaling_params(
 	pipe_ctx->scl_data.v_active = timing->v_addressable
 			+ timing->v_border_top + timing->v_border_bottom;
 
+	get_optimal_number_of_taps(&pipe_ctx->scl_data.taps);
+
 	/* Check if scaling is required update taps if not */
-	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.horz) == 1 << 19)
+	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.horz) == (1 << 19))
 		pipe_ctx->scl_data.taps.h_taps = 1;
-	else
+	else if (surface->scaling_quality.h_taps != 0)
 		pipe_ctx->scl_data.taps.h_taps = surface->scaling_quality.h_taps;
 
-	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.horz_c) == 1 << 19)
+	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.horz_c) == (1 << 19))
 		pipe_ctx->scl_data.taps.h_taps_c = 1;
-	else
+	else if (surface->scaling_quality.h_taps_c != 0)
 		pipe_ctx->scl_data.taps.h_taps_c = surface->scaling_quality.h_taps_c;
 
-	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.vert) == 1 << 19)
+	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.vert) == (1 << 19))
 		pipe_ctx->scl_data.taps.v_taps = 1;
-	else
+	else if (surface->scaling_quality.v_taps != 0)
 		pipe_ctx->scl_data.taps.v_taps = surface->scaling_quality.v_taps;
 
-	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.vert_c) == 1 << 19)
+	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.vert_c) == (1 << 19))
 		pipe_ctx->scl_data.taps.v_taps_c = 1;
-	else
+	else if (surface->scaling_quality.v_taps_c != 0)
 		pipe_ctx->scl_data.taps.v_taps_c = surface->scaling_quality.v_taps_c;
 
 	dal_logger_write(pipe_ctx->stream->ctx->logger,
