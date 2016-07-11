@@ -55,7 +55,6 @@ struct dc_surface;
 struct dc_stream_funcs {
 	bool (*adjust_vmin_vmax)(struct dc *dc,
 			const struct dc_stream **stream, int num_streams, int vmin, int vmax);
-	void (*send_null_packet)(const struct dc_stream *dc_stream, bool enable);
 	bool (*set_gamut_remap)(struct dc *dc,
 			const struct dc_stream **stream, int num_streams);
 };
