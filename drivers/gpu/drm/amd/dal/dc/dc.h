@@ -66,6 +66,7 @@ struct dc_config {
 
 struct dc_debug {
 	bool surface_visual_confirm;
+	bool disable_stutter;
 };
 
 struct dc {
