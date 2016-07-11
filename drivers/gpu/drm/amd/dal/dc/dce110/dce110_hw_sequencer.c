@@ -1484,6 +1484,31 @@ static void program_scaler(const struct core_dc *dc,
 		&pipe_ctx->scl_data);
 }
 
+static bool blender_configuration_changed(struct pipe_ctx *pipe_ctx, struct pipe_ctx *old_pipe_ctx)
+{
+	if (pipe_ctx->bottom_pipe && !old_pipe_ctx->bottom_pipe)
+		return true;
+
+	if (!pipe_ctx->bottom_pipe && old_pipe_ctx->bottom_pipe)
+		return true;
+
+	return false;
+}
+
+static void program_blender_if_needed(const struct core_dc *dc,
+		struct pipe_ctx *pipe_ctx)
+{
+	struct pipe_ctx *old_pipe_ctx = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
+	enum blender_mode blender_mode = BLENDER_MODE_CURRENT_PIPE;
+
+	if (!old_pipe_ctx->stream || blender_configuration_changed(pipe_ctx, old_pipe_ctx)) {
+		if (pipe_ctx->bottom_pipe)
+			blender_mode = BLENDER_MODE_BLENDING;
+		dc->hwss.set_blender_mode(
+			dc->ctx, pipe_ctx->pipe_idx, blender_mode);
+	}
+}
+
 /**
  * Program the Front End of the Pipe.
  * The Back End was already programmed by Set Mode.
@@ -1493,11 +1518,9 @@ static void set_plane_config(
 	struct pipe_ctx *pipe_ctx,
 	struct resource_context *res_ctx)
 {
-	int i;
 	struct mem_input *mi = pipe_ctx->mi;
 	struct dc_context *ctx = pipe_ctx->stream->ctx;
 	struct core_surface *surface = pipe_ctx->surface;
-	enum blender_mode blender_mode = BLENDER_MODE_CURRENT_PIPE;
 	struct xfm_grph_csc_adjustment adjust;
 
 	memset(&adjust, 0, sizeof(adjust));
@@ -1542,19 +1565,9 @@ static void set_plane_config(
 
 	program_scaler(dc, pipe_ctx);
 
-	for (i = pipe_ctx->pipe_idx + 1; i < MAX_PIPES; i++)
-		if (res_ctx->pipe_ctx[i].stream == pipe_ctx->stream) {
-			if (surface->public.visible)
-				blender_mode = BLENDER_MODE_BLENDING;
-			else
-				blender_mode = BLENDER_MODE_OTHER_PIPE;
-			break;
-		}
+	program_blender_if_needed(dc, pipe_ctx);
 
-	dc->hwss.set_blender_mode(
-		ctx, pipe_ctx->pipe_idx, blender_mode);
-
-	if (blender_mode != BLENDER_MODE_CURRENT_PIPE)
+	if (pipe_ctx->bottom_pipe)
 		pipe_ctx->xfm->funcs->transform_set_alpha(pipe_ctx->xfm, true);
 
 	mi->funcs->mem_input_program_surface_config(
