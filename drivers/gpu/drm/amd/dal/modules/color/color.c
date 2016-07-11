@@ -38,33 +38,36 @@ struct sink_caps {
 const unsigned int gamut_divider = 10000;
 
 struct gamut_calculation_matrix {
-	struct fixed31_32 *MTransposed;
-	struct fixed31_32 *XYZtoRGB_Custom;
-	struct fixed31_32 *XYZtoRGB_Ref;
-	struct fixed31_32 *RGBtoXYZ_Final;
+	struct fixed31_32 MTransposed[9];
+	struct fixed31_32 XYZtoRGB_Custom[9];
+	struct fixed31_32 XYZtoRGB_Ref[9];
+	struct fixed31_32 RGBtoXYZ_Final[9];
 
-	struct fixed31_32 *MResult;
-	struct fixed31_32 *fXYZofWhiteRef;
-	struct fixed31_32 *fXYZofRGBRef;
+	struct fixed31_32 MResult[9];
+	struct fixed31_32 fXYZofWhiteRef[9];
+	struct fixed31_32 fXYZofRGBRef[9];
 };
 
 struct gamut_src_dst_matrix {
-	struct fixed31_32 *rgbCoeffDst;
-	struct fixed31_32 *whiteCoeffDst;
-	struct fixed31_32 *rgbCoeffSrc;
-	struct fixed31_32 *whiteCoeffSrc;
+	struct fixed31_32 rgbCoeffDst[9];
+	struct fixed31_32 whiteCoeffDst[3];
+	struct fixed31_32 rgbCoeffSrc[9];
+	struct fixed31_32 whiteCoeffSrc[3];
 };
 
+struct color_state {
+	bool user_enable_color_temperature;
+	int custom_color_temperature;
+	struct color_space_coordinates source_gamut;
+	struct color_space_coordinates destination_gamut;
+};
 
 struct core_color {
 	struct mod_color public;
 	struct dc *dc;
-	struct sink_caps *caps;
 	int num_sinks;
-	bool *user_enable_color_temperature;
-	int color_temperature;
-	struct color_space_coordinates *source_gamut;
-	struct color_space_coordinates *destination_gamut;
+	struct sink_caps *caps;
+	struct color_state *state;
 };
 
 #define MOD_COLOR_TO_CORE(mod_color)\
@@ -217,7 +220,6 @@ static bool compute_inverse_matrix_3x3(const struct fixed31_32 *m,
 	return false;
 }
 
-
 /**
  *****************************************************************************
  *  Function: calculateXYZtoRGB_M3x3
@@ -263,114 +265,6 @@ static bool calculate_XYZ_to_RGB_3x3(const struct fixed31_32 *XYZofRGB,
 	return true;
 }
 
-
-/**
-*****************************************************************************
-*  Function: allocateCalculationMatrix
-*
-*  @brief
-*     allocates several arrays of floating point pointers
-*     save several allocations in one call
-*  @param [out  ] pMatrix - holds internal pointers of allocated arrays
-*  @return  true if success
-*
-*
-*****************************************************************************
-*/
-
-static bool allocate_calculation_matrix
-		(struct gamut_calculation_matrix *pMatrix)
-{
-	unsigned int sizeOfAllocation =
-			sizeof(struct fixed31_32) * 9 * 6 +
-			sizeof(struct fixed31_32) * 3;
-
-	pMatrix->MTransposed =
-			(struct fixed31_32 *)(dm_alloc(sizeOfAllocation));
-
-	if (pMatrix->MTransposed != NULL) {
-		pMatrix->XYZtoRGB_Custom = pMatrix->MTransposed + 9;
-		pMatrix->XYZtoRGB_Ref = pMatrix->XYZtoRGB_Custom + 9;
-		pMatrix->RGBtoXYZ_Final = pMatrix->XYZtoRGB_Ref + 9;
-		pMatrix->MResult = pMatrix->RGBtoXYZ_Final + 9;
-		pMatrix->fXYZofWhiteRef = pMatrix->MResult + 9;
-		pMatrix->fXYZofRGBRef = pMatrix->fXYZofWhiteRef + 3;
-
-		return true;
-	}
-
-	return false;
-}
-
-/*****************************************************************************
-*  Function: deallocateCalculationMatrix
-*
-*  @brief
-*     free allocated pointer
-*  @param [in  ] pMatrix - holds internal pointer required to free
-*
-*
-*****************************************************************************
-*/
-static void deallocate_calculation_matrix
-		(struct gamut_calculation_matrix *pMatrix)
-{
-	if (pMatrix->MTransposed != NULL) {
-		dm_free(pMatrix->MTransposed);
-		pMatrix->MTransposed = NULL;
-	}
-}
-
-/**
- *****************************************************************************
- *  Function: allocateMatrix
- *
- *  @brief
- *      allocate array of pointers
- *  @param [out  ] pMatrix - holds pointers for allocation
- *  @return  true if success
- *
- *****************************************************************************
- */
-
-static bool allocate_matrix(struct gamut_src_dst_matrix *pMatrix)
-{
-	const unsigned int sizeOfAllocation =
-			(sizeof(struct fixed31_32) * 3 +
-			sizeof(struct fixed31_32) * 9) * 2;
-
-	pMatrix->rgbCoeffDst =
-			(struct fixed31_32 *)(dm_alloc(sizeOfAllocation));
-
-	if (pMatrix->rgbCoeffDst != NULL) {
-		pMatrix->whiteCoeffDst = pMatrix->rgbCoeffDst + 9;
-		pMatrix->rgbCoeffSrc = pMatrix->whiteCoeffDst + 3;
-		pMatrix->whiteCoeffSrc = pMatrix->rgbCoeffSrc + 9;
-
-		return true;
-	}
-
-	return false;
-}
-/**
- *****************************************************************************
- *  Function: deallocateMatrix
- *
- *  @brief
- *      frees array of pointers
- *  @param [out  ] pMatrix - holds pointers for reelase
- *  @return  void
- *
- *****************************************************************************
- */
-static void deallocate_matrix(struct gamut_src_dst_matrix *pMatrix)
-{
-	if (pMatrix->rgbCoeffDst != NULL) {
-		dm_free(pMatrix->rgbCoeffDst);
-		pMatrix->rgbCoeffDst = NULL;
-	}
-}
-
 static bool gamut_to_color_matrix(
 	const struct fixed31_32 *pXYZofRGB,/*destination gamut*/
 	const struct fixed31_32 *pXYZofWhite,/*destination of white point*/
@@ -380,32 +274,28 @@ static bool gamut_to_color_matrix(
 	struct fixed31_32 *tempMatrix3X3)
 {
 	int i = 0;
-	struct gamut_calculation_matrix matrix;
-	/*pointers used as assignment vars, not allocation*/
+	struct gamut_calculation_matrix *matrix =
+			dm_alloc(sizeof(struct gamut_calculation_matrix));
+
 	struct fixed31_32 *pXYZtoRGB_Temp;
 	struct fixed31_32 *pXYZtoRGB_Final;
 
-	matrix.MTransposed = NULL;
-
-	if (!allocate_calculation_matrix(&matrix))
-		return false;
-
-	matrix.fXYZofWhiteRef[0] = pRefXYZofWhite[0];
-	matrix.fXYZofWhiteRef[1] = pRefXYZofWhite[1];
-	matrix.fXYZofWhiteRef[2] = pRefXYZofWhite[2];
+	matrix->fXYZofWhiteRef[0] = pRefXYZofWhite[0];
+	matrix->fXYZofWhiteRef[1] = pRefXYZofWhite[1];
+	matrix->fXYZofWhiteRef[2] = pRefXYZofWhite[2];
 
 
-	matrix.fXYZofRGBRef[0] = pRefXYZofRGB[0];
-	matrix.fXYZofRGBRef[1] = pRefXYZofRGB[1];
-	matrix.fXYZofRGBRef[2] = pRefXYZofRGB[2];
+	matrix->fXYZofRGBRef[0] = pRefXYZofRGB[0];
+	matrix->fXYZofRGBRef[1] = pRefXYZofRGB[1];
+	matrix->fXYZofRGBRef[2] = pRefXYZofRGB[2];
 
-	matrix.fXYZofRGBRef[3] = pRefXYZofRGB[3];
-	matrix.fXYZofRGBRef[4] = pRefXYZofRGB[4];
-	matrix.fXYZofRGBRef[5] = pRefXYZofRGB[5];
+	matrix->fXYZofRGBRef[3] = pRefXYZofRGB[3];
+	matrix->fXYZofRGBRef[4] = pRefXYZofRGB[4];
+	matrix->fXYZofRGBRef[5] = pRefXYZofRGB[5];
 
-	matrix.fXYZofRGBRef[6] = pRefXYZofRGB[6];
-	matrix.fXYZofRGBRef[7] = pRefXYZofRGB[7];
-	matrix.fXYZofRGBRef[8] = pRefXYZofRGB[8];
+	matrix->fXYZofRGBRef[6] = pRefXYZofRGB[6];
+	matrix->fXYZofRGBRef[7] = pRefXYZofRGB[7];
+	matrix->fXYZofRGBRef[8] = pRefXYZofRGB[8];
 
 	/*default values -  unity matrix*/
 	while (i < 9) {
@@ -420,49 +310,49 @@ static bool gamut_to_color_matrix(
 	 * bInvert == FALSE --> RGBtoXYZ_Ref * XYZtoRGB_Custom
 	 * bInvert == TRUE  --> RGBtoXYZ_Custom * XYZtoRGB_Ref */
 	if (invert) {
-		pXYZtoRGB_Temp  = matrix.XYZtoRGB_Custom;
-		pXYZtoRGB_Final = matrix.XYZtoRGB_Ref;
+		pXYZtoRGB_Temp = matrix->XYZtoRGB_Custom;
+		pXYZtoRGB_Final = matrix->XYZtoRGB_Ref;
 	} else {
-		pXYZtoRGB_Temp  = matrix.XYZtoRGB_Ref;
-		pXYZtoRGB_Final = matrix.XYZtoRGB_Custom;
+		pXYZtoRGB_Temp = matrix->XYZtoRGB_Ref;
+		pXYZtoRGB_Final = matrix->XYZtoRGB_Custom;
 	}
 
 	/*2. Calculate XYZtoRGB_Ref*/
-	transpose_matrix(matrix.fXYZofRGBRef, 3, 3, matrix.MTransposed);
+	transpose_matrix(matrix->fXYZofRGBRef, 3, 3, matrix->MTransposed);
 
 	if (!calculate_XYZ_to_RGB_3x3(
-		matrix.MTransposed,
-		matrix.fXYZofWhiteRef,
-		matrix.XYZtoRGB_Ref))
-		goto calculation_failure;
+		matrix->MTransposed,
+		matrix->fXYZofWhiteRef,
+		matrix->XYZtoRGB_Ref))
+		goto function_fail;
 
 	/*3. Calculate XYZtoRGB_Custom*/
-	transpose_matrix(pXYZofRGB, 3, 3, matrix.MTransposed);
+	transpose_matrix(pXYZofRGB, 3, 3, matrix->MTransposed);
 
 	if (!calculate_XYZ_to_RGB_3x3(
-		matrix.MTransposed,
+		matrix->MTransposed,
 		pXYZofWhite,
-		matrix.XYZtoRGB_Custom))
-		goto calculation_failure;
+		matrix->XYZtoRGB_Custom))
+		goto function_fail;
 
 	/*4. Calculate RGBtoXYZ -
 	 * inverse matrix 3x3 of XYZtoRGB_Ref or XYZtoRGB_Custom*/
-	if (!compute_inverse_matrix_3x3(pXYZtoRGB_Temp, matrix.RGBtoXYZ_Final))
-		goto calculation_failure;
+	if (!compute_inverse_matrix_3x3(pXYZtoRGB_Temp, matrix->RGBtoXYZ_Final))
+		goto function_fail;
 
 	/*5. Calculate M(3x3) = RGBtoXYZ * XYZtoRGB*/
-	multiply_matrices(matrix.MResult, matrix.RGBtoXYZ_Final,
+	multiply_matrices(matrix->MResult, matrix->RGBtoXYZ_Final,
 			pXYZtoRGB_Final, 3, 3, 3);
 
 	for (i = 0; i < 9; i++)
-		tempMatrix3X3[i] = matrix.MResult[i];
+		tempMatrix3X3[i] = matrix->MResult[i];
 
-	deallocate_calculation_matrix(&matrix);
+	dm_free(matrix);
 
 	return true;
 
-calculation_failure:
-	deallocate_calculation_matrix(&matrix);
+function_fail:
+	dm_free(matrix);
 	return false;
 }
 
@@ -523,120 +413,6 @@ static bool check_dc_support(const struct dc *dc)
 	return true;
 }
 
-struct mod_color *mod_color_create(struct dc *dc)
-{
-	int i = 0;
-	struct core_color *core_color =
-				dm_alloc(sizeof(struct core_color));
-	if (core_color == NULL)
-		goto fail_alloc_context;
-
-	core_color->caps = dm_alloc(sizeof(struct sink_caps) *
-			MOD_COLOR_MAX_CONCURRENT_SINKS);
-
-	if (core_color->caps == NULL)
-		goto fail_alloc_caps;
-
-	for (i = 0; i < MOD_COLOR_MAX_CONCURRENT_SINKS; i++)
-		core_color->caps[i].sink = NULL;
-
-	core_color->user_enable_color_temperature =
-			dm_alloc(sizeof(bool) *
-					MOD_COLOR_MAX_CONCURRENT_SINKS);
-
-	if (core_color->user_enable_color_temperature == NULL)
-		goto fail_alloc_user_enable;
-
-	core_color->num_sinks = 0;
-	core_color->color_temperature = 6500;
-
-	core_color->source_gamut =
-			dm_alloc(sizeof(struct color_space_coordinates) *
-					MOD_COLOR_MAX_CONCURRENT_SINKS);
-
-	if (core_color->source_gamut == NULL)
-		goto fail_alloc_source_gamut;
-
-	for (i = 0; i < MOD_COLOR_MAX_CONCURRENT_SINKS; i++) {
-		core_color->source_gamut[i].blueX = 1500;
-		core_color->source_gamut[i].blueY = 600;
-		core_color->source_gamut[i].greenX = 3000;
-		core_color->source_gamut[i].greenY = 6000;
-		core_color->source_gamut[i].redX = 6400;
-		core_color->source_gamut[i].redY = 3300;
-		core_color->source_gamut[i].whiteX = 3127;
-		core_color->source_gamut[i].whiteY = 3290;
-	}
-
-	core_color->destination_gamut =
-			dm_alloc(sizeof(struct color_space_coordinates) *
-					MOD_COLOR_MAX_CONCURRENT_SINKS);
-
-	if (core_color->destination_gamut == NULL)
-			goto fail_alloc_destination_gamut;
-
-	for (i = 0; i < MOD_COLOR_MAX_CONCURRENT_SINKS; i++) {
-		core_color->destination_gamut[i].blueX = 1500;
-		core_color->destination_gamut[i].blueY = 600;
-		core_color->destination_gamut[i].greenX = 3000;
-		core_color->destination_gamut[i].greenY = 6000;
-		core_color->destination_gamut[i].redX = 6400;
-		core_color->destination_gamut[i].redY = 3300;
-		core_color->destination_gamut[i].whiteX = 3127;
-		core_color->destination_gamut[i].whiteY = 3290;
-	}
-
-	if (dc == NULL)
-		goto fail_construct;
-
-	core_color->dc = dc;
-
-	if (!check_dc_support(dc))
-		goto fail_construct;
-
-	return &core_color->public;
-
-fail_construct:
-	dm_free(core_color->destination_gamut);
-
-fail_alloc_destination_gamut:
-	dm_free(core_color->source_gamut);
-
-fail_alloc_source_gamut:
-	dm_free(core_color->user_enable_color_temperature);
-
-fail_alloc_user_enable:
-	dm_free(core_color->caps);
-
-fail_alloc_caps:
-	dm_free(core_color);
-
-fail_alloc_context:
-	return NULL;
-}
-
-void mod_color_destroy(struct mod_color *mod_color)
-{
-	if (mod_color != NULL) {
-		int i;
-		struct core_color *core_color =
-				MOD_COLOR_TO_CORE(mod_color);
-
-		dm_free(core_color->destination_gamut);
-
-		dm_free(core_color->source_gamut);
-
-		dm_free(core_color->user_enable_color_temperature);
-
-		for (i = 0; i < core_color->num_sinks; i++)
-			dc_sink_release(core_color->caps[i].sink);
-
-		dm_free(core_color->caps);
-
-		dm_free(core_color);
-	}
-}
-
 /* Given a specific dc_sink* this function finds its equivalent
  * on the dc_sink array and returns the corresponding index
  */
@@ -654,222 +430,463 @@ static unsigned int sink_index_from_sink(struct core_color *core_color,
 	return index;
 }
 
+struct mod_color *mod_color_create(struct dc *dc)
+{
+	int i = 0;
+	struct core_color *core_color =
+				dm_alloc(sizeof(struct core_color));
+	if (core_color == NULL)
+		goto fail_alloc_context;
 
-bool mod_color_adjust_temperature(struct mod_color *mod_color,
-		const struct dc_stream **streams, int num_streams,
-		int temperature)
+	core_color->caps = dm_alloc(sizeof(struct sink_caps) *
+			MOD_COLOR_MAX_CONCURRENT_SINKS);
+
+	if (core_color->caps == NULL)
+		goto fail_alloc_caps;
+
+	for (i = 0; i < MOD_COLOR_MAX_CONCURRENT_SINKS; i++)
+		core_color->caps[i].sink = NULL;
+
+	core_color->state = dm_alloc(sizeof(struct color_state) *
+			MOD_COLOR_MAX_CONCURRENT_SINKS);
+
+	/*hardcoded to sRGB with 6500 color temperature*/
+	for (i = 0; i < MOD_COLOR_MAX_CONCURRENT_SINKS; i++) {
+		core_color->state[i].source_gamut.blueX = 1500;
+		core_color->state[i].source_gamut.blueY = 600;
+		core_color->state[i].source_gamut.greenX = 3000;
+		core_color->state[i].source_gamut.greenY = 6000;
+		core_color->state[i].source_gamut.redX = 6400;
+		core_color->state[i].source_gamut.redY = 3300;
+		core_color->state[i].source_gamut.whiteX = 3127;
+		core_color->state[i].source_gamut.whiteY = 3290;
+
+		core_color->state[i].destination_gamut.blueX = 1500;
+		core_color->state[i].destination_gamut.blueY = 600;
+		core_color->state[i].destination_gamut.greenX = 3000;
+		core_color->state[i].destination_gamut.greenY = 6000;
+		core_color->state[i].destination_gamut.redX = 6400;
+		core_color->state[i].destination_gamut.redY = 3300;
+		core_color->state[i].destination_gamut.whiteX = 3127;
+		core_color->state[i].destination_gamut.whiteY = 3290;
+
+		core_color->state[i].custom_color_temperature = 6500;
+	}
+
+	if (core_color->state == NULL)
+		goto fail_alloc_state;
+
+	core_color->num_sinks = 0;
+
+	if (dc == NULL)
+		goto fail_construct;
+
+	core_color->dc = dc;
+
+	if (!check_dc_support(dc))
+		goto fail_construct;
+
+	return &core_color->public;
+
+fail_construct:
+	dm_free(core_color->state);
+
+fail_alloc_state:
+	dm_free(core_color->caps);
+
+fail_alloc_caps:
+	dm_free(core_color);
+
+fail_alloc_context:
+	return NULL;
+}
+
+void mod_color_destroy(struct mod_color *mod_color)
+{
+	if (mod_color != NULL) {
+		int i;
+		struct core_color *core_color =
+				MOD_COLOR_TO_CORE(mod_color);
+
+		dm_free(core_color->state);
+
+		for (i = 0; i < core_color->num_sinks; i++)
+			dc_sink_release(core_color->caps[i].sink);
+
+		dm_free(core_color->caps);
+
+		dm_free(core_color);
+	}
+}
+
+bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 {
 	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
 
-	/*TODO: calculations for the matrix and add to the streams*/
-	struct fixed31_32 identity_matrix[12];
+	if (core_color->num_sinks < MOD_COLOR_MAX_CONCURRENT_SINKS) {
+		dc_sink_retain(sink);
+		core_color->caps[core_color->num_sinks].sink = sink;
+		core_color->state[core_color->num_sinks].
+				user_enable_color_temperature = true;
+		core_color->num_sinks++;
+		return true;
+	}
+	return false;
+}
 
-	identity_matrix[0] = dal_fixed31_32_from_fraction(temperature, 6500);
-	identity_matrix[1] = dal_fixed31_32_zero;
-	identity_matrix[2] = dal_fixed31_32_zero;
-	identity_matrix[3] = dal_fixed31_32_zero;
-	identity_matrix[4] = dal_fixed31_32_zero;
-	identity_matrix[5] = dal_fixed31_32_from_fraction(temperature, 6500);
-	identity_matrix[6] = dal_fixed31_32_zero;
-	identity_matrix[7] = dal_fixed31_32_zero;
-	identity_matrix[8] = dal_fixed31_32_zero;
-	identity_matrix[9] = dal_fixed31_32_zero;
-	identity_matrix[10] = dal_fixed31_32_from_fraction(temperature, 6500);
-	identity_matrix[11] = dal_fixed31_32_zero;
+bool mod_color_remove_sink(struct mod_color *mod_color,
+		const struct dc_sink *sink)
+{
+	int i = 0, j = 0;
+	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
 
-	int i;
-	int j;
+	for (i = 0; i < core_color->num_sinks; i++) {
+		if (core_color->caps[i].sink == sink) {
+			/* To remove this sink, shift everything after down */
+			for (j = i; j < core_color->num_sinks - 1; j++) {
+				core_color->caps[j].sink =
+					core_color->caps[j + 1].sink;
 
-	for (i = 0; i < num_streams; i++) {
-		struct core_stream *core_stream = DC_STREAM_TO_CORE(streams[i]);
+				core_color->state[j].
+				user_enable_color_temperature =
+					core_color->state[j + 1].
+					user_enable_color_temperature;
+			}
+
+			core_color->num_sinks--;
+
+			dc_sink_release(sink);
+
+			return true;
+		}
+	}
+
+	return false;
+}
+
+bool mod_color_update_gamut_to_stream(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams)
+{
+	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
+	struct gamut_src_dst_matrix *matrix =
+			dm_alloc(sizeof(struct gamut_src_dst_matrix));
+
+	unsigned int stream_index, sink_index, j;
+
+	for (stream_index = 0; stream_index < num_streams; stream_index++) {
+		sink_index = sink_index_from_sink(core_color,
+				streams[stream_index]->sink);
+
+		if (!build_gamut_remap_matrix
+				(core_color->state[sink_index].source_gamut,
+						matrix->rgbCoeffSrc,
+						matrix->whiteCoeffSrc))
+			goto function_fail;
+
+		if (!build_gamut_remap_matrix
+				(core_color->state[sink_index].
+				destination_gamut,
+				matrix->rgbCoeffDst, matrix->whiteCoeffDst))
+			goto function_fail;
+
+		struct fixed31_32 gamut_result[12];
+		struct fixed31_32 temp_matrix[9];
+
+		if (!gamut_to_color_matrix(
+				matrix->rgbCoeffDst,
+				matrix->whiteCoeffDst,
+				matrix->rgbCoeffSrc,
+				matrix->whiteCoeffSrc,
+				true,
+				temp_matrix))
+			goto function_fail;
+
+		gamut_result[0] = temp_matrix[0];
+		gamut_result[1] = temp_matrix[1];
+		gamut_result[2] = temp_matrix[2];
+		gamut_result[3] = matrix->whiteCoeffSrc[0];
+		gamut_result[4] = temp_matrix[3];
+		gamut_result[5] = temp_matrix[4];
+		gamut_result[6] = temp_matrix[5];
+		gamut_result[7] = matrix->whiteCoeffSrc[1];
+		gamut_result[8] = temp_matrix[6];
+		gamut_result[9] = temp_matrix[7];
+		gamut_result[10] = temp_matrix[8];
+		gamut_result[11] = matrix->whiteCoeffSrc[2];
+
+
+		struct core_stream *core_stream =
+				DC_STREAM_TO_CORE
+				(streams[stream_index]);
 
 		core_stream->public.gamut_remap_matrix.enable_remap = true;
 
 		for (j = 0; j < 12; j++)
-			core_stream->public.gamut_remap_matrix.matrix[j] =
-					identity_matrix[j];
+			core_stream->public.
+			gamut_remap_matrix.matrix[j] =
+					gamut_result[j];
 	}
 
-	core_color->dc->stream_funcs.set_gamut_remap(core_color->dc, streams,
-						num_streams);
+	dm_free(matrix);
+	core_color->dc->stream_funcs.set_gamut_remap
+			(core_color->dc, streams, num_streams);
 
 	return true;
+
+function_fail:
+	dm_free(matrix);
+	return false;
 }
 
 bool mod_color_adjust_source_gamut(struct mod_color *mod_color,
 		const struct dc_stream **streams, int num_streams,
-		struct gamut_space_coordinates inputGamutCoord,
-		struct white_point_coodinates inputWhitePointCoord)
-{
-	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
-
-	core_color->source_gamut[0].blueX = inputGamutCoord.blueX;
-	core_color->source_gamut[0].blueY = inputGamutCoord.blueY;
-	core_color->source_gamut[0].greenX = inputGamutCoord.greenX;
-	core_color->source_gamut[0].greenY = inputGamutCoord.greenY;
-	core_color->source_gamut[0].redX = inputGamutCoord.redX;
-	core_color->source_gamut[0].redY = inputGamutCoord.redY;
-	core_color->source_gamut[0].whiteX = inputWhitePointCoord.whiteX;
-	core_color->source_gamut[0].whiteY = inputWhitePointCoord.whiteY;
-
-	struct gamut_src_dst_matrix matrix;
-
-	if (!allocate_matrix(&matrix))
-		return false;
-
-	if (!build_gamut_remap_matrix(core_color->source_gamut[0],
-			matrix.rgbCoeffSrc, matrix.whiteCoeffSrc))
-		return false;
-
-	if (!build_gamut_remap_matrix(core_color->destination_gamut[0],
-				matrix.rgbCoeffDst, matrix.whiteCoeffDst))
-		return false;
-
-	struct fixed31_32 temp_matrix[9];
-
-	if (!gamut_to_color_matrix(
-			matrix.rgbCoeffDst,
-			matrix.whiteCoeffDst,
-			matrix.rgbCoeffSrc,
-			matrix.whiteCoeffSrc,
-			true,
-			temp_matrix))
-		return false;
-
-	/*TODO: calculations for the matrix and add to the streams*/
-	struct fixed31_32 identity_matrix[12];
-
-	identity_matrix[0] = temp_matrix[0];
-	identity_matrix[1] = temp_matrix[1];
-	identity_matrix[2] = temp_matrix[2];
-	identity_matrix[3] = matrix.whiteCoeffSrc[0];
-	identity_matrix[4] = temp_matrix[3];
-	identity_matrix[5] = temp_matrix[4];
-	identity_matrix[6] = temp_matrix[5];
-	identity_matrix[7] = matrix.whiteCoeffSrc[1];
-	identity_matrix[8] = temp_matrix[6];
-	identity_matrix[9] = temp_matrix[7];
-	identity_matrix[10] = temp_matrix[8];
-	identity_matrix[11] = matrix.whiteCoeffSrc[2];
-
-	int i;
-	int j;
-
-	for (i = 0; i < num_streams; i++) {
-		struct core_stream *core_stream = DC_STREAM_TO_CORE(streams[i]);
-
-		core_stream->public.gamut_remap_matrix.enable_remap = true;
-
-		for (j = 0; j < 12; j++)
-			core_stream->public.gamut_remap_matrix.matrix[j] =
-					identity_matrix[j];
-	}
-
-	core_color->dc->stream_funcs.set_gamut_remap(core_color->dc, streams,
-						num_streams);
-
-	return true;
-}
-
-bool mod_color_adjust_destination_gamut(struct mod_color *mod_color,
-		const struct dc_stream **streams, int num_streams,
-		struct gamut_space_coordinates inputGamutCoord,
-		struct white_point_coodinates inputWhitePointCoord)
-{
-	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
-
-	core_color->destination_gamut[0].blueX = inputGamutCoord.blueX;
-	core_color->destination_gamut[0].blueY = inputGamutCoord.blueY;
-	core_color->destination_gamut[0].greenX = inputGamutCoord.greenX;
-	core_color->destination_gamut[0].greenY = inputGamutCoord.greenY;
-	core_color->destination_gamut[0].redX = inputGamutCoord.redX;
-	core_color->destination_gamut[0].redY = inputGamutCoord.redY;
-	core_color->destination_gamut[0].whiteX = inputWhitePointCoord.whiteX;
-	core_color->destination_gamut[0].whiteY = inputWhitePointCoord.whiteY;
-
-	struct gamut_src_dst_matrix matrix;
-
-	if (!allocate_matrix(&matrix))
-		return false;
-
-	if (!build_gamut_remap_matrix(core_color->source_gamut[0],
-			matrix.rgbCoeffSrc, matrix.whiteCoeffSrc))
-		return false;
-
-	if (!build_gamut_remap_matrix(core_color->destination_gamut[0],
-				matrix.rgbCoeffDst, matrix.whiteCoeffDst))
-		return false;
-
-	struct fixed31_32 temp_matrix[9];
-
-	if (!gamut_to_color_matrix(
-			matrix.rgbCoeffDst,
-			matrix.whiteCoeffDst,
-			matrix.rgbCoeffSrc,
-			matrix.whiteCoeffSrc,
-			true,
-			temp_matrix))
-		return false;
-
-	/*TODO: calculations for the matrix and add to the streams*/
-	struct fixed31_32 identity_matrix[12];
-
-	identity_matrix[0] = temp_matrix[0];
-	identity_matrix[1] = temp_matrix[1];
-	identity_matrix[2] = temp_matrix[2];
-	identity_matrix[3] = matrix.whiteCoeffDst[0];
-	identity_matrix[4] = temp_matrix[3];
-	identity_matrix[5] = temp_matrix[4];
-	identity_matrix[6] = temp_matrix[5];
-	identity_matrix[7] = matrix.whiteCoeffDst[1];
-	identity_matrix[8] = temp_matrix[6];
-	identity_matrix[9] = temp_matrix[7];
-	identity_matrix[10] = temp_matrix[8];
-	identity_matrix[11] = matrix.whiteCoeffDst[2];
-
-	int i;
-	int j;
-
-	for (i = 0; i < num_streams; i++) {
-		struct core_stream *core_stream = DC_STREAM_TO_CORE(streams[i]);
-
-		core_stream->public.gamut_remap_matrix.enable_remap = true;
-
-		for (j = 0; j < 12; j++)
-			core_stream->public.gamut_remap_matrix.matrix[j] =
-					identity_matrix[j];
-	}
-
-	core_color->dc->stream_funcs.set_gamut_remap(core_color->dc, streams,
-						num_streams);
-
-	return true;
-}
-
-/*TODO: user enable for color temperature button*/
-
-bool mod_color_set_user_enable(struct mod_color *mod_color,
-		const struct dc_stream **streams, int num_streams,
-		bool user_enable)
+		struct gamut_space_coordinates *input_gamut_coordinates,
+		struct white_point_coodinates *input_white_point_coordinates)
 {
 	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
 
 	unsigned int stream_index, sink_index;
 
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
-
 		sink_index = sink_index_from_sink(core_color,
 				streams[stream_index]->sink);
 
-		core_color->user_enable_color_temperature[sink_index] =
-				user_enable;
+		core_color->state[sink_index].source_gamut.blueX =
+				input_gamut_coordinates->blueX;
+		core_color->state[sink_index].source_gamut.blueY =
+				input_gamut_coordinates->blueY;
+		core_color->state[sink_index].source_gamut.greenX =
+				input_gamut_coordinates->greenX;
+		core_color->state[sink_index].source_gamut.greenY =
+				input_gamut_coordinates->greenY;
+		core_color->state[sink_index].source_gamut.redX =
+				input_gamut_coordinates->redX;
+		core_color->state[sink_index].source_gamut.redY =
+				input_gamut_coordinates->redY;
+		core_color->state[sink_index].source_gamut.whiteX =
+				input_white_point_coordinates->whiteX;
+		core_color->state[sink_index].source_gamut.whiteY =
+				input_white_point_coordinates->whiteY;
 	}
 
-	/*set_color_on_streams(core_color, streams, num_streams);*/
+	if (!mod_color_update_gamut_to_stream(mod_color, streams, num_streams))
+		return false;
 
 	return true;
 }
 
+bool mod_color_adjust_destination_gamut(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		struct gamut_space_coordinates *input_gamut_coordinates,
+		struct white_point_coodinates *input_white_point_coordinates)
+{
+	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
 
+	unsigned int stream_index, sink_index;
+
+	for (stream_index = 0; stream_index < num_streams; stream_index++) {
+		sink_index = sink_index_from_sink(core_color,
+				streams[stream_index]->sink);
+
+		core_color->state[sink_index].destination_gamut.blueX =
+				input_gamut_coordinates->blueX;
+		core_color->state[sink_index].destination_gamut.blueY =
+				input_gamut_coordinates->blueY;
+		core_color->state[sink_index].destination_gamut.greenX =
+				input_gamut_coordinates->greenX;
+		core_color->state[sink_index].destination_gamut.greenY =
+				input_gamut_coordinates->greenY;
+		core_color->state[sink_index].destination_gamut.redX =
+				input_gamut_coordinates->redX;
+		core_color->state[sink_index].destination_gamut.redY =
+				input_gamut_coordinates->redY;
+		core_color->state[sink_index].destination_gamut.whiteX =
+				input_white_point_coordinates->whiteX;
+		core_color->state[sink_index].destination_gamut.whiteY =
+				input_white_point_coordinates->whiteY;
+	}
+
+	if (!mod_color_update_gamut_to_stream(mod_color, streams, num_streams))
+		return false;
+
+	return true;
+}
+
+bool mod_color_set_white_point(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		struct white_point_coodinates *white_point)
+{
+	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int stream_index, sink_index;
+
+	for (stream_index = 0; stream_index < num_streams;
+			stream_index++) {
+		sink_index = sink_index_from_sink(core_color,
+				streams[stream_index]->sink);
+		core_color->state[sink_index].source_gamut.whiteX =
+				white_point->whiteX;
+		core_color->state[sink_index].source_gamut.whiteY =
+				white_point->whiteY;
+	}
+
+	if (!mod_color_update_gamut_to_stream(mod_color, streams, num_streams))
+		return false;
+
+	return true;
+}
+
+bool mod_color_set_user_enable(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		bool user_enable)
+{
+	struct core_color *core_color =
+			MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int stream_index, sink_index;
+
+	for (stream_index = 0; stream_index < num_streams; stream_index++) {
+		sink_index = sink_index_from_sink(core_color,
+				streams[stream_index]->sink);
+		core_color->state[sink_index].user_enable_color_temperature
+				= user_enable;
+	}
+	return true;
+}
+
+bool mod_color_get_user_enable(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		bool *user_enable)
+{
+	struct core_color *core_color =
+			MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int sink_index = sink_index_from_sink(core_color, sink);
+
+	*user_enable = core_color->state[sink_index].
+					user_enable_color_temperature;
+
+	return true;
+}
+
+bool mod_color_set_custom_color_temperature(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		int color_temperature)
+{
+	struct core_color *core_color =
+			MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int stream_index, sink_index;
+
+	for (stream_index = 0; stream_index < num_streams; stream_index++) {
+		sink_index = sink_index_from_sink(core_color,
+				streams[stream_index]->sink);
+		core_color->state[sink_index].custom_color_temperature
+				= color_temperature;
+	}
+	return true;
+}
+
+bool mod_color_get_custom_color_temperature(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		int *color_temperature)
+{
+	struct core_color *core_color =
+			MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int sink_index = sink_index_from_sink(core_color, sink);
+
+	*color_temperature = core_color->state[sink_index].
+			custom_color_temperature;
+
+	return true;
+}
+
+bool mod_color_get_source_gamut(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		struct color_space_coordinates *source_gamut)
+{
+	struct core_color *core_color =
+			MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int sink_index = sink_index_from_sink(core_color, sink);
+
+	*source_gamut = core_color->state[sink_index].source_gamut;
+
+	return true;
+}
+
+bool mod_color_notify_mode_change(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams)
+{
+	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
+
+	struct gamut_src_dst_matrix *matrix =
+			dm_alloc(sizeof(struct gamut_src_dst_matrix));
+
+	unsigned int stream_index, sink_index, j;
+
+	for (stream_index = 0; stream_index < num_streams; stream_index++) {
+		sink_index = sink_index_from_sink(core_color,
+				streams[stream_index]->sink);
+
+		if (!build_gamut_remap_matrix
+				(core_color->state[sink_index].source_gamut,
+						matrix->rgbCoeffSrc,
+						matrix->whiteCoeffSrc))
+			goto function_fail;
+
+		if (!build_gamut_remap_matrix
+				(core_color->state[sink_index].
+				destination_gamut,
+				matrix->rgbCoeffDst, matrix->whiteCoeffDst))
+			goto function_fail;
+
+		struct fixed31_32 gamut_result[12];
+		struct fixed31_32 temp_matrix[9];
+
+		if (!gamut_to_color_matrix(
+				matrix->rgbCoeffDst,
+				matrix->whiteCoeffDst,
+				matrix->rgbCoeffSrc,
+				matrix->whiteCoeffSrc,
+				true,
+				temp_matrix))
+			goto function_fail;
+
+		gamut_result[0] = temp_matrix[0];
+		gamut_result[1] = temp_matrix[1];
+		gamut_result[2] = temp_matrix[2];
+		gamut_result[3] = matrix->whiteCoeffSrc[0];
+		gamut_result[4] = temp_matrix[3];
+		gamut_result[5] = temp_matrix[4];
+		gamut_result[6] = temp_matrix[5];
+		gamut_result[7] = matrix->whiteCoeffSrc[1];
+		gamut_result[8] = temp_matrix[6];
+		gamut_result[9] = temp_matrix[7];
+		gamut_result[10] = temp_matrix[8];
+		gamut_result[11] = matrix->whiteCoeffSrc[2];
+
+
+		struct core_stream *core_stream =
+				DC_STREAM_TO_CORE
+				(streams[stream_index]);
+
+		core_stream->public.gamut_remap_matrix.enable_remap = true;
+
+		for (j = 0; j < 12; j++)
+			core_stream->public.
+			gamut_remap_matrix.matrix[j] =
+					gamut_result[j];
+	}
+
+	dm_free(matrix);
+
+	return true;
+
+function_fail:
+	dm_free(matrix);
+	return false;
+}
 
 

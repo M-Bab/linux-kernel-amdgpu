@@ -81,24 +81,53 @@ struct white_point_coodinates_entry {
 };
 
 struct mod_color *mod_color_create(struct dc *dc);
+
 void mod_color_destroy(struct mod_color *mod_color);
 
-bool mod_color_adjust_temperature(struct mod_color *mod_color,
+bool mod_color_add_sink(struct mod_color *mod_color,
+		const struct dc_sink *sink);
+
+bool mod_color_remove_sink(struct mod_color *mod_color,
+		const struct dc_sink *sink);
+
+bool mod_color_update_gamut_to_stream(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams);
+
+bool mod_color_set_white_point(struct mod_color *mod_color,
 		const struct dc_stream **streams, int num_streams,
-		int temperature);
+		struct white_point_coodinates *white_point);
+
+bool mod_color_adjust_source_gamut(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		struct gamut_space_coordinates *input_gamut_coordinates,
+		struct white_point_coodinates *input_white_point_coordinates);
+
+bool mod_color_adjust_destination_gamut(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		struct gamut_space_coordinates *input_gamut_coordinates,
+		struct white_point_coodinates *input_white_point_coordinates);
+
+bool mod_color_get_user_enable(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		bool *user_enable);
 
 bool mod_color_set_user_enable(struct mod_color *mod_color,
 		const struct dc_stream **streams, int num_streams,
 		bool user_enable);
 
-bool mod_color_adjust_source_gamut(struct mod_color *mod_color,
-		const struct dc_stream **streams, int num_streams,
-		struct gamut_space_coordinates inputGamutCoord,
-		struct white_point_coodinates inputWhitePointCoord);
+bool mod_color_get_custom_color_temperature(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		int *color_temperature);
 
-bool mod_color_adjust_destination_gamut(struct mod_color *mod_color,
+bool mod_color_set_custom_color_temperature(struct mod_color *mod_color,
 		const struct dc_stream **streams, int num_streams,
-		struct gamut_space_coordinates inputGamutCoord,
-		struct white_point_coodinates inputWhitePointCoord);
+		int color_temperature);
+
+bool mod_color_get_source_gamut(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		struct color_space_coordinates *source_gamut);
+
+bool mod_color_notify_mode_change(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams);
 
 #endif /* MOD_COLOR_H_ */

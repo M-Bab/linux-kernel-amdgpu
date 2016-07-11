@@ -1411,8 +1411,16 @@ static void set_default_colors(struct pipe_ctx *pipe_ctx)
 	struct default_adjustment default_adjust = { 0 };
 
 	default_adjust.force_hw_default = false;
-	default_adjust.in_color_space = pipe_ctx->surface->public.color_space;
-	default_adjust.out_color_space = pipe_ctx->stream->public.output_color_space;
+	if (pipe_ctx->surface == NULL)
+		default_adjust.in_color_space = COLOR_SPACE_SRGB;
+	else
+		default_adjust.in_color_space =
+				pipe_ctx->surface->public.color_space;
+	if (pipe_ctx->stream == NULL)
+		default_adjust.out_color_space = COLOR_SPACE_SRGB;
+	else
+		default_adjust.out_color_space =
+				pipe_ctx->stream->public.output_color_space;
 	default_adjust.csc_adjust_type = GRAPHICS_CSC_ADJUST_TYPE_SW;
 	default_adjust.surface_pixel_format = pipe_ctx->scl_data.format;
 
@@ -1522,7 +1530,6 @@ static void set_plane_config(
 	struct dc_context *ctx = pipe_ctx->stream->ctx;
 	struct core_surface *surface = pipe_ctx->surface;
 	struct xfm_grph_csc_adjustment adjust;
-
 	memset(&adjust, 0, sizeof(adjust));
 	adjust.gamut_adjust_type = GRAPHICS_GAMUT_ADJUST_TYPE_BYPASS;
 
