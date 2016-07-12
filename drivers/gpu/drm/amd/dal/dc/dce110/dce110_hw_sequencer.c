@@ -1527,9 +1527,14 @@ static void set_plane_config(
 	struct resource_context *res_ctx)
 {
 	struct mem_input *mi = pipe_ctx->mi;
+	struct pipe_ctx *old_pipe = NULL;
 	struct dc_context *ctx = pipe_ctx->stream->ctx;
 	struct core_surface *surface = pipe_ctx->surface;
 	struct xfm_grph_csc_adjustment adjust;
+
+	if (dc->current_context)
+		old_pipe = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
+
 	memset(&adjust, 0, sizeof(adjust));
 	adjust.gamut_adjust_type = GRAPHICS_GAMUT_ADJUST_TYPE_BYPASS;
 
@@ -1570,7 +1575,10 @@ static void set_plane_config(
 
 	pipe_ctx->xfm->funcs->transform_set_gamut_remap(pipe_ctx->xfm, &adjust);
 
-	program_scaler(dc, pipe_ctx);
+	if (old_pipe && memcmp(&old_pipe->scl_data,
+				&pipe_ctx->scl_data,
+				sizeof(struct scaler_data)) != 0)
+		program_scaler(dc, pipe_ctx);
 
 	program_blender_if_needed(dc, pipe_ctx);
 
