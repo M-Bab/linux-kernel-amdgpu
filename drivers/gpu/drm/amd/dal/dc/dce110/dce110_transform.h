@@ -30,6 +30,9 @@
 #define TO_DCE110_TRANSFORM(transform)\
 	container_of(transform, struct dce110_transform, base)
 
+#define LB_TOTAL_NUMBER_OF_ENTRIES 1712
+#define LB_BITS_PER_ENTRY 144
+
 struct dce110_transform_reg_offsets {
 	uint32_t scl_offset;
 	uint32_t dcfe_offset;
@@ -80,5 +83,10 @@ bool dce110_transform_get_current_pixel_storage_depth(
 	enum lb_pixel_depth *depth);
 
 void dce110_transform_set_alpha(struct transform *xfm, bool enable);
+
+bool dce110_transform_get_optimal_number_of_taps(
+	struct transform *xfm,
+	struct scaler_data *scl_data,
+	const struct scaling_taps *in_taps);
 
 #endif

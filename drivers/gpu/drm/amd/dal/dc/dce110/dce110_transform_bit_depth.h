@@ -30,16 +30,9 @@
 bool dce110_transform_power_up_line_buffer(struct transform *xfm);
 
 bool dce110_transform_get_max_num_of_supported_lines(
-	struct dce110_transform *xfm110,
+	struct transform *xfm,
 	enum lb_pixel_depth depth,
-	uint32_t pixel_width,
-	uint32_t *lines);
-
-bool dce110_transform_get_next_lower_pixel_storage_depth(
-	struct dce110_transform *xfm110,
-	uint32_t display_bpp,
-	enum lb_pixel_depth depth,
-	enum lb_pixel_depth *lower_depth);
+	uint32_t pixel_width);
 
 bool dce110_transform_is_prefetch_enabled(
 	struct dce110_transform *xfm110);

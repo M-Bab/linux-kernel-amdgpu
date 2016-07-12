@@ -435,25 +435,27 @@ static void calculate_scaling_ratios(
 	}
 }
 
-void get_optimal_number_of_taps(
-	struct scaling_taps *taps)
+void decide_lb_format(struct pipe_ctx *pipe_ctx)
 {
-	/*
-	 * TODO fix hard-coding.
-	 * 4 taps preferred but fall
-	 * back to 2 taps if line buffer
-	 * isn't sufficient
-	 */
-	taps->h_taps = 2;
-	taps->v_taps = 2;
-	taps->h_taps_c = 2;
-	taps->v_taps_c = 2;
+	switch (pipe_ctx->pix_clk_params.color_depth) {
+	case COLOR_DEPTH_666:
+	case COLOR_DEPTH_888:
+		pipe_ctx->scl_data.lb_bpp = LB_PIXEL_DEPTH_24BPP;
+		break;
+	case COLOR_DEPTH_101010:
+		pipe_ctx->scl_data.lb_bpp = LB_PIXEL_DEPTH_30BPP;
+		break;
+	default:
+		pipe_ctx->scl_data.lb_bpp = LB_PIXEL_DEPTH_30BPP;
+		break;
+	}
 }
 
-void resource_build_scaling_params(
+bool resource_build_scaling_params(
 	const struct dc_surface *surface,
 	struct pipe_ctx *pipe_ctx)
 {
+	bool res;
 	struct dc_crtc_timing *timing = &pipe_ctx->stream->public.timing;
 	/* Important: scaling ratio calculation requires pixel format,
 	 * lb depth calculation requires recout and taps require scaling ratios.
@@ -466,33 +468,39 @@ void resource_build_scaling_params(
 
 	calculate_recout(surface, pipe_ctx);
 
+	decide_lb_format(pipe_ctx);
+
 	pipe_ctx->scl_data.h_active = timing->h_addressable
 			+ timing->h_border_left + timing->h_border_right;
 	pipe_ctx->scl_data.v_active = timing->v_addressable
 			+ timing->v_border_top + timing->v_border_bottom;
 
-	get_optimal_number_of_taps(&pipe_ctx->scl_data.taps);
+	/* Taps calculations */
+	res = pipe_ctx->xfm->funcs->transform_get_optimal_number_of_taps(
+		pipe_ctx->xfm, &pipe_ctx->scl_data, &surface->scaling_quality);
 
-	/* Check if scaling is required update taps if not */
+	/* Check if scaling is required, if so  fail in case optimal taps calc
+	 * failed. Otherwise just update taps here
+	 */
 	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.horz) == (1 << 19))
 		pipe_ctx->scl_data.taps.h_taps = 1;
-	else if (surface->scaling_quality.h_taps != 0)
-		pipe_ctx->scl_data.taps.h_taps = surface->scaling_quality.h_taps;
+	else if (!res)
+		return false;
 
 	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.horz_c) == (1 << 19))
 		pipe_ctx->scl_data.taps.h_taps_c = 1;
-	else if (surface->scaling_quality.h_taps_c != 0)
-		pipe_ctx->scl_data.taps.h_taps_c = surface->scaling_quality.h_taps_c;
+	else if (!res)
+		return false;
 
 	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.vert) == (1 << 19))
 		pipe_ctx->scl_data.taps.v_taps = 1;
-	else if (surface->scaling_quality.v_taps != 0)
-		pipe_ctx->scl_data.taps.v_taps = surface->scaling_quality.v_taps;
+	else if (!res)
+		return false;
 
 	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.vert_c) == (1 << 19))
 		pipe_ctx->scl_data.taps.v_taps_c = 1;
-	else if (surface->scaling_quality.v_taps_c != 0)
-		pipe_ctx->scl_data.taps.v_taps_c = surface->scaling_quality.v_taps_c;
+	else if (!res)
+		return false;
 
 	dal_logger_write(pipe_ctx->stream->ctx->logger,
 				LOG_MAJOR_DCP,
@@ -509,10 +517,12 @@ void resource_build_scaling_params(
 				surface->dst_rect.width,
 				surface->dst_rect.x,
 				surface->dst_rect.y);
+
+	return true;
 }
 
 
-void resource_build_scaling_params_for_context(
+enum dc_status resource_build_scaling_params_for_context(
 	const struct core_dc *dc,
 	struct validate_context *context)
 {
@@ -521,10 +531,13 @@ void resource_build_scaling_params_for_context(
 	for (i = 0; i < MAX_PIPES; i++) {
 		if (context->res_ctx.pipe_ctx[i].surface != NULL &&
 				context->res_ctx.pipe_ctx[i].stream != NULL)
-			resource_build_scaling_params(
+			if (!resource_build_scaling_params(
 				&context->res_ctx.pipe_ctx[i].surface->public,
-				&context->res_ctx.pipe_ctx[i]);
+				&context->res_ctx.pipe_ctx[i]))
+				return DC_FAIL_BANDWIDTH_VALIDATE;
 	}
+
+	return DC_OK;
 }
 
 static void detach_surfaces_for_target(

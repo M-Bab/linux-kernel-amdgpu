@@ -40,9 +40,6 @@
 #define LB_REG(reg)\
 	(reg + xfm80->offsets.lb_offset)
 
-#define LB_TOTAL_NUMBER_OF_ENTRIES 1712
-#define LB_BITS_PER_ENTRY 144
-
 enum dcp_out_trunc_round_mode {
 	DCP_OUT_TRUNC_ROUND_MODE_TRUNCATE,
 	DCP_OUT_TRUNC_ROUND_MODE_ROUND
@@ -528,56 +525,6 @@ static bool set_dither(
 	return true;
 }
 
-bool dce80_transform_get_max_num_of_supported_lines(
-	struct dce80_transform *xfm80,
-	enum lb_pixel_depth depth,
-	uint32_t pixel_width,
-	uint32_t *lines)
-{
-	uint32_t pixels_per_entries = 0;
-	uint32_t max_pixels_supports = 0;
-
-	if (pixel_width == 0)
-		return false;
-
-	/* Find number of pixels that can fit into a single LB entry and
-	 * take floor of the value since we cannot store a single pixel
-	 * across multiple entries. */
-	switch (depth) {
-	case LB_PIXEL_DEPTH_18BPP:
-		pixels_per_entries = LB_BITS_PER_ENTRY / 18;
-		break;
-
-	case LB_PIXEL_DEPTH_24BPP:
-		pixels_per_entries = LB_BITS_PER_ENTRY / 24;
-		break;
-
-	case LB_PIXEL_DEPTH_30BPP:
-		pixels_per_entries = LB_BITS_PER_ENTRY / 30;
-		break;
-
-	case LB_PIXEL_DEPTH_36BPP:
-		pixels_per_entries = LB_BITS_PER_ENTRY / 36;
-		break;
-
-	default:
-		dal_logger_write(xfm80->base.ctx->logger,
-			LOG_MAJOR_WARNING,
-			LOG_MINOR_COMPONENT_GPU,
-			"%s: Invalid LB pixel depth",
-			__func__);
-		break;
-	}
-
-	if (pixels_per_entries == 0)
-		return false;
-
-	max_pixels_supports = pixels_per_entries * LB_TOTAL_NUMBER_OF_ENTRIES;
-
-	*lines = max_pixels_supports / pixel_width;
-	return true;
-}
-
 void dce80_transform_enable_alpha(
 	struct dce80_transform *xfm80,
 	bool enable)
@@ -602,48 +549,6 @@ void dce80_transform_enable_alpha(
 				ALPHA_EN);
 
 	dm_write_reg(ctx, addr, value);
-}
-
-static enum lb_pixel_depth translate_display_bpp_to_lb_depth(
-	uint32_t display_bpp)
-{
-	switch (display_bpp) {
-	case 18:
-		return LB_PIXEL_DEPTH_18BPP;
-	case 24:
-		return LB_PIXEL_DEPTH_24BPP;
-	case 36:
-	case 42:
-	case 48:
-		return LB_PIXEL_DEPTH_36BPP;
-	case 30:
-	default:
-		return LB_PIXEL_DEPTH_30BPP;
-	}
-}
-
-bool dce80_transform_get_next_lower_pixel_storage_depth(
-	struct dce80_transform *xfm80,
-	uint32_t display_bpp,
-	enum lb_pixel_depth depth,
-	enum lb_pixel_depth *lower_depth)
-{
-	enum lb_pixel_depth depth_req_by_display =
-		translate_display_bpp_to_lb_depth(display_bpp);
-	uint32_t current_required_depth = depth_req_by_display;
-	uint32_t current_depth = depth;
-
-	/* if required display depth < current we could go down, for example
-	 * from LB_PIXEL_DEPTH_30BPP to LB_PIXEL_DEPTH_24BPP
-	 */
-	if (current_required_depth < current_depth) {
-		current_depth = current_depth >> 1;
-		if (xfm80->lb_pixel_depth_supported & current_depth) {
-			*lower_depth = current_depth;
-			return true;
-		}
-	}
-	return false;
 }
 
 bool dce80_transform_is_prefetch_enabled(

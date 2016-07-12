@@ -40,6 +40,21 @@
 
 #include "dce80_transform_bit_depth.h"
 
+bool dce80_transform_get_optimal_number_of_taps(
+	struct transform *xfm,
+	struct scaler_data *scl_data,
+	const struct scaling_taps *in_taps)
+{
+
+	return transform_get_optimal_number_of_taps_helper(
+			xfm,
+			scl_data,
+			scl_data->viewport.width,
+			in_taps);
+
+	return true;
+}
+
 static const struct transform_funcs dce80_transform_funcs = {
 	.transform_power_up =
 		dce80_transform_power_up,
@@ -54,7 +69,9 @@ static const struct transform_funcs dce80_transform_funcs = {
 	.transform_set_pixel_storage_depth =
 		dce80_transform_set_pixel_storage_depth,
 	.transform_get_current_pixel_storage_depth =
-		dce80_transform_get_current_pixel_storage_depth
+		dce80_transform_get_current_pixel_storage_depth,
+	.transform_get_optimal_number_of_taps =
+		dce80_transform_get_optimal_number_of_taps
 };
 
 /*****************************************/
@@ -78,6 +95,9 @@ bool dce80_transform_construct(
 			LB_PIXEL_DEPTH_18BPP |
 			LB_PIXEL_DEPTH_24BPP |
 			LB_PIXEL_DEPTH_30BPP;
+
+	xfm80->base.lb_bits_per_entry = LB_BITS_PER_ENTRY;
+	xfm80->base.lb_total_entries_num = LB_TOTAL_NUMBER_OF_ENTRIES;
 
 	return true;
 }

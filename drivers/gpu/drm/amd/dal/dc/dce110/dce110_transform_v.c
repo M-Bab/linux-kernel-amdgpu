@@ -35,7 +35,6 @@
 
 #define NOT_IMPLEMENTED()  DAL_LOGGER_NOT_IMPL(LOG_MINOR_COMPONENT_CONTROLLER,\
 			"TRANSFORM SCALER:%s()\n", __func__)
-#define LB_TOTAL_NUMBER_OF_ENTRIES 1712
 
 struct sclv_ratios_inits {
 	uint32_t h_int_scale_ratio_luma;
@@ -591,7 +590,9 @@ static const struct transform_funcs dce110_transform_v_funcs = {
 	.transform_set_pixel_storage_depth =
 		dce110_transform_v_set_pixel_storage_depth,
 	.transform_get_current_pixel_storage_depth =
-		dce110_transform_v_get_current_pixel_storage_depth
+		dce110_transform_v_get_current_pixel_storage_depth,
+	.transform_get_optimal_number_of_taps =
+			dce110_transform_get_optimal_number_of_taps
 };
 /*****************************************/
 /* Constructor, Destructor               */

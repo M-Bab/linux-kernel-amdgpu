@@ -30,6 +30,7 @@
 #include "dce/dce_11_0_sh_mask.h"
 
 #include "dce110_transform.h"
+#include "dce110_transform_bit_depth.h"
 
 #define UP_SCALER_RATIO_MAX 16000
 #define DOWN_SCALER_RATIO_MAX 250
@@ -720,3 +721,38 @@ void dce110_transform_set_scaler_filter(
 	xfm->filter = filter;
 }
 
+bool transform_get_optimal_number_of_taps_helper(
+	struct transform *xfm,
+	struct scaler_data *scl_data,
+	uint32_t pixel_width,
+	const struct scaling_taps *in_taps) {
+
+	int max_num_of_lines;
+
+	max_num_of_lines = dce110_transform_get_max_num_of_supported_lines(
+		xfm,
+		scl_data->lb_bpp,
+		pixel_width);
+
+	/* If num of taps is given as input fail if we cannot
+	 * maintain that much taps
+	 */
+	if (in_taps->v_taps) {
+		scl_data->taps = *in_taps;
+		return max_num_of_lines > scl_data->taps.v_taps;
+	}
+
+	/*If no taps given as input set to max and reduce
+	 * as needed to get along, also
+	 * set horizontal taps to 4 regardless
+	 */
+	scl_data->taps.h_taps = 4;
+	scl_data->taps.v_taps = 4;
+
+	if (max_num_of_lines > scl_data->taps.v_taps)
+		return true;
+
+	scl_data->taps.v_taps = max_num_of_lines - 1;
+	return scl_data->taps.v_taps > 1;
+
+}

@@ -637,7 +637,7 @@ enum dc_status dce80_validate_with_context(
 		result = validate_mapped_resource(dc, context);
 
 	if (result == DC_OK)
-		resource_build_scaling_params_for_context(dc, context);
+		result = resource_build_scaling_params_for_context(dc, context);
 
 	if (result == DC_OK)
 		result = dce80_validate_bandwidth(dc, context);
@@ -669,7 +669,7 @@ enum dc_status dce80_validate_guaranteed(
 	if (result == DC_OK) {
 		validate_guaranteed_copy_target(
 				context, dc->public.caps.max_targets);
-		resource_build_scaling_params_for_context(dc, context);
+		result = resource_build_scaling_params_for_context(dc, context);
 	}
 
 	if (result == DC_OK)

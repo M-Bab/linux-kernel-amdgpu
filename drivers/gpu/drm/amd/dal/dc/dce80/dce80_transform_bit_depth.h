@@ -29,21 +29,9 @@
 
 bool dce80_transform_power_up_line_buffer(struct transform *xfm);
 
-bool dce80_transform_get_max_num_of_supported_lines(
-	struct dce80_transform *xfm80,
-	enum lb_pixel_depth depth,
-	uint32_t pixel_width,
-	uint32_t *lines);
-
 void dce80_transform_enable_alpha(
 	struct dce80_transform *xfm80,
 	bool enable);
-
-bool dce80_transform_get_next_lower_pixel_storage_depth(
-	struct dce80_transform *xfm80,
-	uint32_t display_bpp,
-	enum lb_pixel_depth depth,
-	enum lb_pixel_depth *lower_depth);
 
 bool dce80_transform_is_prefetch_enabled(
 	struct dce80_transform *xfm80);

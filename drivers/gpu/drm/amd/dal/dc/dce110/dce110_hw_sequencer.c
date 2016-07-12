@@ -1490,7 +1490,7 @@ static void program_scaler(const struct core_dc *dc,
 
 	pipe_ctx->xfm->funcs->transform_set_pixel_storage_depth(
 		pipe_ctx->xfm,
-		LB_PIXEL_DEPTH_30BPP,
+		pipe_ctx->scl_data.lb_bpp,
 		&pipe_ctx->stream->bit_depth_params);
 
 	pipe_ctx->tg->funcs->set_overscan_blank_color(

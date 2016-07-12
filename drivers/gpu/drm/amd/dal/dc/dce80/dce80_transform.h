@@ -30,6 +30,9 @@
 #define TO_DCE80_TRANSFORM(transform)\
 	container_of(transform, struct dce80_transform, base)
 
+#define LB_TOTAL_NUMBER_OF_ENTRIES 1712
+#define LB_BITS_PER_ENTRY 144
+
 struct dce80_transform_reg_offsets {
 	uint32_t scl_offset;
 	uint32_t crtc_offset;

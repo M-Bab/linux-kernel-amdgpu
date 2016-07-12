@@ -40,6 +40,27 @@
 
 #include "dce110_transform_bit_depth.h"
 
+bool dce110_transform_get_optimal_number_of_taps(
+	struct transform *xfm,
+	struct scaler_data *scl_data,
+	const struct scaling_taps *in_taps)
+{
+	uint32_t pixel_width;
+
+
+	if (scl_data->viewport.width > scl_data->recout.width)
+		pixel_width = scl_data->recout.width;
+	else
+		pixel_width = scl_data->viewport.width;
+
+	return transform_get_optimal_number_of_taps_helper(
+			xfm,
+			scl_data,
+			pixel_width,
+			in_taps);
+
+}
+
 static const struct transform_funcs dce110_transform_funcs = {
 	.transform_power_up =
 		dce110_transform_power_up,
@@ -55,7 +76,9 @@ static const struct transform_funcs dce110_transform_funcs = {
 		dce110_transform_set_pixel_storage_depth,
 	.transform_get_current_pixel_storage_depth =
 		dce110_transform_get_current_pixel_storage_depth,
-	.transform_set_alpha = dce110_transform_set_alpha
+	.transform_set_alpha = dce110_transform_set_alpha,
+	.transform_get_optimal_number_of_taps =
+		dce110_transform_get_optimal_number_of_taps
 };
 
 /*****************************************/
@@ -80,6 +103,9 @@ bool dce110_transform_construct(
 			LB_PIXEL_DEPTH_24BPP |
 			LB_PIXEL_DEPTH_30BPP;
 
+	xfm110->base.lb_bits_per_entry = LB_BITS_PER_ENTRY;
+	xfm110->base.lb_total_entries_num = LB_TOTAL_NUMBER_OF_ENTRIES;
+
 	return true;
 }
 
@@ -87,4 +113,3 @@ bool dce110_transform_power_up(struct transform *xfm)
 {
 	return dce110_transform_power_up_line_buffer(xfm);
 }
-

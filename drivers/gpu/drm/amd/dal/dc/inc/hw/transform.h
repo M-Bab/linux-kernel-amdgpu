@@ -28,6 +28,7 @@
 
 #include "include/scaler_types.h"
 #include "calcs/scaler_filter.h"
+#include "dc_hw_types.h"
 
 struct bit_depth_reduction_params;
 
@@ -36,6 +37,9 @@ struct transform {
 	struct dc_context *ctx;
 	uint32_t inst;
 	struct scaler_filter *filter;
+
+	int lb_total_entries_num;
+	int lb_bits_per_entry;
 };
 
 enum lb_pixel_depth {
@@ -148,6 +152,7 @@ struct scaler_data {
 	struct scaling_ratios ratios;
 	struct sharpness_adj sharpness;
 	enum pixel_format format;
+	enum lb_pixel_depth lb_bpp;
 };
 
 struct line_buffer_params {
@@ -187,6 +192,17 @@ struct transform_funcs {
 		enum lb_pixel_depth *depth);
 
 	void (*transform_set_alpha)(struct transform *xfm, bool enable);
+
+	bool (*transform_get_optimal_number_of_taps)(
+		struct transform *xfm,
+		struct scaler_data *scl_data,
+		const struct scaling_taps *in_taps);
 };
+
+bool transform_get_optimal_number_of_taps_helper(
+	struct transform *xfm,
+	struct scaler_data *scl_data,
+	uint32_t pixel_width,
+	const struct scaling_taps *in_taps);
 
 #endif

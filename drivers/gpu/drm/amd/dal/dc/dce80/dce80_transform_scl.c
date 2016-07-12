@@ -717,4 +717,3 @@ void dce80_transform_set_scaler_filter(
 {
 	xfm->filter = filter;
 }
-
