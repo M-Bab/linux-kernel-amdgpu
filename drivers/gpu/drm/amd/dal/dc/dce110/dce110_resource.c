@@ -1051,13 +1051,13 @@ static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 			clks.clocks_in_khz[clks.num_levels>>1], 1000);
 	dc->bw_vbios.low_sclk  = bw_frc_to_fixed(
 			clks.clocks_in_khz[0], 1000);
+	dc->sclk_lvls = clks;
 
 	/*do display clock*/
 	dm_pp_get_clock_levels_by_type(
 			dc->ctx,
 			DM_PP_CLOCK_TYPE_DISPLAY_CLK,
 			&clks);
-
 	dc->bw_vbios.high_voltage_max_dispclk = bw_frc_to_fixed(
 			clks.clocks_in_khz[clks.num_levels-1], 1000);
 	dc->bw_vbios.mid_voltage_max_dispclk  = bw_frc_to_fixed(

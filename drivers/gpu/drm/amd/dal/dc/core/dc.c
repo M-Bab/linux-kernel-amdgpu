@@ -714,6 +714,24 @@ static uint32_t get_min_vblank_time_us(const struct validate_context *context)
 	return min_vertical_blank_time;
 }
 
+static int determine_sclk_from_bounding_box(
+		const struct core_dc *dc,
+		int required_sclk)
+{
+	int i;
+
+	for (i = 0; i < dc->sclk_lvls.num_levels; i++) {
+		if (dc->sclk_lvls.clocks_in_khz[i] >= required_sclk)
+			return dc->sclk_lvls.clocks_in_khz[i];
+	}
+	/*
+	 * even maximum level could not satisfy requirement, this
+	 * is unexpected at this stage, should have been caught at
+	 * validation time
+	 */
+	ASSERT(0);
+	return dc->sclk_lvls.clocks_in_khz[dc->sclk_lvls.num_levels - 1];
+}
 void pplib_apply_display_requirements(
 	const struct core_dc *dc,
 	const struct validate_context *context,
@@ -733,7 +751,10 @@ void pplib_apply_display_requirements(
 	pp_display_cfg->min_memory_clock_khz = context->bw_results.required_yclk
 		/ MEMORY_TYPE_MULTIPLIER;
 
-	pp_display_cfg->min_engine_clock_khz = context->bw_results.required_sclk;
+	pp_display_cfg->min_engine_clock_khz = determine_sclk_from_bounding_box(
+			dc,
+			context->bw_results.required_sclk);
+
 	pp_display_cfg->min_engine_clock_deep_sleep_khz
 			= context->bw_results.required_sclk_deep_sleep;
 

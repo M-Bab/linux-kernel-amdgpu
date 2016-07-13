@@ -29,6 +29,9 @@ struct core_dc {
 	enum dc_video_power_state previous_power_state;
 	enum dc_video_power_state current_power_state;
 
+	/* Display Engine Clock levels */
+	struct dm_pp_clock_levels sclk_lvls;
+
 	/* Inputs into BW and WM calculations. */
 	struct bw_calcs_dceip bw_dceip;
 	struct bw_calcs_vbios bw_vbios;
