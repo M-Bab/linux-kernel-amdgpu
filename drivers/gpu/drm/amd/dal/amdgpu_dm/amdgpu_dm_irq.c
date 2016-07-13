@@ -696,15 +696,15 @@ static inline int dm_irq_state(
 
 	struct amdgpu_crtc *acrtc = adev->mode_info.crtcs[crtc_id];
 
-	if (!acrtc || !acrtc->target) {
-		DRM_INFO(
-			"%s: target is null for crtc %d, talk to David R\n",
-			func,
-			crtc_id);
+	if (!acrtc) {
+		DRM_ERROR(
+			"%s: crtc is NULL at id :%d\n",
+	 		func,
+	 		crtc_id);
 		return 0;
 	}
 
-	irq_source = dc_target_get_irq_src(adev->dm.dc, acrtc->target, dal_irq_type);
+	irq_source = dal_irq_type + acrtc->otg_inst;
 
 	st = (state == AMDGPU_IRQ_STATE_ENABLE);
 

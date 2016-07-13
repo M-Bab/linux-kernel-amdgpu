@@ -284,11 +284,6 @@ uint32_t dc_target_get_scanoutpos(
 		uint32_t *vbl,
 		uint32_t *position);
 
-enum dc_irq_source dc_target_get_irq_src(
-	const struct dc *dc,
-	const struct dc_target *dc_target,
-	const enum irq_type irq_type);
-
 /*
  * Structure to store surface/target associations for validation
  */

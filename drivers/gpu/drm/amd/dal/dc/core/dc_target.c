@@ -283,25 +283,6 @@ uint32_t dc_target_get_scanoutpos(
 	return 0;
 }
 
-enum dc_irq_source dc_target_get_irq_src(
-	const struct dc *dc,
-	const struct dc_target *dc_target,
-	const enum irq_type irq_type)
-{
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-
-	uint8_t i;
-	struct core_target *core_target = DC_TARGET_TO_CORE(dc_target);
-	struct core_stream *stream =
-			DC_STREAM_TO_CORE(core_target->public.streams[0]);
-
-	for (i = 0; i < MAX_PIPES; i++)
-		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == stream)
-			return irq_type + i;
-
-	return irq_type;
-}
-
 void dc_target_log(
 	const struct dc_target *dc_target,
 	struct dal_logger *dal_logger,
