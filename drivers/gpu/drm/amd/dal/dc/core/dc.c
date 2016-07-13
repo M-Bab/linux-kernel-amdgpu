@@ -978,13 +978,8 @@ bool dc_commit_surfaces_to_target(
 
 	core_dc->hwss.apply_ctx_to_surface(core_dc, context);
 
-	/* TODO: decouple wm programming and display clock and unhack this condition*/
-	/* Lower display clock if necessary */
-	if (prev_disp_clk > context->bw_results.dispclk_khz) {
-		core_dc->hwss.set_display_clock(context);
-		pplib_apply_display_requirements(core_dc, context,
-						&context->pp_display_cfg);
-	}
+
+	/* TODO: Implement lowering display clock */
 
 	resource_validate_ctx_destruct(core_dc->current_context);
 	dm_free(core_dc->current_context);
