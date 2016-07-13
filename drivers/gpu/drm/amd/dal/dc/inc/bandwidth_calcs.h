@@ -501,7 +501,7 @@ struct bw_calcs_output {
 	uint32_t required_sclk_deep_sleep;
 	uint32_t required_yclk;
 	uint32_t dispclk_khz;
-	int32_t required_blackout_duration_us;
+	int blackout_recovery_time_us;
 };
 
 enum bw_calcs_version {

@@ -875,7 +875,7 @@ enum dc_status dce110_validate_bandwidth(
 			context->bw_results.stutter_mode_enable);
 		dal_logger_append(&log_entry,
 			"cstate: %d pstate: %d nbpstate: %d sync: %d dispclk: %d\n"
-			"sclk: %d sclk_sleep: %d yclk: %d blackout_duration: %d\n",
+			"sclk: %d sclk_sleep: %d yclk: %d blackout_recovery_time_us: %d\n",
 			context->bw_results.cpuc_state_change_enable,
 			context->bw_results.cpup_state_change_enable,
 			context->bw_results.nbp_state_change_enable,
@@ -884,7 +884,7 @@ enum dc_status dce110_validate_bandwidth(
 			context->bw_results.required_sclk,
 			context->bw_results.required_sclk_deep_sleep,
 			context->bw_results.required_yclk,
-			context->bw_results.required_blackout_duration_us);
+			context->bw_results.blackout_recovery_time_us);
 		dal_logger_close(&log_entry);
 	}
 	return result;

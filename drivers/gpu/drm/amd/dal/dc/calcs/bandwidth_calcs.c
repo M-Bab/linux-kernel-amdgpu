@@ -4147,10 +4147,8 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->dispclk_khz =
 			bw_fixed_to_int(bw_mul(bw_results_internal->dispclk,
 					bw_int_to_fixed(1000)));
-		calcs_output->required_blackout_duration_us =
-			bw_fixed_to_int(bw_add(bw_results_internal->
-				blackout_duration_margin[yclk_lvl][sclk_lvl],
-				vbios->blackout_duration));
+		calcs_output->blackout_recovery_time_us =
+			bw_fixed_to_int(bw_results_internal->blackout_recovery_time);
 		calcs_output->required_sclk =
 			bw_fixed_to_int(bw_mul(bw_results_internal->required_sclk,
 					bw_int_to_fixed(1000)));
@@ -4168,8 +4166,6 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 				bw_mul(high_yclk, bw_int_to_fixed(1000)));
 
 		/* units: nanosecond, 16bit storage. */
-
-
 
 		calcs_output->nbp_state_change_wm_ns[0].a_mark =
 			bw_fixed_to_int(bw_mul(bw_results_internal->

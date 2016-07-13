@@ -728,10 +728,11 @@ void pplib_apply_display_requirements(
 	pp_display_cfg->cpu_pstate_disable =
 			context->bw_results.cpup_state_change_enable == false;
 	pp_display_cfg->cpu_pstate_separation_time =
-			context->bw_results.required_blackout_duration_us;
+			context->bw_results.blackout_recovery_time_us;
 
 	pp_display_cfg->min_memory_clock_khz = context->bw_results.required_yclk
 		/ MEMORY_TYPE_MULTIPLIER;
+
 	pp_display_cfg->min_engine_clock_khz = context->bw_results.required_sclk;
 	pp_display_cfg->min_engine_clock_deep_sleep_khz
 			= context->bw_results.required_sclk_deep_sleep;
