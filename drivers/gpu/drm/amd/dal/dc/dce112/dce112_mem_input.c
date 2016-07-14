@@ -157,10 +157,18 @@ static void program_stutter_watermark(
 
 	stutter_cntl = dm_read_reg(ctx, stutter_addr);
 
-	set_reg_field_value(stutter_cntl,
-		1,
-		DPG_PIPE_STUTTER_CONTROL,
-		STUTTER_ENABLE);
+	if (ctx->dc->debug.disable_stutter) {
+		set_reg_field_value(stutter_cntl,
+			0,
+			DPG_PIPE_STUTTER_CONTROL,
+			STUTTER_ENABLE);
+	} else {
+		set_reg_field_value(stutter_cntl,
+			1,
+			DPG_PIPE_STUTTER_CONTROL,
+			STUTTER_ENABLE);
+	}
+
 	set_reg_field_value(stutter_cntl,
 		1,
 		DPG_PIPE_STUTTER_CONTROL,
@@ -182,15 +190,6 @@ static void program_stutter_watermark(
 	dm_write_reg(ctx, wm_addr, wm_mask_cntl);
 
 	stutter_cntl = dm_read_reg(ctx, stutter_addr);
-	set_reg_field_value(stutter_cntl,
-		1,
-		DPG_PIPE_STUTTER_CONTROL,
-		STUTTER_ENABLE);
-	set_reg_field_value(stutter_cntl,
-		1,
-		DPG_PIPE_STUTTER_CONTROL,
-		STUTTER_IGNORE_FBC);
-
 	/*Write watermark set B*/
 	set_reg_field_value(stutter_cntl,
 		marks.b_mark,
@@ -207,15 +206,6 @@ static void program_stutter_watermark(
 	dm_write_reg(ctx, wm_addr, wm_mask_cntl);
 
 	stutter_cntl = dm_read_reg(ctx, stutter_addr);
-	set_reg_field_value(stutter_cntl,
-		1,
-		DPG_PIPE_STUTTER_CONTROL,
-		STUTTER_ENABLE);
-	set_reg_field_value(stutter_cntl,
-		1,
-		DPG_PIPE_STUTTER_CONTROL,
-		STUTTER_IGNORE_FBC);
-
 	/*Write watermark set C*/
 	set_reg_field_value(stutter_cntl,
 		marks.c_mark,
@@ -232,15 +222,6 @@ static void program_stutter_watermark(
 	dm_write_reg(ctx, wm_addr, wm_mask_cntl);
 
 	stutter_cntl = dm_read_reg(ctx, stutter_addr);
-	set_reg_field_value(stutter_cntl,
-		1,
-		DPG_PIPE_STUTTER_CONTROL,
-		STUTTER_ENABLE);
-	set_reg_field_value(stutter_cntl,
-		1,
-		DPG_PIPE_STUTTER_CONTROL,
-		STUTTER_IGNORE_FBC);
-
 	/*Write watermark set D*/
 	set_reg_field_value(stutter_cntl,
 		marks.d_mark,
