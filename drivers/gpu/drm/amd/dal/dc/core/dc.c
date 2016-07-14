@@ -720,6 +720,13 @@ static int determine_sclk_from_bounding_box(
 {
 	int i;
 
+	/*
+	 * Some asics do not give us sclk levels, so we just report the actual
+	 * required sclk
+	 */
+	if (dc->sclk_lvls.num_levels == 0)
+		return required_sclk;
+
 	for (i = 0; i < dc->sclk_lvls.num_levels; i++) {
 		if (dc->sclk_lvls.clocks_in_khz[i] >= required_sclk)
 			return dc->sclk_lvls.clocks_in_khz[i];
@@ -732,6 +739,7 @@ static int determine_sclk_from_bounding_box(
 	ASSERT(0);
 	return dc->sclk_lvls.clocks_in_khz[dc->sclk_lvls.num_levels - 1];
 }
+
 void pplib_apply_display_requirements(
 	const struct core_dc *dc,
 	const struct validate_context *context,
