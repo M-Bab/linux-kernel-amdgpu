@@ -1094,6 +1094,8 @@ static int amdgpu_dm_mode_config_init(struct amdgpu_device *adev)
 
 	adev->ddev->mode_config.preferred_depth = 24;
 	adev->ddev->mode_config.prefer_shadow = 1;
+	/* indicate support of immediate flip */
+	adev->ddev->mode_config.async_page_flip = true;
 
 	adev->ddev->mode_config.fb_base = adev->mc.aper_base;
 
@@ -1354,6 +1356,7 @@ static void dm_page_flip(struct amdgpu_device *adev,
 
 	addr.address.grph.addr.low_part = lower_32_bits(crtc_base);
 	addr.address.grph.addr.high_part = upper_32_bits(crtc_base);
+	addr.flip_immediate = async;
 
 	DRM_DEBUG_DRIVER("%s Flipping to hi: 0x%x, low: 0x%x \n",
 			 __func__,
