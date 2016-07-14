@@ -562,6 +562,30 @@ static void program_timing_sync(
 			}
 		}
 
+		/* set first unblanked pipe as master */
+		for (j = 0; j < group_size; j++) {
+			struct pipe_ctx *temp;
+
+			if (!pipe_set[j]->tg->funcs->is_blanked(pipe_set[j]->tg)) {
+				if (j == 0)
+					break;
+
+				temp = pipe_set[0];
+				pipe_set[0] = pipe_set[j];
+				pipe_set[j] = temp;
+				break;
+			}
+		}
+
+		/* remove any other unblanked pipes as they have already been synced */
+		for (j = j + 1; j < group_size; j++) {
+			if (!pipe_set[j]->tg->funcs->is_blanked(pipe_set[j]->tg)) {
+				group_size--;
+				pipe_set[j] = pipe_set[group_size];
+				j--;
+			}
+		}
+
 		if (group_size > 1) {
 			core_dc->hwss.enable_timing_synchronization(
 				core_dc, group_index, group_size, pipe_set);

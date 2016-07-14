@@ -130,7 +130,8 @@ struct timing_generator_funcs {
 	void (*wait_for_state)(struct timing_generator *tg,
 							enum crtc_state state);
 	bool (*set_blank)(struct timing_generator *tg,
-					   bool enable_blanking);
+					bool enable_blanking);
+	bool (*is_blanked)(struct timing_generator *tg);
 	void (*set_overscan_blank_color) (struct timing_generator *tg, const struct tg_color *color);
 	void (*set_blank_color)(struct timing_generator *tg, const struct tg_color *color);
 	void (*set_colors)(struct timing_generator *tg,

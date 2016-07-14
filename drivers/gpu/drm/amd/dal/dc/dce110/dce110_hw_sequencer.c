@@ -1628,8 +1628,7 @@ static void update_plane_addr(const struct core_dc *dc, struct pipe_ctx *pipe_ct
 
 	if (surface->public.flip_immediate)
 		while (pipe_ctx->mi->funcs->mem_input_is_flip_pending(
-				pipe_ctx->mi))
-			;
+				pipe_ctx->mi));
 }
 
 static void update_pending_status(struct pipe_ctx *pipe_ctx)
