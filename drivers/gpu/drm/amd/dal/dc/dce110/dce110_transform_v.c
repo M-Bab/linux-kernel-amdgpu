@@ -36,6 +36,183 @@
 #define NOT_IMPLEMENTED()  DAL_LOGGER_NOT_IMPL(LOG_MINOR_COMPONENT_CONTROLLER,\
 			"TRANSFORM SCALER:%s()\n", __func__)
 
+#define SCLV_PHASES 64
+
+const uint16_t filter_2tap[66] = {
+	4096, 0,
+	4032, 64,
+	3968, 128,
+	3904, 192,
+	3840, 256,
+	3776, 320,
+	3712, 384,
+	3648, 448,
+	3584, 512,
+	3520, 576,
+	3456, 640,
+	3392, 704,
+	3328, 768,
+	3264, 832,
+	3200, 896,
+	3136, 960,
+	3072, 1024,
+	3008, 1088,
+	2944, 1152,
+	2880, 1216,
+	2816, 1280,
+	2752, 1344,
+	2688, 1408,
+	2624, 1472,
+	2560, 1536,
+	2496, 1600,
+	2432, 1664,
+	2368, 1728,
+	2304, 1792,
+	2240, 1856,
+	2176, 1920,
+	2112, 1984,
+	2048, 2048 };
+
+const uint16_t filter_4tap_upscale[132] = {
+	0, 4096, 0, 0,
+	16344, 4092, 40, 0,
+	16308, 4084, 84, 16380,
+	16272, 4072, 132, 16380,
+	16240, 4056, 180, 16380,
+	16212, 4036, 232, 16376,
+	16184, 4012, 288, 16372,
+	16160, 3984, 344, 16368,
+	16136, 3952, 404, 16364,
+	16116, 3916, 464, 16360,
+	16100, 3872, 528, 16356,
+	16084, 3828, 596, 16348,
+	16072, 3780, 664, 16344,
+	16060, 3728, 732, 16336,
+	16052, 3676, 804, 16328,
+	16044, 3616, 876, 16320,
+	16040, 3556, 952, 16312,
+	16036, 3492, 1028, 16300,
+	16032, 3424, 1108, 16292,
+	16032, 3356, 1188, 16280,
+	16036, 3284, 1268, 16272,
+	16036, 3212, 1352, 16260,
+	16040, 3136, 1436, 16248,
+	16044, 3056, 1520, 16236,
+	16052, 2980, 1604, 16224,
+	16060, 2896, 1688, 16212,
+	16064, 2816, 1776, 16200,
+	16076, 2732, 1864, 16188,
+	16084, 2648, 1952, 16176,
+	16092, 2564, 2040, 16164,
+	16104, 2476, 2128, 16152,
+	16116, 2388, 2216, 16140,
+	16128, 2304, 2304, 16128 };
+
+const uint16_t filter_4tap_117[132] = {
+	420, 3248, 420, 0,
+	380, 3248, 464, 16380,
+	344, 3248, 508, 16372,
+	308, 3248, 552, 16368,
+	272, 3240, 596, 16364,
+	236, 3236, 644, 16356,
+	204, 3224, 692, 16352,
+	172, 3212, 744, 16344,
+	144, 3196, 796, 16340,
+	116, 3180, 848, 16332,
+	88, 3160, 900, 16324,
+	60, 3136, 956, 16320,
+	36, 3112, 1012, 16312,
+	16, 3084, 1068, 16304,
+	16380, 3056, 1124, 16296,
+	16360, 3024, 1184, 16292,
+	16340, 2992, 1244, 16284,
+	16324, 2956, 1304, 16276,
+	16308, 2920, 1364, 16268,
+	16292, 2880, 1424, 16264,
+	16280, 2836, 1484, 16256,
+	16268, 2792, 1548, 16252,
+	16256, 2748, 1608, 16244,
+	16248, 2700, 1668, 16240,
+	16240, 2652, 1732, 16232,
+	16232, 2604, 1792, 16228,
+	16228, 2552, 1856, 16224,
+	16220, 2500, 1916, 16220,
+	16216, 2444, 1980, 16216,
+	16216, 2388, 2040, 16216,
+	16212, 2332, 2100, 16212,
+	16212, 2276, 2160, 16212,
+	16212, 2220, 2220, 16212 };
+
+const uint16_t filter_4tap_150[132] = {
+	696, 2700, 696, 0,
+	660, 2704, 732, 16380,
+	628, 2704, 768, 16376,
+	596, 2704, 804, 16372,
+	564, 2700, 844, 16364,
+	532, 2696, 884, 16360,
+	500, 2692, 924, 16356,
+	472, 2684, 964, 16352,
+	440, 2676, 1004, 16352,
+	412, 2668, 1044, 16348,
+	384, 2656, 1088, 16344,
+	360, 2644, 1128, 16340,
+	332, 2632, 1172, 16336,
+	308, 2616, 1216, 16336,
+	284, 2600, 1260, 16332,
+	260, 2580, 1304, 16332,
+	236, 2560, 1348, 16328,
+	216, 2540, 1392, 16328,
+	196, 2516, 1436, 16328,
+	176, 2492, 1480, 16324,
+	156, 2468, 1524, 16324,
+	136, 2440, 1568, 16328,
+	120, 2412, 1612, 16328,
+	104, 2384, 1656, 16328,
+	88, 2352, 1700, 16332,
+	72, 2324, 1744, 16332,
+	60, 2288, 1788, 16336,
+	48, 2256, 1828, 16340,
+	36, 2220, 1872, 16344,
+	24, 2184, 1912, 16352,
+	12, 2148, 1952, 16356,
+	4, 2112, 1996, 16364,
+	16380, 2072, 2036, 16372 };
+
+const uint16_t filter_4tap_183[132] = {
+	944, 2204, 944, 0,
+	916, 2204, 972, 0,
+	888, 2200, 996, 0,
+	860, 2200, 1024, 4,
+	832, 2196, 1052, 4,
+	808, 2192, 1080, 8,
+	780, 2188, 1108, 12,
+	756, 2180, 1140, 12,
+	728, 2176, 1168, 16,
+	704, 2168, 1196, 20,
+	680, 2160, 1224, 24,
+	656, 2152, 1252, 28,
+	632, 2144, 1280, 36,
+	608, 2132, 1308, 40,
+	584, 2120, 1336, 48,
+	560, 2112, 1364, 52,
+	536, 2096, 1392, 60,
+	516, 2084, 1420, 68,
+	492, 2072, 1448, 76,
+	472, 2056, 1476, 84,
+	452, 2040, 1504, 92,
+	428, 2024, 1532, 100,
+	408, 2008, 1560, 112,
+	392, 1992, 1584, 120,
+	372, 1972, 1612, 132,
+	352, 1956, 1636, 144,
+	336, 1936, 1664, 156,
+	316, 1916, 1688, 168,
+	300, 1896, 1712, 180,
+	284, 1876, 1736, 192,
+	268, 1852, 1760, 208,
+	252, 1832, 1784, 220,
+	236, 1808, 1808, 236 };
+
 struct sclv_ratios_inits {
 	uint32_t h_int_scale_ratio_luma;
 	uint32_t h_int_scale_ratio_chroma;
@@ -47,20 +224,6 @@ struct sclv_ratios_inits {
 	struct init_int_and_frac v_init_chroma;
 };
 
-/*
-*****************************************************************************
-*  Function: calculateViewport
-*
-*  @brief
-*     Calculates all of the data required to set the viewport
-*
-*  @param [in]  pData:      scaler settings data
-*  @param [out] pLumaVp:    luma viewport information
-*  @param [out] pChromaVp:  chroma viewport information
-*  @param [out] srcResCx2:  source chroma resolution times 2  - for multi-taps
-*
-*****************************************************************************
-*/
 static void calculate_viewport(
 		const struct scaler_data *scl_data,
 		struct rect *luma_viewport,
@@ -318,29 +481,116 @@ static void program_two_taps_filter_vert(
 static void set_coeff_update_complete(
 		struct dce110_transform *xfm110)
 {
-	/*TODO: Until now, only scaler bypass, up-scaler 2 -TAPS coeff auto
-	 * calculation are implemented. Coefficient RAM is not used
-	 * Do not check this flag yet
-	 */
+	uint32_t value;
 
-	/*uint32_t value;
-	uint32_t addr = xfm->regs[IDX_SCL_UPDATE];
-
-	value = dal_read_reg(xfm->ctx, addr);
-	set_reg_field_value(value, 0,
-			SCL_UPDATE, SCL_COEF_UPDATE_COMPLETE);
-	dal_write_reg(xfm->ctx, addr, value);*/
+	value = dm_read_reg(xfm110->base.ctx, mmSCLV_UPDATE);
+	set_reg_field_value(value, 1, SCLV_UPDATE, SCL_COEF_UPDATE_COMPLETE);
+	dm_write_reg(xfm110->base.ctx, mmSCLV_UPDATE, value);
 }
 
-static bool program_multi_taps_filter(
+const uint16_t *get_filter_4tap(struct fixed31_32 ratio)
+{
+	if (ratio.value < dal_fixed31_32_one.value)
+		return filter_4tap_upscale;
+	else if (ratio.value < dal_fixed31_32_from_fraction(4, 3).value)
+		return filter_4tap_117;
+	else if (ratio.value < dal_fixed31_32_from_fraction(5, 3).value)
+		return filter_4tap_150;
+	else
+		return filter_4tap_183;
+}
+
+static void program_multi_taps_filter(
 	struct dce110_transform *xfm110,
-	const struct scaler_data *data,
-	bool horizontal)
+	int taps,
+	struct fixed31_32 ratio,
+	enum ram_filter_type filter_type)
 {
 	struct dc_context *ctx = xfm110->base.ctx;
+	int i, phase, pair;
+	int array_idx = 0;
+	int taps_pairs = (taps + 1) / 2;
+	int phases_to_program = SCLV_PHASES / 2 + 1;
 
-	NOT_IMPLEMENTED();
-	return false;
+	const uint16_t *coeffs = NULL;
+	uint32_t select = 0;
+	uint32_t power_ctl, power_ctl_off;
+
+	if (taps == 4)
+		coeffs = get_filter_4tap(ratio);
+	else if (taps == 2)
+		coeffs = filter_2tap;
+	else {
+		/* should never happen, major bug */
+		BREAK_TO_DEBUGGER();
+		return;
+	}
+
+	/*We need to disable power gating on coeff memory to do programming*/
+	power_ctl = dm_read_reg(ctx, mmDCFEV_MEM_PWR_CTRL);
+	power_ctl_off = power_ctl;
+	set_reg_field_value(power_ctl_off, 1, DCFEV_MEM_PWR_CTRL, SCLV_COEFF_MEM_PWR_DIS);
+	dm_write_reg(ctx, mmDCFEV_MEM_PWR_CTRL, power_ctl_off);
+
+	/*Wait to disable gating:*/
+	for (i = 0; i < 10; i++) {
+		if (get_reg_field_value(
+				dm_read_reg(ctx, mmDCFEV_MEM_PWR_STATUS),
+				DCFEV_MEM_PWR_STATUS,
+				SCLV_COEFF_MEM_PWR_STATE) == 0)
+			break;
+
+		udelay(1);
+	}
+
+	set_reg_field_value(select, filter_type, SCLV_COEF_RAM_SELECT, SCL_C_RAM_FILTER_TYPE);
+
+	for (phase = 0; phase < phases_to_program; phase++) {
+		/*we always program N/2 + 1 phases, total phases N, but N/2-1 are just mirror
+		phase 0 is unique and phase N/2 is unique if N is even*/
+		set_reg_field_value(select, phase, SCLV_COEF_RAM_SELECT, SCL_C_RAM_PHASE);
+		for (pair = 0; pair < taps_pairs; pair++) {
+			uint32_t data = 0;
+
+			set_reg_field_value(select, pair,
+					SCLV_COEF_RAM_SELECT, SCL_C_RAM_TAP_PAIR_IDX);
+
+			dm_write_reg(ctx, mmSCLV_COEF_RAM_SELECT, select);
+
+			set_reg_field_value(
+					data, 1,
+					SCLV_COEF_RAM_TAP_DATA,
+					SCL_C_RAM_EVEN_TAP_COEF_EN);
+			set_reg_field_value(
+					data, coeffs[array_idx],
+					SCLV_COEF_RAM_TAP_DATA,
+					SCL_C_RAM_EVEN_TAP_COEF);
+
+			if (taps % 2 && pair == taps_pairs - 1) {
+				set_reg_field_value(
+						data, 0,
+						SCLV_COEF_RAM_TAP_DATA,
+						SCL_C_RAM_ODD_TAP_COEF_EN);
+				array_idx++;
+			} else {
+				set_reg_field_value(
+						data, 1,
+						SCLV_COEF_RAM_TAP_DATA,
+						SCL_C_RAM_ODD_TAP_COEF_EN);
+				set_reg_field_value(
+						data, coeffs[array_idx + 1],
+						SCLV_COEF_RAM_TAP_DATA,
+						SCL_C_RAM_ODD_TAP_COEF);
+
+				array_idx += 2;
+			}
+
+			dm_write_reg(ctx, mmSCLV_COEF_RAM_TAP_DATA, data);
+		}
+	}
+
+	/*We need to restore power gating on coeff memory to initial state*/
+	dm_write_reg(ctx, mmDCFEV_MEM_PWR_CTRL, power_ctl);
 }
 
 static void calculate_inits(
@@ -487,7 +737,6 @@ static bool dce110_transform_v_set_scaler(
 	bool filter_updated = false;
 	struct rect luma_viewport = {0};
 	struct rect chroma_viewport = {0};
-	struct dc_context *ctx = xfm->ctx;
 
 	/* 1. Calculate viewport, viewport programming should happen after init
 	 * calculations as they may require an adjustment in the viewport.
@@ -518,31 +767,39 @@ static bool dce110_transform_v_set_scaler(
 		/*scaler coeff of 2-TAPS use hardware auto calculated value*/
 
 		/* 5. Program vertical filters */
-		if (data->taps.v_taps > 2) {
+		if (data->taps.v_taps > 2 || data->taps.v_taps_c > 2) {
 			program_two_taps_filter_vert(xfm110, false);
 
-			if (!program_multi_taps_filter(xfm110, data, false)) {
-				dal_logger_write(ctx->logger,
-					LOG_MAJOR_DCP,
-					LOG_MINOR_DCP_SCALER,
-					"Failed vertical taps programming\n");
-				return false;
-			}
+			program_multi_taps_filter(
+					xfm110,
+					data->taps.v_taps,
+					data->ratios.vert,
+					FILTER_TYPE_RGB_Y_VERTICAL);
+			program_multi_taps_filter(
+					xfm110,
+					data->taps.v_taps_c,
+					data->ratios.vert_c,
+					FILTER_TYPE_CBCR_VERTICAL);
+
 			filter_updated = true;
 		} else
 			program_two_taps_filter_vert(xfm110, true);
 
 		/* 6. Program horizontal filters */
-		if (data->taps.h_taps > 2) {
+		if (data->taps.h_taps > 2 || data->taps.h_taps_c > 2) {
 			program_two_taps_filter_horz(xfm110, false);
 
-			if (!program_multi_taps_filter(xfm110, data, true)) {
-				dal_logger_write(ctx->logger,
-					LOG_MAJOR_DCP,
-					LOG_MINOR_DCP_SCALER,
-					"Failed horizontal taps programming\n");
-				return false;
-			}
+			program_multi_taps_filter(
+					xfm110,
+					data->taps.h_taps,
+					data->ratios.horz,
+					FILTER_TYPE_RGB_Y_HORIZONTAL);
+			program_multi_taps_filter(
+					xfm110,
+					data->taps.h_taps_c,
+					data->ratios.horz_c,
+					FILTER_TYPE_CBCR_HORIZONTAL);
+
 			filter_updated = true;
 		} else
 			program_two_taps_filter_horz(xfm110, true);
