@@ -410,16 +410,11 @@ void ProgramPixelDurationV(unsigned int pixelClockInKHz )
 
 struct dc *dc_create(const struct dc_init_data *init_params)
  {
-	struct dc_context ctx = {
-		.driver_context = init_params->driver,
-		.cgs_device = init_params->cgs_device
-	};
 	struct core_dc *core_dc = dm_alloc(sizeof(*core_dc));
 
 	if (NULL == core_dc)
 		goto alloc_fail;
 
-	ctx.dc = &core_dc->public;
 	if (false == construct(core_dc, init_params))
 		goto construct_fail;
 
