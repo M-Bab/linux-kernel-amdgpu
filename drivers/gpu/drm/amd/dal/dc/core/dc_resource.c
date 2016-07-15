@@ -444,6 +444,7 @@ bool resource_build_scaling_params(
 {
 	bool res;
 	struct dc_crtc_timing *timing = &pipe_ctx->stream->public.timing;
+
 	/* Important: scaling ratio calculation requires pixel format,
 	 * lb depth calculation requires recout and taps require scaling ratios.
 	 */
@@ -473,29 +474,6 @@ bool resource_build_scaling_params(
 	res = pipe_ctx->xfm->funcs->transform_get_optimal_number_of_taps(
 		pipe_ctx->xfm, &pipe_ctx->scl_data, &surface->scaling_quality);
 
-	/* Check if scaling is required, if so  fail in case optimal taps calc
-	 * failed. Otherwise just update taps here
-	 */
-	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.horz) == (1 << 19))
-		pipe_ctx->scl_data.taps.h_taps = 1;
-	else if (!res)
-		return false;
-
-	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.horz_c) == (1 << 19))
-		pipe_ctx->scl_data.taps.h_taps_c = 1;
-	else if (!res)
-		return false;
-
-	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.vert) == (1 << 19))
-		pipe_ctx->scl_data.taps.v_taps = 1;
-	else if (!res)
-		return false;
-
-	if (dal_fixed31_32_u2d19(pipe_ctx->scl_data.ratios.vert_c) == (1 << 19))
-		pipe_ctx->scl_data.taps.v_taps_c = 1;
-	else if (!res)
-		return false;
-
 	dal_logger_write(pipe_ctx->stream->ctx->logger,
 				LOG_MAJOR_DCP,
 				LOG_MINOR_DCP_SCALER,
@@ -512,7 +490,7 @@ bool resource_build_scaling_params(
 				surface->dst_rect.x,
 				surface->dst_rect.y);
 
-	return true;
+	return res;
 }
 
 
