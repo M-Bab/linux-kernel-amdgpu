@@ -179,6 +179,17 @@ static bool setup_scaling_configuration(
 	struct dc_context *ctx = xfm110->base.ctx;
 	uint32_t value = 0;
 
+	set_reg_field_value(value, data->taps.h_taps - 1,
+			SCLV_TAP_CONTROL, SCL_H_NUM_OF_TAPS);
+	set_reg_field_value(value, data->taps.v_taps - 1,
+			SCLV_TAP_CONTROL, SCL_V_NUM_OF_TAPS);
+	set_reg_field_value(value, data->taps.h_taps_c - 1,
+			SCLV_TAP_CONTROL, SCL_H_NUM_OF_TAPS_C);
+	set_reg_field_value(value, data->taps.v_taps_c - 1,
+			SCLV_TAP_CONTROL, SCL_V_NUM_OF_TAPS_C);
+	dm_write_reg(ctx, mmSCLV_TAP_CONTROL, value);
+
+	value = 0;
 	if (data->taps.h_taps + data->taps.v_taps > 2) {
 		set_reg_field_value(value, 1, SCLV_MODE, SCL_MODE);
 		set_reg_field_value(value, 1, SCLV_MODE, SCL_PSCL_EN);
@@ -208,17 +219,6 @@ static bool setup_scaling_configuration(
 		set_reg_field_value(value, 0, SCLV_MODE, SCL_PSCL_EN_C);
 	}
 	dm_write_reg(ctx, mmSCLV_MODE, value);
-
-	value = 0;
-	set_reg_field_value(value, data->taps.h_taps - 1,
-			SCLV_TAP_CONTROL, SCL_H_NUM_OF_TAPS);
-	set_reg_field_value(value, data->taps.v_taps - 1,
-			SCLV_TAP_CONTROL, SCL_V_NUM_OF_TAPS);
-	set_reg_field_value(value, data->taps.h_taps_c - 1,
-			SCLV_TAP_CONTROL, SCL_H_NUM_OF_TAPS_C);
-	set_reg_field_value(value, data->taps.v_taps_c - 1,
-			SCLV_TAP_CONTROL, SCL_V_NUM_OF_TAPS_C);
-	dm_write_reg(ctx, mmSCLV_TAP_CONTROL, value);
 
 	value = 0;
 	/*
