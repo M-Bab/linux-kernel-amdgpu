@@ -1018,6 +1018,8 @@ struct validate_context *dc_pre_commit_surfaces_to_target(
 
 	core_dc->hwss.apply_ctx_to_surface_locked(core_dc, context);
 
+	context->locked = true;
+
 	return context;
 
 unexpected_fail:
@@ -1042,6 +1044,7 @@ bool dc_isr_commit_surfaces_to_target(
 	if (!core_dc->hwss.apply_ctx_to_surface_unlock)
 		return true;
 	status = core_dc->hwss.apply_ctx_to_surface_unlock(core_dc, context);
+	context->locked = false;
 	return status == DC_OK;
 }
 
@@ -1051,6 +1054,9 @@ bool dc_post_commit_surfaces_to_target(
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	/* TODO: lower display clock if needed*/
+
+	if (context->locked)
+		dc_isr_commit_surfaces_to_target(dc, context);
 
 	resource_validate_ctx_destruct(core_dc->current_context);
 	dm_free(core_dc->current_context);
@@ -1181,6 +1187,58 @@ const struct audio **dc_get_audios(struct dc *dc)
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	return (const struct audio **)core_dc->res_pool->audios;
+}
+
+void dc_flip_surface_addrs_on_context(
+		struct dc *dc,
+		struct validate_context *context,
+		const struct dc_surface *const surfaces[],
+		struct dc_flip_addrs flip_addrs[],
+		uint32_t count)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	int i, j;
+	int pipe_count = core_dc->res_pool->pipe_count;
+
+	for (i = 0; i < count; i++)
+		for (j = 0; j < pipe_count; j++) {
+			struct pipe_ctx *pipe_ctx =
+				&context->res_ctx.pipe_ctx[j];
+			struct core_surface *ctx_surface = pipe_ctx->surface;
+
+			if (DC_SURFACE_TO_CORE(surfaces[i]) != ctx_surface)
+				continue;
+
+			ctx_surface->public.address = flip_addrs[i].address;
+			ctx_surface->public.flip_immediate = flip_addrs[i].flip_immediate;
+
+			if (!ctx_surface->public.flip_immediate)
+				core_dc->hwss.pipe_control_lock(
+						core_dc->ctx,
+						pipe_ctx->pipe_idx,
+						PIPE_LOCK_CONTROL_SURFACE |
+						PIPE_LOCK_CONTROL_MODE,
+						true);
+
+			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
+		}
+
+	for (j = pipe_count - 1; j >= 0; j--)
+		for (i = count - 1; i >= 0; i--) {
+			struct pipe_ctx *pipe_ctx =
+				&context->res_ctx.pipe_ctx[j];
+			struct core_surface *ctx_surface = pipe_ctx->surface;
+
+			if (DC_SURFACE_TO_CORE(surfaces[i]) != ctx_surface)
+				continue;
+
+			if (!ctx_surface->public.flip_immediate)
+				core_dc->hwss.pipe_control_lock(
+						core_dc->ctx,
+						pipe_ctx->pipe_idx,
+						PIPE_LOCK_CONTROL_SURFACE,
+						false);
+		}
 }
 
 void dc_flip_surface_addrs(

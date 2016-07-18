@@ -215,11 +215,37 @@ void dc_flip_surface_addrs(struct dc *dc,
  *   Surfaces attributes are programmed and configured to be composed into target.
  *   This does not trigger a flip.  No surface address is programmed.
  */
+
+/* Forward declaration*/
+struct validate_context;
+
+void dc_flip_surface_addrs_on_context(
+		struct dc *dc,
+		struct validate_context *context,
+		const struct dc_surface *const surfaces[],
+		struct dc_flip_addrs flip_addrs[],
+		uint32_t count);
+
 bool dc_commit_surfaces_to_target(
 		struct dc *dc,
 		struct dc_surface *dc_surfaces[],
 		uint8_t surface_count,
 		struct dc_target *dc_target);
+
+struct validate_context *dc_pre_commit_surfaces_to_target(
+		struct dc *dc,
+		struct dc_surface *new_surfaces[],
+		uint8_t new_surface_count,
+		struct dc_target *dc_target);
+
+bool dc_isr_commit_surfaces_to_target(
+		struct dc *dc,
+		struct validate_context *context);
+
+bool dc_post_commit_surfaces_to_target(
+		struct dc *dc,
+		struct validate_context *context);
+
 
 bool dc_update_surfaces_for_target(
 		struct dc *dc,

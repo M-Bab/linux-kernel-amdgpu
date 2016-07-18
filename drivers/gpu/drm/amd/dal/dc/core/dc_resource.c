@@ -464,6 +464,9 @@ bool resource_build_scaling_params(
 
 	calculate_viewport(surface, pipe_ctx);
 
+	if (pipe_ctx->scl_data.viewport.height < 16 || pipe_ctx->scl_data.viewport.width < 16)
+		return false;
+
 	calculate_scaling_ratios(surface, pipe_ctx);
 
 	calculate_recout(surface, pipe_ctx);
