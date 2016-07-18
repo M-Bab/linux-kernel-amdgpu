@@ -905,17 +905,15 @@ context_alloc_fail:
 	return (result == DC_OK);
 }
 
-bool dc_commit_surfaces_to_target(
+struct validate_context *dc_pre_commit_surfaces_to_target(
 		struct dc *dc,
 		struct dc_surface *new_surfaces[],
 		uint8_t new_surface_count,
 		struct dc_target *dc_target)
-
 {
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-	struct dc_bios *dcb = core_dc->ctx->dc_bios;
 
 	int i, j;
+	struct core_dc *core_dc = DC_TO_CORE(dc);
 	uint32_t prev_disp_clk = core_dc->current_context->bw_results.dispclk_khz;
 	struct core_target *target = DC_TARGET_TO_CORE(dc_target);
 	struct dc_target_status *target_status = NULL;
@@ -926,7 +924,7 @@ bool dc_commit_surfaces_to_target(
 	int new_enabled_surface_count = 0;
 
 	if (core_dc->current_context->target_count == 0)
-		return false;
+		return NULL;
 
 
 	context = dm_alloc(sizeof(struct validate_context));
@@ -944,12 +942,6 @@ bool dc_commit_surfaces_to_target(
 			break;
 
 	target_status = &context->target_status[i];
-
-	if (!dcb->funcs->is_accelerated_mode(dcb)
-			|| i == context->target_count) {
-		BREAK_TO_DEBUGGER();
-		goto unexpected_fail;
-	}
 
 	for (i = 0; i < target_status->surface_count; i++)
 		if (target_status->surfaces[i]->visible)
@@ -1024,23 +1016,70 @@ bool dc_commit_surfaces_to_target(
 		target_disable_memory_requests(dc_target,
 				&core_dc->current_context->res_ctx);
 
-	core_dc->hwss.apply_ctx_to_surface(core_dc, context);
+	core_dc->hwss.apply_ctx_to_surface_locked(core_dc, context);
 
-
-	/* TODO: Implement lowering display clock */
-
-	resource_validate_ctx_destruct(core_dc->current_context);
-	dm_free(core_dc->current_context);
-	core_dc->current_context = context;
-
-	return true;
+	return context;
 
 unexpected_fail:
 	resource_validate_ctx_destruct(context);
 	dm_free(context);
 val_ctx_fail:
+	return NULL;
+}
 
-	return false;
+bool dc_isr_commit_surfaces_to_target(
+		struct dc *dc,
+		struct validate_context *context)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	enum dc_status status;
+
+	/*
+	 * Currently refactor is not complete, in some environment this is
+	 * not implemented so we need to check the pointer.
+	 * TODO: remove the check when implementation is done
+	 */
+	if (!core_dc->hwss.apply_ctx_to_surface_unlock)
+		return true;
+	status = core_dc->hwss.apply_ctx_to_surface_unlock(core_dc, context);
+	return status == DC_OK;
+}
+
+bool dc_post_commit_surfaces_to_target(
+		struct dc *dc,
+		struct validate_context *context)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	/* TODO: lower display clock if needed*/
+
+	resource_validate_ctx_destruct(core_dc->current_context);
+	dm_free(core_dc->current_context);
+	core_dc->current_context = context;
+	return true;
+}
+
+bool dc_commit_surfaces_to_target(
+		struct dc *dc,
+		struct dc_surface *new_surfaces[],
+		uint8_t new_surface_count,
+		struct dc_target *dc_target)
+{
+	struct validate_context *context = dc_pre_commit_surfaces_to_target(
+			dc,
+			new_surfaces,
+			new_surface_count,
+			dc_target);
+	if (!context)
+		return false;
+
+	if (!dc_isr_commit_surfaces_to_target(dc, context))
+		return false;
+
+	if (!dc_post_commit_surfaces_to_target(dc, context))
+		return false;
+
+	return true;
+
 }
 
 bool dc_update_surfaces_for_target(

@@ -1876,11 +1876,24 @@ static void set_display_mark_for_pipe_if_needed(struct core_dc *dc,
 		program_wm_for_pipe(dc, pipe_ctx, context);
 }
 
+static void dce110_program_blending(struct core_dc *dc,
+		struct pipe_ctx *pipe_ctx,
+		struct validate_context *context)
+{
+	program_blender_if_needed(dc, pipe_ctx);
+}
+
 static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 		struct pipe_ctx *pipe_ctx,
 		struct validate_context *context)
 {
 	struct core_gamma *gamma = NULL;
+	struct mem_input *mi = pipe_ctx->mi;
+	struct pipe_ctx *old_pipe = NULL;
+	struct dc_context *ctx = pipe_ctx->stream->ctx;
+	struct core_surface *surface = pipe_ctx->surface;
+	struct xfm_grph_csc_adjustment adjust;
+
 	int lock_mask =
 		PIPE_LOCK_CONTROL_GRAPHICS |
 		PIPE_LOCK_CONTROL_SCL |
@@ -1901,9 +1914,70 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 			lock_mask,
 			true);
 
+	if (dc->current_context)
+		old_pipe = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
 
-	dc->hwss.set_plane_config(
-			dc, pipe_ctx, &context->res_ctx);
+	memset(&adjust, 0, sizeof(adjust));
+	adjust.gamut_adjust_type = GRAPHICS_GAMUT_ADJUST_TYPE_BYPASS;
+
+	dc->hwss.enable_fe_clock(ctx, pipe_ctx->pipe_idx, true);
+
+	set_default_colors(pipe_ctx);
+
+	if (pipe_ctx->stream->public.gamut_remap_matrix.enable_remap == true) {
+		adjust.gamut_adjust_type = GRAPHICS_GAMUT_ADJUST_TYPE_SW;
+		adjust.temperature_matrix[0] =
+				pipe_ctx->stream->
+				public.gamut_remap_matrix.matrix[0];
+		adjust.temperature_matrix[1] =
+				pipe_ctx->stream->
+				public.gamut_remap_matrix.matrix[1];
+		adjust.temperature_matrix[2] =
+				pipe_ctx->stream->
+				public.gamut_remap_matrix.matrix[2];
+		adjust.temperature_matrix[3] =
+				pipe_ctx->stream->
+				public.gamut_remap_matrix.matrix[4];
+		adjust.temperature_matrix[4] =
+				pipe_ctx->stream->
+				public.gamut_remap_matrix.matrix[5];
+		adjust.temperature_matrix[5] =
+				pipe_ctx->stream->
+				public.gamut_remap_matrix.matrix[6];
+		adjust.temperature_matrix[6] =
+				pipe_ctx->stream->
+				public.gamut_remap_matrix.matrix[8];
+		adjust.temperature_matrix[7] =
+				pipe_ctx->stream->
+				public.gamut_remap_matrix.matrix[9];
+		adjust.temperature_matrix[8] =
+				pipe_ctx->stream->
+				public.gamut_remap_matrix.matrix[10];
+	}
+
+	pipe_ctx->xfm->funcs->transform_set_gamut_remap(pipe_ctx->xfm, &adjust);
+
+	if (old_pipe && memcmp(&old_pipe->scl_data,
+				&pipe_ctx->scl_data,
+				sizeof(struct scaler_data)) != 0)
+		program_scaler(dc, pipe_ctx);
+
+	if (pipe_ctx->bottom_pipe)
+		pipe_ctx->xfm->funcs->transform_set_alpha(pipe_ctx->xfm, true);
+
+	mi->funcs->mem_input_program_surface_config(
+			mi,
+			surface->public.format,
+			&surface->public.tiling_info,
+			&surface->public.plane_size,
+			surface->public.rotation);
+
+	if (dc->public.config.gpu_vm_support)
+		mi->funcs->mem_input_program_pte_vm(
+				pipe_ctx->mi,
+				surface->public.format,
+				&surface->public.tiling_info,
+				surface->public.rotation);
 
 	dc->hwss.update_plane_addr(dc, pipe_ctx);
 
@@ -1941,7 +2015,6 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 			pipe_ctx->surface->public.clip_rect.width,
 			pipe_ctx->surface->public.clip_rect.height);
 
-
 	dal_logger_write(dc->ctx->logger,
 			LOG_MAJOR_INTERFACE_TRACE,
 			LOG_MINOR_COMPONENT_SURFACE,
@@ -1959,7 +2032,7 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 			pipe_ctx->scl_data.recout.y);
 }
 
-static enum dc_status apply_ctx_to_surface(
+static enum dc_status apply_ctx_to_surface_locked(
 		struct core_dc *dc,
 		struct validate_context *context)
 {
@@ -1977,7 +2050,26 @@ static enum dc_status apply_ctx_to_surface(
 		hw_sequencer_program_pipe_tree(dc, context, head_pipe,
 				dce110_program_front_end_for_pipe);
 
+	}
 
+
+	return DC_OK;
+}
+
+static enum dc_status apply_ctx_to_surface_unlock(
+		struct core_dc *dc,
+		struct validate_context *context)
+{
+	int i;
+
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
+		struct pipe_ctx *head_pipe = &context->res_ctx.pipe_ctx[i];
+
+		if (!head_pipe->surface || head_pipe->top_pipe != NULL)
+			continue;
+
+		hw_sequencer_program_pipe_tree(dc, context, head_pipe,
+				dce110_program_blending);
 	}
 
 	/* Go in reverse order so that all pipes are unlocked simultaneously
@@ -1998,9 +2090,6 @@ static enum dc_status apply_ctx_to_surface(
 				false);
 	}
 
-#ifdef DIAGS_BUILD
-	print_context_timing_status(dc, &context->res_ctx);
-#endif
 	return DC_OK;
 }
 
@@ -2029,7 +2118,8 @@ static void update_plane_surface(
 static const struct hw_sequencer_funcs dce110_funcs = {
 	.init_hw = init_hw,
 	.apply_ctx_to_hw = apply_ctx_to_hw,
-	.apply_ctx_to_surface = apply_ctx_to_surface,
+	.apply_ctx_to_surface_locked = apply_ctx_to_surface_locked,
+	.apply_ctx_to_surface_unlock = apply_ctx_to_surface_unlock,
 	.set_plane_config = set_plane_config,
 	.update_plane_addr = update_plane_addr,
 	.update_pending_status = update_pending_status,

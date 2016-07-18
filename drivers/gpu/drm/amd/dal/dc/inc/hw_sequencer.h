@@ -51,7 +51,10 @@ struct hw_sequencer_funcs {
 	enum dc_status (*apply_ctx_to_hw)(
 			struct core_dc *dc, struct validate_context *context);
 
-	enum dc_status (*apply_ctx_to_surface)(
+	enum dc_status (*apply_ctx_to_surface_locked)(
+			struct core_dc *dc, struct validate_context *context);
+
+	enum dc_status (*apply_ctx_to_surface_unlock)(
 			struct core_dc *dc, struct validate_context *context);
 
 	void (*set_plane_config)(
