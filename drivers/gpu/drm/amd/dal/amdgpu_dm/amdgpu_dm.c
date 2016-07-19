@@ -955,8 +955,8 @@ static void handle_hpd_rx_irq(void *param)
 			drm_kms_helper_hotplug_event(dev);
 		}
 	}
-
-	dm_handle_hpd_rx_irq(aconnector);
+	if (aconnector->dc_link->cur_link_settings.lane_count != LANE_COUNT_UNKNOWN)
+		dm_handle_hpd_rx_irq(aconnector);
 }
 
 static void register_hpd_handlers(struct amdgpu_device *adev)
