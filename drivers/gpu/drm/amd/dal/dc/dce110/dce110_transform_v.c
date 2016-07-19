@@ -868,5 +868,8 @@ bool dce110_transform_v_construct(
 			LB_PIXEL_DEPTH_24BPP |
 			LB_PIXEL_DEPTH_30BPP;
 
+	xfm110->base.lb_bits_per_entry = LB_BITS_PER_ENTRY;
+	xfm110->base.lb_total_entries_num = LB_TOTAL_NUMBER_OF_ENTRIES;
+
 	return true;
 }

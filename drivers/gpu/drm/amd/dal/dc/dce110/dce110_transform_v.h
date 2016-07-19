@@ -27,6 +27,9 @@
 
 #include "transform.h"
 
+#define LB_TOTAL_NUMBER_OF_ENTRIES 1712
+#define LB_BITS_PER_ENTRY 144
+
 bool dce110_transform_v_construct(
 	struct dce110_transform *xfm110,
 	struct dc_context *ctx);
