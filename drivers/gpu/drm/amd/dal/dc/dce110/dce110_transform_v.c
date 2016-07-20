@@ -445,39 +445,6 @@ static void program_overscan(
 			overscan_top_bottom);
 }
 
-static void program_two_taps_filter_horz(
-	struct dce110_transform *xfm110,
-	bool hardcode_coff)
-{
-	uint32_t value = 0;
-
-	if (hardcode_coff)
-		set_reg_field_value(
-				value,
-				1,
-				SCLV_HORZ_FILTER_CONTROL,
-				SCL_H_2TAP_HARDCODE_COEF_EN);
-
-	dm_write_reg(xfm110->base.ctx,
-			mmSCLV_HORZ_FILTER_CONTROL,
-			value);
-}
-
-static void program_two_taps_filter_vert(
-	struct dce110_transform *xfm110,
-	bool hardcode_coff)
-{
-	uint32_t value = 0;
-
-	if (hardcode_coff)
-		set_reg_field_value(value, 1, SCLV_VERT_FILTER_CONTROL,
-				SCL_V_2TAP_HARDCODE_COEF_EN);
-
-	dm_write_reg(xfm110->base.ctx,
-			mmSCLV_VERT_FILTER_CONTROL,
-			value);
-}
-
 static void set_coeff_update_complete(
 		struct dce110_transform *xfm110)
 {
@@ -503,7 +470,7 @@ const uint16_t *get_filter_4tap(struct fixed31_32 ratio)
 static void program_multi_taps_filter(
 	struct dce110_transform *xfm110,
 	int taps,
-	struct fixed31_32 ratio,
+	const uint16_t *coeffs,
 	enum ram_filter_type filter_type)
 {
 	struct dc_context *ctx = xfm110->base.ctx;
@@ -512,19 +479,11 @@ static void program_multi_taps_filter(
 	int taps_pairs = (taps + 1) / 2;
 	int phases_to_program = SCLV_PHASES / 2 + 1;
 
-	const uint16_t *coeffs = NULL;
 	uint32_t select = 0;
 	uint32_t power_ctl, power_ctl_off;
 
-	if (taps == 4)
-		coeffs = get_filter_4tap(ratio);
-	else if (taps == 2)
-		coeffs = filter_2tap;
-	else {
-		/* should never happen, major bug */
-		BREAK_TO_DEBUGGER();
+	if (!coeffs)
 		return;
-	}
 
 	/*We need to disable power gating on coeff memory to do programming*/
 	power_ctl = dm_read_reg(ctx, mmDCFEV_MEM_PWR_CTRL);
@@ -728,6 +687,21 @@ static void dce110_transform_v_set_scalerv_bypass(
 	dm_write_reg(xfm->ctx, addr, value);
 }
 
+static const uint16_t *get_filter_coeffs(int taps, struct fixed31_32 ratio)
+{
+	if (taps == 4)
+		return get_filter_4tap(ratio);
+	else if (taps == 2)
+		return filter_2tap;
+	else if (taps == 1)
+		return NULL;
+	else {
+		/* should never happen, bug */
+		BREAK_TO_DEBUGGER();
+		return NULL;
+	}
+}
+
 static bool dce110_transform_v_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data)
@@ -735,6 +709,7 @@ static bool dce110_transform_v_set_scaler(
 	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
 	bool is_scaling_required = false;
 	bool filter_updated = false;
+	const uint16_t *coeffs_v, *coeffs_h, *coeffs_h_c, *coeffs_v_c;
 	struct rect luma_viewport = {0};
 	struct rect chroma_viewport = {0};
 
@@ -764,45 +739,45 @@ static bool dce110_transform_v_set_scaler(
 
 		program_scl_ratios_inits(xfm110, &inits);
 
-		/*scaler coeff of 2-TAPS use hardware auto calculated value*/
+		coeffs_v = get_filter_coeffs(data->taps.v_taps, data->ratios.vert);
+		coeffs_h = get_filter_coeffs(data->taps.h_taps, data->ratios.horz);
+		coeffs_v_c = get_filter_coeffs(data->taps.v_taps_c, data->ratios.vert_c);
+		coeffs_h_c = get_filter_coeffs(data->taps.h_taps_c, data->ratios.horz_c);
 
+		if (coeffs_v != xfm110->filter_v
+				|| coeffs_v_c != xfm110->filter_v_c
+				|| coeffs_h != xfm110->filter_h
+				|| coeffs_h_c != xfm110->filter_h_c) {
 		/* 5. Program vertical filters */
-		if (data->taps.v_taps > 2 || data->taps.v_taps_c > 2) {
-			program_two_taps_filter_vert(xfm110, false);
-
 			program_multi_taps_filter(
 					xfm110,
 					data->taps.v_taps,
-					data->ratios.vert,
+					coeffs_v,
 					FILTER_TYPE_RGB_Y_VERTICAL);
 			program_multi_taps_filter(
 					xfm110,
 					data->taps.v_taps_c,
-					data->ratios.vert_c,
+					coeffs_v_c,
 					FILTER_TYPE_CBCR_VERTICAL);
 
-			filter_updated = true;
-		} else
-			program_two_taps_filter_vert(xfm110, true);
-
 		/* 6. Program horizontal filters */
-		if (data->taps.h_taps > 2 || data->taps.h_taps_c > 2) {
-			program_two_taps_filter_horz(xfm110, false);
-
 			program_multi_taps_filter(
 					xfm110,
 					data->taps.h_taps,
-					data->ratios.horz,
+					coeffs_h,
 					FILTER_TYPE_RGB_Y_HORIZONTAL);
 			program_multi_taps_filter(
 					xfm110,
 					data->taps.h_taps_c,
-					data->ratios.horz_c,
+					coeffs_h_c,
 					FILTER_TYPE_CBCR_HORIZONTAL);
 
+			xfm110->filter_v = coeffs_v;
+			xfm110->filter_v_c = coeffs_v_c;
+			xfm110->filter_h = coeffs_h;
+			xfm110->filter_h_c = coeffs_h_c;
 			filter_updated = true;
-		} else
-			program_two_taps_filter_horz(xfm110, true);
+		}
 	}
 
 	/* 7. Program the viewport */

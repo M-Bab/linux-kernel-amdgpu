@@ -44,6 +44,10 @@ struct dce110_transform {
 	struct transform base;
 	struct dce110_transform_reg_offsets offsets;
 
+	const uint16_t *filter_v;
+	const uint16_t *filter_h;
+	const uint16_t *filter_v_c;
+	const uint16_t *filter_h_c;
 	uint32_t lb_pixel_depth_supported;
 };
 
