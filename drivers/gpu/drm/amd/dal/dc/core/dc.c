@@ -1007,7 +1007,7 @@ struct validate_context *dc_pre_commit_surfaces_to_target(
 
 	if (prev_disp_clk < context->bw_results.dispclk_khz) {
 		pplib_apply_display_requirements(core_dc, context,
-								&context->pp_display_cfg);
+						&context->pp_display_cfg);
 		core_dc->hwss.set_display_clock(context);
 	}
 
@@ -1052,11 +1052,29 @@ bool dc_post_commit_surfaces_to_target(
 		struct dc *dc,
 		struct validate_context *context)
 {
+	int i;
 	struct core_dc *core_dc = DC_TO_CORE(dc);
-	/* TODO: lower display clock if needed*/
 
 	if (context->locked)
-		dc_isr_commit_surfaces_to_target(dc, context);
+		return false;
+
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
+		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream != NULL
+				&& context->res_ctx.pipe_ctx[i].stream == NULL) {
+			core_dc->hwss.enable_display_power_gating(
+				core_dc->ctx, i, core_dc->ctx->dc_bios,
+				PIPE_GATING_CONTROL_ENABLE);
+			memset(&context->res_ctx.pipe_ctx[i], 0, sizeof(struct pipe_ctx));
+		}
+	}
+
+	if (core_dc->current_context->bw_results.dispclk_khz
+			> context->bw_results.dispclk_khz) {
+		pplib_apply_display_requirements(
+				core_dc, context, &context->pp_display_cfg);
+		core_dc->hwss.set_display_clock(context);
+	}
+
 
 	resource_validate_ctx_destruct(core_dc->current_context);
 	dm_free(core_dc->current_context);
