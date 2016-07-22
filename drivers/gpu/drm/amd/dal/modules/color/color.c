@@ -30,12 +30,14 @@
 #include "fixed31_32.h"
 
 #define MOD_COLOR_MAX_CONCURRENT_SINKS 32
+#define DIVIDER 10000
+/* S2D13 value in [-3.00...0.9999] */
+#define S2D13_MIN (-3 * DIVIDER)
+#define S2D13_MAX (3 * DIVIDER)
 
 struct sink_caps {
 	const struct dc_sink *sink;
 };
-
-const unsigned int gamut_divider = 10000;
 
 struct gamut_calculation_matrix {
 	struct fixed31_32 MTransposed[9];
@@ -60,6 +62,10 @@ struct color_state {
 	int custom_color_temperature;
 	struct color_space_coordinates source_gamut;
 	struct color_space_coordinates destination_gamut;
+	struct color_range contrast;
+	struct color_range saturation;
+	struct color_range brightness;
+	struct color_range hue;
 };
 
 struct core_color {
@@ -362,21 +368,21 @@ static bool build_gamut_remap_matrix
 		struct fixed31_32 *white_point_matrix)
 {
 	struct fixed31_32 fixed_blueX = dal_fixed31_32_from_fraction
-			(gamut_description.blueX, gamut_divider);
+			(gamut_description.blueX, DIVIDER);
 	struct fixed31_32 fixed_blueY = dal_fixed31_32_from_fraction
-			(gamut_description.blueY, gamut_divider);
+			(gamut_description.blueY, DIVIDER);
 	struct fixed31_32 fixed_greenX = dal_fixed31_32_from_fraction
-			(gamut_description.greenX, gamut_divider);
+			(gamut_description.greenX, DIVIDER);
 	struct fixed31_32 fixed_greenY = dal_fixed31_32_from_fraction
-			(gamut_description.greenY, gamut_divider);
+			(gamut_description.greenY, DIVIDER);
 	struct fixed31_32 fixed_redX = dal_fixed31_32_from_fraction
-			(gamut_description.redX, gamut_divider);
+			(gamut_description.redX, DIVIDER);
 	struct fixed31_32 fixed_redY = dal_fixed31_32_from_fraction
-			(gamut_description.redY, gamut_divider);
+			(gamut_description.redY, DIVIDER);
 	struct fixed31_32 fixed_whiteX = dal_fixed31_32_from_fraction
-			(gamut_description.whiteX, gamut_divider);
+			(gamut_description.whiteX, DIVIDER);
 	struct fixed31_32 fixed_whiteY = dal_fixed31_32_from_fraction
-			(gamut_description.whiteY, gamut_divider);
+			(gamut_description.whiteY, DIVIDER);
 
 	rgb_matrix[0] = dal_fixed31_32_div(fixed_redX, fixed_redY);
 	rgb_matrix[1] = dal_fixed31_32_one;
@@ -413,6 +419,156 @@ static bool check_dc_support(const struct dc *dc)
 	return true;
 }
 
+static uint16_t fixed_point_to_int_frac(
+	struct fixed31_32 arg,
+	uint8_t integer_bits,
+	uint8_t fractional_bits)
+{
+	int32_t numerator;
+	int32_t divisor = 1 << fractional_bits;
+
+	uint16_t result;
+
+	uint16_t d = (uint16_t)dal_fixed31_32_floor(
+		dal_fixed31_32_abs(
+			arg));
+
+	if (d <= (uint16_t)(1 << integer_bits) - (1 / (uint16_t)divisor))
+		numerator = (uint16_t)dal_fixed31_32_floor(
+			dal_fixed31_32_mul_int(
+				arg,
+				divisor));
+	else {
+		numerator = dal_fixed31_32_floor(
+			dal_fixed31_32_sub(
+				dal_fixed31_32_from_int(
+					1LL << integer_bits),
+				dal_fixed31_32_recip(
+					dal_fixed31_32_from_int(
+						divisor))));
+	}
+
+	if (numerator >= 0)
+		result = (uint16_t)numerator;
+	else
+		result = (uint16_t)(
+		(1 << (integer_bits + fractional_bits + 1)) + numerator);
+
+	if ((result != 0) && dal_fixed31_32_lt(
+		arg, dal_fixed31_32_zero))
+		result |= 1 << (integer_bits + fractional_bits);
+
+	return result;
+}
+
+/**
+* convert_float_matrix
+* This converts a double into HW register spec defined format S2D13.
+* @param :
+* @return None
+*/
+static void convert_float_matrix(
+	uint16_t *matrix,
+	struct fixed31_32 *flt,
+	uint32_t buffer_size)
+{
+	const struct fixed31_32 min_2_13 =
+		dal_fixed31_32_from_fraction(S2D13_MIN, DIVIDER);
+	const struct fixed31_32 max_2_13 =
+		dal_fixed31_32_from_fraction(S2D13_MAX, DIVIDER);
+	uint32_t i;
+
+	for (i = 0; i < buffer_size; ++i) {
+		uint32_t reg_value =
+				fixed_point_to_int_frac(
+					dal_fixed31_32_clamp(
+						flt[i],
+						min_2_13,
+						max_2_13),
+						2,
+						13);
+
+		matrix[i] = (uint16_t)reg_value;
+	}
+}
+
+static int get_hw_value_from_sw_value(int swVal, int swMin,
+		int swMax, int hwMin, int hwMax)
+{
+	int dSW = swMax - swMin; /*software adjustment range size*/
+	int dHW = hwMax - hwMin; /*hardware adjustment range size*/
+	int hwVal; /*HW adjustment value*/
+
+	/* error case, I preserve the behavior from the predecessor
+	 *getHwStepFromSwHwMinMaxValue (removed in Feb 2013)
+	 *which was the FP version that only computed SCLF (i.e. dHW/dSW).
+	 *it would return 0 in this case so
+	 *hwVal = hwMin from the formula given in @brief
+	*/
+	if (dSW == 0)
+		return hwMin;
+
+	/*it's quite often that ranges match,
+	 *e.g. for overlay colors currently (Feb 2013)
+	 *only brightness has a different
+	 *HW range, and in this case no multiplication or division is needed,
+	 *and if minimums match, no calculation at all
+	*/
+	if (dSW != dHW) {
+		hwVal = (swVal - swMin)*dHW/dSW + hwMin;
+	} else {
+		hwVal = swVal;
+		if (swMin != hwMin)
+			hwVal += (hwMin - swMin);
+	}
+
+	return hwVal;
+}
+
+static void initialize_fix_point_color_values(
+	struct core_color *core_color,
+	unsigned int sink_index,
+	struct fixed31_32 *grph_cont,
+	struct fixed31_32 *grph_sat,
+	struct fixed31_32 *grph_bright,
+	struct fixed31_32 *sin_grph_hue,
+	struct fixed31_32 *cos_grph_hue)
+{
+	/* Hue adjustment could be negative. -45 ~ +45 */
+	struct fixed31_32 hue =
+		dal_fixed31_32_mul(
+			dal_fixed31_32_from_fraction
+			(get_hw_value_from_sw_value
+				(core_color->state[sink_index].hue.current,
+				core_color->state[sink_index].hue.min,
+				core_color->state[sink_index].hue.max,
+				-30, 30), 180),
+			dal_fixed31_32_pi);
+
+	*sin_grph_hue = dal_fixed31_32_sin(hue);
+	*cos_grph_hue = dal_fixed31_32_cos(hue);
+
+	*grph_cont =
+		dal_fixed31_32_from_fraction(get_hw_value_from_sw_value
+			(core_color->state[sink_index].contrast.current,
+			core_color->state[sink_index].contrast.min,
+			core_color->state[sink_index].contrast.max,
+			50, 150), 100);
+	*grph_sat =
+		dal_fixed31_32_from_fraction(get_hw_value_from_sw_value
+			(core_color->state[sink_index].saturation.current,
+			core_color->state[sink_index].saturation.min,
+			core_color->state[sink_index].saturation.max,
+			0, 200), 100);
+	*grph_bright =
+		dal_fixed31_32_from_fraction(get_hw_value_from_sw_value
+			(core_color->state[sink_index].brightness.current,
+			core_color->state[sink_index].brightness.min,
+			core_color->state[sink_index].brightness.max,
+			-25, 25), 100);
+}
+
+
 /* Given a specific dc_sink* this function finds its equivalent
  * on the dc_sink array and returns the corresponding index
  */
@@ -428,6 +584,479 @@ static unsigned int sink_index_from_sink(struct core_color *core_color,
 	/* Could not find sink requested */
 	ASSERT(false);
 	return index;
+}
+
+static void calculate_rgb_matrix(struct core_color *core_color,
+		unsigned int sink_index,
+		struct fixed31_32 *rgb_matrix)
+{
+	const struct fixed31_32 k1 =
+		dal_fixed31_32_from_fraction(701000, 1000000);
+	const struct fixed31_32 k2 =
+		dal_fixed31_32_from_fraction(236568, 1000000);
+	const struct fixed31_32 k3 =
+		dal_fixed31_32_from_fraction(-587000, 1000000);
+	const struct fixed31_32 k4 =
+		dal_fixed31_32_from_fraction(464432, 1000000);
+	const struct fixed31_32 k5 =
+		dal_fixed31_32_from_fraction(-114000, 1000000);
+	const struct fixed31_32 k6 =
+		dal_fixed31_32_from_fraction(-701000, 1000000);
+	const struct fixed31_32 k7 =
+		dal_fixed31_32_from_fraction(-299000, 1000000);
+	const struct fixed31_32 k8 =
+		dal_fixed31_32_from_fraction(-292569, 1000000);
+	const struct fixed31_32 k9 =
+		dal_fixed31_32_from_fraction(413000, 1000000);
+	const struct fixed31_32 k10 =
+		dal_fixed31_32_from_fraction(-92482, 1000000);
+	const struct fixed31_32 k11 =
+		dal_fixed31_32_from_fraction(-114000, 1000000);
+	const struct fixed31_32 k12 =
+		dal_fixed31_32_from_fraction(385051, 1000000);
+	const struct fixed31_32 k13 =
+		dal_fixed31_32_from_fraction(-299000, 1000000);
+	const struct fixed31_32 k14 =
+		dal_fixed31_32_from_fraction(886000, 1000000);
+	const struct fixed31_32 k15 =
+		dal_fixed31_32_from_fraction(-587000, 1000000);
+	const struct fixed31_32 k16 =
+		dal_fixed31_32_from_fraction(-741914, 1000000);
+	const struct fixed31_32 k17 =
+		dal_fixed31_32_from_fraction(886000, 1000000);
+	const struct fixed31_32 k18 =
+		dal_fixed31_32_from_fraction(-144086, 1000000);
+
+	const struct fixed31_32 luma_r =
+		dal_fixed31_32_from_fraction(299, 1000);
+	const struct fixed31_32 luma_g =
+		dal_fixed31_32_from_fraction(587, 1000);
+	const struct fixed31_32 luma_b =
+		dal_fixed31_32_from_fraction(114, 1000);
+
+	struct fixed31_32 grph_cont;
+	struct fixed31_32 grph_sat;
+	struct fixed31_32 grph_bright;
+	struct fixed31_32 sin_grph_hue;
+	struct fixed31_32 cos_grph_hue;
+
+	initialize_fix_point_color_values(
+		core_color, sink_index, &grph_cont, &grph_sat,
+		&grph_bright, &sin_grph_hue, &cos_grph_hue);
+
+	/* COEF_1_1 = GrphCont * (LumaR + GrphSat * (Cos(GrphHue) * K1 +*/
+	/* Sin(GrphHue) * K2))*/
+	/* (Cos(GrphHue) * K1 + Sin(GrphHue) * K2)*/
+	rgb_matrix[0] =
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(cos_grph_hue, k1),
+			dal_fixed31_32_mul(sin_grph_hue, k2));
+	/* GrphSat * (Cos(GrphHue) * K1 + Sin(GrphHue) * K2 */
+	rgb_matrix[0] = dal_fixed31_32_mul(grph_sat, rgb_matrix[0]);
+	/* (LumaR + GrphSat * (Cos(GrphHue) * K1 + Sin(GrphHue) * K2))*/
+	rgb_matrix[0] = dal_fixed31_32_add(luma_r, rgb_matrix[0]);
+	/* GrphCont * (LumaR + GrphSat * (Cos(GrphHue) * K1 + Sin(GrphHue)**/
+	/* K2))*/
+	rgb_matrix[0] = dal_fixed31_32_mul(grph_cont, rgb_matrix[0]);
+
+	/* COEF_1_2 = GrphCont * (LumaG + GrphSat * (Cos(GrphHue) * K3 +*/
+	/* Sin(GrphHue) * K4))*/
+	/* (Cos(GrphHue) * K3 + Sin(GrphHue) * K4)*/
+	rgb_matrix[1] =
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(cos_grph_hue, k3),
+			dal_fixed31_32_mul(sin_grph_hue, k4));
+	/* GrphSat * (Cos(GrphHue) * K3 + Sin(GrphHue) * K4)*/
+	rgb_matrix[1] = dal_fixed31_32_mul(grph_sat, rgb_matrix[1]);
+	/* (LumaG + GrphSat * (Cos(GrphHue) * K3 + Sin(GrphHue) * K4))*/
+	rgb_matrix[1] = dal_fixed31_32_add(luma_g, rgb_matrix[1]);
+	/* GrphCont * (LumaG + GrphSat * (Cos(GrphHue) * K3 + Sin(GrphHue)**/
+	/* K4))*/
+	rgb_matrix[1] = dal_fixed31_32_mul(grph_cont, rgb_matrix[1]);
+
+	/* COEF_1_3 = GrphCont * (LumaB + GrphSat * (Cos(GrphHue) * K5 +*/
+	/* Sin(GrphHue) * K6))*/
+	/* (Cos(GrphHue) * K5 + Sin(GrphHue) * K6)*/
+	rgb_matrix[2] =
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(cos_grph_hue, k5),
+			dal_fixed31_32_mul(sin_grph_hue, k6));
+	/* GrphSat * (Cos(GrphHue) * K5 + Sin(GrphHue) * K6)*/
+	rgb_matrix[2] = dal_fixed31_32_mul(grph_sat, rgb_matrix[2]);
+	/* LumaB + GrphSat * (Cos(GrphHue) * K5 + Sin(GrphHue) * K6)*/
+	rgb_matrix[2] = dal_fixed31_32_add(luma_b, rgb_matrix[2]);
+	/* GrphCont  * (LumaB + GrphSat * (Cos(GrphHue) * K5 + Sin(GrphHue)**/
+	/* K6))*/
+	rgb_matrix[2] = dal_fixed31_32_mul(grph_cont, rgb_matrix[2]);
+
+	/* COEF_1_4 = GrphBright*/
+	rgb_matrix[3] = grph_bright;
+
+	/* COEF_2_1 = GrphCont * (LumaR + GrphSat * (Cos(GrphHue) * K7 +*/
+	/* Sin(GrphHue) * K8))*/
+	/* (Cos(GrphHue) * K7 + Sin(GrphHue) * K8)*/
+	rgb_matrix[4] =
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(cos_grph_hue, k7),
+			dal_fixed31_32_mul(sin_grph_hue, k8));
+	/* GrphSat * (Cos(GrphHue) * K7 + Sin(GrphHue) * K8)*/
+	rgb_matrix[4] = dal_fixed31_32_mul(grph_sat, rgb_matrix[4]);
+	/* (LumaR + GrphSat * (Cos(GrphHue) * K7 + Sin(GrphHue) * K8))*/
+	rgb_matrix[4] = dal_fixed31_32_add(luma_r, rgb_matrix[4]);
+	/* GrphCont * (LumaR + GrphSat * (Cos(GrphHue) * K7 + Sin(GrphHue)**/
+	/* K8))*/
+	rgb_matrix[4] = dal_fixed31_32_mul(grph_cont, rgb_matrix[4]);
+
+	/* COEF_2_2 = GrphCont * (LumaG + GrphSat * (Cos(GrphHue) * K9 +*/
+	/* Sin(GrphHue) * K10))*/
+	/* (Cos(GrphHue) * K9 + Sin(GrphHue) * K10))*/
+	rgb_matrix[5] =
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(cos_grph_hue, k9),
+			dal_fixed31_32_mul(sin_grph_hue, k10));
+	/* GrphSat * (Cos(GrphHue) * K9 + Sin(GrphHue) * K10))*/
+	rgb_matrix[5] = dal_fixed31_32_mul(grph_sat, rgb_matrix[5]);
+	/* (LumaG + GrphSat * (Cos(GrphHue) * K9 + Sin(GrphHue) * K10))*/
+	rgb_matrix[5] = dal_fixed31_32_add(luma_g, rgb_matrix[5]);
+	/* GrphCont * (LumaG + GrphSat * (Cos(GrphHue) * K9 + Sin(GrphHue)**/
+	/* K10))*/
+	rgb_matrix[5] = dal_fixed31_32_mul(grph_cont, rgb_matrix[5]);
+
+	/* COEF_2_3 = GrphCont * (LumaB + GrphSat * (Cos(GrphHue) * K11 +*/
+	/* Sin(GrphHue) * K12))*/
+	/* (Cos(GrphHue) * K11 + Sin(GrphHue) * K12))*/
+	rgb_matrix[6] =
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(cos_grph_hue, k11),
+			dal_fixed31_32_mul(sin_grph_hue, k12));
+	/* GrphSat * (Cos(GrphHue) * K11 + Sin(GrphHue) * K12))*/
+	rgb_matrix[6] = dal_fixed31_32_mul(grph_sat, rgb_matrix[6]);
+	/* (LumaB + GrphSat * (Cos(GrphHue) * K11 + Sin(GrphHue) * K12))*/
+	rgb_matrix[6] = dal_fixed31_32_add(luma_b, rgb_matrix[6]);
+	/* GrphCont * (LumaB + GrphSat * (Cos(GrphHue) * K11 + Sin(GrphHue)**/
+	/* K12))*/
+	rgb_matrix[6] = dal_fixed31_32_mul(grph_cont, rgb_matrix[6]);
+
+	/* COEF_2_4 = GrphBright*/
+	rgb_matrix[7] = grph_bright;
+
+	/* COEF_3_1 = GrphCont  * (LumaR + GrphSat * (Cos(GrphHue) * K13 +*/
+	/* Sin(GrphHue) * K14))*/
+	/* (Cos(GrphHue) * K13 + Sin(GrphHue) * K14)) */
+	rgb_matrix[8] =
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(cos_grph_hue, k13),
+			dal_fixed31_32_mul(sin_grph_hue, k14));
+	/* GrphSat * (Cos(GrphHue) * K13 + Sin(GrphHue) * K14)) */
+	rgb_matrix[8] = dal_fixed31_32_mul(grph_sat, rgb_matrix[8]);
+	/* (LumaR + GrphSat * (Cos(GrphHue) * K13 + Sin(GrphHue) * K14)) */
+	rgb_matrix[8] = dal_fixed31_32_add(luma_r, rgb_matrix[8]);
+	/* GrphCont  * (LumaR + GrphSat * (Cos(GrphHue) * K13 + Sin(GrphHue)**/
+	/* K14)) */
+	rgb_matrix[8] = dal_fixed31_32_mul(grph_cont, rgb_matrix[8]);
+
+	/* COEF_3_2    = GrphCont * (LumaG + GrphSat * (Cos(GrphHue) * K15 +*/
+	/* Sin(GrphHue) * K16)) */
+	/* GrphSat * (Cos(GrphHue) * K15 + Sin(GrphHue) * K16) */
+	rgb_matrix[9] =
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(cos_grph_hue, k15),
+			dal_fixed31_32_mul(sin_grph_hue, k16));
+	/* (LumaG + GrphSat * (Cos(GrphHue) * K15 + Sin(GrphHue) * K16)) */
+	rgb_matrix[9] = dal_fixed31_32_mul(grph_sat, rgb_matrix[9]);
+	/* (LumaG + GrphSat * (Cos(GrphHue) * K15 + Sin(GrphHue) * K16)) */
+	rgb_matrix[9] = dal_fixed31_32_add(luma_g, rgb_matrix[9]);
+	/* GrphCont * (LumaG + GrphSat * (Cos(GrphHue) * K15 + Sin(GrphHue)**/
+	/* K16)) */
+	rgb_matrix[9] = dal_fixed31_32_mul(grph_cont, rgb_matrix[9]);
+
+	/*  COEF_3_3 = GrphCont * (LumaB + GrphSat * (Cos(GrphHue) * K17 +*/
+	/* Sin(GrphHue) * K18)) */
+	/* (Cos(GrphHue) * K17 + Sin(GrphHue) * K18)) */
+	rgb_matrix[10] =
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(cos_grph_hue, k17),
+			dal_fixed31_32_mul(sin_grph_hue, k18));
+	/*  GrphSat * (Cos(GrphHue) * K17 + Sin(GrphHue) * K18)) */
+	rgb_matrix[10] = dal_fixed31_32_mul(grph_sat, rgb_matrix[10]);
+	/* (LumaB + GrphSat * (Cos(GrphHue) * K17 + Sin(GrphHue) * K18)) */
+	rgb_matrix[10] = dal_fixed31_32_add(luma_b, rgb_matrix[10]);
+	/* GrphCont * (LumaB + GrphSat * (Cos(GrphHue) * K17 + Sin(GrphHue)**/
+	/* K18)) */
+	rgb_matrix[10] = dal_fixed31_32_mul(grph_cont, rgb_matrix[10]);
+
+	/* COEF_3_4 = GrphBright */
+	rgb_matrix[11] = grph_bright;
+}
+
+static void calculate_rgb_limited_range_matrix(struct core_color *core_color,
+		unsigned int sink_index, struct fixed31_32 *rgb_matrix)
+{
+	struct fixed31_32 ideal[12];
+
+	static const int32_t matrix_[] = {
+			85546875, 0, 0, 6250000,
+			0, 85546875, 0, 6250000,
+			0, 0, 85546875, 6250000
+		};
+
+	uint32_t i = 0;
+
+	do {
+		ideal[i] = dal_fixed31_32_from_fraction(
+			matrix_[i],
+			100000000);
+		++i;
+	} while (i != ARRAY_SIZE(matrix_));
+
+
+	struct fixed31_32 grph_cont;
+	struct fixed31_32 grph_sat;
+	struct fixed31_32 grph_bright;
+	struct fixed31_32 sin_grph_hue;
+	struct fixed31_32 cos_grph_hue;
+
+	initialize_fix_point_color_values(
+		core_color, sink_index, &grph_cont, &grph_sat,
+		&grph_bright, &sin_grph_hue, &cos_grph_hue);
+
+	const struct fixed31_32 multiplier =
+		dal_fixed31_32_mul(grph_cont, grph_sat);
+
+	rgb_matrix[8] = dal_fixed31_32_mul(ideal[0], grph_cont);
+
+	rgb_matrix[9] = dal_fixed31_32_mul(ideal[1], grph_cont);
+
+	rgb_matrix[10] = dal_fixed31_32_mul(ideal[2], grph_cont);
+
+	rgb_matrix[11] = dal_fixed31_32_add(
+			ideal[3],
+			dal_fixed31_32_mul(
+				grph_bright,
+				dal_fixed31_32_from_fraction(86, 100)));
+
+	rgb_matrix[0] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(
+				ideal[8],
+				sin_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[4],
+				cos_grph_hue)));
+
+	rgb_matrix[1] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(
+				ideal[9],
+				sin_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[5],
+				cos_grph_hue)));
+
+	rgb_matrix[2] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(
+				ideal[10],
+				sin_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[6],
+				cos_grph_hue)));
+
+	rgb_matrix[3] = ideal[7];
+
+	rgb_matrix[4] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_sub(
+			dal_fixed31_32_mul(
+				ideal[8],
+				cos_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[4],
+				sin_grph_hue)));
+
+	rgb_matrix[5] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_sub(
+			dal_fixed31_32_mul(
+				ideal[9],
+				cos_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[5],
+				sin_grph_hue)));
+
+	rgb_matrix[6] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_sub(
+			dal_fixed31_32_mul(
+				ideal[10],
+				cos_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[6],
+				sin_grph_hue)));
+
+	rgb_matrix[7] = ideal[11];
+}
+
+static void calculate_yuv_matrix(struct core_color *core_color,
+		unsigned int sink_index,
+		enum dc_color_space color_space,
+		struct fixed31_32 *yuv_matrix)
+{
+	struct fixed31_32 ideal[12];
+	uint32_t i = 0;
+
+	if ((color_space == COLOR_SPACE_YPBPR601) ||
+			(color_space == COLOR_SPACE_YCBCR601) ||
+			(color_space == COLOR_SPACE_YCBCR601_LIMITED)) {
+		static const int32_t matrix_[] = {
+				25578516, 50216016, 9752344, 6250000,
+				-14764391, -28985609, 43750000, 50000000,
+				43750000, -36635164, -7114836, 50000000
+			};
+		do {
+			ideal[i] = dal_fixed31_32_from_fraction(
+					matrix_[i],
+				100000000);
+			++i;
+		} while (i != ARRAY_SIZE(matrix_));
+	} else {
+		static const int32_t matrix_[] = {
+				18187266, 61183125, 6176484, 6250000,
+				-10025059, -33724941, 43750000, 50000000,
+				43750000, -39738379, -4011621, 50000000
+			};
+		do {
+			ideal[i] = dal_fixed31_32_from_fraction(
+					matrix_[i],
+				100000000);
+			++i;
+		} while (i != ARRAY_SIZE(matrix_));
+	}
+
+	struct fixed31_32 grph_cont;
+	struct fixed31_32 grph_sat;
+	struct fixed31_32 grph_bright;
+	struct fixed31_32 sin_grph_hue;
+	struct fixed31_32 cos_grph_hue;
+
+	initialize_fix_point_color_values(
+		core_color, sink_index, &grph_cont, &grph_sat,
+		&grph_bright, &sin_grph_hue, &cos_grph_hue);
+
+	const struct fixed31_32 multiplier =
+			dal_fixed31_32_mul(grph_cont, grph_sat);
+
+	yuv_matrix[0] = dal_fixed31_32_mul(ideal[0], grph_cont);
+
+	yuv_matrix[1] = dal_fixed31_32_mul(ideal[1], grph_cont);
+
+	yuv_matrix[2] = dal_fixed31_32_mul(ideal[2], grph_cont);
+
+	yuv_matrix[4] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(
+				ideal[8],
+				sin_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[4],
+				cos_grph_hue)));
+
+	yuv_matrix[5] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(
+				ideal[9],
+				sin_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[5],
+				cos_grph_hue)));
+
+	yuv_matrix[6] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_add(
+			dal_fixed31_32_mul(
+				ideal[10],
+				sin_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[6],
+				cos_grph_hue)));
+
+	yuv_matrix[7] = ideal[7];
+
+	yuv_matrix[8] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_sub(
+			dal_fixed31_32_mul(
+				ideal[8],
+				cos_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[4],
+				sin_grph_hue)));
+
+	yuv_matrix[9] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_sub(
+			dal_fixed31_32_mul(
+				ideal[9],
+				cos_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[5],
+				sin_grph_hue)));
+
+	yuv_matrix[10] = dal_fixed31_32_mul(
+		multiplier,
+		dal_fixed31_32_sub(
+			dal_fixed31_32_mul(
+				ideal[10],
+				cos_grph_hue),
+			dal_fixed31_32_mul(
+				ideal[6],
+				sin_grph_hue)));
+
+	yuv_matrix[11] = ideal[11];
+
+	if ((color_space == COLOR_SPACE_YCBCR601_LIMITED) ||
+			(color_space == COLOR_SPACE_YCBCR709_LIMITED)) {
+		yuv_matrix[3] = dal_fixed31_32_add(ideal[3], grph_bright);
+	} else {
+		yuv_matrix[3] = dal_fixed31_32_add(
+			ideal[3],
+			dal_fixed31_32_mul(
+				grph_bright,
+				dal_fixed31_32_from_fraction(86, 100)));
+	}
+}
+
+static void calculate_csc_matrix(struct core_color *core_color,
+		unsigned int sink_index,
+		enum dc_color_space color_space,
+		struct fixed31_32 *csc_matrix)
+{
+	switch (color_space) {
+	case COLOR_SPACE_SRGB:
+		calculate_rgb_matrix(core_color, sink_index, csc_matrix);
+		break;
+	case COLOR_SPACE_SRGB_LIMITED:
+		calculate_rgb_limited_range_matrix(core_color, sink_index,
+				csc_matrix);
+		break;
+	case COLOR_SPACE_YCBCR601:
+	case COLOR_SPACE_YCBCR709:
+	case COLOR_SPACE_YCBCR601_LIMITED:
+	case COLOR_SPACE_YCBCR709_LIMITED:
+	case COLOR_SPACE_YPBPR601:
+	case COLOR_SPACE_YPBPR709:
+		calculate_yuv_matrix(core_color, sink_index, color_space,
+				csc_matrix);
+		break;
+	default:
+		calculate_rgb_matrix(core_color, sink_index, csc_matrix);
+		break;
+	}
 }
 
 struct mod_color *mod_color_create(struct dc *dc)
@@ -471,6 +1100,22 @@ struct mod_color *mod_color_create(struct dc *dc)
 		core_color->state[i].destination_gamut.whiteY = 3290;
 
 		core_color->state[i].custom_color_temperature = 6500;
+
+		core_color->state[i].contrast.current = 100;
+		core_color->state[i].contrast.min = 0;
+		core_color->state[i].contrast.max = 200;
+
+		core_color->state[i].saturation.current = 100;
+		core_color->state[i].saturation.min = 0;
+		core_color->state[i].saturation.max = 200;
+
+		core_color->state[i].brightness.current = 0;
+		core_color->state[i].brightness.min = -100;
+		core_color->state[i].brightness.max = 100;
+
+		core_color->state[i].hue.current = 0;
+		core_color->state[i].hue.min = -30;
+		core_color->state[i].hue.max = 30;
 	}
 
 	if (core_color->state == NULL)
@@ -769,6 +1414,21 @@ bool mod_color_get_user_enable(struct mod_color *mod_color,
 	return true;
 }
 
+bool mod_color_get_custom_color_temperature(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		int *color_temperature)
+{
+	struct core_color *core_color =
+			MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int sink_index = sink_index_from_sink(core_color, sink);
+
+	*color_temperature = core_color->state[sink_index].
+			custom_color_temperature;
+
+	return true;
+}
+
 bool mod_color_set_custom_color_temperature(struct mod_color *mod_color,
 		const struct dc_stream **streams, int num_streams,
 		int color_temperature)
@@ -787,17 +1447,58 @@ bool mod_color_set_custom_color_temperature(struct mod_color *mod_color,
 	return true;
 }
 
-bool mod_color_get_custom_color_temperature(struct mod_color *mod_color,
+bool mod_color_get_color_saturation(struct mod_color *mod_color,
 		const struct dc_sink *sink,
-		int *color_temperature)
+		struct color_range *color_saturation)
 {
 	struct core_color *core_color =
 			MOD_COLOR_TO_CORE(mod_color);
 
 	unsigned int sink_index = sink_index_from_sink(core_color, sink);
 
-	*color_temperature = core_color->state[sink_index].
-			custom_color_temperature;
+	*color_saturation = core_color->state[sink_index].saturation;
+
+	return true;
+}
+
+bool mod_color_get_color_contrast(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		struct color_range *color_contrast)
+{
+	struct core_color *core_color =
+			MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int sink_index = sink_index_from_sink(core_color, sink);
+
+	*color_contrast = core_color->state[sink_index].contrast;
+
+	return true;
+}
+
+bool mod_color_get_color_brightness(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		struct color_range *color_brightness)
+{
+	struct core_color *core_color =
+			MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int sink_index = sink_index_from_sink(core_color, sink);
+
+	*color_brightness = core_color->state[sink_index].brightness;
+
+	return true;
+}
+
+bool mod_color_get_color_hue(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		struct color_range *color_hue)
+{
+	struct core_color *core_color =
+			MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int sink_index = sink_index_from_sink(core_color, sink);
+
+	*color_hue = core_color->state[sink_index].hue;
 
 	return true;
 }
@@ -889,4 +1590,158 @@ function_fail:
 	return false;
 }
 
+bool mod_color_set_brightness(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		int brightness_value)
+{
+	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int stream_index, sink_index;
+
+	for (stream_index = 0; stream_index < num_streams; stream_index++) {
+		sink_index = sink_index_from_sink(core_color,
+				streams[stream_index]->sink);
+
+		struct core_stream *core_stream =
+						DC_STREAM_TO_CORE
+						(streams[stream_index]);
+
+		core_color->state[sink_index].brightness.current =
+				brightness_value;
+
+		struct fixed31_32 csc_matrix_fixed[12];
+
+		calculate_csc_matrix(core_color, sink_index,
+				core_stream->public.output_color_space,
+				csc_matrix_fixed);
+
+		convert_float_matrix(
+				core_stream->public.csc_color_matrix.matrix,
+				csc_matrix_fixed,
+				12);
+
+		core_stream->public.csc_color_matrix.enable_adjustment = true;
+	}
+
+	core_color->dc->stream_funcs.set_gamut_remap
+			(core_color->dc, streams, num_streams);
+
+	return true;
+}
+
+bool mod_color_set_contrast(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		int contrast_value)
+{
+	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int stream_index, sink_index;
+
+	for (stream_index = 0; stream_index < num_streams; stream_index++) {
+		sink_index = sink_index_from_sink(core_color,
+				streams[stream_index]->sink);
+
+		struct core_stream *core_stream =
+						DC_STREAM_TO_CORE
+						(streams[stream_index]);
+
+		core_color->state[sink_index].contrast.current =
+				contrast_value;
+
+		struct fixed31_32 csc_matrix_fixed[12];
+
+		calculate_csc_matrix(core_color, sink_index,
+				core_stream->public.output_color_space,
+				csc_matrix_fixed);
+
+		convert_float_matrix(
+				core_stream->public.csc_color_matrix.matrix,
+				csc_matrix_fixed,
+				12);
+
+		core_stream->public.csc_color_matrix.enable_adjustment = true;
+	}
+
+	core_color->dc->stream_funcs.set_gamut_remap
+			(core_color->dc, streams, num_streams);
+
+	return true;
+}
+
+bool mod_color_set_hue(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		int hue_value)
+{
+	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int stream_index, sink_index;
+
+	for (stream_index = 0; stream_index < num_streams; stream_index++) {
+		sink_index = sink_index_from_sink(core_color,
+				streams[stream_index]->sink);
+
+		struct core_stream *core_stream =
+						DC_STREAM_TO_CORE
+						(streams[stream_index]);
+
+		core_color->state[sink_index].hue.current = hue_value;
+
+		struct fixed31_32 csc_matrix_fixed[12];
+
+		calculate_csc_matrix(core_color, sink_index,
+				core_stream->public.output_color_space,
+				csc_matrix_fixed);
+
+		convert_float_matrix(
+				core_stream->public.csc_color_matrix.matrix,
+				csc_matrix_fixed,
+				12);
+
+		core_stream->public.csc_color_matrix.enable_adjustment = true;
+	}
+
+	core_color->dc->stream_funcs.set_gamut_remap
+			(core_color->dc, streams, num_streams);
+
+	return true;
+}
+
+bool mod_color_set_saturation(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		int saturation_value)
+{
+	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
+
+	unsigned int stream_index, sink_index;
+
+	for (stream_index = 0; stream_index < num_streams; stream_index++) {
+		sink_index = sink_index_from_sink(core_color,
+				streams[stream_index]->sink);
+
+		struct core_stream *core_stream =
+						DC_STREAM_TO_CORE
+						(streams[stream_index]);
+
+		core_color->state[sink_index].saturation.current =
+				saturation_value;
+
+		struct fixed31_32 csc_matrix_fixed[12];
+
+		calculate_csc_matrix(core_color, sink_index,
+				core_stream->public.output_color_space,
+				csc_matrix_fixed);
+
+		convert_float_matrix(
+				core_stream->public.csc_color_matrix.matrix,
+				csc_matrix_fixed,
+				12);
+
+		core_stream->public.csc_color_matrix.enable_adjustment = true;
+	}
+
+	core_color->dc->stream_funcs.set_gamut_remap
+			(core_color->dc, streams, num_streams);
+
+	return true;
+}
 

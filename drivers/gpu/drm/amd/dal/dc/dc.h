@@ -376,6 +376,7 @@ struct dc_stream {
 	/* TODO: dithering */
 	/* TODO: transfer function (CSC/regamma/gamut remap) */
 	struct colorspace_transform gamut_remap_matrix;
+	struct csc_transform csc_color_matrix;
 	/* TODO: custom INFO packets */
 	/* TODO: ABM info (DMCU) */
 	/* TODO: PSR info */

@@ -1540,16 +1540,34 @@ static void set_plane_config(
 	struct dc_context *ctx = pipe_ctx->stream->ctx;
 	struct core_surface *surface = pipe_ctx->surface;
 	struct xfm_grph_csc_adjustment adjust;
+	struct out_csc_color_matrix tbl_entry;
+	unsigned int i;
 
 	if (dc->current_context)
-		old_pipe = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
+		old_pipe =
+			&dc->current_context->
+			res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
 
 	memset(&adjust, 0, sizeof(adjust));
+	memset(&tbl_entry, 0, sizeof(tbl_entry));
 	adjust.gamut_adjust_type = GRAPHICS_GAMUT_ADJUST_TYPE_BYPASS;
 
 	dc->hwss.enable_fe_clock(ctx, pipe_ctx->pipe_idx, true);
 
-	set_default_colors(pipe_ctx);
+	if (pipe_ctx->stream->public.csc_color_matrix.enable_adjustment
+			== true) {
+		tbl_entry.color_space =
+			pipe_ctx->stream->public.output_color_space;
+
+		for (i = 0; i < 12; i++)
+			tbl_entry.regval[i] =
+			pipe_ctx->stream->public.csc_color_matrix.matrix[i];
+
+		pipe_ctx->opp->funcs->opp_set_csc_adjustment
+				(pipe_ctx->opp, &tbl_entry);
+	} else {
+		set_default_colors(pipe_ctx);
+	}
 
 	if (pipe_ctx->stream->public.gamut_remap_matrix.enable_remap == true) {
 		adjust.gamut_adjust_type = GRAPHICS_GAMUT_ADJUST_TYPE_SW;
@@ -1609,7 +1627,8 @@ static void set_plane_config(
 				surface->public.rotation);
 }
 
-static void update_plane_addr(const struct core_dc *dc, struct pipe_ctx *pipe_ctx)
+static void update_plane_addr(const struct core_dc *dc,
+		struct pipe_ctx *pipe_ctx)
 {
 	struct core_surface *surface = pipe_ctx->surface;
 

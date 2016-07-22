@@ -80,6 +80,12 @@ struct white_point_coodinates_entry {
 	unsigned int whiteY;
 };
 
+struct color_range {
+	int current;
+	int min;
+	int max;
+};
+
 struct mod_color *mod_color_create(struct dc *dc);
 
 void mod_color_destroy(struct mod_color *mod_color);
@@ -123,11 +129,43 @@ bool mod_color_set_custom_color_temperature(struct mod_color *mod_color,
 		const struct dc_stream **streams, int num_streams,
 		int color_temperature);
 
+bool mod_color_get_color_saturation(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		struct color_range *color_saturation);
+
+bool mod_color_get_color_contrast(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		struct color_range *color_contrast);
+
+bool mod_color_get_color_brightness(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		struct color_range *color_brightness);
+
+bool mod_color_get_color_hue(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		struct color_range *color_hue);
+
 bool mod_color_get_source_gamut(struct mod_color *mod_color,
 		const struct dc_sink *sink,
 		struct color_space_coordinates *source_gamut);
 
 bool mod_color_notify_mode_change(struct mod_color *mod_color,
 		const struct dc_stream **streams, int num_streams);
+
+bool mod_color_set_brightness(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		int brightness_value);
+
+bool mod_color_set_contrast(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		int contrast_value);
+
+bool mod_color_set_hue(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		int hue_value);
+
+bool mod_color_set_saturation(struct mod_color *mod_color,
+		const struct dc_stream **streams, int num_streams,
+		int saturation_value);
 
 #endif /* MOD_COLOR_H_ */

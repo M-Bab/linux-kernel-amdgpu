@@ -246,6 +246,11 @@ struct opp_grph_csc_adjustment {
 	int32_t grph_hue;
 };
 
+struct out_csc_color_matrix {
+	enum dc_color_space color_space;
+	uint16_t regval[12];
+};
+
 /* Underlay related types */
 
 struct hw_adjustment_range {
@@ -281,7 +286,7 @@ struct opp_funcs {
 
 	void (*opp_set_csc_adjustment)(
 		struct output_pixel_processor *opp,
-		const struct opp_grph_csc_adjustment *adjust);
+		const struct out_csc_color_matrix *tbl_entry);
 
 	void (*opp_set_csc_default)(
 		struct output_pixel_processor *opp,

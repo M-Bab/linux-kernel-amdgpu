@@ -532,4 +532,9 @@ struct colorspace_transform {
 	bool enable_remap;
 };
 
+struct csc_transform {
+	uint16_t matrix[12];
+	bool enable_adjustment;
+};
+
 #endif /* DC_TYPES_H_ */
