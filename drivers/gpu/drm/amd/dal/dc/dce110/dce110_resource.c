@@ -890,6 +890,41 @@ enum dc_status dce110_validate_bandwidth(
 	return result;
 }
 
+static bool dce110_validate_surface_sets(
+		const struct dc_validation_set set[],
+		int set_count)
+{
+	int i;
+
+	for (i = 0; i < set_count; i++) {
+		if (set[i].surface_count == 0)
+			continue;
+
+		if (set[i].surface_count > 2)
+			return false;
+
+		if (set[i].surfaces[0]->clip_rect.width
+				!= set[i].target->streams[0]->src.width
+				|| set[i].surfaces[0]->clip_rect.height
+				!= set[i].target->streams[0]->src.height)
+			return false;
+		if (set[i].surfaces[0]->format
+				>= SURFACE_PIXEL_FORMAT_VIDEO_BEGIN)
+			return false;
+
+		if (set[i].surface_count == 2) {
+			if (set[i].surfaces[1]->format
+					< SURFACE_PIXEL_FORMAT_VIDEO_BEGIN)
+				return false;
+			if (set[i].surfaces[1]->src_rect.width > 1920
+					|| set[i].surfaces[1]->src_rect.height > 1080)
+				return false;
+		}
+	}
+
+	return true;
+}
+
 enum dc_status dce110_validate_with_context(
 		const struct core_dc *dc,
 		const struct dc_validation_set set[],
@@ -899,6 +934,9 @@ enum dc_status dce110_validate_with_context(
 	struct dc_context *dc_ctx = dc->ctx;
 	enum dc_status result = DC_ERROR_UNEXPECTED;
 	int i;
+
+	if (!dce110_validate_surface_sets(set, set_count))
+		return DC_FAIL_SURFACE_VALIDATE;
 
 	context->res_ctx.pool = dc->res_pool;
 
