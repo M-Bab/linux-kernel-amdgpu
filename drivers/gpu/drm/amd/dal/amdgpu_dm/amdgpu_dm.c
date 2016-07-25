@@ -939,6 +939,7 @@ static void handle_hpd_rx_irq(void *param)
 	struct amdgpu_connector *aconnector = (struct amdgpu_connector *)param;
 	struct drm_connector *connector = &aconnector->base;
 	struct drm_device *dev = connector->dev;
+	const struct dc_link *dc_link = aconnector->dc_link;
 	bool is_mst_root_connector = aconnector->mst_mgr.mst_state;
 
 	if (dc_link_handle_hpd_rx_irq(aconnector->dc_link) &&
@@ -955,7 +956,8 @@ static void handle_hpd_rx_irq(void *param)
 			drm_kms_helper_hotplug_event(dev);
 		}
 	}
-	if (aconnector->dc_link->cur_link_settings.lane_count != LANE_COUNT_UNKNOWN)
+	if ((dc_link->cur_link_settings.lane_count != LANE_COUNT_UNKNOWN) ||
+				(dc_link->type == dc_connection_mst_branch))
 		dm_handle_hpd_rx_irq(aconnector);
 }
 
