@@ -49,7 +49,8 @@ enum filter_type {
 };
 
 enum ram_filter_type {
-	FILTER_TYPE_RGB_Y_VERTICAL	= 0, /* 0 - RGB/Y Vertical filter */
+	FILTER_TYPE_RGB_Y_VERTICAL	= 0, /* 0 - RGB/Y
+	 Vertical filter */
 	FILTER_TYPE_CBCR_VERTICAL	= 1, /* 1 - CbCr  Vertical filter */
 	FILTER_TYPE_RGB_Y_HORIZONTAL	= 2, /* 1 - RGB/Y Horizontal filter */
 	FILTER_TYPE_CBCR_HORIZONTAL	= 3, /* 3 - CbCr  Horizontal filter */

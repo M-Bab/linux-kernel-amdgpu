@@ -4177,7 +4177,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				nbp_state_change_watermark[6], bw_int_to_fixed(1000)));
 
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->nbp_state_change_wm_ns[3].a_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					nbp_state_change_watermark[0], bw_int_to_fixed(1000)));
@@ -4207,7 +4207,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->stutter_exit_wm_ns[2].a_mark =
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				stutter_exit_watermark[6], bw_int_to_fixed(1000)));
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->stutter_exit_wm_ns[3].a_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					stutter_exit_watermark[0], bw_int_to_fixed(1000)));
@@ -4237,7 +4237,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->urgent_wm_ns[2].a_mark =
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				urgent_watermark[6], bw_int_to_fixed(1000)));
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->urgent_wm_ns[3].a_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					urgent_watermark[0], bw_int_to_fixed(1000)));
@@ -4273,7 +4273,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				nbp_state_change_watermark[6], bw_int_to_fixed(1000)));
 
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->nbp_state_change_wm_ns[3].b_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					nbp_state_change_watermark[0], bw_int_to_fixed(1000)));
@@ -4303,7 +4303,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->stutter_exit_wm_ns[2].b_mark =
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				stutter_exit_watermark[6], bw_int_to_fixed(1000)));
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->stutter_exit_wm_ns[3].b_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					stutter_exit_watermark[0], bw_int_to_fixed(1000)));
@@ -4333,7 +4333,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->urgent_wm_ns[2].b_mark =
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				urgent_watermark[6], bw_int_to_fixed(1000)));
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->urgent_wm_ns[3].b_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					urgent_watermark[0], bw_int_to_fixed(1000)));
@@ -4369,7 +4369,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->nbp_state_change_wm_ns[2].c_mark =
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				nbp_state_change_watermark[6], bw_int_to_fixed(1000)));
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->nbp_state_change_wm_ns[3].c_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					nbp_state_change_watermark[0], bw_int_to_fixed(1000)));
@@ -4398,7 +4398,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->stutter_exit_wm_ns[2].c_mark =
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				stutter_exit_watermark[6], bw_int_to_fixed(1000)));
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->stutter_exit_wm_ns[3].c_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					stutter_exit_watermark[0], bw_int_to_fixed(1000)));
@@ -4428,7 +4428,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->urgent_wm_ns[2].c_mark =
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				urgent_watermark[6], bw_int_to_fixed(1000)));
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->urgent_wm_ns[3].c_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					urgent_watermark[0], bw_int_to_fixed(1000)));
@@ -4464,7 +4464,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->nbp_state_change_wm_ns[2].d_mark =
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				nbp_state_change_watermark[6], bw_int_to_fixed(1000)));
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->nbp_state_change_wm_ns[3].d_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					nbp_state_change_watermark[0], bw_int_to_fixed(1000)));
@@ -4492,7 +4492,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->stutter_exit_wm_ns[2].d_mark =
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				stutter_exit_watermark[6], bw_int_to_fixed(1000)));
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->stutter_exit_wm_ns[3].d_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					stutter_exit_watermark[0], bw_int_to_fixed(1000)));
@@ -4521,7 +4521,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->urgent_wm_ns[2].d_mark =
 			bw_fixed_to_int(bw_mul(bw_results_internal->
 				urgent_watermark[6], bw_int_to_fixed(1000)));
-		if (ctx->dc->caps.max_underlays) {
+		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->urgent_wm_ns[3].d_mark =
 				bw_fixed_to_int(bw_mul(bw_results_internal->
 					urgent_watermark[0], bw_int_to_fixed(1000)));
