@@ -1041,10 +1041,11 @@ bool dc_isr_commit_surfaces_to_target(
 	 * not implemented so we need to check the pointer.
 	 * TODO: remove the check when implementation is done
 	 */
-	if (!core_dc->hwss.apply_ctx_to_surface_unlock)
+	if (!core_dc->hwss.apply_ctx_to_surface_unlock) {
+		context->locked = false;
 		return true;
+	}
 	status = core_dc->hwss.apply_ctx_to_surface_unlock(core_dc, context);
-	context->locked = false;
 	return status == DC_OK;
 }
 
