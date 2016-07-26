@@ -78,6 +78,18 @@ bool mod_freesync_remove_sink(struct mod_freesync *mod_freesync,
 		const struct dc_sink *sink);
 
 /*
+ * Add stream to be tracked by module
+ */
+bool mod_freesync_add_stream(struct mod_freesync *mod_freesync,
+		const struct dc_stream *stream);
+
+/*
+ * Remove stream to be tracked by module
+ */
+bool mod_freesync_remove_stream(struct mod_freesync *mod_freesync,
+		const struct dc_stream *stream);
+
+/*
  * Build additional parameters for dc_stream when creating stream for
  * sink to support freesync
  */

@@ -34,11 +34,6 @@
 /* Refresh rate ramp at a fixed rate of 65 Hz/second */
 #define STATIC_SCREEN_RAMP_DELTA_REFRESH_RATE_PER_FRAME ((1000 / 60) * 65)
 
-struct sink_caps {
-	const struct dc_sink *sink;
-	struct mod_freesync_caps caps;
-};
-
 struct gradual_static_ramp {
 	bool ramp_is_active;
 	bool ramp_direction_is_up;
@@ -56,13 +51,21 @@ struct freesync_state {
 	struct gradual_static_ramp static_ramp;
 };
 
+struct freesync_entity {
+	const struct dc_stream *stream;
+	const struct dc_sink *sink;
+	struct mod_freesync_caps caps;
+	struct freesync_state state;
+	struct mod_freesync_user_enable user_enable;
+};
+
 struct core_freesync {
 	struct mod_freesync public;
 	struct dc *dc;
-	struct sink_caps *caps;
-	struct freesync_state *state;
-	struct mod_freesync_user_enable *user_enable;
+	struct freesync_entity *map;
 	int num_sinks;
+	int num_streams;
+	int num_entities;
 };
 
 #define MOD_FREESYNC_TO_CORE(mod_freesync)\
@@ -90,29 +93,20 @@ struct mod_freesync *mod_freesync_create(struct dc *dc)
 	if (core_freesync == NULL)
 		goto fail_alloc_context;
 
-	core_freesync->caps = dm_alloc(sizeof(struct sink_caps) *
+	core_freesync->map = dm_alloc(sizeof(struct freesync_entity) *
 			MOD_FREESYNC_MAX_CONCURRENT_SINKS);
 
-	if (core_freesync->caps == NULL)
-		goto fail_alloc_caps;
+	if (core_freesync->map == NULL)
+		goto fail_alloc_map;
 
-	core_freesync->state = dm_alloc(sizeof(struct freesync_state) *
-			MOD_FREESYNC_MAX_CONCURRENT_SINKS);
-
-	if (core_freesync->state == NULL)
-		goto fail_alloc_state;
-
-	core_freesync->user_enable =
-			dm_alloc(sizeof(struct mod_freesync_user_enable) *
-					MOD_FREESYNC_MAX_CONCURRENT_SINKS);
-
-	if (core_freesync->user_enable == NULL)
-		goto fail_alloc_user_enable;
-
-	for (i = 0; i < MOD_FREESYNC_MAX_CONCURRENT_SINKS; i++)
-		core_freesync->caps[i].sink = NULL;
+	for (i = 0; i < MOD_FREESYNC_MAX_CONCURRENT_SINKS; i++) {
+		core_freesync->map[i].stream = NULL;
+		core_freesync->map[i].sink = NULL;
+	}
 
 	core_freesync->num_sinks = 0;
+	core_freesync->num_streams = 0;
+	core_freesync->num_entities = 0;
 
 	if (dc == NULL)
 		goto fail_construct;
@@ -131,15 +125,9 @@ struct mod_freesync *mod_freesync_create(struct dc *dc)
 	return &core_freesync->public;
 
 fail_construct:
-	dm_free(core_freesync->user_enable);
+	dm_free(core_freesync->map);
 
-fail_alloc_user_enable:
-	dm_free(core_freesync->state);
-
-fail_alloc_state:
-	dm_free(core_freesync->caps);
-
-fail_alloc_caps:
+fail_alloc_map:
 	dm_free(core_freesync);
 
 fail_alloc_context:
@@ -153,17 +141,51 @@ void mod_freesync_destroy(struct mod_freesync *mod_freesync)
 		struct core_freesync *core_freesync =
 				MOD_FREESYNC_TO_CORE(mod_freesync);
 
-		for (i = 0; i < core_freesync->num_sinks; i++)
-			dc_sink_release(core_freesync->caps[i].sink);
+		for (i = 0; i < core_freesync->num_entities; i++) {
+			if (core_freesync->map[i].stream)
+				dc_stream_release(core_freesync->map[i].stream);
+			if (core_freesync->map[i].sink)
+				dc_sink_release(core_freesync->map[i].sink);
+		}
 
-		dm_free(core_freesync->user_enable);
-
-		dm_free(core_freesync->state);
-
-		dm_free(core_freesync->caps);
+		dm_free(core_freesync->map);
 
 		dm_free(core_freesync);
 	}
+}
+
+/* Given a specific dc_sink* this function finds its equivalent
+ * on the core_freesync->map and returns the corresponding index
+ */
+static unsigned int map_index_from_sink(struct core_freesync *core_freesync,
+		const struct dc_sink *sink)
+{
+	unsigned int index = 0;
+
+	for (index = 0; index < core_freesync->num_entities; index++)
+		if (core_freesync->map[index].sink == sink)
+			return index;
+
+	/* Could not find sink requested */
+	ASSERT(false);
+	return index;
+}
+
+/* Given a specific dc_stream* this function finds its equivalent
+ * on the core_freesync->map and returns the corresponding index
+ */
+static unsigned int map_index_from_stream(struct core_freesync *core_freesync,
+		const struct dc_stream *stream)
+{
+	unsigned int index = 0;
+
+	for (index = 0; index < core_freesync->num_entities; index++)
+		if (core_freesync->map[index].stream == stream)
+			return index;
+
+	/* Could not find stream requested */
+	ASSERT(false);
+	return index;
 }
 
 bool mod_freesync_add_sink(struct mod_freesync *mod_freesync,
@@ -171,59 +193,55 @@ bool mod_freesync_add_sink(struct mod_freesync *mod_freesync,
 {
 	struct core_freesync *core_freesync =
 			MOD_FREESYNC_TO_CORE(mod_freesync);
-
 	struct core_dc *core_dc = DC_TO_CORE(core_freesync->dc);
 
 	int persistent_freesync_enable = 0;
-
 	struct persistent_data_flag flag;
 
-	if (core_freesync->num_sinks < MOD_FREESYNC_MAX_CONCURRENT_SINKS) {
+	flag.save_per_edid = true;
+	flag.save_per_link = false;
+
+	if (core_freesync->num_entities < MOD_FREESYNC_MAX_CONCURRENT_SINKS &&
+			core_freesync->num_sinks < MOD_FREESYNC_MAX_CONCURRENT_SINKS) {
 		dc_sink_retain(sink);
 
-		core_freesync->caps[core_freesync->num_sinks].sink = sink;
-		core_freesync->caps[core_freesync->num_sinks].caps = *caps;
+		core_freesync->map[core_freesync->num_entities].sink = sink;
+		core_freesync->map[core_freesync->num_entities].caps = *caps;
 
-		core_freesync->state[core_freesync->num_sinks].
+		core_freesync->map[core_freesync->num_entities].state.
 			fullscreen = false;
-		core_freesync->state[core_freesync->num_sinks].
+		core_freesync->map[core_freesync->num_entities].state.
 			static_screen = false;
-		core_freesync->state[core_freesync->num_sinks].
+		core_freesync->map[core_freesync->num_entities].state.
 			video = false;
-		core_freesync->state[core_freesync->num_sinks].
+		core_freesync->map[core_freesync->num_entities].state.
 			duration_in_ns = 0;
-		core_freesync->state[core_freesync->num_sinks].
+		core_freesync->map[core_freesync->num_entities].state.
 			static_ramp.ramp_is_active = false;
 
 		/* get persistent data from registry */
-		flag.save_per_edid = true;
-		flag.save_per_link = false;
-
 		if (dm_read_persistent_data(core_dc->ctx, sink, "freesync",
-					"userenable",
-					&persistent_freesync_enable,
+					"userenable", &persistent_freesync_enable,
 					sizeof(int), &flag)) {
-			core_freesync->user_enable[core_freesync->num_sinks].
+			core_freesync->map[core_freesync->num_sinks].user_enable.
 					enable_for_gaming =
-					(persistent_freesync_enable & 1)
-					? true : false;
-			core_freesync->user_enable[core_freesync->num_sinks].
+					(persistent_freesync_enable & 1) ? true : false;
+			core_freesync->map[core_freesync->num_sinks].user_enable.
 					enable_for_static =
-					(persistent_freesync_enable & 2)
-					? true : false;
-			core_freesync->user_enable[core_freesync->num_sinks].
+					(persistent_freesync_enable & 2) ? true : false;
+			core_freesync->map[core_freesync->num_sinks].user_enable.
 					enable_for_video =
-					(persistent_freesync_enable & 4)
-					? true : false;
+					(persistent_freesync_enable & 4) ? true : false;
 		} else {
-			core_freesync->user_enable[core_freesync->num_sinks].
+			core_freesync->map[core_freesync->num_sinks].user_enable.
 					enable_for_gaming = false;
-			core_freesync->user_enable[core_freesync->num_sinks].
+			core_freesync->map[core_freesync->num_sinks].user_enable.
 					enable_for_static = false;
-			core_freesync->user_enable[core_freesync->num_sinks].
+			core_freesync->map[core_freesync->num_sinks].user_enable.
 					enable_for_video = false;
 		}
 
+		core_freesync->num_entities++;
 		core_freesync->num_sinks++;
 
 		return true;
@@ -232,102 +250,111 @@ bool mod_freesync_add_sink(struct mod_freesync *mod_freesync,
 	return false;
 }
 
-bool mod_freesync_remove_sink(struct mod_freesync *mod_freesync,
-		const struct dc_sink *sink)
+bool mod_freesync_add_stream(struct mod_freesync *mod_freesync,
+		const struct dc_stream *stream)
 {
-	int i = 0, j = 0;
 	struct core_freesync *core_freesync =
 			MOD_FREESYNC_TO_CORE(mod_freesync);
 
-	for (i = 0; i < core_freesync->num_sinks; i++) {
-		if (core_freesync->caps[i].sink == sink) {
-			/* To remove this sink, shift everything after down */
-			for (j = i; j < core_freesync->num_sinks - 1; j++) {
-				core_freesync->caps[j].sink =
-					core_freesync->caps[j + 1].sink;
-				core_freesync->caps[j].caps =
-					core_freesync->caps[j + 1].caps;
+	struct core_stream *core_stream =
+			DC_STREAM_TO_CORE(stream);
 
-				core_freesync->state[j] =
-					core_freesync->state[j + 1];
-
-				core_freesync->user_enable[j] =
-					core_freesync->user_enable[j + 1];
-			}
-
-			core_freesync->num_sinks--;
-
-			dc_sink_release(sink);
-
-			return true;
+	if (core_freesync->num_entities < MOD_FREESYNC_MAX_CONCURRENT_SINKS &&
+			core_freesync->num_streams < MOD_FREESYNC_MAX_CONCURRENT_SINKS) {
+		unsigned int index = map_index_from_sink(core_freesync, stream->sink);
+		if (core_freesync->map[index].stream) {
+			dc_stream_release(core_freesync->map[index].stream);
+			core_freesync->num_streams--;
+			/* don't need any other part of mod_freesync_remove_stream */
 		}
-	}
+		dc_stream_retain(stream);
 
+		if (core_freesync->map[index].caps.supported)
+			core_stream->public.ignore_msa_timing_param = 1;
+
+		core_freesync->map[index].stream = stream;
+		core_freesync->num_streams++;
+		return true;
+	}
 	return false;
 }
 
-/* Given a specific dc_sink* this function finds its equivalent
- * on the dc_sink array and returns the corresponding index
- */
-static unsigned int sink_index_from_sink(struct core_freesync *core_freesync,
+static void remove_entity(struct core_freesync *core_freesync,
+		int index)
+{
+	int i = 0;
+	/* To remove this entity, shift everything after down */
+	for (i = index; i < core_freesync->num_entities - 1; i++)
+		core_freesync->map[i] = core_freesync->map[i + 1];
+	core_freesync->num_entities--;
+}
+
+bool mod_freesync_remove_sink(struct mod_freesync *mod_freesync,
 		const struct dc_sink *sink)
 {
-	unsigned int index = 0;
+	struct core_freesync *core_freesync =
+			MOD_FREESYNC_TO_CORE(mod_freesync);
 
-	for (index = 0; index < core_freesync->num_sinks; index++)
-		if (core_freesync->caps[index].sink == sink)
-			return index;
+	unsigned int index = map_index_from_sink(core_freesync, sink);
+	dc_sink_release(core_freesync->map[index].sink);
+	core_freesync->map[index].sink = NULL;
+	core_freesync->num_sinks--;
+	if (core_freesync->map[index].stream == NULL)
+		remove_entity(core_freesync, index);
+	return true;
+}
 
-	/* Could not find sink requested */
-	ASSERT(false);
-	return index;
+bool mod_freesync_remove_stream(struct mod_freesync *mod_freesync,
+		const struct dc_stream *stream)
+{
+	struct core_freesync *core_freesync =
+			MOD_FREESYNC_TO_CORE(mod_freesync);
+
+	unsigned int index = map_index_from_stream(core_freesync, stream);
+	dc_stream_release(core_freesync->map[index].stream);
+	core_freesync->map[index].stream = NULL;
+	core_freesync->num_streams--;
+	if (core_freesync->map[index].sink == NULL)
+		remove_entity(core_freesync, index);
+	return true;
 }
 
 static void update_stream_freesync_context(struct core_freesync *core_freesync,
 		const struct dc_stream *stream)
 {
-	unsigned int sink_idx;
+	unsigned int index;
 	struct freesync_context *ctx;
 	struct core_stream *core_stream;
 
 	core_stream = DC_STREAM_TO_CORE(stream);
 	ctx = &core_stream->public.freesync_ctx;
 
-	sink_idx = sink_index_from_sink(core_freesync, stream->sink);
+	index = map_index_from_stream(core_freesync, stream);
 
-	ctx->supported = core_freesync->caps[sink_idx].caps.supported;
-	ctx->enabled = (core_freesync->user_enable[sink_idx].
-		enable_for_gaming ||
-		core_freesync->user_enable[sink_idx].
-		enable_for_video ||
-		core_freesync->user_enable[sink_idx].
-		enable_for_static);
-	ctx->active = (core_freesync->state[sink_idx].fullscreen ||
-		core_freesync->state[sink_idx].video ||
-		core_freesync->state[sink_idx].static_ramp.
-		ramp_is_active);
-	ctx->min_refresh_in_micro_hz = core_freesync->caps[sink_idx].
+	ctx->supported = core_freesync->map[index].caps.supported;
+	ctx->enabled = (core_freesync->map[index].user_enable.enable_for_gaming ||
+		core_freesync->map[index].user_enable.enable_for_video ||
+		core_freesync->map[index].user_enable.enable_for_static);
+	ctx->active = (core_freesync->map[index].state.fullscreen ||
+		core_freesync->map[index].state.video ||
+		core_freesync->map[index].state.static_ramp.ramp_is_active);
+	ctx->min_refresh_in_micro_hz = core_freesync->map[index].
 		caps.min_refresh_in_micro_hz;
 	ctx->nominal_refresh_in_micro_hz = core_freesync->
-		state[sink_idx].nominal_refresh_rate_in_micro_hz;
+		map[index].state.nominal_refresh_rate_in_micro_hz;
 
 }
 
 static void update_stream(struct core_freesync *core_freesync,
 		const struct dc_stream *stream)
 {
-	int i = 0;
 	struct core_stream *core_stream = DC_STREAM_TO_CORE(stream);
 
-	for (i = 0; i < core_freesync->num_sinks; i++)
-		if (core_freesync->caps[i].sink == stream->sink &&
-				core_freesync->caps[i].caps.supported) {
-
-			core_stream->public.ignore_msa_timing_param = 1;
-
-			update_stream_freesync_context(core_freesync, stream);
-		}
-
+	unsigned int index = map_index_from_stream(core_freesync, stream);
+	if (core_freesync->map[index].caps.supported) {
+		core_stream->public.ignore_msa_timing_param = 1;
+		update_stream_freesync_context(core_freesync, stream);
+	}
 }
 
 static void calc_vmin_vmax(struct core_freesync *core_freesync,
@@ -336,17 +363,16 @@ static void calc_vmin_vmax(struct core_freesync *core_freesync,
 	/* TODO: This calculation is probably wrong... */
 
 	unsigned int min_frame_duration_in_ns = 0, max_frame_duration_in_ns = 0;
-	unsigned int sink_index = sink_index_from_sink(core_freesync,
-					stream->sink);
+	unsigned int index = map_index_from_stream(core_freesync, stream);
 
 	min_frame_duration_in_ns = ((unsigned int) (div64_u64(
 					(1000000000ULL * 1000000),
-					core_freesync->state[sink_index].
+					core_freesync->map[index].state.
 					nominal_refresh_rate_in_micro_hz)));
 	max_frame_duration_in_ns = ((unsigned int) (div64_u64(
 					(1000000000ULL * 1000000),
-					core_freesync->caps[sink_index].
-					caps.min_refresh_in_micro_hz)));
+					core_freesync->map[index].caps.
+					min_refresh_in_micro_hz)));
 
 	*vmax = div64_u64(div64_u64(((unsigned long long)(
 			max_frame_duration_in_ns) * stream->timing.pix_clk_khz),
@@ -366,12 +392,12 @@ static void calc_v_total_from_duration(const struct dc_stream *stream,
 
 static void calc_v_total_for_static_ramp(struct core_freesync *core_freesync,
 		const struct dc_stream *stream,
-		unsigned int sink_index, int *v_total)
+		unsigned int index, int *v_total)
 {
 	unsigned int frame_duration = 0;
 
 	struct gradual_static_ramp *static_ramp_variables =
-				&core_freesync->state[sink_index].static_ramp;
+				&core_freesync->map[index].state.static_ramp;
 
 	/* Calc ratio between new and current frame duration with 3 digit */
 	unsigned int frame_duration_ratio = div64_u64(1000000,
@@ -401,7 +427,7 @@ static void calc_v_total_for_static_ramp(struct core_freesync *core_freesync,
 		/* min frame duration */
 		frame_duration = ((unsigned int) (div64_u64(
 			(1000000000ULL * 1000000),
-			core_freesync->state[sink_index].
+			core_freesync->map[index].state.
 			nominal_refresh_rate_in_micro_hz)));
 
 		/* adjust for frame duration below min */
@@ -422,7 +448,7 @@ static void calc_v_total_for_static_ramp(struct core_freesync *core_freesync,
 		/* max frame duration */
 		frame_duration = ((unsigned int) (div64_u64(
 			(1000000000ULL * 1000000),
-			core_freesync->caps[sink_index].
+			core_freesync->map[index].
 			caps.min_refresh_in_micro_hz)));
 
 		/* adjust for frame duration above max */
@@ -448,25 +474,24 @@ void mod_freesync_handle_v_update(struct mod_freesync *mod_freesync,
 	struct core_freesync *core_freesync =
 			MOD_FREESYNC_TO_CORE(mod_freesync);
 
-	unsigned int sink_index, v_total = 0;
+	unsigned int index, v_total = 0;
 
-	if (core_freesync->num_sinks == 0)
+	if (core_freesync->num_streams == 0)
 		return;
 
-	sink_index = sink_index_from_sink(core_freesync,
-		streams[0]->sink);
+	index = map_index_from_stream(core_freesync,
+		streams[0]);
 
-	if (core_freesync->caps[sink_index].caps.
-		supported == false)
+	if (core_freesync->map[index].caps.supported == false)
 		return;
 
 	/* If in fullscreen freesync mode or in video, do not program
 	 * static screen ramp values
 	 */
-	if (core_freesync->state[sink_index].fullscreen == true ||
-		core_freesync->state[sink_index].video == true) {
+	if (core_freesync->map[index].state.fullscreen == true ||
+		core_freesync->map[index].state.video == true) {
 
-		core_freesync->state[sink_index].static_ramp.
+		core_freesync->map[index].state.static_ramp.
 			ramp_is_active = false;
 
 		return;
@@ -474,11 +499,11 @@ void mod_freesync_handle_v_update(struct mod_freesync *mod_freesync,
 
 
 	/* Execute if ramp is active and user enabled freesync static screen*/
-	if (core_freesync->state[sink_index].static_ramp.ramp_is_active &&
-		core_freesync->user_enable[sink_index].enable_for_static) {
+	if (core_freesync->map[index].state.static_ramp.ramp_is_active &&
+		core_freesync->map[index].user_enable.enable_for_static) {
 
 		calc_v_total_for_static_ramp(core_freesync, streams[0],
-				sink_index, &v_total);
+				index, &v_total);
 
 		/* Update the freesync context for the stream */
 		update_stream_freesync_context(core_freesync, streams[0]);
@@ -498,17 +523,17 @@ static bool set_freesync_on_streams(struct core_freesync *core_freesync,
 		const struct dc_stream **streams, int num_streams)
 {
 	int v_total_nominal = 0, v_total_min = 0, v_total_max = 0;
-	unsigned int stream_idx, sink_index = 0;
+	unsigned int stream_idx, map_index = 0;
 
 	if (num_streams == 0 || streams == NULL || num_streams > 1)
 		return false;
 
 	for (stream_idx = 0; stream_idx < num_streams; stream_idx++) {
 
-		sink_index = sink_index_from_sink(core_freesync,
-				streams[stream_idx]->sink);
+		map_index = map_index_from_stream(core_freesync,
+				streams[stream_idx]);
 
-		if (core_freesync->caps[sink_index].caps.supported) {
+		if (core_freesync->map[map_index].caps.supported) {
 
 			/* Fullscreen has the topmost priority. If the
 			 * fullscreen bit is set, we are in a fullscreen
@@ -516,9 +541,9 @@ static bool set_freesync_on_streams(struct core_freesync *core_freesync,
 			 * static screen. We should not check the static_screen
 			 * bit - we want to enable freesync regardless.
 			 */
-			if (core_freesync->user_enable[sink_index].
+			if (core_freesync->map[map_index].user_enable.
 				enable_for_gaming && core_freesync->
-				state[sink_index].fullscreen == true) {
+				map[map_index].state.fullscreen == true) {
 				/* Enable freesync */
 
 				calc_vmin_vmax(core_freesync,
@@ -537,13 +562,13 @@ static bool set_freesync_on_streams(struct core_freesync *core_freesync,
 
 				return true;
 
-			} else if (core_freesync->user_enable[sink_index].
+			} else if (core_freesync->map[map_index].user_enable.
 				enable_for_video && core_freesync->
-				state[sink_index].video == true) {
+				map[map_index].state.video == true) {
 				/* Enable 48Hz feature */
 
 				calc_v_total_from_duration(streams[stream_idx],
-					core_freesync->state[sink_index].
+					core_freesync->map[map_index].state.
 					duration_in_ns, &v_total_nominal);
 
 				/* Program only if v_total_nominal is in range*/
@@ -593,12 +618,12 @@ static bool set_freesync_on_streams(struct core_freesync *core_freesync,
 }
 
 static void set_static_ramp_variables(struct core_freesync *core_freesync,
-		unsigned int sink_index, bool enable_static_screen)
+		unsigned int index, bool enable_static_screen)
 {
 	unsigned int frame_duration = 0;
 
 	struct gradual_static_ramp *static_ramp_variables =
-			&core_freesync->state[sink_index].static_ramp;
+			&core_freesync->map[index].state.static_ramp;
 
 	/* If ramp is not active, set initial frame duration depending on
 	 * whether we are enabling/disabling static screen mode. If the ramp is
@@ -615,7 +640,7 @@ static void set_static_ramp_variables(struct core_freesync *core_freesync,
 			 */
 			frame_duration = ((unsigned int) (div64_u64(
 				(1000000000ULL * 1000000),
-				core_freesync->state[sink_index].
+				core_freesync->map[index].state.
 				nominal_refresh_rate_in_micro_hz)));
 		} else {
 			/* Going to higher refresh rate, so start from min
@@ -623,8 +648,8 @@ static void set_static_ramp_variables(struct core_freesync *core_freesync,
 			 */
 			frame_duration = ((unsigned int) (div64_u64(
 				(1000000000ULL * 1000000),
-				core_freesync->caps[sink_index].
-				caps.min_refresh_in_micro_hz)));
+				core_freesync->map[index].caps.
+				min_refresh_in_micro_hz)));
 		}
 
 		static_ramp_variables->
@@ -646,29 +671,32 @@ void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 	bool freesync_program_required = false;
 	unsigned int stream_index;
 
+	if (core_freesync->num_streams == 0)
+		return;
+
 	for(stream_index = 0; stream_index < num_streams; stream_index++) {
 
-		unsigned int sink_index = sink_index_from_sink(core_freesync,
-				streams[stream_index]->sink);
+		unsigned int map_index = map_index_from_stream(core_freesync,
+				streams[stream_index]);
 
 		switch (freesync_params->state){
 		case FREESYNC_STATE_FULLSCREEN:
-			core_freesync->state[sink_index].fullscreen =
+			core_freesync->map[map_index].state.fullscreen =
 					freesync_params->enable;
 			freesync_program_required = true;
 			break;
 		case FREESYNC_STATE_STATIC_SCREEN:
 			/* Change core variables only if there is a change*/
-			if (core_freesync->state[sink_index].static_screen !=
+			if (core_freesync->map[map_index].state.static_screen !=
 				freesync_params->enable) {
 
 				/* Change the state flag */
-				core_freesync->state[sink_index].static_screen =
+				core_freesync->map[map_index].state.static_screen =
 					freesync_params->enable;
 
 				/* Change static screen ramp variables */
 				set_static_ramp_variables(core_freesync,
-						sink_index,
+						map_index,
 						freesync_params->enable);
 			}
 			/* We program the ramp starting next VUpdate */
@@ -676,12 +704,12 @@ void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 		case FREESYNC_STATE_VIDEO:
 			/* Change core variables only if there is a change*/
 			if(freesync_params->duration_in_ns != core_freesync->
-					state[sink_index].duration_in_ns) {
+					map[map_index].state.duration_in_ns) {
 
-				core_freesync->state[sink_index].video =
+				core_freesync->map[map_index].state.video =
 						freesync_params->enable;
 				core_freesync->
-					state[sink_index].duration_in_ns =
+					map[map_index].state.duration_in_ns =
 					freesync_params->duration_in_ns;
 
 				freesync_program_required = true;
@@ -701,9 +729,9 @@ bool mod_freesync_get_freesync_caps(struct mod_freesync *mod_freesync,
 	struct core_freesync *core_freesync =
 			MOD_FREESYNC_TO_CORE(mod_freesync);
 
-	unsigned int sink_index = sink_index_from_sink(core_freesync, sink);
+	unsigned int index = map_index_from_sink(core_freesync, sink);
 
-	*caps = core_freesync->caps[sink_index].caps;
+	*caps = core_freesync->map[index].caps;
 
 	return true;
 }
@@ -716,31 +744,31 @@ bool mod_freesync_set_user_enable(struct mod_freesync *mod_freesync,
 			MOD_FREESYNC_TO_CORE(mod_freesync);
 	struct core_dc *core_dc = DC_TO_CORE(core_freesync->dc);
 
-	unsigned int stream_index, sink_index;
-	struct persistent_data_flag flag;
+	unsigned int stream_index, map_index;
 	int persistent_data = 0;
+	struct persistent_data_flag flag;
+
+	flag.save_per_edid = true;
+	flag.save_per_link = false;
 
 	for(stream_index = 0; stream_index < num_streams;
 			stream_index++){
 
-		sink_index = sink_index_from_sink(core_freesync,
-				streams[stream_index]->sink);
+		map_index = map_index_from_stream(core_freesync,
+				streams[stream_index]);
 
-		core_freesync->user_enable[sink_index] = *user_enable;
+		core_freesync->map[map_index].user_enable = *user_enable;
 
 		/* Write persistent data in registry*/
-		if (core_freesync->user_enable[sink_index].
+		if (core_freesync->map[map_index].user_enable.
 				enable_for_gaming)
 			persistent_data = persistent_data | 1;
-		if (core_freesync->user_enable[sink_index].
+		if (core_freesync->map[map_index].user_enable.
 				enable_for_static)
 			persistent_data = persistent_data | 2;
-		if (core_freesync->user_enable[sink_index].
+		if (core_freesync->map[map_index].user_enable.
 				enable_for_video)
 			persistent_data = persistent_data | 4;
-
-		flag.save_per_edid = true;
-		flag.save_per_link = false;
 
 		dm_write_persistent_data(core_dc->ctx,
 					streams[stream_index]->sink,
@@ -749,7 +777,6 @@ bool mod_freesync_set_user_enable(struct mod_freesync *mod_freesync,
 					&persistent_data,
 					sizeof(int),
 					&flag);
-
 	}
 
 	set_freesync_on_streams(core_freesync, streams, num_streams);
@@ -764,9 +791,9 @@ bool mod_freesync_get_user_enable(struct mod_freesync *mod_freesync,
 	struct core_freesync *core_freesync =
 			MOD_FREESYNC_TO_CORE(mod_freesync);
 
-	unsigned int sink_index = sink_index_from_sink(core_freesync, sink);
+	unsigned int index = map_index_from_sink(core_freesync, sink);
 
-	*user_enable = core_freesync->user_enable[sink_index];
+	*user_enable = core_freesync->map[index].user_enable;
 
 	return true;
 }
@@ -777,16 +804,16 @@ void mod_freesync_notify_mode_change(struct mod_freesync *mod_freesync,
 	struct core_freesync *core_freesync =
 			MOD_FREESYNC_TO_CORE(mod_freesync);
 
-	unsigned int stream_index, sink_index;
+	unsigned int stream_index, map_index;
 
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
 
-		sink_index = sink_index_from_sink(core_freesync,
-				streams[stream_index]->sink);
+		map_index = map_index_from_stream(core_freesync,
+				streams[stream_index]);
 
-		if (core_freesync->caps[sink_index].caps.supported) {
+		if (core_freesync->map[map_index].caps.supported) {
 			/* Update the field rate for new timing */
-			core_freesync->state[sink_index].
+			core_freesync->map[map_index].state.
 				nominal_refresh_rate_in_micro_hz = 1000000 *
 				div64_u64(div64_u64((streams[stream_index]->
 				timing.pix_clk_khz * 1000),

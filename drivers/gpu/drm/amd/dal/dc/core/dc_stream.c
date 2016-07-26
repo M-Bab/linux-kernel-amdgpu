@@ -91,13 +91,13 @@ static void destruct(struct core_stream *stream)
 	dc_sink_release(&stream->sink->public);
 }
 
-void dc_stream_retain(struct dc_stream *dc_stream)
+void dc_stream_retain(const struct dc_stream *dc_stream)
 {
 	struct stream *stream = DC_STREAM_TO_STREAM(dc_stream);
 	stream->ref_count++;
 }
 
-void dc_stream_release(struct dc_stream *public)
+void dc_stream_release(const struct dc_stream *public)
 {
 	struct stream *stream = DC_STREAM_TO_STREAM(public);
 	struct core_stream *protected = DC_STREAM_TO_CORE(public);
