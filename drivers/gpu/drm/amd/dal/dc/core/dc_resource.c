@@ -435,22 +435,6 @@ static void calculate_scaling_ratios(
 	}
 }
 
-void decide_lb_format(struct pipe_ctx *pipe_ctx)
-{
-	switch (pipe_ctx->pix_clk_params.color_depth) {
-	case COLOR_DEPTH_666:
-	case COLOR_DEPTH_888:
-		pipe_ctx->scl_data.lb_bpp = LB_PIXEL_DEPTH_24BPP;
-		break;
-	case COLOR_DEPTH_101010:
-		pipe_ctx->scl_data.lb_bpp = LB_PIXEL_DEPTH_30BPP;
-		break;
-	default:
-		pipe_ctx->scl_data.lb_bpp = LB_PIXEL_DEPTH_30BPP;
-		break;
-	}
-}
-
 bool resource_build_scaling_params(
 	const struct dc_surface *surface,
 	struct pipe_ctx *pipe_ctx)
@@ -471,7 +455,11 @@ bool resource_build_scaling_params(
 
 	calculate_recout(surface, pipe_ctx);
 
-	decide_lb_format(pipe_ctx);
+	/**
+	 * Setting line buffer pixel depth to 24bpp yields banding
+	 * on certain displays, such as the Sharp 4k
+	 */
+	pipe_ctx->scl_data.lb_bpp = LB_PIXEL_DEPTH_30BPP;
 
 	pipe_ctx->scl_data.h_active = timing->h_addressable
 			+ timing->h_border_left + timing->h_border_right;
