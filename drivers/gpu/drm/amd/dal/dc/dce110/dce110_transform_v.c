@@ -808,7 +808,19 @@ static bool dce110_transform_v_power_up_line_buffer(struct transform *xfm)
 	return true;
 }
 
+static void dce110_transform_v_reset(struct transform *xfm)
+{
+	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+
+	xfm110->filter_h = NULL;
+	xfm110->filter_v = NULL;
+	xfm110->filter_h_c = NULL;
+	xfm110->filter_v_c = NULL;
+}
+
 static const struct transform_funcs dce110_transform_v_funcs = {
+	.transform_reset =
+			dce110_transform_v_reset,
 	.transform_power_up =
 		dce110_transform_v_power_up_line_buffer,
 	.transform_set_scaler =

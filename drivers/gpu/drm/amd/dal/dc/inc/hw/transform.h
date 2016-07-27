@@ -164,6 +164,9 @@ struct line_buffer_params {
 };
 
 struct transform_funcs {
+	void (*transform_reset)(
+		struct transform *xfm);
+
 	bool (*transform_power_up)(
 		struct transform *xfm);
 

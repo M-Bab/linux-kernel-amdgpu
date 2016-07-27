@@ -1058,6 +1058,8 @@ bool dc_post_commit_surfaces_to_target(
 			core_dc->hwss.enable_display_power_gating(
 				core_dc->ctx, i, core_dc->ctx->dc_bios,
 				PIPE_GATING_CONTROL_ENABLE);
+			context->res_ctx.pipe_ctx[i].xfm->funcs->transform_reset(
+					context->res_ctx.pipe_ctx[i].xfm);
 			memset(&context->res_ctx.pipe_ctx[i], 0, sizeof(struct pipe_ctx));
 		}
 	}
@@ -1224,32 +1226,7 @@ void dc_flip_surface_addrs_on_context(
 			ctx_surface->public.address = flip_addrs[i].address;
 			ctx_surface->public.flip_immediate = flip_addrs[i].flip_immediate;
 
-			if (!ctx_surface->public.flip_immediate)
-				core_dc->hwss.pipe_control_lock(
-						core_dc->ctx,
-						pipe_ctx->pipe_idx,
-						PIPE_LOCK_CONTROL_SURFACE |
-						PIPE_LOCK_CONTROL_MODE,
-						true);
-
 			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
-		}
-
-	for (j = pipe_count - 1; j >= 0; j--)
-		for (i = count - 1; i >= 0; i--) {
-			struct pipe_ctx *pipe_ctx =
-				&context->res_ctx.pipe_ctx[j];
-			struct core_surface *ctx_surface = pipe_ctx->surface;
-
-			if (DC_SURFACE_TO_CORE(surfaces[i]) != ctx_surface)
-				continue;
-
-			if (!ctx_surface->public.flip_immediate)
-				core_dc->hwss.pipe_control_lock(
-						core_dc->ctx,
-						pipe_ctx->pipe_idx,
-						PIPE_LOCK_CONTROL_SURFACE,
-						false);
 		}
 }
 

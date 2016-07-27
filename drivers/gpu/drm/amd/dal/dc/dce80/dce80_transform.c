@@ -55,7 +55,13 @@ bool dce80_transform_get_optimal_number_of_taps(
 	return true;
 }
 
+static void dce80_transform_reset(struct transform *xfm)
+{
+}
+
+
 static const struct transform_funcs dce80_transform_funcs = {
+	.transform_reset = dce80_transform_reset,
 	.transform_power_up =
 		dce80_transform_power_up,
 	.transform_set_scaler =

@@ -61,7 +61,20 @@ bool dce110_transform_get_optimal_number_of_taps(
 
 }
 
+static void dce110_transform_reset(struct transform *xfm)
+{
+	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+
+	xfm110->filter_h = NULL;
+	xfm110->filter_v = NULL;
+	xfm110->filter_h_c = NULL;
+	xfm110->filter_v_c = NULL;
+}
+
+
 static const struct transform_funcs dce110_transform_funcs = {
+	.transform_reset =
+			dce110_transform_reset,
 	.transform_power_up =
 		dce110_transform_power_up,
 	.transform_set_scaler =
