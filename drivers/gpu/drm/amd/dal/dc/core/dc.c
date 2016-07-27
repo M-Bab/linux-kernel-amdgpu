@@ -1036,16 +1036,9 @@ bool dc_isr_commit_surfaces_to_target(
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	enum dc_status status;
 
-	/*
-	 * Currently refactor is not complete, in some environment this is
-	 * not implemented so we need to check the pointer.
-	 * TODO: remove the check when implementation is done
-	 */
-	if (!core_dc->hwss.apply_ctx_to_surface_unlock) {
-		context->locked = false;
-		return true;
-	}
 	status = core_dc->hwss.apply_ctx_to_surface_unlock(core_dc, context);
+	context->locked = false;
+
 	return status == DC_OK;
 }
 
