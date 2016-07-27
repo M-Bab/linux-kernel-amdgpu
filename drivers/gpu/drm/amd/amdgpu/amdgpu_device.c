@@ -2093,6 +2093,7 @@ retry:
 		amdgpu_atombios_scratch_regs_restore(adev);
 	}
 	if (!r) {
+		amdgpu_irq_gpu_reset_resume_helper(adev);
 		r = amdgpu_ib_ring_tests(adev);
 		if (r) {
 			dev_err(adev->dev, "ib ring test failed (%d).\n", r);
@@ -2123,7 +2124,6 @@ retry:
 		/* bad news, how to tell it to userspace ? */
 		dev_info(adev->dev, "GPU reset failed\n");
 	}
-	amdgpu_irq_gpu_reset_resume_helper(adev);
 
 	return r;
 }
