@@ -727,6 +727,11 @@ bool transform_get_optimal_number_of_taps_helper(
 	uint32_t pixel_width,
 	const struct scaling_taps *in_taps) {
 
+	/*In gcc linux, the scl_data->taps.v_taps will somehow be optimized out by compiler
+	 *and thus causing a scale tap validation failure. Declaring the scaler data with volatile
+	 *will avoid it to be optimized.
+	 */
+	volatile struct scaler_data *scl = scl_data;
 	int max_num_of_lines;
 
 	max_num_of_lines = dce110_transform_get_max_num_of_supported_lines(
@@ -738,21 +743,23 @@ bool transform_get_optimal_number_of_taps_helper(
 	 * maintain that much taps
 	 */
 	if (in_taps->v_taps) {
-		scl_data->taps = *in_taps;
-		return max_num_of_lines > scl_data->taps.v_taps;
+		scl->taps = *in_taps;
+		return max_num_of_lines > scl->taps.v_taps;
 	}
 
 	/*If no taps given as input set to max and reduce
 	 * as needed to get along, also
 	 * set horizontal taps to 4 regardless
 	 */
-	scl_data->taps.h_taps = 4;
-	scl_data->taps.v_taps = 4;
+	scl->taps.h_taps = 4;
+	scl->taps.v_taps = 4;
 
-	if (max_num_of_lines > scl_data->taps.v_taps)
+	if (max_num_of_lines > scl->taps.v_taps)
 		return true;
 
-	scl_data->taps.v_taps = max_num_of_lines - 1;
-	return scl_data->taps.v_taps > 1;
+	scl->taps.v_taps = max_num_of_lines - 1;
+
+
+	return scl->taps.v_taps > 1;
 
 }
