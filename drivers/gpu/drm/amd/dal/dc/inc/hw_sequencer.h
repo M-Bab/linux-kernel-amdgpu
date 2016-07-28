@@ -134,11 +134,14 @@ struct hw_sequencer_funcs {
 				const struct core_dc *dc,
 				struct validate_context *context);
 
-	void (*set_display_mark_for_pipe_if_needed)(struct core_dc *dc,
+	void (*increase_watermarks_for_pipe)(struct core_dc *dc,
 			struct pipe_ctx *pipe_ctx,
 			struct validate_context *context);
 
 	void (*set_display_clock)(struct validate_context *context);
+
+	bool (*decrease_bandwidth)(struct core_dc *dc,
+			struct validate_context *context);
 
 	void (*set_drr)(struct pipe_ctx **pipe_ctx, int num_pipes,
 			int vmin, int vmax);

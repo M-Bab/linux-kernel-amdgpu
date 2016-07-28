@@ -1146,8 +1146,19 @@ int get_bw_result_idx(
 	return collapsed_idx;
 }
 
+static bool is_watermark_set_a_greater(
+		const struct bw_watermarks *set_a,
+		const struct bw_watermarks *set_b)
+{
+	if (set_a->a_mark > set_b->a_mark
+			|| set_a->b_mark > set_b->b_mark
+			|| set_a->c_mark > set_b->c_mark
+			|| set_a->d_mark > set_b->d_mark)
+		return true;
+	return false;
+}
 
-static bool watermark_changed(
+static bool did_watermarks_increase(
 		struct pipe_ctx *pipe_ctx,
 		struct validate_context *context,
 		struct validate_context *old_context)
@@ -1161,17 +1172,17 @@ static bool watermark_changed(
 	if (!old_pipe_ctx->stream)
 		return true;
 
-	if (memcmp(&context->bw_results.nbp_state_change_wm_ns[collapsed_pipe_idx],
-			&old_context->bw_results.nbp_state_change_wm_ns[old_collapsed_pipe_idx],
-			sizeof(struct bw_watermarks)))
+	if (is_watermark_set_a_greater(
+			&context->bw_results.nbp_state_change_wm_ns[collapsed_pipe_idx],
+			&old_context->bw_results.nbp_state_change_wm_ns[old_collapsed_pipe_idx]))
 		return true;
-	if (memcmp(&context->bw_results.stutter_exit_wm_ns[collapsed_pipe_idx],
-			&old_context->bw_results.stutter_exit_wm_ns[old_collapsed_pipe_idx],
-			sizeof(struct bw_watermarks)))
+	if (is_watermark_set_a_greater(
+			&context->bw_results.stutter_exit_wm_ns[collapsed_pipe_idx],
+			&old_context->bw_results.stutter_exit_wm_ns[old_collapsed_pipe_idx]))
 		return true;
-	if (memcmp(&context->bw_results.urgent_wm_ns[collapsed_pipe_idx],
-			&old_context->bw_results.urgent_wm_ns[old_collapsed_pipe_idx],
-			sizeof(struct bw_watermarks)))
+	if (is_watermark_set_a_greater(
+			&context->bw_results.urgent_wm_ns[collapsed_pipe_idx],
+			&old_context->bw_results.urgent_wm_ns[old_collapsed_pipe_idx]))
 		return true;
 
 	return false;
@@ -1895,12 +1906,43 @@ static void dce110_power_on_pipe_if_needed(
 	}
 }
 
-static void set_display_mark_for_pipe_if_needed(struct core_dc *dc,
+static void dce110_increase_watermarks_for_pipe(
+		struct core_dc *dc,
 		struct pipe_ctx *pipe_ctx,
 		struct validate_context *context)
 {
-	if (watermark_changed(pipe_ctx, context, dc->current_context))
+	if (did_watermarks_increase(pipe_ctx, context, dc->current_context))
 		program_wm_for_pipe(dc, pipe_ctx, context);
+}
+
+static bool dce110_decrease_bandwidth(
+		struct core_dc *dc,
+		struct validate_context *context)
+{
+	int i;
+	bool ret = false;
+
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+
+		if (!dc->current_context->res_ctx.pipe_ctx[i].stream
+				|| !pipe_ctx->stream)
+			continue;
+
+		/* Reverse context order to check for decrease */
+		if (did_watermarks_increase(pipe_ctx, dc->current_context, context)) {
+			program_wm_for_pipe(dc, pipe_ctx, context);
+			ret = true;
+		}
+	}
+
+	if (dc->current_context->bw_results.dispclk_khz
+			> context->bw_results.dispclk_khz) {
+		dc->hwss.set_display_clock(context);
+		ret = true;
+	}
+
+	return ret;
 }
 
 static void dce110_program_blending(struct core_dc *dc,
@@ -1927,10 +1969,7 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 		PIPE_LOCK_CONTROL_BLENDER |
 		PIPE_LOCK_CONTROL_MODE;
 
-	dc->hwss.set_display_mark_for_pipe_if_needed(
-			dc,
-		pipe_ctx,
-		context);
+	dc->hwss.increase_watermarks_for_pipe(dc, pipe_ctx, context);
 
 	if (!pipe_ctx->surface->public.flip_immediate)
 		lock_mask |= PIPE_LOCK_CONTROL_SURFACE;
@@ -2166,7 +2205,8 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.clock_gating_power_up = dal_dc_clock_gating_dce110_power_up,/*todo*/
 	.set_display_clock = set_display_clock,
 	.set_displaymarks = set_displaymarks,
-	.set_display_mark_for_pipe_if_needed = set_display_mark_for_pipe_if_needed,
+	.increase_watermarks_for_pipe = dce110_increase_watermarks_for_pipe,
+	.decrease_bandwidth = dce110_decrease_bandwidth,
 	.set_drr = set_drr
 };
 

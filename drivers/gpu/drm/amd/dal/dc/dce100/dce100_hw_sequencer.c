@@ -244,6 +244,13 @@ static void set_displaymarks(
 	/* Do nothing until we have proper bandwitdth calcs */
 }
 
+static bool decrease_bandwidth(
+		struct core_dc *dc, struct validate_context *context)
+{
+	/* Do nothing until we have proper bandwitdth calcs */
+	return true;
+}
+
 static void enable_hw_base_light_sleep(void)
 {
 	/* TODO: implement */
@@ -283,7 +290,8 @@ bool dce100_hw_sequencer_construct(struct core_dc *dc)
 	dc->hwss.pipe_control_lock = dce100_pipe_control_lock;
 	dc->hwss.set_blender_mode = dce100_set_blender_mode;
 	dc->hwss.set_displaymarks = set_displaymarks;
-	dc->hwss.set_display_mark_for_pipe_if_needed = set_display_mark_for_pipe_if_needed;
+	dc->hwss.increase_watermarks_for_pipe = set_display_mark_for_pipe_if_needed;
+	dc->hwss.decrease_bandwidth = decrease_bandwidth;
 
 	return true;
 }

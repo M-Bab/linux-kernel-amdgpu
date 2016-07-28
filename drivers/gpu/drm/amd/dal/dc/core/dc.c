@@ -1064,13 +1064,9 @@ bool dc_post_commit_surfaces_to_target(
 		}
 	}
 
-	if (core_dc->current_context->bw_results.dispclk_khz
-			> context->bw_results.dispclk_khz) {
+	if (core_dc->hwss.decrease_bandwidth(core_dc, context))
 		pplib_apply_display_requirements(
 				core_dc, context, &context->pp_display_cfg);
-		core_dc->hwss.set_display_clock(context);
-	}
-
 
 	resource_validate_ctx_destruct(core_dc->current_context);
 	dm_free(core_dc->current_context);
