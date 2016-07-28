@@ -710,6 +710,60 @@ static void build_audio_output(
 			pipe_ctx->pll_settings.ss_percentage;
 }
 
+static void get_surface_visual_confirm_color(const struct pipe_ctx *pipe_ctx,
+		struct tg_color *color)
+{
+	uint32_t color_value = MAX_TG_COLOR_VALUE * (4 - pipe_ctx->pipe_idx) / 4;
+
+	switch (pipe_ctx->scl_data.format) {
+	case PIXEL_FORMAT_ARGB8888:
+		/* set boarder color to red */
+		color->color_r_cr = color_value;
+		break;
+
+	case PIXEL_FORMAT_ARGB2101010:
+		/* set boarder color to blue */
+		color->color_b_cb = color_value;
+		break;
+	case PIXEL_FORMAT_420BPP12:
+		/* set boarder color to green */
+		color->color_g_y = color_value;
+		break;
+	case PIXEL_FORMAT_FP16:
+		/* set boarder color to white */
+		color->color_r_cr = color_value;
+		color->color_b_cb = color_value;
+		color->color_g_y = color_value;
+		break;
+	default:
+		break;
+	}
+}
+
+static void program_scaler(const struct core_dc *dc,
+		const struct pipe_ctx *pipe_ctx)
+{
+	struct tg_color color = {0};
+
+	if (dc->public.debug.surface_visual_confirm)
+		get_surface_visual_confirm_color(pipe_ctx, &color);
+	else
+		color_space_to_black_color(pipe_ctx->stream->public.output_color_space,
+									&color);
+
+	pipe_ctx->xfm->funcs->transform_set_pixel_storage_depth(
+		pipe_ctx->xfm,
+		pipe_ctx->scl_data.lb_bpp,
+		&pipe_ctx->stream->bit_depth_params);
+
+	pipe_ctx->tg->funcs->set_overscan_blank_color(
+		pipe_ctx->tg,
+		&color);
+
+	pipe_ctx->xfm->funcs->transform_set_scaler(pipe_ctx->xfm,
+		&pipe_ctx->scl_data);
+}
+
 static enum dc_status apply_single_controller_ctx_to_hw(
 		struct pipe_ctx *pipe_ctx,
 		struct validate_context *context,
@@ -812,6 +866,11 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 			unblank_stream(pipe_ctx,
 				&stream->sink->link->public.cur_link_settings);
 	}
+
+	if (!pipe_ctx_old || memcmp(&pipe_ctx_old->scl_data,
+				&pipe_ctx->scl_data,
+				sizeof(struct scaler_data)) != 0)
+		program_scaler(dc, pipe_ctx);
 
 	return DC_OK;
 }
@@ -1248,6 +1307,7 @@ static void reset_single_pipe_hw_ctx(
 	pipe_ctx->mi->funcs->free_mem_input(
 				pipe_ctx->mi, context->target_count);
 	pipe_ctx->xfm->funcs->transform_set_scaler_bypass(pipe_ctx->xfm, NULL);
+	pipe_ctx->xfm->funcs->transform_reset(pipe_ctx->xfm);
 	resource_unreference_clock_source(&context->res_ctx, pipe_ctx->clock_source);
 	dc->hwss.enable_display_power_gating(
 		pipe_ctx->stream->ctx, pipe_ctx->pipe_idx, dcb,
@@ -1447,60 +1507,6 @@ static void set_default_colors(struct pipe_ctx *pipe_ctx)
 					pipe_ctx->opp, &default_adjust);
 }
 
-static void get_surface_visual_confirm_color(const struct pipe_ctx *pipe_ctx,
-		struct tg_color *color)
-{
-	uint32_t color_value = MAX_TG_COLOR_VALUE * (4 - pipe_ctx->pipe_idx) / 4;
-
-	switch (pipe_ctx->scl_data.format) {
-	case PIXEL_FORMAT_ARGB8888:
-		/* set boarder color to red */
-		color->color_r_cr = color_value;
-		break;
-
-	case PIXEL_FORMAT_ARGB2101010:
-		/* set boarder color to blue */
-		color->color_b_cb = color_value;
-		break;
-	case PIXEL_FORMAT_420BPP12:
-		/* set boarder color to green */
-		color->color_g_y = color_value;
-		break;
-	case PIXEL_FORMAT_FP16:
-		/* set boarder color to white */
-		color->color_r_cr = color_value;
-		color->color_b_cb = color_value;
-		color->color_g_y = color_value;
-		break;
-	default:
-		break;
-	}
-}
-
-static void program_scaler(const struct core_dc *dc,
-		const struct pipe_ctx *pipe_ctx)
-{
-	struct tg_color color = {0};
-
-	if (dc->public.debug.surface_visual_confirm)
-		get_surface_visual_confirm_color(pipe_ctx, &color);
-	else
-		color_space_to_black_color(pipe_ctx->stream->public.output_color_space,
-									&color);
-
-	pipe_ctx->xfm->funcs->transform_set_pixel_storage_depth(
-		pipe_ctx->xfm,
-		pipe_ctx->scl_data.lb_bpp,
-		&pipe_ctx->stream->bit_depth_params);
-
-	pipe_ctx->tg->funcs->set_overscan_blank_color(
-		pipe_ctx->tg,
-		&color);
-
-	pipe_ctx->xfm->funcs->transform_set_scaler(pipe_ctx->xfm,
-		&pipe_ctx->scl_data);
-}
-
 static bool blender_configuration_changed(struct pipe_ctx *pipe_ctx, struct pipe_ctx *old_pipe_ctx)
 {
 	if (pipe_ctx->bottom_pipe && !old_pipe_ctx->bottom_pipe)
@@ -1602,7 +1608,7 @@ static void set_plane_config(
 
 	pipe_ctx->xfm->funcs->transform_set_gamut_remap(pipe_ctx->xfm, &adjust);
 
-	if (old_pipe && memcmp(&old_pipe->scl_data,
+	if (!old_pipe || memcmp(&old_pipe->scl_data,
 				&pipe_ctx->scl_data,
 				sizeof(struct scaler_data)) != 0)
 		program_scaler(dc, pipe_ctx);
