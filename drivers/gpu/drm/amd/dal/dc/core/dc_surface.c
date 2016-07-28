@@ -103,6 +103,7 @@ alloc_fail:
 }
 
 const struct dc_surface_status *dc_surface_get_status(
+		struct validate_context *context,
 		struct dc_surface *dc_surface)
 {
 	struct dc_surface_status *surface_status;
@@ -125,22 +126,23 @@ const struct dc_surface_status *dc_surface_get_status(
 
 	core_dc = DC_TO_CORE(core_surface->ctx->dc);
 
+	if (!context)
+		context = core_dc->current_context;
+
 	if (core_dc->current_context == NULL)
 		return NULL;
 
-	for (i = 0; i < core_dc->current_context->res_ctx.pool->pipe_count;
+	for (i = 0; i < context->res_ctx.pool->pipe_count;
 			i++) {
 		struct pipe_ctx *pipe_ctx =
-				&core_dc->current_context->res_ctx.pipe_ctx[i];
+				&context->res_ctx.pipe_ctx[i];
 
 		if (pipe_ctx->surface !=
 				DC_SURFACE_TO_CORE(dc_surface))
 			continue;
 
 		core_dc->hwss.update_pending_status(pipe_ctx);
-		surface_status->requested_address = dc_surface->address;
 	}
-
 	return surface_status;
 }
 

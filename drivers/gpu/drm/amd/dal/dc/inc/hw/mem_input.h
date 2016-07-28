@@ -32,6 +32,8 @@
 struct mem_input {
 	struct mem_input_funcs *funcs;
 	struct dc_context *ctx;
+	struct dc_plane_address request_address;
+	struct dc_plane_address current_address;
 	uint32_t inst;
 };
 

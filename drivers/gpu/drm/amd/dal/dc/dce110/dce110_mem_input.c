@@ -359,6 +359,7 @@ bool dce110_mem_input_is_flip_pending(struct mem_input *mem_input)
 			GRPH_SURFACE_UPDATE_PENDING))
 		return true;
 
+	mem_input->current_address = mem_input->request_address;
 	return false;
 }
 
@@ -400,6 +401,7 @@ bool dce110_mem_input_program_surface_flip_and_addr(
 		break;
 	}
 
+	mem_input->request_address = *address;
 	return true;
 }
 

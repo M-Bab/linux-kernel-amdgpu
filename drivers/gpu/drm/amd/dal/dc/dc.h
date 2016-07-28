@@ -49,8 +49,10 @@ struct dc_caps {
 	uint32_t i2c_speed_in_khz;
 };
 
+/* Forward declaration*/
 struct dc;
 struct dc_surface;
+struct validate_context;
 
 struct dc_stream_funcs {
 	bool (*adjust_vmin_vmax)(struct dc *dc,
@@ -165,6 +167,7 @@ struct dc_surface {
  */
 struct dc_surface_status {
 	struct dc_plane_address requested_address;
+	struct dc_plane_address current_address;
 	bool is_flip_pending;
 };
 
@@ -172,8 +175,9 @@ struct dc_surface_status {
  * Create a new surface with default parameters;
  */
 struct dc_surface *dc_create_surface(const struct dc *dc);
-const struct dc_surface_status* dc_surface_get_status(
-						struct dc_surface *dc_surface);
+const struct dc_surface_status *dc_surface_get_status(
+		struct validate_context *context,
+		struct dc_surface *dc_surface);
 
 void dc_surface_retain(const struct dc_surface *dc_surface);
 void dc_surface_release(const struct dc_surface *dc_surface);
@@ -216,8 +220,6 @@ void dc_flip_surface_addrs(struct dc *dc,
  *   This does not trigger a flip.  No surface address is programmed.
  */
 
-/* Forward declaration*/
-struct validate_context;
 
 void dc_flip_surface_addrs_on_context(
 		struct dc *dc,

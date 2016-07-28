@@ -1660,6 +1660,8 @@ static void update_pending_status(struct pipe_ctx *pipe_ctx)
 	surface->status.is_flip_pending =
 			pipe_ctx->mi->funcs->mem_input_is_flip_pending(
 					pipe_ctx->mi);
+
+	surface->status.current_address = pipe_ctx->mi->current_address;
 }
 
 static void power_down(struct core_dc *dc)
@@ -1927,11 +1929,12 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 	if (!pipe_ctx->surface->public.flip_immediate)
 		lock_mask |= PIPE_LOCK_CONTROL_SURFACE;
 
-	dc->hwss.pipe_control_lock(
-			dc->ctx,
-			pipe_ctx->pipe_idx,
-			lock_mask,
-			true);
+	if (blender_configuration_changed(pipe_ctx, &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx]))
+		dc->hwss.pipe_control_lock(
+				dc->ctx,
+				pipe_ctx->pipe_idx,
+				lock_mask,
+				true);
 
 	if (dc->current_context)
 		old_pipe = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
@@ -1997,8 +2000,6 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 				surface->public.format,
 				&surface->public.tiling_info,
 				surface->public.rotation);
-
-	dc->hwss.update_plane_addr(dc, pipe_ctx);
 
 	if (pipe_ctx->surface->public.gamma_correction)
 		gamma = DC_GAMMA_TO_CORE(
