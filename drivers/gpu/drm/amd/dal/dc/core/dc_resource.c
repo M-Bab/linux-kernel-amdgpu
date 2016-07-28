@@ -198,6 +198,9 @@ static bool is_sharable_clk_src(
 	if (pipe_with_clk_src->clock_source == NULL)
 		return false;
 
+	if (pipe_with_clk_src->stream->signal == SIGNAL_TYPE_VIRTUAL)
+		return false;
+
 	if (dc_is_dp_signal(pipe_with_clk_src->stream->signal))
 		return false;
 
