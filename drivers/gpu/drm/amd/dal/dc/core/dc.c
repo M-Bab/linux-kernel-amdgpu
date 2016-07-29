@@ -1050,7 +1050,7 @@ bool dc_post_commit_surfaces_to_target(
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 
 	if (context->locked)
-		return false;
+		dc_isr_commit_surfaces_to_target(dc, context);
 
 	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream != NULL
