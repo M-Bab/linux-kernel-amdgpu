@@ -1058,8 +1058,8 @@ bool dc_post_commit_surfaces_to_target(
 			core_dc->hwss.enable_display_power_gating(
 				core_dc->ctx, i, core_dc->ctx->dc_bios,
 				PIPE_GATING_CONTROL_ENABLE);
-			context->res_ctx.pipe_ctx[i].xfm->funcs->transform_reset(
-					context->res_ctx.pipe_ctx[i].xfm);
+			core_dc->current_context->res_ctx.pipe_ctx[i].xfm->funcs->transform_reset(
+					core_dc->current_context->res_ctx.pipe_ctx[i].xfm);
 			memset(&context->res_ctx.pipe_ctx[i], 0, sizeof(struct pipe_ctx));
 		}
 	}
