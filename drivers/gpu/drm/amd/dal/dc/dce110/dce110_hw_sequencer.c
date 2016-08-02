@@ -2046,6 +2046,8 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 				&surface->public.tiling_info,
 				surface->public.rotation);
 
+	dc->hwss.update_plane_addr(dc, pipe_ctx);
+
 	if (pipe_ctx->surface->public.gamma_correction)
 		gamma = DC_GAMMA_TO_CORE(
 			pipe_ctx->surface->public.gamma_correction);
