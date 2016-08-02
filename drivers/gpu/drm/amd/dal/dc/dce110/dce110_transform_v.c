@@ -38,7 +38,7 @@
 
 #define SCLV_PHASES 64
 
-const uint16_t filter_2tap[66] = {
+const uint16_t filter_2tap_64p[66] = {
 	4096, 0,
 	4032, 64,
 	3968, 128,
@@ -73,7 +73,7 @@ const uint16_t filter_2tap[66] = {
 	2112, 1984,
 	2048, 2048 };
 
-const uint16_t filter_4tap_upscale[132] = {
+const uint16_t filter_4tap_64p_upscale[132] = {
 	0, 4096, 0, 0,
 	16344, 4092, 40, 0,
 	16308, 4084, 84, 16380,
@@ -108,7 +108,7 @@ const uint16_t filter_4tap_upscale[132] = {
 	16116, 2388, 2216, 16140,
 	16128, 2304, 2304, 16128 };
 
-const uint16_t filter_4tap_117[132] = {
+const uint16_t filter_4tap_64p_117[132] = {
 	420, 3248, 420, 0,
 	380, 3248, 464, 16380,
 	344, 3248, 508, 16372,
@@ -143,7 +143,7 @@ const uint16_t filter_4tap_117[132] = {
 	16212, 2276, 2160, 16212,
 	16212, 2220, 2220, 16212 };
 
-const uint16_t filter_4tap_150[132] = {
+const uint16_t filter_4tap_64p_150[132] = {
 	696, 2700, 696, 0,
 	660, 2704, 732, 16380,
 	628, 2704, 768, 16376,
@@ -178,7 +178,7 @@ const uint16_t filter_4tap_150[132] = {
 	4, 2112, 1996, 16364,
 	16380, 2072, 2036, 16372 };
 
-const uint16_t filter_4tap_183[132] = {
+const uint16_t filter_4tap_64p_183[132] = {
 	944, 2204, 944, 0,
 	916, 2204, 972, 0,
 	888, 2200, 996, 0,
@@ -455,16 +455,16 @@ static void set_coeff_update_complete(
 	dm_write_reg(xfm110->base.ctx, mmSCLV_UPDATE, value);
 }
 
-const uint16_t *get_filter_4tap(struct fixed31_32 ratio)
+const uint16_t *get_filter_4tap_64p(struct fixed31_32 ratio)
 {
 	if (ratio.value < dal_fixed31_32_one.value)
-		return filter_4tap_upscale;
+		return filter_4tap_64p_upscale;
 	else if (ratio.value < dal_fixed31_32_from_fraction(4, 3).value)
-		return filter_4tap_117;
+		return filter_4tap_64p_117;
 	else if (ratio.value < dal_fixed31_32_from_fraction(5, 3).value)
-		return filter_4tap_150;
+		return filter_4tap_64p_150;
 	else
-		return filter_4tap_183;
+		return filter_4tap_64p_183;
 }
 
 static void program_multi_taps_filter(
@@ -687,12 +687,12 @@ static void dce110_transform_v_set_scalerv_bypass(
 	dm_write_reg(xfm->ctx, addr, value);
 }
 
-static const uint16_t *get_filter_coeffs(int taps, struct fixed31_32 ratio)
+static const uint16_t *get_filter_coeffs_64p(int taps, struct fixed31_32 ratio)
 {
 	if (taps == 4)
-		return get_filter_4tap(ratio);
+		return get_filter_4tap_64p(ratio);
 	else if (taps == 2)
-		return filter_2tap;
+		return filter_2tap_64p;
 	else if (taps == 1)
 		return NULL;
 	else {
@@ -739,10 +739,10 @@ static bool dce110_transform_v_set_scaler(
 
 		program_scl_ratios_inits(xfm110, &inits);
 
-		coeffs_v = get_filter_coeffs(data->taps.v_taps, data->ratios.vert);
-		coeffs_h = get_filter_coeffs(data->taps.h_taps, data->ratios.horz);
-		coeffs_v_c = get_filter_coeffs(data->taps.v_taps_c, data->ratios.vert_c);
-		coeffs_h_c = get_filter_coeffs(data->taps.h_taps_c, data->ratios.horz_c);
+		coeffs_v = get_filter_coeffs_64p(data->taps.v_taps, data->ratios.vert);
+		coeffs_h = get_filter_coeffs_64p(data->taps.h_taps, data->ratios.horz);
+		coeffs_v_c = get_filter_coeffs_64p(data->taps.v_taps_c, data->ratios.vert_c);
+		coeffs_h_c = get_filter_coeffs_64p(data->taps.h_taps_c, data->ratios.horz_c);
 
 		if (coeffs_v != xfm110->filter_v
 				|| coeffs_v_c != xfm110->filter_v_c

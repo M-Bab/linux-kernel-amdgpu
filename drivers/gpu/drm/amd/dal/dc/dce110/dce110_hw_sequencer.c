@@ -944,6 +944,8 @@ static void disable_vga_and_power_gate_all_controllers(
 				true);
 		dc->hwss.enable_display_power_gating(ctx, i, dcb,
 				PIPE_GATING_CONTROL_ENABLE);
+		dc->res_pool->transforms[i]->funcs->transform_reset(
+				dc->res_pool->transforms[i]);
 	}
 }
 
@@ -1784,6 +1786,7 @@ static void init_hw(struct core_dc *dc)
 	bp = dc->ctx->dc_bios;
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
 		xfm = dc->res_pool->transforms[i];
+		xfm->funcs->transform_reset(xfm);
 
 		dc->hwss.enable_display_power_gating(
 				dc->ctx, i, bp,

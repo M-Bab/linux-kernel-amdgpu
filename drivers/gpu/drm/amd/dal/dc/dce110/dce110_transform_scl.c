@@ -42,6 +42,116 @@
 #define DCFE_REG(reg)\
 	(reg + xfm110->offsets.dcfe_offset)
 
+#define SCL_PHASES 16
+
+const uint16_t filter_2tap_16p[18] = {
+	4096, 0,
+	3840, 256,
+	3584, 512,
+	3328, 768,
+	3072, 1024,
+	2816, 1280,
+	2560, 1536,
+	2304, 1792,
+	2048, 2048
+};
+
+const uint16_t filter_3tap_16p_upscale[27] = {
+	2048, 2048, 0,
+	1708, 2424, 16348,
+	1372, 2796, 16308,
+	1056, 3148, 16272,
+	768, 3464, 16244,
+	512, 3728, 16236,
+	296, 3928, 16252,
+	124, 4052, 16296,
+	0, 4096, 0
+};
+
+const uint16_t filter_3tap_16p_117[27] = {
+	2048, 2048, 0,
+	1824, 2276, 16376,
+	1600, 2496, 16380,
+	1376, 2700, 16,
+	1156, 2880, 52,
+	948, 3032, 108,
+	756, 3144, 192,
+	580, 3212, 296,
+	428, 3236, 428
+};
+
+const uint16_t filter_3tap_16p_150[27] = {
+	2048, 2048, 0,
+	1872, 2184, 36,
+	1692, 2308, 88,
+	1516, 2420, 156,
+	1340, 2516, 236,
+	1168, 2592, 328,
+	1004, 2648, 440,
+	844, 2684, 560,
+	696, 2696, 696
+};
+
+const uint16_t filter_3tap_16p_183[27] = {
+	2048, 2048, 0,
+	1892, 2104, 92,
+	1744, 2152, 196,
+	1592, 2196, 300,
+	1448, 2232, 412,
+	1304, 2256, 528,
+	1168, 2276, 648,
+	1032, 2288, 772,
+	900, 2292, 900
+};
+
+const uint16_t filter_4tap_16p_upscale[36] = {
+	0, 4096, 0, 0,
+	16240, 4056, 180, 16380,
+	16136, 3952, 404, 16364,
+	16072, 3780, 664, 16344,
+	16040, 3556, 952, 16312,
+	16036, 3284, 1268, 16272,
+	16052, 2980, 1604, 16224,
+	16084, 2648, 1952, 16176,
+	16128, 2304, 2304, 16128
+};
+
+const uint16_t filter_4tap_16p_117[36] = {
+	428, 3236, 428, 0,
+	276, 3232, 604, 16364,
+	148, 3184, 800, 16340,
+	44, 3104, 1016, 16312,
+	16344, 2984, 1244, 16284,
+	16284, 2832, 1488, 16256,
+	16244, 2648, 1732, 16236,
+	16220, 2440, 1976, 16220,
+	16212, 2216, 2216, 16212
+};
+
+const uint16_t filter_4tap_16p_150[36] = {
+	696, 2700, 696, 0,
+	560, 2700, 848, 16364,
+	436, 2676, 1008, 16348,
+	328, 2628, 1180, 16336,
+	232, 2556, 1356, 16328,
+	152, 2460, 1536, 16328,
+	84, 2344, 1716, 16332,
+	28, 2208, 1888, 16348,
+	16376, 2052, 2052, 16376
+};
+
+const uint16_t filter_4tap_16p_183[36] = {
+	940, 2208, 940, 0,
+	832, 2200, 1052, 4,
+	728, 2180, 1164, 16,
+	628, 2148, 1280, 36,
+	536, 2100, 1392, 60,
+	448, 2044, 1504, 92,
+	368, 1976, 1612, 132,
+	296, 1900, 1716, 176,
+	232, 1812, 1812, 232
+};
+
 static void disable_enhanced_sharpness(struct dce110_transform *xfm110)
 {
 	uint32_t  value;
@@ -211,297 +321,117 @@ static void set_coeff_update_complete(struct dce110_transform *xfm110)
 	uint32_t addr = SCL_REG(mmSCL_UPDATE);
 
 	value = dm_read_reg(xfm110->base.ctx, addr);
-	set_reg_field_value(value, 1,
-			SCL_UPDATE, SCL_COEF_UPDATE_COMPLETE);
+	set_reg_field_value(value, 1, SCL_UPDATE, SCL_COEF_UPDATE_COMPLETE);
 	dm_write_reg(xfm110->base.ctx, addr, value);
 }
 
-static void program_filter(
-	struct dce110_transform *xfm110,
-	enum ram_filter_type filter_type,
-	struct scaler_filter_params *scl_filter_params,
-	uint32_t *coeffs,
-	uint32_t coeffs_num)
+const uint16_t *get_filter_3tap_16p(struct fixed31_32 ratio)
 {
-	uint32_t phase = 0;
-	uint32_t array_idx = 0;
-	uint32_t pair = 0;
+	if (ratio.value < dal_fixed31_32_one.value)
+		return filter_3tap_16p_upscale;
+	else if (ratio.value < dal_fixed31_32_from_fraction(4, 3).value)
+		return filter_3tap_16p_117;
+	else if (ratio.value < dal_fixed31_32_from_fraction(5, 3).value)
+		return filter_3tap_16p_150;
+	else
+		return filter_3tap_16p_183;
+}
 
-	uint32_t taps_pairs = (scl_filter_params->taps + 1) / 2;
-	uint32_t phases_to_program = scl_filter_params->phases / 2 + 1;
+const uint16_t *get_filter_4tap_16p(struct fixed31_32 ratio)
+{
+	if (ratio.value < dal_fixed31_32_one.value)
+		return filter_4tap_16p_upscale;
+	else if (ratio.value < dal_fixed31_32_from_fraction(4, 3).value)
+		return filter_4tap_16p_117;
+	else if (ratio.value < dal_fixed31_32_from_fraction(5, 3).value)
+		return filter_4tap_16p_150;
+	else
+		return filter_4tap_16p_183;
+}
 
-	uint32_t i;
-	uint32_t addr;
-	uint32_t select_addr;
-	uint32_t select;
-	uint32_t data;
-	/* We need to disable power gating on coeff memory to do programming */
+static void program_multi_taps_filter(
+	struct dce110_transform *xfm110,
+	int taps,
+	const uint16_t *coeffs,
+	enum ram_filter_type filter_type)
+{
+	struct dc_context *ctx = xfm110->base.ctx;
+	int i, phase, pair;
+	int array_idx = 0;
+	int taps_pairs = (taps + 1) / 2;
+	int phases_to_program = SCL_PHASES / 2 + 1;
 
-	uint32_t pwr_ctrl_orig;
-	uint32_t pwr_ctrl_off;
+	uint32_t select = 0;
+	uint32_t power_ctl, power_ctl_off;
 
-	addr = DCFE_REG(mmDCFE_MEM_PWR_CTRL);
-	pwr_ctrl_orig = dm_read_reg(xfm110->base.ctx, addr);
-	pwr_ctrl_off = pwr_ctrl_orig;
-	set_reg_field_value(
-		pwr_ctrl_off,
-		1,
-		DCFE_MEM_PWR_CTRL,
-		SCL_COEFF_MEM_PWR_DIS);
-	dm_write_reg(xfm110->base.ctx, addr, pwr_ctrl_off);
+	if (!coeffs)
+		return;
 
-	addr = DCFE_REG(mmDCFE_MEM_PWR_STATUS);
-	/* Wait to disable gating: */
-	for (i = 0;
-		i < 10 &&
-		get_reg_field_value(
-			dm_read_reg(xfm110->base.ctx, addr),
-			DCFE_MEM_PWR_STATUS,
-			SCL_COEFF_MEM_PWR_STATE);
-		i++)
+	/*We need to disable power gating on coeff memory to do programming*/
+	power_ctl = dm_read_reg(ctx, DCFE_REG(mmDCFE_MEM_PWR_CTRL));
+	power_ctl_off = power_ctl;
+	set_reg_field_value(power_ctl_off, 1, DCFE_MEM_PWR_CTRL, SCL_COEFF_MEM_PWR_DIS);
+	dm_write_reg(ctx, DCFE_REG(mmDCFE_MEM_PWR_CTRL), power_ctl_off);
+
+	/*Wait to disable gating:*/
+	for (i = 0; i < 10; i++) {
+		if (get_reg_field_value(
+				dm_read_reg(ctx, DCFE_REG(mmDCFE_MEM_PWR_STATUS)),
+				DCFE_MEM_PWR_STATUS,
+				SCL_COEFF_MEM_PWR_STATE) == 0)
+			break;
+
 		udelay(1);
+	}
 
-	ASSERT(i < 10);
-
-	select_addr = SCL_REG(mmSCL_COEF_RAM_SELECT);
-	select = dm_read_reg(xfm110->base.ctx, select_addr);
-
-	set_reg_field_value(
-		select,
-		filter_type,
-		SCL_COEF_RAM_SELECT,
-		SCL_C_RAM_FILTER_TYPE);
-	set_reg_field_value(
-		select,
-		0,
-		SCL_COEF_RAM_SELECT,
-		SCL_C_RAM_TAP_PAIR_IDX);
-	set_reg_field_value(
-		select,
-		0,
-		SCL_COEF_RAM_SELECT,
-		SCL_C_RAM_PHASE);
-
-	data = 0;
+	set_reg_field_value(select, filter_type, SCL_COEF_RAM_SELECT, SCL_C_RAM_FILTER_TYPE);
 
 	for (phase = 0; phase < phases_to_program; phase++) {
-		/* we always program N/2 + 1 phases, total phases N, but N/2-1
-		 * are just mirror phase 0 is unique and phase N/2 is unique
-		 * if N is even
-		 */
-
-		set_reg_field_value(
-			select,
-			phase,
-			SCL_COEF_RAM_SELECT,
-			SCL_C_RAM_PHASE);
-
+		/*we always program N/2 + 1 phases, total phases N, but N/2-1 are just mirror
+		phase 0 is unique and phase N/2 is unique if N is even*/
+		set_reg_field_value(select, phase, SCL_COEF_RAM_SELECT, SCL_C_RAM_PHASE);
 		for (pair = 0; pair < taps_pairs; pair++) {
-			set_reg_field_value(
-				select,
-				pair,
-				SCL_COEF_RAM_SELECT,
-				SCL_C_RAM_TAP_PAIR_IDX);
-			dm_write_reg(xfm110->base.ctx, select_addr, select);
+			uint32_t data = 0;
 
-			/* even tap write enable */
-			set_reg_field_value(
-				data,
-				1,
-				SCL_COEF_RAM_TAP_DATA,
-				SCL_C_RAM_EVEN_TAP_COEF_EN);
-			/* even tap data */
-			set_reg_field_value(
-				data,
-				coeffs[array_idx],
-				SCL_COEF_RAM_TAP_DATA,
-				SCL_C_RAM_EVEN_TAP_COEF);
+			set_reg_field_value(select, pair,
+					SCL_COEF_RAM_SELECT, SCL_C_RAM_TAP_PAIR_IDX);
 
-			/* if we have odd number of taps and the last pair is
-			 * here then we do not need to program
-			 */
-			if (scl_filter_params->taps % 2 &&
-				pair == taps_pairs - 1) {
-				/* odd tap write disable */
-				set_reg_field_value(
-					data,
-					0,
+			dm_write_reg(ctx, SCL_REG(mmSCL_COEF_RAM_SELECT), select);
+
+			set_reg_field_value(
+					data, 1,
 					SCL_COEF_RAM_TAP_DATA,
-					SCL_C_RAM_ODD_TAP_COEF_EN);
-				set_reg_field_value(
-					data,
-					0,
+					SCL_C_RAM_EVEN_TAP_COEF_EN);
+			set_reg_field_value(
+					data, coeffs[array_idx],
 					SCL_COEF_RAM_TAP_DATA,
-					SCL_C_RAM_ODD_TAP_COEF);
-				array_idx += 1;
+					SCL_C_RAM_EVEN_TAP_COEF);
+
+			if (taps % 2 && pair == taps_pairs - 1) {
+				set_reg_field_value(
+						data, 0,
+						SCL_COEF_RAM_TAP_DATA,
+						SCL_C_RAM_ODD_TAP_COEF_EN);
+				array_idx++;
 			} else {
-				/* odd tap write enable */
 				set_reg_field_value(
-					data,
-					1,
-					SCL_COEF_RAM_TAP_DATA,
-					SCL_C_RAM_ODD_TAP_COEF_EN);
-				/* dbg_val: 0x1000 / sclFilterParams->taps; */
+						data, 1,
+						SCL_COEF_RAM_TAP_DATA,
+						SCL_C_RAM_ODD_TAP_COEF_EN);
 				set_reg_field_value(
-					data,
-					coeffs[array_idx + 1],
-					SCL_COEF_RAM_TAP_DATA,
-					SCL_C_RAM_ODD_TAP_COEF);
+						data, coeffs[array_idx + 1],
+						SCL_COEF_RAM_TAP_DATA,
+						SCL_C_RAM_ODD_TAP_COEF);
 
 				array_idx += 2;
 			}
 
-			dm_write_reg(
-				xfm110->base.ctx,
-				SCL_REG(mmSCL_COEF_RAM_TAP_DATA),
-				data);
+			dm_write_reg(ctx, SCL_REG(mmSCL_COEF_RAM_TAP_DATA), data);
 		}
 	}
 
-	ASSERT(coeffs_num == array_idx);
-
-	/* reset the power gating register */
-	dm_write_reg(
-		xfm110->base.ctx,
-		DCFE_REG(mmDCFE_MEM_PWR_CTRL),
-		pwr_ctrl_orig);
-
-	set_coeff_update_complete(xfm110);
-}
-
-/*
- *
- * Populates an array with filter coefficients in 1.1.12 fixed point form
-*/
-static bool get_filter_coefficients(
-	struct dce110_transform *xfm110,
-	uint32_t taps,
-	uint32_t **data_tab,
-	uint32_t *data_size)
-{
-	uint32_t num = 0;
-	uint32_t i;
-	const struct fixed31_32 *filter =
-		dal_scaler_filter_get(
-			xfm110->base.filter,
-			data_tab,
-			&num);
-	uint32_t *data_row;
-
-	if (!filter) {
-		BREAK_TO_DEBUGGER();
-		return false;
-	}
-	data_row = *data_tab;
-
-	for (i = 0; i < num; ++i) {
-		/* req. format sign fixed 1.1.12, the values are always between
-		 * [-1; 1]
-		 *
-		 * Each phase is mirrored as follows :
-		 * 0 : Phase 0
-		 * 1 : Phase 1 or Phase 64 - 1 / 128 - 1
-		 * N : Phase N or Phase 64 - N / 128 - N
-		 *
-		 * Convert from Fixed31_32 to 1.1.12 by using floor on value
-		 * shifted by number of required fractional bits(12)
-		 */
-		struct fixed31_32 value = filter[i];
-
-		data_row[i] =
-			dal_fixed31_32_floor(dal_fixed31_32_shl(value, 12)) &
-			0x3FFC;
-	}
-	*data_size = num;
-
-	return true;
-}
-
-static bool program_multi_taps_filter(
-	struct dce110_transform *xfm110,
-	const struct scaler_data *data,
-	bool horizontal)
-{
-	struct scaler_filter_params filter_params;
-	enum ram_filter_type filter_type;
-	uint32_t src_size;
-	uint32_t dst_size;
-
-	uint32_t *filter_data = NULL;
-	uint32_t filter_data_size = 0;
-
-	/* 16 phases total for DCE11 */
-	filter_params.phases = 16;
-
-	if (horizontal) {
-		filter_params.taps = data->taps.h_taps;
-		filter_params.sharpness = 0; /* TODO */
-		filter_params.flags.bits.HORIZONTAL = 1;
-
-		src_size = data->viewport.width;
-		dst_size =
-			dal_fixed31_32_floor(
-				dal_fixed31_32_div(
-					dal_fixed31_32_from_int(
-						data->viewport.width),
-					data->ratios.horz));
-
-		filter_type = FILTER_TYPE_RGB_Y_HORIZONTAL;
-	} else {
-		filter_params.taps = data->taps.v_taps;
-		filter_params.sharpness = 0; /* TODO */
-		filter_params.flags.bits.HORIZONTAL = 0;
-
-		src_size = data->viewport.height;
-		dst_size =
-			dal_fixed31_32_floor(
-				dal_fixed31_32_div(
-					dal_fixed31_32_from_int(
-						data->viewport.height),
-					data->ratios.vert));
-
-		filter_type = FILTER_TYPE_RGB_Y_VERTICAL;
-	}
-
-	/* 1. Generate the coefficients */
-	if (!dal_scaler_filter_generate(
-		xfm110->base.filter,
-		&filter_params,
-		src_size,
-		dst_size))
-		return false;
-
-	/* 2. Convert coefficients to fixed point format 1.12 (note coeff.
-	 * could be negative(!) and  range is [ from -1 to 1 ]) */
-	if (!get_filter_coefficients(
-		xfm110,
-		filter_params.taps,
-		&filter_data,
-		&filter_data_size))
-		return false;
-
-	/* 3. Program the filter */
-	program_filter(
-		xfm110,
-		filter_type,
-		&filter_params,
-		filter_data,
-		filter_data_size);
-
-	/* 4. Program the alpha*/
-	if (horizontal)
-		filter_type = FILTER_TYPE_ALPHA_HORIZONTAL;
-	else
-		filter_type = FILTER_TYPE_ALPHA_VERTICAL;
-
-	program_filter(
-		xfm110,
-		filter_type,
-		&filter_params,
-		filter_data,
-		filter_data_size);
-
-	return true;
+	/*We need to restore power gating on coeff memory to initial state*/
+	dm_write_reg(ctx, DCFE_REG(mmDCFE_MEM_PWR_CTRL), power_ctl);
 }
 
 static void program_viewport(
@@ -641,60 +571,92 @@ static void program_scl_ratios_inits(
 	dm_write_reg(xfm110->base.ctx, addr, value);
 }
 
+static const uint16_t *get_filter_coeffs_16p(int taps, struct fixed31_32 ratio)
+{
+	if (taps == 4)
+		return get_filter_4tap_16p(ratio);
+	else if (taps == 3)
+		return get_filter_3tap_16p(ratio);
+	else if (taps == 2)
+		return filter_2tap_16p;
+	else if (taps == 1)
+		return NULL;
+	else {
+		/* should never happen, bug */
+		BREAK_TO_DEBUGGER();
+		return NULL;
+	}
+}
+
 bool dce110_transform_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data)
 {
 	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
 	bool is_scaling_required;
-	struct dc_context *ctx = xfm->ctx;
+	bool filter_updated = false;
+	const uint16_t *coeffs_v, *coeffs_h;
 
 	disable_enhanced_sharpness(xfm110);
 
-	/* 3. Program overscan */
+	/* 1. Program overscan */
 	program_overscan(xfm110, data);
 
-	/* 4. Program taps and configuration */
+	/* 2. Program taps and configuration */
 	is_scaling_required = setup_scaling_configuration(xfm110, data);
+
 	if (is_scaling_required) {
-		/* 5. Calculate and program ratio, filter initialization */
+		/* 3. Calculate and program ratio, filter initialization */
 		struct scl_ratios_inits inits = { 0 };
 
 		calculate_inits(xfm110, data, &inits);
 
 		program_scl_ratios_inits(xfm110, &inits);
 
-		/* 6. Program vertical filters */
-		if (data->taps.v_taps > 2) {
-			program_two_taps_filter(xfm110, false, true);
+		coeffs_v = get_filter_coeffs_16p(data->taps.v_taps, data->ratios.vert);
+		coeffs_h = get_filter_coeffs_16p(data->taps.h_taps, data->ratios.horz);
 
-			if (!program_multi_taps_filter(xfm110, data, false)) {
-				dal_logger_write(ctx->logger,
-					LOG_MAJOR_DCP,
-					LOG_MINOR_DCP_SCALER,
-					"Failed vertical taps programming\n");
-				return false;
-			}
-		} else
-			program_two_taps_filter(xfm110, true, true);
+		if (coeffs_v != xfm110->filter_v || coeffs_h != xfm110->filter_h) {
+			/* 4. Program vertical filters */
+			if (xfm110->filter_v == NULL)
+				program_two_taps_filter(xfm110, 0, true);
+			program_multi_taps_filter(
+					xfm110,
+					data->taps.v_taps,
+					coeffs_v,
+					FILTER_TYPE_RGB_Y_VERTICAL);
+			program_multi_taps_filter(
+					xfm110,
+					data->taps.v_taps,
+					coeffs_v,
+					FILTER_TYPE_ALPHA_VERTICAL);
 
-		/* 7. Program horizontal filters */
-		if (data->taps.h_taps > 2) {
-			program_two_taps_filter(xfm110, false, false);
+			/* 5. Program horizontal filters */
+			if (xfm110->filter_h == NULL)
+				program_two_taps_filter(xfm110, 0, false);
+			program_multi_taps_filter(
+					xfm110,
+					data->taps.h_taps,
+					coeffs_h,
+					FILTER_TYPE_RGB_Y_HORIZONTAL);
+			program_multi_taps_filter(
+					xfm110,
+					data->taps.h_taps,
+					coeffs_h,
+					FILTER_TYPE_ALPHA_HORIZONTAL);
 
-			if (!program_multi_taps_filter(xfm110, data, true)) {
-				dal_logger_write(ctx->logger,
-					LOG_MAJOR_DCP,
-					LOG_MINOR_DCP_SCALER,
-					"Failed horizontal taps programming\n");
-				return false;
-			}
-		} else
-			program_two_taps_filter(xfm110, true, false);
+			xfm110->filter_v = coeffs_v;
+			xfm110->filter_h = coeffs_h;
+			filter_updated = true;
+		}
 	}
 
-	/* 7. Program the viewport */
+	/* 6. Program the viewport */
 	program_viewport(xfm110, &data->viewport);
+
+	/* 7. Set bit to flip to new coefficient memory */
+	if (filter_updated)
+		set_coeff_update_complete(xfm110);
 
 	return true;
 }
@@ -704,14 +666,14 @@ void dce110_transform_set_scaler_bypass(
 		const struct scaler_data *scl_data)
 {
 	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-	uint32_t sclv_mode;
+	uint32_t scl_mode;
 
 	disable_enhanced_sharpness(xfm110);
 
-	sclv_mode = dm_read_reg(xfm->ctx, SCL_REG(mmSCL_MODE));
-	set_reg_field_value(sclv_mode, 0, SCL_MODE, SCL_MODE);
-	set_reg_field_value(sclv_mode, 0, SCL_MODE, SCL_PSCL_EN);
-	dm_write_reg(xfm->ctx, SCL_REG(mmSCL_MODE), sclv_mode);
+	scl_mode = dm_read_reg(xfm->ctx, SCL_REG(mmSCL_MODE));
+	set_reg_field_value(scl_mode, 0, SCL_MODE, SCL_MODE);
+	set_reg_field_value(scl_mode, 0, SCL_MODE, SCL_PSCL_EN);
+	dm_write_reg(xfm->ctx, SCL_REG(mmSCL_MODE), scl_mode);
 }
 
 void dce110_transform_set_scaler_filter(
