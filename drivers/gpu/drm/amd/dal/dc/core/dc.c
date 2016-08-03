@@ -919,6 +919,7 @@ struct validate_context *dc_pre_commit_surfaces_to_target(
 	struct dc_target_status *target_status = NULL;
 	struct validate_context *context;
 	struct validate_context *temp_context;
+	bool bw_increased = false;
 
 	int current_enabled_surface_count = 0;
 	int new_enabled_surface_count = 0;
@@ -1009,6 +1010,7 @@ struct validate_context *dc_pre_commit_surfaces_to_target(
 		pplib_apply_display_requirements(core_dc, context,
 						&context->pp_display_cfg);
 		core_dc->hwss.set_display_clock(context);
+		bw_increased = true;
 	}
 
 
@@ -1017,8 +1019,11 @@ struct validate_context *dc_pre_commit_surfaces_to_target(
 				&core_dc->current_context->res_ctx);
 
 	core_dc->hwss.apply_ctx_to_surface_locked(core_dc, context);
-
 	context->locked = true;
+
+	if (bw_increased)
+		core_dc->current_context->bw_results = context->bw_results;
+
 
 	return context;
 

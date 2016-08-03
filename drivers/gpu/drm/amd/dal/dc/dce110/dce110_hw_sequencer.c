@@ -1621,10 +1621,8 @@ static void set_plane_config(
 
 	pipe_ctx->xfm->funcs->transform_set_gamut_remap(pipe_ctx->xfm, &adjust);
 
-	if (!old_pipe || memcmp(&old_pipe->scl_data,
-				&pipe_ctx->scl_data,
-				sizeof(struct scaler_data)) != 0)
-		program_scaler(dc, pipe_ctx);
+
+	program_scaler(dc, pipe_ctx);
 
 	program_blender_if_needed(dc, pipe_ctx);
 
@@ -1926,7 +1924,6 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 		struct pipe_ctx *pipe_ctx,
 		struct validate_context *context)
 {
-	struct core_gamma *gamma = NULL;
 	struct mem_input *mi = pipe_ctx->mi;
 	struct pipe_ctx *old_pipe = NULL;
 	struct dc_context *ctx = pipe_ctx->stream->ctx;
@@ -1938,8 +1935,6 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 		PIPE_LOCK_CONTROL_SCL |
 		PIPE_LOCK_CONTROL_BLENDER |
 		PIPE_LOCK_CONTROL_MODE;
-
-	dc->hwss.increase_watermarks_for_pipe(dc, pipe_ctx, context);
 
 	if (!pipe_ctx->surface->public.flip_immediate)
 		lock_mask |= PIPE_LOCK_CONTROL_SURFACE;
@@ -2018,15 +2013,6 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 
 	dc->hwss.update_plane_addr(dc, pipe_ctx);
 
-	if (pipe_ctx->surface->public.gamma_correction)
-		gamma = DC_GAMMA_TO_CORE(
-			pipe_ctx->surface->public.gamma_correction);
-
-	dc->hwss.set_gamma_correction(
-			pipe_ctx->ipp,
-			pipe_ctx->opp,
-			gamma, pipe_ctx->surface);
-
 	dal_logger_write(dc->ctx->logger,
 			LOG_MAJOR_INTERFACE_TRACE,
 			LOG_MINOR_COMPONENT_SURFACE,
@@ -2069,6 +2055,26 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 			pipe_ctx->scl_data.recout.y);
 }
 
+
+
+static void dce110_prepare_pipe_for_surface_commit(
+		struct core_dc *dc,
+		struct pipe_ctx *pipe_ctx,
+		struct validate_context *context) {
+	struct core_gamma *gamma = NULL;
+
+	dc->hwss.increase_watermarks_for_pipe(dc, pipe_ctx, context);
+
+	if (pipe_ctx->surface->public.gamma_correction)
+		gamma = DC_GAMMA_TO_CORE(
+			pipe_ctx->surface->public.gamma_correction);
+
+	dc->hwss.set_gamma_correction(
+			pipe_ctx->ipp,
+			pipe_ctx->opp,
+			gamma, pipe_ctx->surface);
+}
+
 static enum dc_status apply_ctx_to_surface_locked(
 		struct core_dc *dc,
 		struct validate_context *context)
@@ -2085,7 +2091,7 @@ static enum dc_status apply_ctx_to_surface_locked(
 				dce110_power_on_pipe_if_needed);
 
 		hw_sequencer_program_pipe_tree(dc, context, head_pipe,
-				dce110_program_front_end_for_pipe);
+				dce110_prepare_pipe_for_surface_commit);
 
 	}
 
@@ -2104,6 +2110,9 @@ static enum dc_status apply_ctx_to_surface_unlock(
 
 		if (!head_pipe->surface || head_pipe->top_pipe != NULL)
 			continue;
+
+		hw_sequencer_program_pipe_tree(dc, context, head_pipe,
+				dce110_program_front_end_for_pipe);
 
 		hw_sequencer_program_pipe_tree(dc, context, head_pipe,
 				dce110_program_blending);
