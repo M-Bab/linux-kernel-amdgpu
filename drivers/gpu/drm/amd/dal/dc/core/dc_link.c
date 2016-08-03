@@ -1353,15 +1353,16 @@ enum dc_status dc_link_validate_mode_timing(
 		return DC_EXCEED_DONGLE_MAX_CLK;
 
 	switch (stream->signal) {
-		case SIGNAL_TYPE_DISPLAY_PORT:
-			if(!dp_validate_mode_timing(
-					link,
-					timing))
-				return DC_NO_DP_LINK_BANDWIDTH;
-			break;
+	case SIGNAL_TYPE_EDP:
+	case SIGNAL_TYPE_DISPLAY_PORT:
+		if (!dp_validate_mode_timing(
+				link,
+				timing))
+			return DC_NO_DP_LINK_BANDWIDTH;
+		break;
 
-		default:
-			break;
+	default:
+		break;
 	}
 
 	return DC_OK;
