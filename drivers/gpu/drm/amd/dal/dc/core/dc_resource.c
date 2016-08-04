@@ -474,6 +474,14 @@ bool resource_build_scaling_params(
 	res = pipe_ctx->xfm->funcs->transform_get_optimal_number_of_taps(
 		pipe_ctx->xfm, &pipe_ctx->scl_data, &surface->scaling_quality);
 
+	if (!res) {
+		/* Try 24 bpp linebuffer */
+		pipe_ctx->scl_data.lb_bpp = LB_PIXEL_DEPTH_24BPP;
+
+		res = pipe_ctx->xfm->funcs->transform_get_optimal_number_of_taps(
+			pipe_ctx->xfm, &pipe_ctx->scl_data, &surface->scaling_quality);
+	}
+
 	dal_logger_write(pipe_ctx->stream->ctx->logger,
 				LOG_MAJOR_DCP,
 				LOG_MINOR_DCP_SCALER,
