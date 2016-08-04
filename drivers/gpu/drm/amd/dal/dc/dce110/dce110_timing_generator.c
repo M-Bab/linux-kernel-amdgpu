@@ -1476,7 +1476,7 @@ void dce110_tg_program_timing(struct timing_generator *tg,
 		dce110_timing_generator_program_blanking(tg, timing);
 }
 
-static bool dce110_tg_is_blanked(struct timing_generator *tg)
+bool dce110_tg_is_blanked(struct timing_generator *tg)
 {
 	struct dce110_timing_generator *tg110 = DCE110TG_FROM_TG(tg);
 	uint32_t value = dm_read_reg(tg->ctx, CRTC_REG(mmCRTC_BLANK_CONTROL));

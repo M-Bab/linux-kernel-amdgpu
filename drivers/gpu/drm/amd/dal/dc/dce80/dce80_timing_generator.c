@@ -128,6 +128,7 @@ static const struct timing_generator_funcs dce80_tg_funcs = {
 		.set_early_control = dce110_timing_generator_set_early_control,
 		.wait_for_state = dce110_tg_wait_for_state,
 		.set_blank = dce110_tg_set_blank,
+		.is_blanked = dce110_tg_is_blanked,
 		.set_colors = dce110_tg_set_colors,
 		.set_overscan_blank_color =
 				dce110_timing_generator_set_overscan_color_black,

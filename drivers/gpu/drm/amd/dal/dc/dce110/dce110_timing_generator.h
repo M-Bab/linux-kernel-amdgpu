@@ -194,6 +194,8 @@ void dce110_tg_program_timing(struct timing_generator *tg,
 	const struct dc_crtc_timing *timing,
 	bool use_vbios);
 
+bool dce110_tg_is_blanked(struct timing_generator *tg);
+
 bool dce110_tg_set_blank(struct timing_generator *tg,
 		bool enable_blanking);
 
