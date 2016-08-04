@@ -577,6 +577,10 @@ bool dc_link_detect(const struct dc_link *dc_link, bool boot)
 		return false;
 	}
 
+	if (link->public.connector_signal == SIGNAL_TYPE_EDP &&
+			link->public.local_sink)
+		return true;
+
 	link_disconnect_sink(link);
 
 	if (new_connection_type != dc_connection_none) {
