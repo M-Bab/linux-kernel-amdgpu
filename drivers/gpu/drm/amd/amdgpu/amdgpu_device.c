@@ -1442,16 +1442,9 @@ static bool amdgpu_device_is_virtual(void)
 #endif
 }
 
-/**
- * amdgpu_device_has_dal_support - check if dal is supported
- *
- * @adev: amdgpu_device_pointer
- *
- * Returns true for supported, false for not supported
- */
-bool amdgpu_device_has_dal_support(struct amdgpu_device *adev)
+bool amdgpu_device_asic_has_dal_support(enum amd_asic_type asic_type)
 {
-	switch(adev->asic_type) {
+	switch (asic_type) {
 #if defined(CONFIG_DRM_AMD_DAL) && defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 	case CHIP_BONAIRE:
 	case CHIP_HAWAII:
@@ -1474,6 +1467,17 @@ bool amdgpu_device_has_dal_support(struct amdgpu_device *adev)
 	}
 }
 
+/**
+ * amdgpu_device_has_dal_support - check if dal is supported
+ *
+ * @adev: amdgpu_device_pointer
+ *
+ * Returns true for supported, false for not supported
+ */
+bool amdgpu_device_has_dal_support(struct amdgpu_device *adev)
+{
+	return amdgpu_device_asic_has_dal_support(adev->asic_type);
+}
 
 /**
  * amdgpu_device_init - initialize the driver
