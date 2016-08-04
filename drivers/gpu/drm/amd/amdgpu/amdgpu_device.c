@@ -1454,12 +1454,12 @@ bool amdgpu_device_has_dal_support(struct amdgpu_device *adev)
 	switch(adev->asic_type) {
 #if defined(CONFIG_DRM_AMD_DAL) && defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 	case CHIP_CARRIZO:
-		return true;
+		return amdgpu_dal != 0;
 #endif
 #if defined(CONFIG_DRM_AMD_DAL) && defined(CONFIG_DRM_AMD_DAL_DCE10_0)
 	case CHIP_TONGA:
 	case CHIP_FIJI:
-		return true;
+		return amdgpu_dal != 0;
 #endif
 	default:
 		return false;
@@ -1633,7 +1633,7 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	}
 
 	/* init i2c buses */
-	if (!amdgpu_has_dal_support(adev))
+	if (!amdgpu_device_has_dal_support(adev))
 		amdgpu_atombios_i2c_init(adev);
 
 	/* Fence driver */
@@ -1745,7 +1745,7 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
 	adev->ip_block_status = NULL;
 	adev->accel_working = false;
 	/* free i2c buses */
-	if (!amdgpu_has_dal_support(adev))
+	if (!amdgpu_device_has_dal_support(adev))
 		amdgpu_i2c_fini(adev);
 	amdgpu_atombios_fini(adev);
 	kfree(adev->bios);
@@ -1796,7 +1796,7 @@ int amdgpu_suspend_kms(struct drm_device *dev, bool suspend, bool fbcon)
 
 	drm_kms_helper_poll_disable(dev);
 
-	if (!amdgpu_has_dal_support(adev)) {
+	if (!amdgpu_device_has_dal_support(adev)) {
 		/* turn off display hw */
 		drm_modeset_lock_all(dev);
 		list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
@@ -1933,7 +1933,7 @@ int amdgpu_resume_kms(struct drm_device *dev, bool resume, bool fbcon)
 
 	/* blat the mode back in */
 	if (fbcon) {
-		if (!amdgpu_has_dal_support(adev)) {
+		if (!amdgpu_device_has_dal_support(adev)) {
 			/* pre DCE11 */
 			drm_helper_resume_force_mode(dev);
 
@@ -1960,7 +1960,7 @@ int amdgpu_resume_kms(struct drm_device *dev, bool resume, bool fbcon)
 #ifdef CONFIG_PM
 	dev->dev->power.disable_depth++;
 #endif
-	if (!amdgpu_has_dal_support(adev))
+	if (!amdgpu_device_has_dal_support(adev))
 		drm_helper_hpd_irq_event(dev);
 	else
 		drm_kms_helper_hotplug_event(dev);
