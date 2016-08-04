@@ -31,6 +31,7 @@
 #include <linux/debugfs.h>
 #include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>
+#include <drm/drm_atomic_helper.h>
 #include <drm/amdgpu_drm.h>
 #include <linux/vgaarb.h>
 #include <linux/vga_switcheroo.h>
@@ -2089,6 +2090,7 @@ static int amdgpu_post_soft_reset(struct amdgpu_device *adev)
  */
 int amdgpu_gpu_reset(struct amdgpu_device *adev)
 {
+	struct drm_atomic_state *state = NULL;
 	int i, r;
 	int resched;
 	bool need_full_reset;
@@ -2102,6 +2104,9 @@ int amdgpu_gpu_reset(struct amdgpu_device *adev)
 
 	/* block TTM */
 	resched = ttm_bo_lock_delayed_workqueue(&adev->mman.bdev);
+	/* store modesetting */
+	if (amdgpu_device_has_dal_support(adev))
+		state = drm_atomic_helper_suspend(adev->ddev);
 
 	/* block scheduler */
 	for (i = 0; i < AMDGPU_MAX_RINGS; ++i) {
@@ -2177,8 +2182,7 @@ retry:
 	}
 
 	if (amdgpu_device_has_dal_support(adev))
-		/* TODO needed from DAL, otherwise the mode cannot be back */
-		;
+		r = drm_atomic_helper_resume(adev->ddev, state);
 	else
 		drm_helper_resume_force_mode(adev->ddev);
 
