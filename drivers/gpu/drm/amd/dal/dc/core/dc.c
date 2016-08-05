@@ -929,7 +929,7 @@ bool dc_pre_commit_surfaces_to_target(
 	int current_enabled_surface_count = 0;
 	int new_enabled_surface_count = 0;
 
-	if (core_dc->pending_context)
+	if (core_dc->retired_context)
 		dc_post_commit_surfaces_to_target(dc);
 
 	if (core_dc->current_context->target_count == 0)
@@ -1114,14 +1114,21 @@ bool dc_isr_commit_surfaces_to_target(
 		core_dc->pending_context->locked = false;
 	}
 
+	if (core_dc->pending_context) {
+		ASSERT(core_dc->retired_context == NULL);
+		core_dc->retired_context = core_dc->current_context;
+		core_dc->current_context = core_dc->pending_context;
+		core_dc->pending_context = NULL;
+	}
+
 	return status == DC_OK;
 }
 
 bool dc_post_commit_surfaces_to_target(
 		struct dc *dc)
 {
-	int i;
 	struct core_dc *core_dc = DC_TO_CORE(dc);
+	/*int i;
 
 	if (!core_dc->pending_context)
 		return true;
@@ -1148,7 +1155,12 @@ bool dc_post_commit_surfaces_to_target(
 	resource_validate_ctx_destruct(core_dc->current_context);
 	dm_free(core_dc->current_context);
 	core_dc->current_context = core_dc->pending_context;
-	core_dc->pending_context = NULL;
+	core_dc->pending_context = NULL;*/
+	if (core_dc->retired_context) {
+		resource_validate_ctx_destruct(core_dc->retired_context);
+		dm_free(core_dc->retired_context);
+		core_dc->retired_context = NULL;
+	}
 	return true;
 }
 
