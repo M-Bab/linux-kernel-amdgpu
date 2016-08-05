@@ -501,7 +501,7 @@ static bool set_freesync_on_streams(struct core_freesync *core_freesync,
 
 				/* Program only if v_total_nominal is in range*/
 				if (v_total_nominal >=
-					streams[stream_idx]->timing.v_total)
+					streams[stream_idx]->timing.v_total) {
 
 					/* Update the freesync context for
 					 * the stream
@@ -515,7 +515,7 @@ static bool set_freesync_on_streams(struct core_freesync *core_freesync,
 						core_freesync->dc, streams,
 						num_streams, v_total_nominal,
 						v_total_nominal);
-
+				}
 				return true;
 
 			} else {
