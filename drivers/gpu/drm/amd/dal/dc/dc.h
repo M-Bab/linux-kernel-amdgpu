@@ -176,7 +176,6 @@ struct dc_surface_status {
  */
 struct dc_surface *dc_create_surface(const struct dc *dc);
 const struct dc_surface_status *dc_surface_get_status(
-		struct validate_context *context,
 		struct dc_surface *dc_surface);
 
 void dc_surface_retain(const struct dc_surface *dc_surface);
@@ -234,7 +233,7 @@ bool dc_commit_surfaces_to_target(
 		uint8_t surface_count,
 		struct dc_target *dc_target);
 
-struct validate_context *dc_pre_commit_surfaces_to_target(
+bool dc_pre_commit_surfaces_to_target(
 		struct dc *dc,
 		struct dc_surface *new_surfaces[],
 		uint8_t new_surface_count,
@@ -242,11 +241,12 @@ struct validate_context *dc_pre_commit_surfaces_to_target(
 
 bool dc_isr_commit_surfaces_to_target(
 		struct dc *dc,
-		struct validate_context *context);
+		struct dc_flip_addrs flip_addrs[],
+		struct dc_surface *new_surfaces[],
+		int new_surface_count);
 
 bool dc_post_commit_surfaces_to_target(
-		struct dc *dc,
-		struct validate_context *context);
+		struct dc *dc);
 
 
 bool dc_update_surfaces_for_target(

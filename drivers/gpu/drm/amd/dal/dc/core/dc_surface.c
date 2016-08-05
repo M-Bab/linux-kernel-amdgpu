@@ -103,13 +103,14 @@ alloc_fail:
 }
 
 const struct dc_surface_status *dc_surface_get_status(
-		struct validate_context *context,
 		struct dc_surface *dc_surface)
 {
 	struct dc_surface_status *surface_status;
 	struct core_surface *core_surface;
 	struct core_dc *core_dc;
 	int i;
+
+	struct validate_context *context;
 
 	if (dc_surface == NULL)
 		return NULL;
@@ -125,6 +126,8 @@ const struct dc_surface_status *dc_surface_get_status(
 		return NULL;
 
 	core_dc = DC_TO_CORE(core_surface->ctx->dc);
+
+	context = core_dc->pending_context;
 
 	if (!context)
 		context = core_dc->current_context;

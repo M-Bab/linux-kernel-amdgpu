@@ -23,6 +23,7 @@ struct core_dc {
 
 	/* TODO: determine max number of targets*/
 	struct validate_context *current_context;
+	struct validate_context *pending_context;
 	struct resource_pool *res_pool;
 
 	/*Power State*/
