@@ -2464,54 +2464,84 @@ static const struct amdgpu_ip_block_version kaveri_ip_blocks_vd[] =
 
 int cik_set_ip_blocks(struct amdgpu_device *adev)
 {
-	switch (adev->asic_type) {
-	case CHIP_BONAIRE:
+	if (amdgpu_virtual_display) {
+		amdgpu_dal = 0;
+		adev->mode_info.vsync_timer_enabled = AMDGPU_IRQ_STATE_DISABLE;
+		switch (adev->asic_type) {
+		case CHIP_BONAIRE:
+			adev->ip_blocks = bonaire_ip_blocks_vd;
+			adev->num_ip_blocks = ARRAY_SIZE(bonaire_ip_blocks_vd);
+			break;
+		case CHIP_HAWAII:
+			adev->ip_blocks = hawaii_ip_blocks_vd;
+			adev->num_ip_blocks = ARRAY_SIZE(hawaii_ip_blocks_vd);
+			break;
+		case CHIP_KAVERI:
+			adev->ip_blocks = kaveri_ip_blocks_vd;
+			adev->num_ip_blocks = ARRAY_SIZE(kaveri_ip_blocks_vd);
+			break;
+		case CHIP_KABINI:
+			adev->ip_blocks = kabini_ip_blocks_vd;
+			adev->num_ip_blocks = ARRAY_SIZE(kabini_ip_blocks_vd);
+			break;
+		case CHIP_MULLINS:
+			adev->ip_blocks = mullins_ip_blocks_vd;
+			adev->num_ip_blocks = ARRAY_SIZE(mullins_ip_blocks_vd);
+			break;
+		default:
+			/* FIXME: not supported yet */
+			return -EINVAL;
+		}
+	} else {
+		switch (adev->asic_type) {
+		case CHIP_BONAIRE:
 #if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
-		if (amdgpu_device_has_dal_support(adev)) {
-			adev->ip_blocks = bonaire_ip_blocks_dal;
-			adev->num_ip_blocks = ARRAY_SIZE(bonaire_ip_blocks_dal);
-		} else {
+			if (amdgpu_device_has_dal_support(adev)) {
+				adev->ip_blocks = bonaire_ip_blocks_dal;
+				adev->num_ip_blocks = ARRAY_SIZE(bonaire_ip_blocks_dal);
+			} else {
+				adev->ip_blocks = bonaire_ip_blocks;
+				adev->num_ip_blocks = ARRAY_SIZE(bonaire_ip_blocks);
+			}
+#else
 			adev->ip_blocks = bonaire_ip_blocks;
 			adev->num_ip_blocks = ARRAY_SIZE(bonaire_ip_blocks);
-		}
-#else
-		adev->ip_blocks = bonaire_ip_blocks;
-		adev->num_ip_blocks = ARRAY_SIZE(bonaire_ip_blocks);
 #endif
-		break;
-	case CHIP_HAWAII:
+			break;
+		case CHIP_HAWAII:
 #if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
-		if (amdgpu_device_has_dal_support(adev)) {
-			adev->ip_blocks = hawaii_ip_blocks_dal;
-			adev->num_ip_blocks = ARRAY_SIZE(hawaii_ip_blocks_dal);
-		} else {
+			if (amdgpu_device_has_dal_support(adev)) {
+				adev->ip_blocks = hawaii_ip_blocks_dal;
+				adev->num_ip_blocks = ARRAY_SIZE(hawaii_ip_blocks_dal);
+			} else {
+				adev->ip_blocks = hawaii_ip_blocks;
+				adev->num_ip_blocks = ARRAY_SIZE(hawaii_ip_blocks);
+			}
+#else
 			adev->ip_blocks = hawaii_ip_blocks;
 			adev->num_ip_blocks = ARRAY_SIZE(hawaii_ip_blocks);
-		}
-#else
-		adev->ip_blocks = hawaii_ip_blocks;
-		adev->num_ip_blocks = ARRAY_SIZE(hawaii_ip_blocks);
 #endif
-		break;
-	case CHIP_KAVERI:
-		adev->ip_blocks = kaveri_ip_blocks;
-		adev->num_ip_blocks = ARRAY_SIZE(kaveri_ip_blocks);
-		break;
-	case CHIP_KABINI:
-		adev->ip_blocks = kabini_ip_blocks;
-		adev->num_ip_blocks = ARRAY_SIZE(kabini_ip_blocks);
-		break;
-	case CHIP_MULLINS:
-		adev->ip_blocks = mullins_ip_blocks;
-		adev->num_ip_blocks = ARRAY_SIZE(mullins_ip_blocks);
-		break;
-	default:
-		/* FIXME: not supported yet */
-		return -EINVAL;
+			break;
+		case CHIP_KAVERI:
+			adev->ip_blocks = kaveri_ip_blocks;
+			adev->num_ip_blocks = ARRAY_SIZE(kaveri_ip_blocks);
+			break;
+		case CHIP_KABINI:
+			adev->ip_blocks = kabini_ip_blocks;
+			adev->num_ip_blocks = ARRAY_SIZE(kabini_ip_blocks);
+			break;
+		case CHIP_MULLINS:
+			adev->ip_blocks = mullins_ip_blocks;
+			adev->num_ip_blocks = ARRAY_SIZE(mullins_ip_blocks);
+			break;
+		default:
+			/* FIXME: not supported yet */
+			return -EINVAL;
+		}
 	}
-
 	return 0;
 }
+
 
 static const struct amdgpu_asic_funcs cik_asic_funcs =
 {

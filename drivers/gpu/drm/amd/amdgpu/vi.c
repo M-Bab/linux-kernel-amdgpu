@@ -1676,76 +1676,110 @@ static const struct amdgpu_ip_block_version fiji_ip_blocks_dal[] =
 
 int vi_set_ip_blocks(struct amdgpu_device *adev)
 {
-	switch (adev->asic_type) {
-	case CHIP_TOPAZ:
-		adev->ip_blocks = topaz_ip_blocks;
-		adev->num_ip_blocks = ARRAY_SIZE(topaz_ip_blocks);
-		break;
-	case CHIP_FIJI:
+	if (amdgpu_virtual_display) {
+		amdgpu_dal = 0;
+		adev->mode_info.vsync_timer_enabled = AMDGPU_IRQ_STATE_DISABLE;
+		switch (adev->asic_type) {
+		case CHIP_TOPAZ:
+			adev->ip_blocks = topaz_ip_blocks;
+			adev->num_ip_blocks = ARRAY_SIZE(topaz_ip_blocks);
+			break;
+		case CHIP_FIJI:
+			adev->ip_blocks = fiji_ip_blocks_vd;
+			adev->num_ip_blocks = ARRAY_SIZE(fiji_ip_blocks_vd);
+			break;
+		case CHIP_TONGA:
+			adev->ip_blocks = tonga_ip_blocks_vd;
+			adev->num_ip_blocks = ARRAY_SIZE(tonga_ip_blocks_vd);
+			break;
+		case CHIP_POLARIS11:
+		case CHIP_POLARIS10:
+			adev->ip_blocks = polaris11_ip_blocks_vd;
+			adev->num_ip_blocks = ARRAY_SIZE(polaris11_ip_blocks_vd);
+			break;
+
+		case CHIP_CARRIZO:
+		case CHIP_STONEY:
+			adev->ip_blocks = cz_ip_blocks_vd;
+			adev->num_ip_blocks = ARRAY_SIZE(cz_ip_blocks_vd);
+			break;
+		default:
+			/* FIXME: not supported yet */
+			return -EINVAL;
+		}
+	} else {
+		switch (adev->asic_type) {
+		case CHIP_TOPAZ:
+			adev->ip_blocks = topaz_ip_blocks;
+			adev->num_ip_blocks = ARRAY_SIZE(topaz_ip_blocks);
+			break;
+		case CHIP_FIJI:
 #if defined(CONFIG_DRM_AMD_DAL)
-		if (amdgpu_device_has_dal_support(adev)) {
-			adev->ip_blocks = fiji_ip_blocks_dal;
-			adev->num_ip_blocks = ARRAY_SIZE(fiji_ip_blocks_dal);
-		} else {
+			if (amdgpu_device_has_dal_support(adev)) {
+				adev->ip_blocks = fiji_ip_blocks_dal;
+				adev->num_ip_blocks = ARRAY_SIZE(fiji_ip_blocks_dal);
+			} else {
+				adev->ip_blocks = fiji_ip_blocks;
+				adev->num_ip_blocks = ARRAY_SIZE(fiji_ip_blocks);
+			}
+#else
 			adev->ip_blocks = fiji_ip_blocks;
 			adev->num_ip_blocks = ARRAY_SIZE(fiji_ip_blocks);
-		}
-#else
-		adev->ip_blocks = fiji_ip_blocks;
-		adev->num_ip_blocks = ARRAY_SIZE(fiji_ip_blocks);
 #endif
-		break;
-	case CHIP_TONGA:
+			break;
+		case CHIP_TONGA:
 #if defined(CONFIG_DRM_AMD_DAL)
-		if (amdgpu_device_has_dal_support(adev)) {
-			adev->ip_blocks = tonga_ip_blocks_dal;
-			adev->num_ip_blocks = ARRAY_SIZE(tonga_ip_blocks_dal);
-		} else {
+			if (amdgpu_device_has_dal_support(adev)) {
+				adev->ip_blocks = tonga_ip_blocks_dal;
+				adev->num_ip_blocks = ARRAY_SIZE(tonga_ip_blocks_dal);
+			} else {
+				adev->ip_blocks = tonga_ip_blocks;
+				adev->num_ip_blocks = ARRAY_SIZE(tonga_ip_blocks);
+			}
+#else
 			adev->ip_blocks = tonga_ip_blocks;
 			adev->num_ip_blocks = ARRAY_SIZE(tonga_ip_blocks);
-		}
-#else
-		adev->ip_blocks = tonga_ip_blocks;
-		adev->num_ip_blocks = ARRAY_SIZE(tonga_ip_blocks);
 #endif
-		break;
-	case CHIP_POLARIS11:
-	case CHIP_POLARIS10:
+			break;
+		case CHIP_POLARIS11:
+		case CHIP_POLARIS10:
 #if defined(CONFIG_DRM_AMD_DAL)
-		if (amdgpu_device_has_dal_support(adev)) {
-			adev->ip_blocks = polaris11_ip_blocks_dal;
-			adev->num_ip_blocks = ARRAY_SIZE(polaris11_ip_blocks_dal);
-		} else {
+			if (amdgpu_device_has_dal_support(adev)) {
+				adev->ip_blocks = polaris11_ip_blocks_dal;
+				adev->num_ip_blocks = ARRAY_SIZE(polaris11_ip_blocks_dal);
+			} else {
+				adev->ip_blocks = polaris11_ip_blocks;
+				adev->num_ip_blocks = ARRAY_SIZE(polaris11_ip_blocks);
+			}
+#else
 			adev->ip_blocks = polaris11_ip_blocks;
 			adev->num_ip_blocks = ARRAY_SIZE(polaris11_ip_blocks);
-		}
-#else
-		adev->ip_blocks = polaris11_ip_blocks;
-		adev->num_ip_blocks = ARRAY_SIZE(polaris11_ip_blocks);
 #endif
-		break;
-	case CHIP_CARRIZO:
-	case CHIP_STONEY:
+			break;
+		case CHIP_CARRIZO:
+		case CHIP_STONEY:
 #if defined(CONFIG_DRM_AMD_DAL)
-		if (amdgpu_device_has_dal_support(adev)) {
-			adev->ip_blocks = cz_ip_blocks_dal;
-			adev->num_ip_blocks = ARRAY_SIZE(cz_ip_blocks_dal);
-		} else {
+			if (amdgpu_device_has_dal_support(adev)) {
+				adev->ip_blocks = cz_ip_blocks_dal;
+				adev->num_ip_blocks = ARRAY_SIZE(cz_ip_blocks_dal);
+			} else {
+				adev->ip_blocks = cz_ip_blocks;
+				adev->num_ip_blocks = ARRAY_SIZE(cz_ip_blocks);
+			}
+#else
 			adev->ip_blocks = cz_ip_blocks;
 			adev->num_ip_blocks = ARRAY_SIZE(cz_ip_blocks);
-		}
-#else
-		adev->ip_blocks = cz_ip_blocks;
-		adev->num_ip_blocks = ARRAY_SIZE(cz_ip_blocks);
 #endif
-		break;
-	default:
-		/* FIXME: not supported yet */
-		return -EINVAL;
+			break;
+		default:
+			/* FIXME: not supported yet */
+			return -EINVAL;
+		}
 	}
 
 	return 0;
 }
+
 
 #define ATI_REV_ID_FUSE_MACRO__ADDRESS      0xC0014044
 #define ATI_REV_ID_FUSE_MACRO__SHIFT        9
