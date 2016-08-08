@@ -68,6 +68,7 @@
 #include "amdgpu_dm.h"
 #include "amdgpu_amdkfd.h"
 #include "amdgpu_powerplay.h"
+#include "dce_virtual.h"
 
 /*
  * Indirect registers accessor
@@ -1779,6 +1780,74 @@ static const struct amdgpu_ip_block_version bonaire_ip_blocks[] =
 	},
 };
 
+static const struct amdgpu_ip_block_version bonaire_ip_blocks_vd[] =
+{
+	/* ORDER MATTERS! */
+	{
+		.type = AMD_IP_BLOCK_TYPE_COMMON,
+		.major = 1,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_common_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_GMC,
+		.major = 7,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &gmc_v7_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_IH,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_ih_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_SMC,
+		.major = 7,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &amdgpu_pp_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_DCE,
+		.major = 8,
+		.minor = 2,
+		.rev = 0,
+		.funcs = &dce_virtual_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_GFX,
+		.major = 7,
+		.minor = 2,
+		.rev = 0,
+		.funcs = &gfx_v7_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_SDMA,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_sdma_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_UVD,
+		.major = 4,
+		.minor = 2,
+		.rev = 0,
+		.funcs = &uvd_v4_2_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_VCE,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &vce_v2_0_ip_funcs,
+	},
+};
+
 #if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 static const struct amdgpu_ip_block_version hawaii_ip_blocks_dal[] =
 {
@@ -1917,6 +1986,74 @@ static const struct amdgpu_ip_block_version hawaii_ip_blocks[] =
 	},
 };
 
+static const struct amdgpu_ip_block_version hawaii_ip_blocks_vd[] =
+{
+	/* ORDER MATTERS! */
+	{
+		.type = AMD_IP_BLOCK_TYPE_COMMON,
+		.major = 1,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_common_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_GMC,
+		.major = 7,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &gmc_v7_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_IH,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_ih_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_SMC,
+		.major = 7,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &amdgpu_pp_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_DCE,
+		.major = 8,
+		.minor = 5,
+		.rev = 0,
+		.funcs = &dce_virtual_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_GFX,
+		.major = 7,
+		.minor = 3,
+		.rev = 0,
+		.funcs = &gfx_v7_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_SDMA,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_sdma_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_UVD,
+		.major = 4,
+		.minor = 2,
+		.rev = 0,
+		.funcs = &uvd_v4_2_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_VCE,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &vce_v2_0_ip_funcs,
+	},
+};
+
 static const struct amdgpu_ip_block_version kabini_ip_blocks[] =
 {
 	/* ORDER MATTERS! */
@@ -1954,6 +2091,74 @@ static const struct amdgpu_ip_block_version kabini_ip_blocks[] =
 		.minor = 3,
 		.rev = 0,
 		.funcs = &dce_v8_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_GFX,
+		.major = 7,
+		.minor = 2,
+		.rev = 0,
+		.funcs = &gfx_v7_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_SDMA,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_sdma_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_UVD,
+		.major = 4,
+		.minor = 2,
+		.rev = 0,
+		.funcs = &uvd_v4_2_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_VCE,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &vce_v2_0_ip_funcs,
+	},
+};
+
+static const struct amdgpu_ip_block_version kabini_ip_blocks_vd[] =
+{
+	/* ORDER MATTERS! */
+	{
+		.type = AMD_IP_BLOCK_TYPE_COMMON,
+		.major = 1,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_common_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_GMC,
+		.major = 7,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &gmc_v7_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_IH,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_ih_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_SMC,
+		.major = 7,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &amdgpu_pp_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_DCE,
+		.major = 8,
+		.minor = 3,
+		.rev = 0,
+		.funcs = &dce_virtual_ip_funcs,
 	},
 	{
 		.type = AMD_IP_BLOCK_TYPE_GFX,
@@ -2053,6 +2258,74 @@ static const struct amdgpu_ip_block_version mullins_ip_blocks[] =
 	},
 };
 
+static const struct amdgpu_ip_block_version mullins_ip_blocks_vd[] =
+{
+	/* ORDER MATTERS! */
+	{
+		.type = AMD_IP_BLOCK_TYPE_COMMON,
+		.major = 1,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_common_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_GMC,
+		.major = 7,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &gmc_v7_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_IH,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_ih_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_SMC,
+		.major = 7,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &amdgpu_pp_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_DCE,
+		.major = 8,
+		.minor = 3,
+		.rev = 0,
+		.funcs = &dce_virtual_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_GFX,
+		.major = 7,
+		.minor = 2,
+		.rev = 0,
+		.funcs = &gfx_v7_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_SDMA,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_sdma_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_UVD,
+		.major = 4,
+		.minor = 2,
+		.rev = 0,
+		.funcs = &uvd_v4_2_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_VCE,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &vce_v2_0_ip_funcs,
+	},
+};
+
 static const struct amdgpu_ip_block_version kaveri_ip_blocks[] =
 {
 	/* ORDER MATTERS! */
@@ -2090,6 +2363,74 @@ static const struct amdgpu_ip_block_version kaveri_ip_blocks[] =
 		.minor = 1,
 		.rev = 0,
 		.funcs = &dce_v8_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_GFX,
+		.major = 7,
+		.minor = 1,
+		.rev = 0,
+		.funcs = &gfx_v7_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_SDMA,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_sdma_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_UVD,
+		.major = 4,
+		.minor = 2,
+		.rev = 0,
+		.funcs = &uvd_v4_2_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_VCE,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &vce_v2_0_ip_funcs,
+	},
+};
+
+static const struct amdgpu_ip_block_version kaveri_ip_blocks_vd[] =
+{
+	/* ORDER MATTERS! */
+	{
+		.type = AMD_IP_BLOCK_TYPE_COMMON,
+		.major = 1,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_common_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_GMC,
+		.major = 7,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &gmc_v7_0_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_IH,
+		.major = 2,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &cik_ih_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_SMC,
+		.major = 7,
+		.minor = 0,
+		.rev = 0,
+		.funcs = &amdgpu_pp_ip_funcs,
+	},
+	{
+		.type = AMD_IP_BLOCK_TYPE_DCE,
+		.major = 8,
+		.minor = 1,
+		.rev = 0,
+		.funcs = &dce_virtual_ip_funcs,
 	},
 	{
 		.type = AMD_IP_BLOCK_TYPE_GFX,
