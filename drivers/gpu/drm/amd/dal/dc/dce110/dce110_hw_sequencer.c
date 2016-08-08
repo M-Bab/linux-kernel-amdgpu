@@ -1828,39 +1828,6 @@ static void init_hw(struct core_dc *dc)
 	}
 }
 
-#ifdef DIAGS_BUILD
-static void print_context_timing_status(
-		const struct core_dc *dc,
-		struct resource_context *res_ctx)
-{
-	int i;
-	struct log_entry entry;
-	dal_logger_open(dc->ctx->logger, &entry, LOG_MAJOR_SYNC,
-							LOG_MINOR_SYNC_TIMING);
-	dal_logger_append(&entry, "\n");
-
-	for (i = 0; i < dc->res_pool->pipe_count; i++) {
-		struct pipe_ctx *pipe_ctx = &res_ctx->pipe_ctx[i];
-		int h_pos = 0;
-		int v_pos = 0;
-
-		if (pipe_ctx->stream == NULL)
-			continue;
-
-		pipe_ctx->tg->funcs->get_position(pipe_ctx->tg, &h_pos, &v_pos);
-		dal_logger_append(&entry,
-				"Pipe_%d   H_tot:%d  V_tot:%d   H_pos:%d  V_pos:%d\n",
-				pipe_ctx->pipe_idx,
-				pipe_ctx->stream->public.timing.h_total,
-				pipe_ctx->stream->public.timing.v_total,
-				h_pos, v_pos);
-
-	}
-
-	dal_logger_close(&entry);
-}
-#endif
-
 /* TODO: move this to apply_ctx_tohw some how?*/
 static void dce110_power_on_pipe_if_needed(
 		struct core_dc *dc,
