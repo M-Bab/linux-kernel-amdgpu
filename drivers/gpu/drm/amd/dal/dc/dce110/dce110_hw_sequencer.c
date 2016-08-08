@@ -1884,30 +1884,30 @@ static void dce110_increase_watermarks_for_pipe(
 		program_wm_for_pipe(dc, pipe_ctx, context);
 }
 
-static bool dce110_decrease_bandwidth(
-		struct core_dc *dc,
-		struct validate_context *context)
+static bool dce110_decrease_bandwidth(struct core_dc *dc)
 {
 	int i;
 	bool ret = false;
 
-	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
-		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+	ASSERT(dc->current_context && dc->retired_context);
 
-		if (!dc->current_context->res_ctx.pipe_ctx[i].stream
+	for (i = 0; i < dc->current_context->res_ctx.pool->pipe_count; i++) {
+		struct pipe_ctx *pipe_ctx = &dc->current_context->res_ctx.pipe_ctx[i];
+
+		if (!dc->retired_context->res_ctx.pipe_ctx[i].stream
 				|| !pipe_ctx->stream)
 			continue;
 
 		/* Reverse context order to check for decrease */
-		if (did_watermarks_increase(pipe_ctx, dc->current_context, context)) {
-			program_wm_for_pipe(dc, pipe_ctx, context);
+		if (did_watermarks_increase(pipe_ctx, dc->retired_context, dc->current_context)) {
+			program_wm_for_pipe(dc, pipe_ctx, dc->current_context);
 			ret = true;
 		}
 	}
 
-	if (dc->current_context->bw_results.dispclk_khz
-			> context->bw_results.dispclk_khz) {
-		dc->hwss.set_display_clock(context);
+	if (dc->retired_context->bw_results.dispclk_khz
+			> dc->current_context->bw_results.dispclk_khz) {
+		dc->hwss.set_display_clock(dc->current_context);
 		ret = true;
 	}
 

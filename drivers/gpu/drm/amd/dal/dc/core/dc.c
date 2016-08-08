@@ -898,7 +898,13 @@ bool dc_commit_targets(
 	/* Any pending context is no longer valid once a setmode happens*/
 	if (core_dc->pending_context) {
 		resource_validate_ctx_destruct(core_dc->pending_context);
+		dm_free(core_dc->pending_context);
 		core_dc->pending_context = NULL;
+	}
+	if (core_dc->retired_context) {
+		resource_validate_ctx_destruct(core_dc->retired_context);
+		dm_free(core_dc->retired_context);
+		core_dc->retired_context = NULL;
 	}
 
 	return (result == DC_OK);
@@ -1114,7 +1120,7 @@ bool dc_isr_commit_surfaces_to_target(
 	}
 
 	if (core_dc->pending_context) {
-		ASSERT(core_dc->retired_context == NULL);
+		ASSERT(core_dc->retired_context == NULL || core_dc->retired_context == core_dc->current_context);
 		core_dc->retired_context = core_dc->current_context;
 		core_dc->current_context = core_dc->pending_context;
 		core_dc->pending_context = NULL;
@@ -1123,43 +1129,34 @@ bool dc_isr_commit_surfaces_to_target(
 	return status == DC_OK;
 }
 
-bool dc_post_commit_surfaces_to_target(
-		struct dc *dc)
+bool dc_post_commit_surfaces_to_target(struct dc *dc)
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
-	/*int i;
+	int i;
 
-	if (!core_dc->pending_context)
+	if (!core_dc->retired_context)
 		return true;
 
-	if (core_dc->pending_context->locked)
-		dc_isr_commit_surfaces_to_target(dc, NULL, NULL, 0);
-
-	for (i = 0; i < core_dc->pending_context->res_ctx.pool->pipe_count; i++) {
-		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream != NULL
-				&& core_dc->pending_context->res_ctx.pipe_ctx[i].stream == NULL) {
+	for (i = 0; i < core_dc->current_context->res_ctx.pool->pipe_count; i++) {
+		if (core_dc->retired_context->res_ctx.pipe_ctx[i].stream != NULL
+				&& core_dc->current_context->res_ctx.pipe_ctx[i].stream == NULL) {
 			core_dc->hwss.enable_display_power_gating(
 				core_dc->ctx, i, core_dc->ctx->dc_bios,
 				PIPE_GATING_CONTROL_ENABLE);
 			core_dc->current_context->res_ctx.pipe_ctx[i].xfm->funcs->transform_reset(
 					core_dc->current_context->res_ctx.pipe_ctx[i].xfm);
-			memset(&core_dc->pending_context->res_ctx.pipe_ctx[i], 0, sizeof(struct pipe_ctx));
+			memset(&core_dc->current_context->res_ctx.pipe_ctx[i], 0, sizeof(struct pipe_ctx));
 		}
 	}
 
-	if (core_dc->hwss.decrease_bandwidth(core_dc, core_dc->pending_context))
+	if (core_dc->hwss.decrease_bandwidth(core_dc))
 		pplib_apply_display_requirements(
-				core_dc, core_dc->pending_context, &core_dc->pending_context->pp_display_cfg);
+				core_dc, core_dc->current_context, &core_dc->current_context->pp_display_cfg);
 
-	resource_validate_ctx_destruct(core_dc->current_context);
-	dm_free(core_dc->current_context);
-	core_dc->current_context = core_dc->pending_context;
-	core_dc->pending_context = NULL;*/
-	if (core_dc->retired_context) {
-		resource_validate_ctx_destruct(core_dc->retired_context);
-		dm_free(core_dc->retired_context);
-		core_dc->retired_context = NULL;
-	}
+	resource_validate_ctx_destruct(core_dc->retired_context);
+	dm_free(core_dc->retired_context);
+	core_dc->retired_context = NULL;
+
 	return true;
 }
 

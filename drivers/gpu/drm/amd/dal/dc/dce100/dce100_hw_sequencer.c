@@ -244,8 +244,7 @@ static void set_displaymarks(
 	/* Do nothing until we have proper bandwitdth calcs */
 }
 
-static bool decrease_bandwidth(
-		struct core_dc *dc, struct validate_context *context)
+static bool decrease_bandwidth(struct core_dc *dc)
 {
 	/* Do nothing until we have proper bandwitdth calcs */
 	return true;
