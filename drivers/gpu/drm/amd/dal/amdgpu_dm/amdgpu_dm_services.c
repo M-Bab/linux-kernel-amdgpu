@@ -88,6 +88,30 @@ bool dm_get_platform_info(struct dc_context *ctx,
 	return false;
 }
 
+bool dm_write_persistent_data(struct dc_context *ctx,
+		const struct dc_sink *sink,
+		const char *module_name,
+		const char *key_name,
+		void *params,
+		unsigned int size,
+		struct persistent_data_flag *flag)
+{
+	/*TODO implement*/
+	return false;
+}
+
+bool dm_read_persistent_data(struct dc_context *ctx,
+				const struct dc_sink *sink,
+				const char *module_name,
+				const char *key_name,
+				void *params,
+				unsigned int size,
+				struct persistent_data_flag *flag)
+{
+	/*TODO implement*/
+	return false;
+}
+
 /**** power component interfaces ****/
 
 bool dm_pp_pre_dce_clock_change(

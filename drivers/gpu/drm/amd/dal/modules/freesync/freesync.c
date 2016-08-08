@@ -27,6 +27,7 @@
 #include "dc.h"
 #include "mod_freesync.h"
 #include "core_types.h"
+#include "core_dc.h"
 
 #define MOD_FREESYNC_MAX_CONCURRENT_SINKS  32
 
@@ -79,6 +80,11 @@ struct mod_freesync *mod_freesync_create(struct dc *dc)
 {
 	struct core_freesync *core_freesync =
 			dm_alloc(sizeof(struct core_freesync));
+
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+
+	struct persistent_data_flag flag;
+
 	int i = 0;
 
 	if (core_freesync == NULL)
@@ -115,6 +121,12 @@ struct mod_freesync *mod_freesync_create(struct dc *dc)
 
 	if (!check_dc_support(dc))
 		goto fail_construct;
+
+	/* Create initial module folder in registry for freesync enable data */
+	flag.save_per_edid = true;
+	flag.save_per_link = false;
+	dm_write_persistent_data(core_dc->ctx, NULL, "freesync", NULL, NULL,
+					0, &flag);
 
 	return &core_freesync->public;
 
@@ -160,6 +172,12 @@ bool mod_freesync_add_sink(struct mod_freesync *mod_freesync,
 	struct core_freesync *core_freesync =
 			MOD_FREESYNC_TO_CORE(mod_freesync);
 
+	struct core_dc *core_dc = DC_TO_CORE(core_freesync->dc);
+
+	int persistent_freesync_enable = 0;
+
+	struct persistent_data_flag flag;
+
 	if (core_freesync->num_sinks < MOD_FREESYNC_MAX_CONCURRENT_SINKS) {
 		dc_sink_retain(sink);
 
@@ -176,6 +194,35 @@ bool mod_freesync_add_sink(struct mod_freesync *mod_freesync,
 			duration_in_ns = 0;
 		core_freesync->state[core_freesync->num_sinks].
 			static_ramp.ramp_is_active = false;
+
+		/* get persistent data from registry */
+		flag.save_per_edid = true;
+		flag.save_per_link = false;
+
+		if (dm_read_persistent_data(core_dc->ctx, sink, "freesync",
+					"userenable",
+					&persistent_freesync_enable,
+					sizeof(int), &flag)) {
+			core_freesync->user_enable[core_freesync->num_sinks].
+					enable_for_gaming =
+					(persistent_freesync_enable & 1)
+					? true : false;
+			core_freesync->user_enable[core_freesync->num_sinks].
+					enable_for_static =
+					(persistent_freesync_enable & 2)
+					? true : false;
+			core_freesync->user_enable[core_freesync->num_sinks].
+					enable_for_video =
+					(persistent_freesync_enable & 4)
+					? true : false;
+		} else {
+			core_freesync->user_enable[core_freesync->num_sinks].
+					enable_for_gaming = false;
+			core_freesync->user_enable[core_freesync->num_sinks].
+					enable_for_static = false;
+			core_freesync->user_enable[core_freesync->num_sinks].
+					enable_for_video = false;
+		}
 
 		core_freesync->num_sinks++;
 
@@ -667,8 +714,11 @@ bool mod_freesync_set_user_enable(struct mod_freesync *mod_freesync,
 {
 	struct core_freesync *core_freesync =
 			MOD_FREESYNC_TO_CORE(mod_freesync);
+	struct core_dc *core_dc = DC_TO_CORE(core_freesync->dc);
 
 	unsigned int stream_index, sink_index;
+	struct persistent_data_flag flag;
+	int persistent_data = 0;
 
 	for(stream_index = 0; stream_index < num_streams;
 			stream_index++){
@@ -677,6 +727,29 @@ bool mod_freesync_set_user_enable(struct mod_freesync *mod_freesync,
 				streams[stream_index]->sink);
 
 		core_freesync->user_enable[sink_index] = *user_enable;
+
+		/* Write persistent data in registry*/
+		if (core_freesync->user_enable[sink_index].
+				enable_for_gaming)
+			persistent_data = persistent_data | 1;
+		if (core_freesync->user_enable[sink_index].
+				enable_for_static)
+			persistent_data = persistent_data | 2;
+		if (core_freesync->user_enable[sink_index].
+				enable_for_video)
+			persistent_data = persistent_data | 4;
+
+		flag.save_per_edid = true;
+		flag.save_per_link = false;
+
+		dm_write_persistent_data(core_dc->ctx,
+					streams[stream_index]->sink,
+					"freesync",
+					"userenable",
+					&persistent_data,
+					sizeof(int),
+					&flag);
+
 	}
 
 	set_freesync_on_streams(core_freesync, streams, num_streams);
