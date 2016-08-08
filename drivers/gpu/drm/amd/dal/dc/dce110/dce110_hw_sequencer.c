@@ -1366,7 +1366,8 @@ static enum dc_status apply_ctx_to_hw(
 		 * PHY when not already disabled.
 		 */
 
-		if (!pipe_ctx_old->stream)
+		/* Skip underlay pipe since it will be handled in commit surface*/
+		if (!pipe_ctx_old->stream || pipe_ctx_old->top_pipe)
 			continue;
 
 		if (!pipe_ctx->stream ||
