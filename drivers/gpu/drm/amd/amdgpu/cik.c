@@ -2466,7 +2466,6 @@ int cik_set_ip_blocks(struct amdgpu_device *adev)
 {
 	if (amdgpu_virtual_display) {
 		amdgpu_dal = 0;
-		adev->mode_info.vsync_timer_enabled = AMDGPU_IRQ_STATE_DISABLE;
 		switch (adev->asic_type) {
 		case CHIP_BONAIRE:
 			adev->ip_blocks = bonaire_ip_blocks_vd;
