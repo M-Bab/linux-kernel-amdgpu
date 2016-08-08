@@ -42,6 +42,8 @@
 #include <linux/i2c-algo-bit.h>
 
 #include <drm/drm_dp_mst_helper.h>
+#include <linux/hrtimer.h>
+#include "amdgpu_irq.h"
 
 struct amdgpu_bo;
 struct amdgpu_device;
@@ -367,6 +369,8 @@ struct amdgpu_mode_info {
 	int			num_dig; /* number of dig blocks */
 	int			disp_priority;
 	const struct amdgpu_display_funcs *funcs;
+	struct hrtimer vblank_timer;
+	enum amdgpu_interrupt_state vsync_timer_enabled;
 };
 
 #define AMDGPU_MAX_BL_LEVEL 0xFF
