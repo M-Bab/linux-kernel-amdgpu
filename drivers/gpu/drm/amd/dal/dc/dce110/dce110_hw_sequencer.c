@@ -1271,7 +1271,7 @@ static void switch_dp_clock_sources(
 	for (i = 0; i < MAX_PIPES; i++) {
 		struct pipe_ctx *pipe_ctx = &res_ctx->pipe_ctx[i];
 
-		if (pipe_ctx->stream == NULL)
+		if (pipe_ctx->stream == NULL || pipe_ctx->top_pipe)
 			continue;
 
 		if (dc_is_dp_signal(pipe_ctx->stream->signal)) {
@@ -1389,7 +1389,7 @@ static enum dc_status apply_ctx_to_hw(
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 		struct dc_bios *dcb;
 
-		if (pipe_ctx->stream == NULL)
+		if (pipe_ctx->stream == NULL || pipe_ctx->top_pipe)
 			continue;
 
 		if (pipe_ctx->stream == pipe_ctx_old->stream) {
