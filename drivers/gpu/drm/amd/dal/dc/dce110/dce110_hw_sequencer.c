@@ -1884,34 +1884,20 @@ static void dce110_increase_watermarks_for_pipe(
 		program_wm_for_pipe(dc, pipe_ctx, context);
 }
 
-static bool dce110_decrease_bandwidth(struct core_dc *dc)
+static void dce110_set_bandwidth(struct core_dc *dc)
 {
 	int i;
-	bool ret = false;
-
-	ASSERT(dc->current_context && dc->retired_context);
 
 	for (i = 0; i < dc->current_context->res_ctx.pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx = &dc->current_context->res_ctx.pipe_ctx[i];
 
-		if (!dc->retired_context->res_ctx.pipe_ctx[i].stream
-				|| !pipe_ctx->stream)
+		if (!pipe_ctx->stream)
 			continue;
 
-		/* Reverse context order to check for decrease */
-		if (did_watermarks_increase(pipe_ctx, dc->retired_context, dc->current_context)) {
-			program_wm_for_pipe(dc, pipe_ctx, dc->current_context);
-			ret = true;
-		}
+		program_wm_for_pipe(dc, pipe_ctx, dc->current_context);
 	}
 
-	if (dc->retired_context->bw_results.dispclk_khz
-			> dc->current_context->bw_results.dispclk_khz) {
-		dc->hwss.set_display_clock(dc->current_context);
-		ret = true;
-	}
-
-	return ret;
+	dc->hwss.set_display_clock(dc->current_context);
 }
 
 static void dce110_program_blending(struct core_dc *dc,
@@ -2188,7 +2174,7 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.set_display_clock = set_display_clock,
 	.set_displaymarks = set_displaymarks,
 	.increase_watermarks_for_pipe = dce110_increase_watermarks_for_pipe,
-	.decrease_bandwidth = dce110_decrease_bandwidth,
+	.set_bandwidth = dce110_set_bandwidth,
 	.set_drr = set_drr
 };
 

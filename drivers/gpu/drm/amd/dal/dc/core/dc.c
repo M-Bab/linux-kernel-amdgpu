@@ -934,8 +934,11 @@ bool dc_pre_commit_surfaces_to_target(
 	int current_enabled_surface_count = 0;
 	int new_enabled_surface_count = 0;
 
-	if (core_dc->retired_context)
-		dc_post_commit_surfaces_to_target(dc);
+	if (core_dc->retired_context) {
+		resource_validate_ctx_destruct(core_dc->retired_context);
+		dm_free(core_dc->retired_context);
+		core_dc->retired_context = NULL;
+	}
 
 	if (core_dc->current_context->target_count == 0)
 		return NULL;
@@ -1024,6 +1027,8 @@ bool dc_pre_commit_surfaces_to_target(
 						&context->pp_display_cfg);
 		core_dc->hwss.set_display_clock(context);
 		bw_increased = true;
+		core_dc->current_context->bw_results.dispclk_khz =
+				context->bw_results.dispclk_khz;
 	}
 
 
@@ -1034,12 +1039,9 @@ bool dc_pre_commit_surfaces_to_target(
 	core_dc->hwss.apply_ctx_to_surface_locked(core_dc, context);
 	context->locked = true;
 
-	if (bw_increased)
-		core_dc->current_context->bw_results = context->bw_results;
-
 	core_dc->pending_context = context;
 
-	return true;
+	return !bw_increased;
 
 unexpected_fail:
 	resource_validate_ctx_destruct(context);
@@ -1134,28 +1136,28 @@ bool dc_post_commit_surfaces_to_target(struct dc *dc)
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	int i;
 
-	if (!core_dc->retired_context)
-		return true;
-
 	for (i = 0; i < core_dc->current_context->res_ctx.pool->pipe_count; i++) {
-		if (core_dc->retired_context->res_ctx.pipe_ctx[i].stream != NULL
-				&& core_dc->current_context->res_ctx.pipe_ctx[i].stream == NULL) {
+		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == NULL) {
 			core_dc->hwss.enable_display_power_gating(
 				core_dc->ctx, i, core_dc->ctx->dc_bios,
 				PIPE_GATING_CONTROL_ENABLE);
-			core_dc->current_context->res_ctx.pipe_ctx[i].xfm->funcs->transform_reset(
-					core_dc->current_context->res_ctx.pipe_ctx[i].xfm);
-			memset(&core_dc->current_context->res_ctx.pipe_ctx[i], 0, sizeof(struct pipe_ctx));
+			if (core_dc->current_context->res_ctx.pipe_ctx[i].xfm)
+				core_dc->current_context->res_ctx.pipe_ctx[i].xfm->funcs->transform_reset(
+						core_dc->current_context->res_ctx.pipe_ctx[i].xfm);
+			memset(&core_dc->current_context->res_ctx.pipe_ctx[i].scl_data, 0, sizeof(struct scaler_data));
 		}
 	}
 
-	if (core_dc->hwss.decrease_bandwidth(core_dc))
-		pplib_apply_display_requirements(
-				core_dc, core_dc->current_context, &core_dc->current_context->pp_display_cfg);
+	core_dc->hwss.set_bandwidth(core_dc);
 
-	resource_validate_ctx_destruct(core_dc->retired_context);
-	dm_free(core_dc->retired_context);
-	core_dc->retired_context = NULL;
+	pplib_apply_display_requirements(
+			core_dc, core_dc->current_context, &core_dc->current_context->pp_display_cfg);
+
+	if (core_dc->retired_context) {
+		resource_validate_ctx_destruct(core_dc->retired_context);
+		dm_free(core_dc->retired_context);
+		core_dc->retired_context = NULL;
+	}
 
 	return true;
 }

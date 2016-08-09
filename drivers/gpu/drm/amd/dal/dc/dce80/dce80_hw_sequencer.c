@@ -227,10 +227,9 @@ static void set_displaymarks(
 	/* Do nothing until we have proper bandwitdth calcs */
 }
 
-static bool decrease_bandwidth(struct core_dc *dc)
+static void set_bandwidth(struct core_dc *dc)
 {
 	/* Do nothing until we have proper bandwitdth calcs */
-	return true;
 }
 
 
@@ -245,7 +244,7 @@ bool dce80_hw_sequencer_construct(struct core_dc *dc)
 	dc->hwss.set_blender_mode = dce80_set_blender_mode;
 	dc->hwss.set_displaymarks = set_displaymarks;
 	dc->hwss.increase_watermarks_for_pipe = set_display_mark_for_pipe_if_needed;
-	dc->hwss.decrease_bandwidth = decrease_bandwidth;
+	dc->hwss.set_bandwidth = set_bandwidth;
 
 	return true;
 }
