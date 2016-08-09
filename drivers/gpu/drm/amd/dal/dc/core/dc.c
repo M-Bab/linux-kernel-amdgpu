@@ -94,8 +94,7 @@ static bool create_links(
 	}
 
 	if (connectors_num == 0 && num_virtual_links == 0) {
-		dm_error("DC: Number of connectors can not be zero!\n");
-		return false;
+		dm_error("DC: Number of connectors is zero!\n");
 	}
 
 	dm_output_to_console(
