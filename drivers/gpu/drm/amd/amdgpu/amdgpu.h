@@ -2219,6 +2219,9 @@ bool amdgpu_device_has_dal_support(struct amdgpu_device *adev);
 #define REG_GET_FIELD(value, reg, field)				\
 	(((value) & REG_FIELD_MASK(reg, field)) >> REG_FIELD_SHIFT(reg, field))
 
+#define WREG32_FIELD(reg, field, val)	\
+	WREG32(mm##reg, (RREG32(mm##reg) & ~REG_FIELD_MASK(reg, field)) | (val) << REG_FIELD_SHIFT(reg, field))
+
 /*
  * BIOS helpers.
  */
