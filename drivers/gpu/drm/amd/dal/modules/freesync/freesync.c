@@ -34,6 +34,8 @@
 /* Refresh rate ramp at a fixed rate of 65 Hz/second */
 #define STATIC_SCREEN_RAMP_DELTA_REFRESH_RATE_PER_FRAME ((1000 / 60) * 65)
 
+#define FREESYNC_REGISTRY_NAME "freesync_v1"
+
 struct gradual_static_ramp {
 	bool ramp_is_active;
 	bool ramp_direction_is_up;
@@ -119,7 +121,7 @@ struct mod_freesync *mod_freesync_create(struct dc *dc)
 	/* Create initial module folder in registry for freesync enable data */
 	flag.save_per_edid = true;
 	flag.save_per_link = false;
-	dm_write_persistent_data(core_dc->ctx, NULL, "freesync", NULL, NULL,
+	dm_write_persistent_data(core_dc->ctx, NULL, FREESYNC_REGISTRY_NAME, NULL, NULL,
 					0, &flag);
 
 	return &core_freesync->public;
@@ -220,7 +222,8 @@ bool mod_freesync_add_sink(struct mod_freesync *mod_freesync,
 			static_ramp.ramp_is_active = false;
 
 		/* get persistent data from registry */
-		if (dm_read_persistent_data(core_dc->ctx, sink, "freesync",
+		if (dm_read_persistent_data(core_dc->ctx, sink,
+					FREESYNC_REGISTRY_NAME,
 					"userenable", &persistent_freesync_enable,
 					sizeof(int), &flag)) {
 			core_freesync->map[core_freesync->num_sinks].user_enable.
@@ -772,7 +775,7 @@ bool mod_freesync_set_user_enable(struct mod_freesync *mod_freesync,
 
 		dm_write_persistent_data(core_dc->ctx,
 					streams[stream_index]->sink,
-					"freesync",
+					FREESYNC_REGISTRY_NAME,
 					"userenable",
 					&persistent_data,
 					sizeof(int),

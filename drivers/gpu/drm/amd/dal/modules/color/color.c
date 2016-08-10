@@ -82,6 +82,8 @@ struct core_color {
 #define MOD_COLOR_TO_CORE(mod_color)\
 		container_of(mod_color, struct core_color, public)
 
+#define COLOR_REGISTRY_NAME "color_v1"
+
 /*Matrix Calculation Functions*/
 /**
  *****************************************************************************
@@ -1208,8 +1210,9 @@ struct mod_color *mod_color_create(struct dc *dc)
 	/* Create initial module folder in registry for color adjustment */
 	flag.save_per_edid = true;
 	flag.save_per_link = false;
-	dm_write_persistent_data(core_dc->ctx, NULL, "color", NULL, NULL,
-					0, &flag);
+
+	dm_write_persistent_data(core_dc->ctx, NULL, COLOR_REGISTRY_NAME, NULL,
+			NULL, 0, &flag);
 
 	return &core_color->public;
 
@@ -1269,7 +1272,8 @@ bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 		flag.save_per_edid = true;
 		flag.save_per_link = false;
 
-		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+
+		if (dm_read_persistent_data(core_dc->ctx, sink, COLOR_REGISTRY_NAME,
 						"enablecolortempadj",
 						&persistent_color_temp_enable,
 						sizeof(bool), &flag))
@@ -1280,7 +1284,7 @@ bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 			core_color->state[core_color->num_sinks].
 				user_enable_color_temperature = true;
 
-		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+		if (dm_read_persistent_data(core_dc->ctx, sink, COLOR_REGISTRY_NAME,
 						"customcolortemp",
 						&persistent_custom_color_temp,
 						sizeof(int), &flag))
@@ -1291,7 +1295,7 @@ bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 			core_color->state[core_color->num_sinks].
 					custom_color_temperature = 6500;
 
-		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+		if (dm_read_persistent_data(core_dc->ctx, sink, COLOR_REGISTRY_NAME,
 					"sourcegamut",
 					&persistent_source_gamut,
 					sizeof(struct color_space_coordinates),
@@ -1318,7 +1322,7 @@ bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 					source_gamut.whiteY = 3290;
 		}
 
-		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+		if (dm_read_persistent_data(core_dc->ctx, sink, COLOR_REGISTRY_NAME,
 					"destgamut",
 					&persistent_destination_gamut,
 					sizeof(struct color_space_coordinates),
@@ -1346,7 +1350,7 @@ bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 					destination_gamut.whiteY = 3290;
 		}
 
-		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+		if (dm_read_persistent_data(core_dc->ctx, sink, COLOR_REGISTRY_NAME,
 						"brightness",
 						&persistent_brightness,
 						sizeof(int), &flag))
@@ -1356,7 +1360,7 @@ bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 			core_color->state[core_color->num_sinks].
 				brightness.current = 0;
 
-		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+		if (dm_read_persistent_data(core_dc->ctx, sink, COLOR_REGISTRY_NAME,
 						"contrast",
 						&persistent_contrast,
 						sizeof(int), &flag))
@@ -1366,7 +1370,7 @@ bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 			core_color->state[core_color->num_sinks].
 				contrast.current = 100;
 
-		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+		if (dm_read_persistent_data(core_dc->ctx, sink, COLOR_REGISTRY_NAME,
 						"hue",
 						&persistent_hue,
 						sizeof(int), &flag))
@@ -1376,7 +1380,7 @@ bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 			core_color->state[core_color->num_sinks].
 				hue.current = 0;
 
-		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+		if (dm_read_persistent_data(core_dc->ctx, sink, COLOR_REGISTRY_NAME,
 						"saturation",
 						&persistent_saturation,
 						sizeof(int), &flag))
@@ -1442,7 +1446,7 @@ bool mod_color_update_gamut_to_stream(struct mod_color *mod_color,
 
 		dm_write_persistent_data(core_dc->ctx,
 					streams[stream_index]->sink,
-					"color",
+					COLOR_REGISTRY_NAME,
 					"sourcegamut",
 					&core_color->state[sink_index].
 							source_gamut,
@@ -1451,7 +1455,7 @@ bool mod_color_update_gamut_to_stream(struct mod_color *mod_color,
 
 		dm_write_persistent_data(core_dc->ctx,
 					streams[stream_index]->sink,
-					"color",
+					COLOR_REGISTRY_NAME,
 					"destgamut",
 					&core_color->state[sink_index].
 							destination_gamut,
@@ -1638,7 +1642,7 @@ bool mod_color_set_user_enable(struct mod_color *mod_color,
 
 		dm_write_persistent_data(core_dc->ctx,
 					streams[stream_index]->sink,
-					"color",
+					COLOR_REGISTRY_NAME,
 					"enablecolortempadj",
 					&user_enable,
 					sizeof(bool),
@@ -1699,7 +1703,7 @@ bool mod_color_set_custom_color_temperature(struct mod_color *mod_color,
 
 		dm_write_persistent_data(core_dc->ctx,
 					streams[stream_index]->sink,
-					"color",
+					COLOR_REGISTRY_NAME,
 					"customcolortemp",
 					&color_temperature,
 					sizeof(int),
@@ -1888,7 +1892,7 @@ bool mod_color_set_brightness(struct mod_color *mod_color,
 		flag.save_per_link = false;
 		dm_write_persistent_data(core_dc->ctx,
 					streams[stream_index]->sink,
-					"color",
+					COLOR_REGISTRY_NAME,
 					"brightness",
 					&brightness_value,
 					sizeof(int),
@@ -1932,7 +1936,7 @@ bool mod_color_set_contrast(struct mod_color *mod_color,
 		flag.save_per_link = false;
 		dm_write_persistent_data(core_dc->ctx,
 					streams[stream_index]->sink,
-					"color",
+					COLOR_REGISTRY_NAME,
 					"contrast",
 					&contrast_value,
 					sizeof(int),
@@ -1975,7 +1979,7 @@ bool mod_color_set_hue(struct mod_color *mod_color,
 		flag.save_per_link = false;
 		dm_write_persistent_data(core_dc->ctx,
 					streams[stream_index]->sink,
-					"color",
+					COLOR_REGISTRY_NAME,
 					"hue",
 					&hue_value,
 					sizeof(int),
@@ -2019,7 +2023,7 @@ bool mod_color_set_saturation(struct mod_color *mod_color,
 		flag.save_per_link = false;
 		dm_write_persistent_data(core_dc->ctx,
 					streams[stream_index]->sink,
-					"color",
+					COLOR_REGISTRY_NAME,
 					"saturation",
 					&saturation_value,
 					sizeof(int),
