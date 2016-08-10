@@ -28,12 +28,15 @@
 #include "mod_color.h"
 #include "core_types.h"
 #include "fixed31_32.h"
+#include "core_dc.h"
 
 #define MOD_COLOR_MAX_CONCURRENT_SINKS 32
 #define DIVIDER 10000
 /* S2D13 value in [-3.00...0.9999] */
 #define S2D13_MIN (-3 * DIVIDER)
 #define S2D13_MAX (3 * DIVIDER)
+#define S0D13_MIN (-1 * DIVIDER)
+#define S0D13_MAX (1 * DIVIDER)
 
 struct sink_caps {
 	const struct dc_sink *sink;
@@ -467,7 +470,8 @@ static uint16_t fixed_point_to_int_frac(
 * @param :
 * @return None
 */
-static void convert_float_matrix(
+
+static void convert_float_matrix_legacy(
 	uint16_t *matrix,
 	struct fixed31_32 *flt,
 	uint32_t buffer_size)
@@ -490,6 +494,64 @@ static void convert_float_matrix(
 
 		matrix[i] = (uint16_t)reg_value;
 	}
+}
+
+static void convert_float_matrix(
+	uint16_t *matrix,
+	struct fixed31_32 *flt,
+	uint32_t buffer_size)
+{
+	const struct fixed31_32 min_0_13 =
+		dal_fixed31_32_from_fraction(S0D13_MIN, DIVIDER);
+	const struct fixed31_32 max_0_13 =
+		dal_fixed31_32_from_fraction(S0D13_MAX, DIVIDER);
+	const struct fixed31_32 min_2_13 =
+		dal_fixed31_32_from_fraction(S2D13_MIN, DIVIDER);
+	const struct fixed31_32 max_2_13 =
+		dal_fixed31_32_from_fraction(S2D13_MAX, DIVIDER);
+	uint32_t i;
+	uint16_t temp_matrix[12];
+
+	for (i = 0; i < buffer_size; ++i) {
+		if (i == 3 || i == 7 || i == 11) {
+			uint32_t reg_value =
+					fixed_point_to_int_frac(
+						dal_fixed31_32_clamp(
+							flt[i],
+							min_0_13,
+							max_0_13),
+							2,
+							13);
+
+			temp_matrix[i] = (uint16_t)reg_value;
+		} else {
+			uint32_t reg_value =
+					fixed_point_to_int_frac(
+						dal_fixed31_32_clamp(
+							flt[i],
+							min_2_13,
+							max_2_13),
+							2,
+							13);
+
+			temp_matrix[i] = (uint16_t)reg_value;
+		}
+	}
+
+	matrix[4] = temp_matrix[0];
+	matrix[5] = temp_matrix[1];
+	matrix[6] = temp_matrix[2];
+	matrix[7] = temp_matrix[3];
+
+	matrix[8] = temp_matrix[4];
+	matrix[9] = temp_matrix[5];
+	matrix[10] = temp_matrix[6];
+	matrix[11] = temp_matrix[7];
+
+	matrix[0] = temp_matrix[8];
+	matrix[1] = temp_matrix[9];
+	matrix[2] = temp_matrix[10];
+	matrix[3] = temp_matrix[11];
 }
 
 static int get_hw_value_from_sw_value(int swVal, int swMin,
@@ -586,7 +648,7 @@ static unsigned int sink_index_from_sink(struct core_color *core_color,
 	return index;
 }
 
-static void calculate_rgb_matrix(struct core_color *core_color,
+static void calculate_rgb_matrix_legacy(struct core_color *core_color,
 		unsigned int sink_index,
 		struct fixed31_32 *rgb_matrix)
 {
@@ -956,66 +1018,66 @@ static void calculate_yuv_matrix(struct core_color *core_color,
 	yuv_matrix[2] = dal_fixed31_32_mul(ideal[2], grph_cont);
 
 	yuv_matrix[4] = dal_fixed31_32_mul(
-		multiplier,
-		dal_fixed31_32_add(
-			dal_fixed31_32_mul(
-				ideal[8],
-				sin_grph_hue),
-			dal_fixed31_32_mul(
-				ideal[4],
-				cos_grph_hue)));
+			multiplier,
+			dal_fixed31_32_add(
+				dal_fixed31_32_mul(
+					ideal[4],
+					cos_grph_hue),
+				dal_fixed31_32_mul(
+					ideal[8],
+					sin_grph_hue)));
 
 	yuv_matrix[5] = dal_fixed31_32_mul(
-		multiplier,
-		dal_fixed31_32_add(
-			dal_fixed31_32_mul(
-				ideal[9],
-				sin_grph_hue),
-			dal_fixed31_32_mul(
-				ideal[5],
-				cos_grph_hue)));
+			multiplier,
+			dal_fixed31_32_add(
+				dal_fixed31_32_mul(
+					ideal[5],
+					cos_grph_hue),
+				dal_fixed31_32_mul(
+					ideal[9],
+					sin_grph_hue)));
 
 	yuv_matrix[6] = dal_fixed31_32_mul(
-		multiplier,
-		dal_fixed31_32_add(
-			dal_fixed31_32_mul(
-				ideal[10],
-				sin_grph_hue),
-			dal_fixed31_32_mul(
-				ideal[6],
-				cos_grph_hue)));
+			multiplier,
+			dal_fixed31_32_add(
+				dal_fixed31_32_mul(
+					ideal[6],
+					cos_grph_hue),
+				dal_fixed31_32_mul(
+					ideal[10],
+					sin_grph_hue)));
 
 	yuv_matrix[7] = ideal[7];
 
 	yuv_matrix[8] = dal_fixed31_32_mul(
-		multiplier,
-		dal_fixed31_32_sub(
-			dal_fixed31_32_mul(
-				ideal[8],
-				cos_grph_hue),
-			dal_fixed31_32_mul(
-				ideal[4],
-				sin_grph_hue)));
+			multiplier,
+			dal_fixed31_32_sub(
+				dal_fixed31_32_mul(
+					ideal[8],
+					cos_grph_hue),
+				dal_fixed31_32_mul(
+					ideal[4],
+					sin_grph_hue)));
 
 	yuv_matrix[9] = dal_fixed31_32_mul(
-		multiplier,
-		dal_fixed31_32_sub(
-			dal_fixed31_32_mul(
-				ideal[9],
-				cos_grph_hue),
-			dal_fixed31_32_mul(
-				ideal[5],
-				sin_grph_hue)));
+			multiplier,
+			dal_fixed31_32_sub(
+				dal_fixed31_32_mul(
+					ideal[9],
+					cos_grph_hue),
+				dal_fixed31_32_mul(
+					ideal[5],
+					sin_grph_hue)));
 
 	yuv_matrix[10] = dal_fixed31_32_mul(
-		multiplier,
-		dal_fixed31_32_sub(
-			dal_fixed31_32_mul(
-				ideal[10],
-				cos_grph_hue),
-			dal_fixed31_32_mul(
-				ideal[6],
-				sin_grph_hue)));
+			multiplier,
+			dal_fixed31_32_sub(
+				dal_fixed31_32_mul(
+					ideal[10],
+					cos_grph_hue),
+				dal_fixed31_32_mul(
+					ideal[6],
+					sin_grph_hue)));
 
 	yuv_matrix[11] = ideal[11];
 
@@ -1034,15 +1096,20 @@ static void calculate_yuv_matrix(struct core_color *core_color,
 static void calculate_csc_matrix(struct core_color *core_color,
 		unsigned int sink_index,
 		enum dc_color_space color_space,
-		struct fixed31_32 *csc_matrix)
+		uint16_t *csc_matrix)
 {
+	struct fixed31_32 fixed_csc_matrix[12];
 	switch (color_space) {
 	case COLOR_SPACE_SRGB:
-		calculate_rgb_matrix(core_color, sink_index, csc_matrix);
+		calculate_rgb_matrix_legacy
+			(core_color, sink_index, fixed_csc_matrix);
+		convert_float_matrix_legacy
+			(csc_matrix, fixed_csc_matrix, 12);
 		break;
 	case COLOR_SPACE_SRGB_LIMITED:
 		calculate_rgb_limited_range_matrix(core_color, sink_index,
-				csc_matrix);
+				fixed_csc_matrix);
+		convert_float_matrix(csc_matrix, fixed_csc_matrix, 12);
 		break;
 	case COLOR_SPACE_YCBCR601:
 	case COLOR_SPACE_YCBCR709:
@@ -1051,10 +1118,14 @@ static void calculate_csc_matrix(struct core_color *core_color,
 	case COLOR_SPACE_YPBPR601:
 	case COLOR_SPACE_YPBPR709:
 		calculate_yuv_matrix(core_color, sink_index, color_space,
-				csc_matrix);
+				fixed_csc_matrix);
+		convert_float_matrix(csc_matrix, fixed_csc_matrix, 12);
 		break;
 	default:
-		calculate_rgb_matrix(core_color, sink_index, csc_matrix);
+		calculate_rgb_matrix_legacy
+			(core_color, sink_index, fixed_csc_matrix);
+		convert_float_matrix_legacy
+			(csc_matrix, fixed_csc_matrix, 12);
 		break;
 	}
 }
@@ -1064,6 +1135,9 @@ struct mod_color *mod_color_create(struct dc *dc)
 	int i = 0;
 	struct core_color *core_color =
 				dm_alloc(sizeof(struct core_color));
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	struct persistent_data_flag flag;
+
 	if (core_color == NULL)
 		goto fail_alloc_context;
 
@@ -1131,6 +1205,12 @@ struct mod_color *mod_color_create(struct dc *dc)
 	if (!check_dc_support(dc))
 		goto fail_construct;
 
+	/* Create initial module folder in registry for color adjustment */
+	flag.save_per_edid = true;
+	flag.save_per_link = false;
+	dm_write_persistent_data(core_dc->ctx, NULL, "color", NULL, NULL,
+					0, &flag);
+
 	return &core_color->public;
 
 fail_construct:
@@ -1167,12 +1247,145 @@ void mod_color_destroy(struct mod_color *mod_color)
 bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 {
 	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
+	struct core_dc *core_dc = DC_TO_CORE(core_color->dc);
+	bool persistent_color_temp_enable;
+	int persistent_custom_color_temp = 0;
+	struct color_space_coordinates persistent_source_gamut;
+	struct color_space_coordinates persistent_destination_gamut;
+	int persistent_brightness;
+	int persistent_contrast;
+	int persistent_hue;
+	int persistent_saturation;
+
+	struct persistent_data_flag flag;
 
 	if (core_color->num_sinks < MOD_COLOR_MAX_CONCURRENT_SINKS) {
 		dc_sink_retain(sink);
 		core_color->caps[core_color->num_sinks].sink = sink;
 		core_color->state[core_color->num_sinks].
 				user_enable_color_temperature = true;
+
+		/* get persistent data from registry */
+		flag.save_per_edid = true;
+		flag.save_per_link = false;
+
+		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+						"enablecolortempadj",
+						&persistent_color_temp_enable,
+						sizeof(bool), &flag))
+			core_color->state[core_color->num_sinks].
+				user_enable_color_temperature =
+						persistent_color_temp_enable;
+		else
+			core_color->state[core_color->num_sinks].
+				user_enable_color_temperature = true;
+
+		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+						"customcolortemp",
+						&persistent_custom_color_temp,
+						sizeof(int), &flag))
+			core_color->state[core_color->num_sinks].
+					custom_color_temperature
+					= persistent_custom_color_temp;
+		else
+			core_color->state[core_color->num_sinks].
+					custom_color_temperature = 6500;
+
+		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+					"sourcegamut",
+					&persistent_source_gamut,
+					sizeof(struct color_space_coordinates),
+					&flag)) {
+			memcpy(&core_color->state[core_color->num_sinks].
+				source_gamut, &persistent_source_gamut,
+				sizeof(struct color_space_coordinates));
+		} else {
+			core_color->state[core_color->num_sinks].
+					source_gamut.blueX = 1500;
+			core_color->state[core_color->num_sinks].
+					source_gamut.blueY = 600;
+			core_color->state[core_color->num_sinks].
+					source_gamut.greenX = 3000;
+			core_color->state[core_color->num_sinks].
+					source_gamut.greenY = 6000;
+			core_color->state[core_color->num_sinks].
+					source_gamut.redX = 6400;
+			core_color->state[core_color->num_sinks].
+					source_gamut.redY = 3300;
+			core_color->state[core_color->num_sinks].
+					source_gamut.whiteX = 3127;
+			core_color->state[core_color->num_sinks].
+					source_gamut.whiteY = 3290;
+		}
+
+		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+					"destgamut",
+					&persistent_destination_gamut,
+					sizeof(struct color_space_coordinates),
+					&flag)) {
+			memcpy(&core_color->state[core_color->num_sinks].
+				destination_gamut,
+				&persistent_destination_gamut,
+				sizeof(struct color_space_coordinates));
+		} else {
+			core_color->state[core_color->num_sinks].
+					destination_gamut.blueX = 1500;
+			core_color->state[core_color->num_sinks].
+					destination_gamut.blueY = 600;
+			core_color->state[core_color->num_sinks].
+					destination_gamut.greenX = 3000;
+			core_color->state[core_color->num_sinks].
+					destination_gamut.greenY = 6000;
+			core_color->state[core_color->num_sinks].
+					destination_gamut.redX = 6400;
+			core_color->state[core_color->num_sinks].
+					destination_gamut.redY = 3300;
+			core_color->state[core_color->num_sinks].
+					destination_gamut.whiteX = 3127;
+			core_color->state[core_color->num_sinks].
+					destination_gamut.whiteY = 3290;
+		}
+
+		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+						"brightness",
+						&persistent_brightness,
+						sizeof(int), &flag))
+			core_color->state[core_color->num_sinks].
+				brightness.current = persistent_brightness;
+		else
+			core_color->state[core_color->num_sinks].
+				brightness.current = 0;
+
+		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+						"contrast",
+						&persistent_contrast,
+						sizeof(int), &flag))
+			core_color->state[core_color->num_sinks].
+				contrast.current = persistent_contrast;
+		else
+			core_color->state[core_color->num_sinks].
+				contrast.current = 100;
+
+		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+						"hue",
+						&persistent_hue,
+						sizeof(int), &flag))
+			core_color->state[core_color->num_sinks].
+				hue.current = persistent_hue;
+		else
+			core_color->state[core_color->num_sinks].
+				hue.current = 0;
+
+		if (dm_read_persistent_data(core_dc->ctx, sink, "color",
+						"saturation",
+						&persistent_saturation,
+						sizeof(int), &flag))
+			core_color->state[core_color->num_sinks].
+				saturation.current = persistent_saturation;
+		else
+			core_color->state[core_color->num_sinks].
+				saturation.current = 100;
+
 		core_color->num_sinks++;
 		return true;
 	}
@@ -1192,10 +1405,9 @@ bool mod_color_remove_sink(struct mod_color *mod_color,
 				core_color->caps[j].sink =
 					core_color->caps[j + 1].sink;
 
-				core_color->state[j].
-				user_enable_color_temperature =
-					core_color->state[j + 1].
-					user_enable_color_temperature;
+				memcpy(&core_color->state[j],
+					&core_color->state[j + 1],
+					sizeof(struct color_state));
 			}
 
 			core_color->num_sinks--;
@@ -1213,6 +1425,8 @@ bool mod_color_update_gamut_to_stream(struct mod_color *mod_color,
 		const struct dc_stream **streams, int num_streams)
 {
 	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
+	struct core_dc *core_dc = DC_TO_CORE(core_color->dc);
+	struct persistent_data_flag flag;
 	struct gamut_src_dst_matrix *matrix =
 			dm_alloc(sizeof(struct gamut_src_dst_matrix));
 
@@ -1221,6 +1435,28 @@ bool mod_color_update_gamut_to_stream(struct mod_color *mod_color,
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
 		sink_index = sink_index_from_sink(core_color,
 				streams[stream_index]->sink);
+
+		/* Write persistent data in registry*/
+		flag.save_per_edid = true;
+		flag.save_per_link = false;
+
+		dm_write_persistent_data(core_dc->ctx,
+					streams[stream_index]->sink,
+					"color",
+					"sourcegamut",
+					&core_color->state[sink_index].
+							source_gamut,
+					sizeof(struct color_space_coordinates),
+					&flag);
+
+		dm_write_persistent_data(core_dc->ctx,
+					streams[stream_index]->sink,
+					"color",
+					"destgamut",
+					&core_color->state[sink_index].
+							destination_gamut,
+					sizeof(struct color_space_coordinates),
+					&flag);
 
 		if (!build_gamut_remap_matrix
 				(core_color->state[sink_index].source_gamut,
@@ -1258,7 +1494,6 @@ bool mod_color_update_gamut_to_stream(struct mod_color *mod_color,
 		gamut_result[9] = temp_matrix[7];
 		gamut_result[10] = temp_matrix[8];
 		gamut_result[11] = matrix->whiteCoeffSrc[2];
-
 
 		struct core_stream *core_stream =
 				DC_STREAM_TO_CORE
@@ -1387,7 +1622,8 @@ bool mod_color_set_user_enable(struct mod_color *mod_color,
 {
 	struct core_color *core_color =
 			MOD_COLOR_TO_CORE(mod_color);
-
+	struct core_dc *core_dc = DC_TO_CORE(core_color->dc);
+	struct persistent_data_flag flag;
 	unsigned int stream_index, sink_index;
 
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
@@ -1395,6 +1631,18 @@ bool mod_color_set_user_enable(struct mod_color *mod_color,
 				streams[stream_index]->sink);
 		core_color->state[sink_index].user_enable_color_temperature
 				= user_enable;
+
+		/* Write persistent data in registry*/
+		flag.save_per_edid = true;
+		flag.save_per_link = false;
+
+		dm_write_persistent_data(core_dc->ctx,
+					streams[stream_index]->sink,
+					"color",
+					"enablecolortempadj",
+					&user_enable,
+					sizeof(bool),
+					&flag);
 	}
 	return true;
 }
@@ -1435,7 +1683,8 @@ bool mod_color_set_custom_color_temperature(struct mod_color *mod_color,
 {
 	struct core_color *core_color =
 			MOD_COLOR_TO_CORE(mod_color);
-
+	struct core_dc *core_dc = DC_TO_CORE(core_color->dc);
+	struct persistent_data_flag flag;
 	unsigned int stream_index, sink_index;
 
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
@@ -1443,6 +1692,18 @@ bool mod_color_set_custom_color_temperature(struct mod_color *mod_color,
 				streams[stream_index]->sink);
 		core_color->state[sink_index].custom_color_temperature
 				= color_temperature;
+
+		/* Write persistent data in registry*/
+		flag.save_per_edid = true;
+		flag.save_per_link = false;
+
+		dm_write_persistent_data(core_dc->ctx,
+					streams[stream_index]->sink,
+					"color",
+					"customcolortemp",
+					&color_temperature,
+					sizeof(int),
+					&flag);
 	}
 	return true;
 }
@@ -1579,6 +1840,12 @@ bool mod_color_notify_mode_change(struct mod_color *mod_color,
 			core_stream->public.
 			gamut_remap_matrix.matrix[j] =
 					gamut_result[j];
+
+		calculate_csc_matrix(core_color, sink_index,
+				core_stream->public.output_color_space,
+				core_stream->public.csc_color_matrix.matrix);
+
+		core_stream->public.csc_color_matrix.enable_adjustment = true;
 	}
 
 	dm_free(matrix);
@@ -1595,7 +1862,8 @@ bool mod_color_set_brightness(struct mod_color *mod_color,
 		int brightness_value)
 {
 	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
-
+	struct core_dc *core_dc = DC_TO_CORE(core_color->dc);
+	struct persistent_data_flag flag;
 	unsigned int stream_index, sink_index;
 
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
@@ -1609,18 +1877,22 @@ bool mod_color_set_brightness(struct mod_color *mod_color,
 		core_color->state[sink_index].brightness.current =
 				brightness_value;
 
-		struct fixed31_32 csc_matrix_fixed[12];
-
 		calculate_csc_matrix(core_color, sink_index,
 				core_stream->public.output_color_space,
-				csc_matrix_fixed);
-
-		convert_float_matrix(
-				core_stream->public.csc_color_matrix.matrix,
-				csc_matrix_fixed,
-				12);
+				core_stream->public.csc_color_matrix.matrix);
 
 		core_stream->public.csc_color_matrix.enable_adjustment = true;
+
+		/* Write persistent data in registry*/
+		flag.save_per_edid = true;
+		flag.save_per_link = false;
+		dm_write_persistent_data(core_dc->ctx,
+					streams[stream_index]->sink,
+					"color",
+					"brightness",
+					&brightness_value,
+					sizeof(int),
+					&flag);
 	}
 
 	core_color->dc->stream_funcs.set_gamut_remap
@@ -1634,7 +1906,8 @@ bool mod_color_set_contrast(struct mod_color *mod_color,
 		int contrast_value)
 {
 	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
-
+	struct core_dc *core_dc = DC_TO_CORE(core_color->dc);
+	struct persistent_data_flag flag;
 	unsigned int stream_index, sink_index;
 
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
@@ -1648,18 +1921,22 @@ bool mod_color_set_contrast(struct mod_color *mod_color,
 		core_color->state[sink_index].contrast.current =
 				contrast_value;
 
-		struct fixed31_32 csc_matrix_fixed[12];
-
 		calculate_csc_matrix(core_color, sink_index,
 				core_stream->public.output_color_space,
-				csc_matrix_fixed);
-
-		convert_float_matrix(
-				core_stream->public.csc_color_matrix.matrix,
-				csc_matrix_fixed,
-				12);
+				core_stream->public.csc_color_matrix.matrix);
 
 		core_stream->public.csc_color_matrix.enable_adjustment = true;
+
+		/* Write persistent data in registry*/
+		flag.save_per_edid = true;
+		flag.save_per_link = false;
+		dm_write_persistent_data(core_dc->ctx,
+					streams[stream_index]->sink,
+					"color",
+					"contrast",
+					&contrast_value,
+					sizeof(int),
+					&flag);
 	}
 
 	core_color->dc->stream_funcs.set_gamut_remap
@@ -1673,7 +1950,8 @@ bool mod_color_set_hue(struct mod_color *mod_color,
 		int hue_value)
 {
 	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
-
+	struct core_dc *core_dc = DC_TO_CORE(core_color->dc);
+	struct persistent_data_flag flag;
 	unsigned int stream_index, sink_index;
 
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
@@ -1686,18 +1964,22 @@ bool mod_color_set_hue(struct mod_color *mod_color,
 
 		core_color->state[sink_index].hue.current = hue_value;
 
-		struct fixed31_32 csc_matrix_fixed[12];
-
 		calculate_csc_matrix(core_color, sink_index,
 				core_stream->public.output_color_space,
-				csc_matrix_fixed);
-
-		convert_float_matrix(
-				core_stream->public.csc_color_matrix.matrix,
-				csc_matrix_fixed,
-				12);
+				core_stream->public.csc_color_matrix.matrix);
 
 		core_stream->public.csc_color_matrix.enable_adjustment = true;
+
+		/* Write persistent data in registry*/
+		flag.save_per_edid = true;
+		flag.save_per_link = false;
+		dm_write_persistent_data(core_dc->ctx,
+					streams[stream_index]->sink,
+					"color",
+					"hue",
+					&hue_value,
+					sizeof(int),
+					&flag);
 	}
 
 	core_color->dc->stream_funcs.set_gamut_remap
@@ -1711,7 +1993,8 @@ bool mod_color_set_saturation(struct mod_color *mod_color,
 		int saturation_value)
 {
 	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
-
+	struct core_dc *core_dc = DC_TO_CORE(core_color->dc);
+	struct persistent_data_flag flag;
 	unsigned int stream_index, sink_index;
 
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
@@ -1725,18 +2008,22 @@ bool mod_color_set_saturation(struct mod_color *mod_color,
 		core_color->state[sink_index].saturation.current =
 				saturation_value;
 
-		struct fixed31_32 csc_matrix_fixed[12];
-
 		calculate_csc_matrix(core_color, sink_index,
 				core_stream->public.output_color_space,
-				csc_matrix_fixed);
-
-		convert_float_matrix(
-				core_stream->public.csc_color_matrix.matrix,
-				csc_matrix_fixed,
-				12);
+				core_stream->public.csc_color_matrix.matrix);
 
 		core_stream->public.csc_color_matrix.enable_adjustment = true;
+
+		/* Write persistent data in registry*/
+		flag.save_per_edid = true;
+		flag.save_per_link = false;
+		dm_write_persistent_data(core_dc->ctx,
+					streams[stream_index]->sink,
+					"color",
+					"saturation",
+					&saturation_value,
+					sizeof(int),
+					&flag);
 	}
 
 	core_color->dc->stream_funcs.set_gamut_remap
