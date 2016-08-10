@@ -1730,7 +1730,7 @@ static const struct amdgpu_ip_block_version fiji_ip_blocks_dal[] =
 
 int vi_set_ip_blocks(struct amdgpu_device *adev)
 {
-	if (amdgpu_virtual_display) {
+	if (adev->enable_virtual_display) {
 		amdgpu_dal = 0;
 		switch (adev->asic_type) {
 		case CHIP_TOPAZ:
