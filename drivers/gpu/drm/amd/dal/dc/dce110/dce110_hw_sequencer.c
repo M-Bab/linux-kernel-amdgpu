@@ -1622,7 +1622,6 @@ static void set_plane_config(
 
 	pipe_ctx->xfm->funcs->transform_set_gamut_remap(pipe_ctx->xfm, &adjust);
 
-
 	program_scaler(dc, pipe_ctx);
 
 	program_blender_if_needed(dc, pipe_ctx);

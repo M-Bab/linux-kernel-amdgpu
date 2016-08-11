@@ -465,10 +465,8 @@ bool resource_build_scaling_params(
 	 */
 	pipe_ctx->scl_data.lb_bpp = LB_PIXEL_DEPTH_30BPP;
 
-	pipe_ctx->scl_data.h_active = timing->h_addressable
-			+ timing->h_border_left + timing->h_border_right;
-	pipe_ctx->scl_data.v_active = timing->v_addressable
-			+ timing->v_border_top + timing->v_border_bottom;
+	pipe_ctx->scl_data.h_active = timing->h_addressable;
+	pipe_ctx->scl_data.v_active = timing->v_addressable;
 
 	/* Taps calculations */
 	res = pipe_ctx->xfm->funcs->transform_get_optimal_number_of_taps(
