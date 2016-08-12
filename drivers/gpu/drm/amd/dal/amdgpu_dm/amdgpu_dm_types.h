@@ -67,9 +67,7 @@ int dm_create_validation_set_for_target(
 void amdgpu_dm_connector_funcs_reset(struct drm_connector *connector);
 struct drm_connector_state *amdgpu_dm_connector_atomic_duplicate_state(
 	struct drm_connector *connector);
-void amdgpu_dm_connector_atomic_destroy_state(
-	struct drm_connector *connector,
-	struct drm_connector_state *state);
+
 int amdgpu_dm_connector_atomic_set_property(
 	struct drm_connector *connector,
 	struct drm_connector_state *state,

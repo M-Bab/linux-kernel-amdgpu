@@ -158,7 +158,7 @@ static const struct drm_connector_funcs dm_dp_mst_connector_funcs = {
 	.reset = amdgpu_dm_connector_funcs_reset,
 	.set_property = drm_atomic_helper_connector_set_property,
 	.atomic_duplicate_state = amdgpu_dm_connector_atomic_duplicate_state,
-	.atomic_destroy_state = amdgpu_dm_connector_atomic_destroy_state,
+	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 	.atomic_set_property = amdgpu_dm_connector_atomic_set_property
 };
 

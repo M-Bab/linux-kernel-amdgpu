@@ -1360,27 +1360,15 @@ struct drm_connector_state *amdgpu_dm_connector_atomic_duplicate_state(
 		to_dm_connector_state(connector->state);
 
 	struct dm_connector_state *new_state =
-		kzalloc(sizeof(*new_state), GFP_KERNEL);
+			kmemdup(state, sizeof(*state), GFP_KERNEL);
 
 	if (new_state) {
-		*new_state = *state;
-
+		__drm_atomic_helper_connector_duplicate_state(connector,
+								      &new_state->base);
 		return &new_state->base;
 	}
 
 	return NULL;
-}
-
-void amdgpu_dm_connector_atomic_destroy_state(
-	struct drm_connector *connector,
-	struct drm_connector_state *state)
-{
-	struct dm_connector_state *dm_state =
-		to_dm_connector_state(state);
-
-	__drm_atomic_helper_connector_destroy_state(state);
-
-	kfree(dm_state);
 }
 
 static const struct drm_connector_funcs amdgpu_dm_connector_funcs = {
@@ -1391,7 +1379,7 @@ static const struct drm_connector_funcs amdgpu_dm_connector_funcs = {
 	.set_property = drm_atomic_helper_connector_set_property,
 	.destroy = amdgpu_dm_connector_destroy,
 	.atomic_duplicate_state = amdgpu_dm_connector_atomic_duplicate_state,
-	.atomic_destroy_state = amdgpu_dm_connector_atomic_destroy_state,
+	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 	.atomic_set_property = amdgpu_dm_connector_atomic_set_property
 };
 
