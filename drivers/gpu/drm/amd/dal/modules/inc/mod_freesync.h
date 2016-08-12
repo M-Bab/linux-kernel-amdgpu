@@ -54,6 +54,8 @@ struct mod_freesync_caps {
 	bool supported;
 	unsigned int min_refresh_in_micro_hz;
 	unsigned int max_refresh_in_micro_hz;
+
+	bool btr_supported;
 };
 
 struct mod_freesync_params {
@@ -120,5 +122,9 @@ void mod_freesync_handle_v_update(struct mod_freesync *mod_freesync,
 
 void mod_freesync_notify_mode_change(struct mod_freesync *mod_freesync,
 		const struct dc_stream **streams, int num_streams);
+
+void mod_freesync_pre_update_plane_addresses(struct mod_freesync *mod_freesync,
+		const struct dc_stream **streams, int num_streams,
+		unsigned int curr_time_stamp);
 
 #endif

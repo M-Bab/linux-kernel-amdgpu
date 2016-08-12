@@ -33,6 +33,10 @@
 
 /* Refresh rate ramp at a fixed rate of 65 Hz/second */
 #define STATIC_SCREEN_RAMP_DELTA_REFRESH_RATE_PER_FRAME ((1000 / 60) * 65)
+/* Number of elements in the render times cache array */
+#define RENDER_TIMES_MAX_COUNT 20
+/* Threshold to exit BTR (to avoid frequent enter-exits at the lower limit) */
+#define BTR_EXIT_MARGIN 2000
 
 #define FREESYNC_REGISTRY_NAME "freesync_v1"
 
@@ -40,6 +44,27 @@ struct gradual_static_ramp {
 	bool ramp_is_active;
 	bool ramp_direction_is_up;
 	unsigned int ramp_current_frame_duration_in_ns;
+};
+
+struct time_cache {
+	unsigned int prev_time_stamp_in_us;
+
+	unsigned int min_render_time_in_us;
+	unsigned int max_render_time_in_us;
+
+	unsigned int render_times_index;
+	unsigned int render_times[RENDER_TIMES_MAX_COUNT];
+};
+
+struct below_the_range {
+	bool btr_active;
+	bool program_btr;
+
+	unsigned int mid_point_in_us;
+
+	unsigned int inserted_frame_duration_in_us;
+	unsigned int frames_to_insert;
+	unsigned int frame_counter;
 };
 
 struct freesync_state {
@@ -50,7 +75,10 @@ struct freesync_state {
 	unsigned int nominal_refresh_rate_in_micro_hz;
 
 	unsigned int duration_in_ns;
+
 	struct gradual_static_ramp static_ramp;
+	struct time_cache time;
+	struct below_the_range btr;
 };
 
 struct freesync_entity {
@@ -204,7 +232,8 @@ bool mod_freesync_add_sink(struct mod_freesync *mod_freesync,
 	flag.save_per_link = false;
 
 	if (core_freesync->num_entities < MOD_FREESYNC_MAX_CONCURRENT_SINKS &&
-			core_freesync->num_sinks < MOD_FREESYNC_MAX_CONCURRENT_SINKS) {
+		core_freesync->num_sinks < MOD_FREESYNC_MAX_CONCURRENT_SINKS) {
+
 		dc_sink_retain(sink);
 
 		core_freesync->map[core_freesync->num_entities].sink = sink;
@@ -227,14 +256,14 @@ bool mod_freesync_add_sink(struct mod_freesync *mod_freesync,
 					"userenable", &persistent_freesync_enable,
 					sizeof(int), &flag)) {
 			core_freesync->map[core_freesync->num_sinks].user_enable.
-					enable_for_gaming =
-					(persistent_freesync_enable & 1) ? true : false;
+				enable_for_gaming =
+				(persistent_freesync_enable & 1) ? true : false;
 			core_freesync->map[core_freesync->num_sinks].user_enable.
-					enable_for_static =
-					(persistent_freesync_enable & 2) ? true : false;
+				enable_for_static =
+				(persistent_freesync_enable & 2) ? true : false;
 			core_freesync->map[core_freesync->num_sinks].user_enable.
-					enable_for_video =
-					(persistent_freesync_enable & 4) ? true : false;
+				enable_for_video =
+				(persistent_freesync_enable & 4) ? true : false;
 		} else {
 			core_freesync->map[core_freesync->num_sinks].user_enable.
 					enable_for_gaming = false;
@@ -263,7 +292,8 @@ bool mod_freesync_add_stream(struct mod_freesync *mod_freesync,
 			DC_STREAM_TO_CORE(stream);
 
 	if (core_freesync->num_entities < MOD_FREESYNC_MAX_CONCURRENT_SINKS &&
-			core_freesync->num_streams < MOD_FREESYNC_MAX_CONCURRENT_SINKS) {
+		core_freesync->num_streams < MOD_FREESYNC_MAX_CONCURRENT_SINKS) {
+
 		unsigned int index = map_index_from_sink(core_freesync, stream->sink);
 		if (core_freesync->map[index].stream) {
 			dc_stream_release(core_freesync->map[index].stream);
@@ -363,8 +393,6 @@ static void update_stream(struct core_freesync *core_freesync,
 static void calc_vmin_vmax(struct core_freesync *core_freesync,
 		const struct dc_stream *stream, int *vmin, int *vmax)
 {
-	/* TODO: This calculation is probably wrong... */
-
 	unsigned int min_frame_duration_in_ns = 0, max_frame_duration_in_ns = 0;
 	unsigned int index = map_index_from_stream(core_freesync, stream);
 
@@ -469,56 +497,20 @@ static void calc_v_total_for_static_ramp(struct core_freesync *core_freesync,
 		ramp_current_frame_duration_in_ns, v_total);
 }
 
-void mod_freesync_handle_v_update(struct mod_freesync *mod_freesync,
-		const struct dc_stream **streams, int num_streams)
+static void reset_freesync_state_variables(struct freesync_state* state)
 {
-	/* Currently we are only doing static screen ramping on v_update */
+	state->static_ramp.ramp_is_active = false;
+	state->static_ramp.ramp_current_frame_duration_in_ns =
+			((unsigned int) (div64_u64(
+			(1000000000ULL * 1000000),
+			state->nominal_refresh_rate_in_micro_hz)));
 
-	struct core_freesync *core_freesync =
-			MOD_FREESYNC_TO_CORE(mod_freesync);
-
-	unsigned int index, v_total = 0;
-
-	if (core_freesync->num_streams == 0)
-		return;
-
-	index = map_index_from_stream(core_freesync,
-		streams[0]);
-
-	if (core_freesync->map[index].caps.supported == false)
-		return;
-
-	/* If in fullscreen freesync mode or in video, do not program
-	 * static screen ramp values
-	 */
-	if (core_freesync->map[index].state.fullscreen == true ||
-		core_freesync->map[index].state.video == true) {
-
-		core_freesync->map[index].state.static_ramp.
-			ramp_is_active = false;
-
-		return;
-	}
-
-
-	/* Execute if ramp is active and user enabled freesync static screen*/
-	if (core_freesync->map[index].state.static_ramp.ramp_is_active &&
-		core_freesync->map[index].user_enable.enable_for_static) {
-
-		calc_v_total_for_static_ramp(core_freesync, streams[0],
-				index, &v_total);
-
-		/* Update the freesync context for the stream */
-		update_stream_freesync_context(core_freesync, streams[0]);
-
-		/* Program static screen ramp values */
-		core_freesync->dc->stream_funcs.adjust_vmin_vmax(
-					core_freesync->dc, streams,
-					num_streams, v_total,
-					v_total);
-	}
+	state->btr.btr_active = false;
+	state->btr.frame_counter = 0;
+	state->btr.frames_to_insert = 0;
+	state->btr.inserted_frame_duration_in_us = 0;
+	state->btr.program_btr = false;
 }
-
 /*
  * Sets freesync mode on a stream depending on current freesync state.
  */
@@ -542,11 +534,12 @@ static bool set_freesync_on_streams(struct core_freesync *core_freesync,
 			 * fullscreen bit is set, we are in a fullscreen
 			 * application where it should not matter if it is
 			 * static screen. We should not check the static_screen
-			 * bit - we want to enable freesync regardless.
+			 * or video bit.
 			 */
 			if (core_freesync->map[map_index].user_enable.
-				enable_for_gaming && core_freesync->
-				map[map_index].state.fullscreen == true) {
+				enable_for_gaming == true &&
+				core_freesync->map[map_index].state.
+				fullscreen == true) {
 				/* Enable freesync */
 
 				calc_vmin_vmax(core_freesync,
@@ -558,8 +551,7 @@ static bool set_freesync_on_streams(struct core_freesync *core_freesync,
 						streams[stream_idx]);
 
 				core_freesync->dc->stream_funcs.
-				adjust_vmin_vmax(
-						core_freesync->dc, streams,
+				adjust_vmin_vmax(core_freesync->dc, streams,
 						num_streams, v_total_min,
 						v_total_max);
 
@@ -610,6 +602,10 @@ static bool set_freesync_on_streams(struct core_freesync *core_freesync,
 						core_freesync->dc, streams,
 						num_streams, v_total_nominal,
 						v_total_nominal);
+
+				/* Reset the cached variables */
+				reset_freesync_state_variables(&core_freesync->
+						map[map_index].state);
 
 				return true;
 			}
@@ -665,6 +661,75 @@ static void set_static_ramp_variables(struct core_freesync *core_freesync,
 	static_ramp_variables->ramp_direction_is_up = !enable_static_screen;
 }
 
+void mod_freesync_handle_v_update(struct mod_freesync *mod_freesync,
+		const struct dc_stream **streams, int num_streams)
+{
+	struct core_freesync *core_freesync =
+			MOD_FREESYNC_TO_CORE(mod_freesync);
+
+	unsigned int index, v_total = 0;
+	struct freesync_state *state;
+
+	if (core_freesync->num_streams == 0)
+		return;
+
+	index = map_index_from_stream(core_freesync,
+		streams[0]);
+
+	if (core_freesync->map[index].caps.supported == false)
+		return;
+
+	state = &core_freesync->map[index].state;
+
+	/* Below the Range Logic */
+
+	/* Only execute if in fullscreen mode */
+	if (state->fullscreen == true &&
+		core_freesync->map[index].user_enable.enable_for_gaming) {
+
+		if (state->btr.btr_active)
+			if (state->btr.frame_counter > 0)
+
+				state->btr.frame_counter--;
+
+		if (state->btr.frame_counter == 1) {
+
+			/* Restore FreeSync */
+			set_freesync_on_streams(core_freesync, streams,
+					num_streams);
+		}
+	}
+
+	/* If in fullscreen freesync mode or in video, do not program
+	 * static screen ramp values
+	 */
+	if (state->fullscreen == true || state->video == true) {
+
+		state->static_ramp.ramp_is_active = false;
+
+		return;
+	}
+
+	/* Gradual Static Screen Ramping Logic */
+
+	/* Execute if ramp is active and user enabled freesync static screen*/
+	if (state->static_ramp.ramp_is_active &&
+		core_freesync->map[index].user_enable.enable_for_static) {
+
+		calc_v_total_for_static_ramp(core_freesync, streams[0],
+				index, &v_total);
+
+		/* Update the freesync context for the stream */
+		update_stream_freesync_context(core_freesync, streams[0]);
+
+		/* Program static screen ramp values */
+		core_freesync->dc->stream_funcs.adjust_vmin_vmax(
+					core_freesync->dc, streams,
+					num_streams, v_total,
+					v_total);
+	}
+}
+
 void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 		const struct dc_stream **streams, int num_streams,
 		struct mod_freesync_params *freesync_params)
@@ -673,6 +738,7 @@ void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 			MOD_FREESYNC_TO_CORE(mod_freesync);
 	bool freesync_program_required = false;
 	unsigned int stream_index;
+	struct freesync_state *state;
 
 	if (core_freesync->num_streams == 0)
 		return;
@@ -682,20 +748,19 @@ void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 		unsigned int map_index = map_index_from_stream(core_freesync,
 				streams[stream_index]);
 
+		state = &core_freesync->map[map_index].state;
+
 		switch (freesync_params->state){
 		case FREESYNC_STATE_FULLSCREEN:
-			core_freesync->map[map_index].state.fullscreen =
-					freesync_params->enable;
+			state->fullscreen = freesync_params->enable;
 			freesync_program_required = true;
 			break;
 		case FREESYNC_STATE_STATIC_SCREEN:
 			/* Change core variables only if there is a change*/
-			if (core_freesync->map[map_index].state.static_screen !=
-				freesync_params->enable) {
+			if (state->static_screen != freesync_params->enable) {
 
 				/* Change the state flag */
-				core_freesync->map[map_index].state.static_screen =
-					freesync_params->enable;
+				state->static_screen = freesync_params->enable;
 
 				/* Change static screen ramp variables */
 				set_static_ramp_variables(core_freesync,
@@ -706,13 +771,11 @@ void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 			break;
 		case FREESYNC_STATE_VIDEO:
 			/* Change core variables only if there is a change*/
-			if(freesync_params->duration_in_ns != core_freesync->
-					map[map_index].state.duration_in_ns) {
+			if(freesync_params->duration_in_ns !=
+				state->duration_in_ns) {
 
-				core_freesync->map[map_index].state.video =
-						freesync_params->enable;
-				core_freesync->
-					map[map_index].state.duration_in_ns =
+				state->video = freesync_params->enable;
+				state->duration_in_ns =
 					freesync_params->duration_in_ns;
 
 				freesync_program_required = true;
@@ -808,16 +871,19 @@ void mod_freesync_notify_mode_change(struct mod_freesync *mod_freesync,
 			MOD_FREESYNC_TO_CORE(mod_freesync);
 
 	unsigned int stream_index, map_index;
+	unsigned min_frame_duration_in_ns, max_frame_duration_in_ns;
+	struct freesync_state *state;
 
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
 
 		map_index = map_index_from_stream(core_freesync,
 				streams[stream_index]);
 
+		state = &core_freesync->map[map_index].state;
+
 		if (core_freesync->map[map_index].caps.supported) {
 			/* Update the field rate for new timing */
-			core_freesync->map[map_index].state.
-				nominal_refresh_rate_in_micro_hz = 1000000 *
+			state->nominal_refresh_rate_in_micro_hz = 1000000 *
 				div64_u64(div64_u64((streams[stream_index]->
 				timing.pix_clk_khz * 1000),
 				streams[stream_index]->timing.v_total),
@@ -825,9 +891,241 @@ void mod_freesync_notify_mode_change(struct mod_freesync *mod_freesync,
 
 			/* Update the stream */
 			update_stream(core_freesync, streams[stream_index]);
+
+			/* Determine whether BTR can be supported */
+			min_frame_duration_in_ns = ((unsigned int) (div64_u64(
+					(1000000000ULL * 1000000),
+					state->nominal_refresh_rate_in_micro_hz)));
+
+			max_frame_duration_in_ns = ((unsigned int) (div64_u64(
+					(1000000000ULL * 1000000),
+					core_freesync->map[map_index].caps.
+					min_refresh_in_micro_hz)));
+
+			if (max_frame_duration_in_ns >=
+					2 * min_frame_duration_in_ns)
+				core_freesync->map[map_index].caps.
+					btr_supported = true;
+			else
+				core_freesync->map[map_index].caps.
+					btr_supported = false;
+
+			/* Cache the time variables */
+			state->time.max_render_time_in_us =
+				max_frame_duration_in_ns / 1000;
+			state->time.min_render_time_in_us =
+				min_frame_duration_in_ns / 1000;
+			state->btr.mid_point_in_us =
+				(max_frame_duration_in_ns +
+				min_frame_duration_in_ns) / 2000;
+
 		}
 	}
 
 	/* Program freesync according to current state*/
 	set_freesync_on_streams(core_freesync, streams, num_streams);
+}
+
+/* Add the timestamps to the cache and determine whether BTR programming
+ * is required, depending on the times calculated
+ */
+static void update_timestamps(struct core_freesync *core_freesync,
+		const struct dc_stream *stream, unsigned int map_index,
+		unsigned int last_render_time_in_us)
+{
+	struct freesync_state *state = &core_freesync->map[map_index].state;
+
+	state->time.render_times[state->time.render_times_index] =
+			last_render_time_in_us;
+	state->time.render_times_index++;
+
+	if (state->time.render_times_index >= RENDER_TIMES_MAX_COUNT)
+		state->time.render_times_index = 0;
+
+	if (last_render_time_in_us + BTR_EXIT_MARGIN <
+		state->time.max_render_time_in_us) {
+
+		/* Exit Below the Range */
+		if (state->btr.btr_active) {
+
+			state->btr.program_btr = true;
+			state->btr.btr_active = false;
+			state->btr.frame_counter = 0;
+		}
+	} else if (last_render_time_in_us > state->time.max_render_time_in_us) {
+
+		/* Enter Below the Range */
+		if (!state->btr.btr_active &&
+			core_freesync->map[map_index].caps.btr_supported) {
+
+			state->btr.program_btr = true;
+			state->btr.btr_active = true;
+		}
+	}
+
+
+	/* When Below the Range is active, must react on every frame */
+	if (state->btr.btr_active)
+		state->btr.program_btr = true;
+
+}
+
+static void apply_below_the_range(struct core_freesync *core_freesync,
+		const struct dc_stream *stream, unsigned int map_index,
+		unsigned int last_render_time_in_us)
+{
+	unsigned int inserted_frame_duration_in_us = 0;
+	unsigned int mid_point_frames_ceil = 0;
+	unsigned int mid_point_frames_floor = 0;
+	unsigned int frame_time_in_us = 0;
+	unsigned int delta_from_mid_point_in_us_1 = 0xFFFFFFFF;
+	unsigned int delta_from_mid_point_in_us_2 = 0xFFFFFFFF;
+	unsigned int frames_to_insert = 0;
+	unsigned int inserted_frame_v_total = 0;
+	unsigned int vmin = 0, vmax = 0;
+	unsigned int min_frame_duration_in_ns = 0;
+	struct freesync_state *state = &core_freesync->map[map_index].state;
+
+	if (!state->btr.program_btr)
+		return;
+
+	state->btr.program_btr = false;
+
+	min_frame_duration_in_ns = ((unsigned int) (div64_u64(
+		(1000000000ULL * 1000000),
+		state->nominal_refresh_rate_in_micro_hz)));
+
+	/* Program BTR */
+
+	/* BTR set to "not active" so disengage */
+	if (!state->btr.btr_active)
+
+		/* Restore FreeSync */
+		set_freesync_on_streams(core_freesync, &stream, 1);
+
+	/* BTR set to "active" so engage */
+	else {
+
+		/* Calculate number of midPoint frames that could fit within
+		 * the render time interval- take ceil of this value
+		 */
+		mid_point_frames_ceil = (last_render_time_in_us +
+			state->btr.mid_point_in_us- 1) /
+			state->btr.mid_point_in_us;
+
+		if (mid_point_frames_ceil > 0) {
+
+			frame_time_in_us = last_render_time_in_us /
+				mid_point_frames_ceil;
+			delta_from_mid_point_in_us_1 = (state->btr.mid_point_in_us >
+				frame_time_in_us) ?
+				(state->btr.mid_point_in_us - frame_time_in_us):
+				(frame_time_in_us - state->btr.mid_point_in_us);
+		}
+
+		/* Calculate number of midPoint frames that could fit within
+		 * the render time interval- take floor of this value
+		 */
+		mid_point_frames_floor = last_render_time_in_us /
+			state->btr.mid_point_in_us;
+
+		if (mid_point_frames_floor > 0) {
+
+			frame_time_in_us = last_render_time_in_us /
+				mid_point_frames_floor;
+			delta_from_mid_point_in_us_2 = (state->btr.mid_point_in_us >
+				frame_time_in_us) ?
+				(state->btr.mid_point_in_us - frame_time_in_us):
+				(frame_time_in_us - state->btr.mid_point_in_us);
+		}
+
+		/* Choose number of frames to insert based on how close it
+		 * can get to the mid point of the variable range.
+		 */
+		if (delta_from_mid_point_in_us_1 < delta_from_mid_point_in_us_2)
+			frames_to_insert = mid_point_frames_ceil;
+		else
+			frames_to_insert = mid_point_frames_floor;
+
+		/* Either we've calculated the number of frames to insert,
+		 * or we need to insert min duration frames
+		 */
+		if (frames_to_insert > 0)
+			inserted_frame_duration_in_us = last_render_time_in_us /
+							frames_to_insert;
+
+		if (inserted_frame_duration_in_us <
+			state->time.min_render_time_in_us)
+
+			inserted_frame_duration_in_us =
+				state->time.min_render_time_in_us;
+
+		/* We need the v_total_min from capability */
+		calc_vmin_vmax(core_freesync, stream, &vmin, &vmax);
+
+		inserted_frame_v_total = vmin;
+		if (min_frame_duration_in_ns / 1000)
+			inserted_frame_v_total = inserted_frame_duration_in_us *
+				vmin / (min_frame_duration_in_ns / 1000);
+
+		/* Set length of inserted frames as v_total_max*/
+		vmax = inserted_frame_v_total;
+
+		/* Program V_TOTAL */
+		core_freesync->dc->stream_funcs.adjust_vmin_vmax(
+			core_freesync->dc, &stream,
+			1, vmin,
+			vmax);
+
+		/* Cache the calculated variables */
+		state->btr.inserted_frame_duration_in_us =
+			inserted_frame_duration_in_us;
+		state->btr.frames_to_insert = frames_to_insert;
+		state->btr.frame_counter = frames_to_insert;
+
+	}
+}
+
+void mod_freesync_pre_update_plane_addresses(struct mod_freesync *mod_freesync,
+		const struct dc_stream **streams, int num_streams,
+		unsigned int curr_time_stamp_in_us)
+{
+	unsigned int stream_index, map_index, last_render_time_in_us = 0;
+	struct core_freesync *core_freesync =
+			MOD_FREESYNC_TO_CORE(mod_freesync);
+
+	for (stream_index = 0; stream_index < num_streams; stream_index++) {
+
+		map_index = map_index_from_stream(core_freesync,
+						streams[stream_index]);
+
+		if (core_freesync->map[map_index].caps.supported) {
+
+			last_render_time_in_us = curr_time_stamp_in_us -
+					core_freesync->map[map_index].state.time.
+					prev_time_stamp_in_us;
+
+			/* Add the timestamps to the cache and determine
+			 * whether BTR program is required
+			 */
+			update_timestamps(core_freesync, streams[stream_index],
+					map_index, last_render_time_in_us);
+
+			if (core_freesync->map[map_index].state.fullscreen &&
+				core_freesync->map[map_index].user_enable.
+				enable_for_gaming)
+
+				if (core_freesync->map[map_index].
+					caps.btr_supported)
+
+					apply_below_the_range(core_freesync,
+						streams[stream_index], map_index,
+						last_render_time_in_us);
+
+
+			core_freesync->map[map_index].state.time.
+				prev_time_stamp_in_us = curr_time_stamp_in_us;
+		}
+
+	}
 }
