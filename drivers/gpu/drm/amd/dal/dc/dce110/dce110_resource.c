@@ -615,10 +615,9 @@ static bool is_surface_pixel_format_supported(struct pipe_ctx *pipe_ctx)
 {
 	if (pipe_ctx->pipe_idx != DCE110_UNDERLAY_IDX)
 		return true;
-	if (pipe_ctx->surface && pipe_ctx->surface->public.format <
-					SURFACE_PIXEL_FORMAT_VIDEO_BEGIN)
-		return false;
 	if (!pipe_ctx->surface)
+		return false;
+	if (pipe_ctx->surface->public.format < SURFACE_PIXEL_FORMAT_VIDEO_BEGIN)
 		return false;
 	return true;
 }
@@ -918,6 +917,9 @@ static bool dce110_validate_surface_sets(
 				return false;
 			if (set[i].surfaces[1]->src_rect.width > 1920
 					|| set[i].surfaces[1]->src_rect.height > 1080)
+				return false;
+
+			if (set[i].target->streams[0]->timing.pixel_encoding != PIXEL_ENCODING_RGB)
 				return false;
 		}
 	}
