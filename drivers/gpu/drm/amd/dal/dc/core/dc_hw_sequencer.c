@@ -53,9 +53,15 @@ static const struct tg_color black_color_format[] = {
 	{0x1a2, 0x20, 0x1a2},
 };
 
-bool front_end_need_program(struct pipe_ctx *old_pipe, struct pipe_ctx *new_pipe)
+static bool front_end_need_program(struct pipe_ctx *old_pipe, struct pipe_ctx *new_pipe)
 {
 	/*TODO: Findout if this is sufficient comparison*/
+
+	if (new_pipe->bottom_pipe && !old_pipe->bottom_pipe)
+		return true;
+
+	if (!new_pipe->bottom_pipe && old_pipe->bottom_pipe)
+		return true;
 
 	/* The scl_data comparison handles the hsplit case where the surface is unmodified*/
 	return new_pipe->surface != old_pipe->surface || memcmp(&old_pipe->scl_data,

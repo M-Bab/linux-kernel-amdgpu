@@ -277,8 +277,9 @@ static bool construct(struct core_dc *dc,
 	}
 
 	dc->current_context = dm_alloc(sizeof(*dc->current_context));
+	dc->temp_flip_context = dm_alloc(sizeof(*dc->temp_flip_context));
 
-	if (!dc->current_context) {
+	if (!dc->current_context || !dc->temp_flip_context) {
 		dm_error("%s: failed to create validate ctx\n", __func__);
 		goto val_ctx_fail;
 	}
@@ -371,6 +372,7 @@ static void destruct(struct core_dc *dc)
 {
 	resource_validate_ctx_destruct(dc->current_context);
 	dm_free(dc->current_context);
+	dm_free(dc->temp_flip_context);
 	dc->current_context = NULL;
 	destroy_links(dc);
 	dc->res_pool->funcs->destroy(&dc->res_pool);
@@ -895,18 +897,6 @@ bool dc_commit_targets(
 	dm_free(core_dc->current_context);
 	core_dc->current_context = context;
 
-	/* Any pending context is no longer valid once a setmode happens*/
-	if (core_dc->pending_context) {
-		resource_validate_ctx_destruct(core_dc->pending_context);
-		dm_free(core_dc->pending_context);
-		core_dc->pending_context = NULL;
-	}
-	if (core_dc->retired_context) {
-		resource_validate_ctx_destruct(core_dc->retired_context);
-		dm_free(core_dc->retired_context);
-		core_dc->retired_context = NULL;
-	}
-
 	return (result == DC_OK);
 
 fail:
@@ -929,25 +919,19 @@ bool dc_pre_commit_surfaces_to_target(
 	struct dc_target_status *target_status = NULL;
 	struct validate_context *context;
 	struct validate_context *temp_context;
-	bool bw_increased = false;
+	bool ret = true;
 
 	int current_enabled_surface_count = 0;
 	int new_enabled_surface_count = 0;
 
-	if (core_dc->retired_context) {
-		resource_validate_ctx_destruct(core_dc->retired_context);
-		dm_free(core_dc->retired_context);
-		core_dc->retired_context = NULL;
-	}
-
 	if (core_dc->current_context->target_count == 0)
 		return NULL;
-
 
 	context = dm_alloc(sizeof(struct validate_context));
 
 	if (!context) {
 		dm_error("%s: failed to create validate ctx\n", __func__);
+		ret = false;
 		goto val_ctx_fail;
 	}
 
@@ -968,28 +952,23 @@ bool dc_pre_commit_surfaces_to_target(
 		if (new_surfaces[i]->visible)
 			new_enabled_surface_count++;
 
-	/*
-	 * Do not print if we have 2 surfaces previously and we are currently
-	 * comiting 2 surfaces. Since the multi-plane case generate a lot of
-	 * spam
-	 */
-	if (!((new_surface_count > 1) && target_status->surface_count > 1))
-		dal_logger_write(core_dc->ctx->logger,
-					LOG_MAJOR_INTERFACE_TRACE,
-					LOG_MINOR_COMPONENT_DC,
-					"%s: commit %d surfaces to target 0x%x\n",
-					__func__,
-					new_surface_count,
-					dc_target);
+	dal_logger_write(core_dc->ctx->logger,
+				LOG_MAJOR_INTERFACE_TRACE,
+				LOG_MINOR_COMPONENT_DC,
+				"%s: commit %d surfaces to target 0x%x\n",
+				__func__,
+				new_surface_count,
+				dc_target);
 
 	if (!resource_attach_surfaces_to_context(
 			new_surfaces, new_surface_count, dc_target, context)) {
 		BREAK_TO_DEBUGGER();
+		ret = false;
 		goto unexpected_fail;
 	}
 
 	for (i = 0; i < new_surface_count; i++)
-		for (j = 0; j < MAX_PIPES; j++) {
+		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
 			if (context->res_ctx.pipe_ctx[j].surface !=
 					DC_SURFACE_TO_CORE(new_surfaces[i]))
 				continue;
@@ -1005,6 +984,7 @@ bool dc_pre_commit_surfaces_to_target(
 
 	if (core_dc->res_pool->funcs->validate_bandwidth(core_dc, context) != DC_OK) {
 		BREAK_TO_DEBUGGER();
+		ret = false;
 		goto unexpected_fail;
 	}
 
@@ -1015,6 +995,7 @@ bool dc_pre_commit_surfaces_to_target(
 		if (!temp_context) {
 			dm_error("%s:failed apply clk constraints\n", __func__);
 			BREAK_TO_DEBUGGER();
+			ret = false;
 			goto unexpected_fail;
 		}
 		resource_validate_ctx_destruct(context);
@@ -1026,109 +1007,113 @@ bool dc_pre_commit_surfaces_to_target(
 		pplib_apply_display_requirements(core_dc, context,
 						&context->pp_display_cfg);
 		core_dc->hwss.set_display_clock(context);
-		bw_increased = true;
 		core_dc->current_context->bw_results.dispclk_khz =
 				context->bw_results.dispclk_khz;
 	}
 
+	for (i = 0; i < new_surface_count; i++)
+		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
+			if (context->res_ctx.pipe_ctx[j].surface !=
+					DC_SURFACE_TO_CORE(new_surfaces[i]))
+				continue;
+
+			core_dc->hwss.prepare_pipe_for_context(
+					core_dc,
+					&context->res_ctx.pipe_ctx[j],
+					context);
+		}
 
 	if (current_enabled_surface_count > 0 && new_enabled_surface_count == 0)
 		target_disable_memory_requests(dc_target,
 				&core_dc->current_context->res_ctx);
 
-	core_dc->hwss.apply_ctx_to_surface_locked(core_dc, context);
-	context->locked = true;
-
-	core_dc->pending_context = context;
-
-	return !bw_increased;
-
 unexpected_fail:
+val_ctx_fail:
 	resource_validate_ctx_destruct(context);
 	dm_free(context);
-val_ctx_fail:
-	return false;
+
+	return ret;
 }
 
 bool dc_isr_commit_surfaces_to_target(
 		struct dc *dc,
-		struct dc_flip_addrs flip_addrs[],
 		struct dc_surface *new_surfaces[],
-		int new_surface_count)
+		int new_surface_count,
+		struct dc_target *dc_target)
 {
 	int i, j;
-	enum dc_status status = DC_OK;
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	int pipe_count = core_dc->res_pool->pipe_count;
-	struct validate_context *context = core_dc->pending_context ?
-			core_dc->pending_context : core_dc->current_context;
+	struct validate_context *context = core_dc->temp_flip_context;
 
+	*context = *core_dc->current_context;
 
-	for (j = 0; j < pipe_count; j++) {
-		struct pipe_ctx *pipe_ctx =
-			&context->res_ctx.pipe_ctx[j];
-		struct core_surface *ctx_surface = pipe_ctx->surface;
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
+		struct pipe_ctx *cur_pipe = &context->res_ctx.pipe_ctx[i];
 
-		if (!ctx_surface)
-			continue;
+		if (cur_pipe->top_pipe)
+			cur_pipe->top_pipe =
+				&context->res_ctx.pipe_ctx[cur_pipe->top_pipe->pipe_idx];
 
-		if (flip_addrs) {
-			for (i = 0; i < new_surface_count; i++) {
-					/*
-					 * Temporary hack, allow address to be filled into
-					 * the surface directly and programmed here.
-					 * TODO: Unify how address is passed into DC
-					 */
+		if (cur_pipe->bottom_pipe)
+			cur_pipe->bottom_pipe =
+				&context->res_ctx.pipe_ctx[cur_pipe->bottom_pipe->pipe_idx];
+	}
 
-					if (DC_SURFACE_TO_CORE(new_surfaces[i]) != ctx_surface)
-						continue;
-				ctx_surface->public.address = flip_addrs[i].address;
-				ctx_surface->public.flip_immediate = flip_addrs[i].flip_immediate;
+	if (!resource_attach_surfaces_to_context(
+			new_surfaces, new_surface_count, dc_target, context)) {
+		BREAK_TO_DEBUGGER();
+		return false;
+	}
+
+	for (i = 0; i < new_surface_count; i++)
+		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
+			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
+
+			if (pipe_ctx->surface !=
+					DC_SURFACE_TO_CORE(new_surfaces[i]))
+				continue;
+
+			resource_build_scaling_params(new_surfaces[i], pipe_ctx);
+
+			if (dc->debug.surface_visual_confirm) {
+				pipe_ctx->scl_data.recout.height -= 2;
+				pipe_ctx->scl_data.recout.width -= 2;
 			}
-		}
 
-		if (!ctx_surface->public.flip_immediate)
 			core_dc->hwss.pipe_control_lock(
 					core_dc->ctx,
 					pipe_ctx->pipe_idx,
-					PIPE_LOCK_CONTROL_SURFACE |
-					PIPE_LOCK_CONTROL_MODE,
+					PIPE_LOCK_CONTROL_SURFACE,
 					true);
 
-		core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
-
-	}
-
-	for (j = pipe_count - 1; j >= 0; j--)
-		for (i = new_surface_count - 1; i >= 0; i--) {
-			struct pipe_ctx *pipe_ctx =
-				&context->res_ctx.pipe_ctx[j];
-			struct core_surface *ctx_surface = pipe_ctx->surface;
-
-			if (!ctx_surface)
-				continue;
-
-			if (!ctx_surface->public.flip_immediate)
-				core_dc->hwss.pipe_control_lock(
-						core_dc->ctx,
-						pipe_ctx->pipe_idx,
-						PIPE_LOCK_CONTROL_SURFACE,
-						false);
+			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
 		}
 
-	if (core_dc->pending_context && core_dc->pending_context->locked) {
-		status = core_dc->hwss.apply_ctx_to_surface_unlock(core_dc, core_dc->pending_context);
-		core_dc->pending_context->locked = false;
+	core_dc->hwss.apply_ctx_to_surface(core_dc, context);
+
+	/* Go in reverse order so that all pipes are unlocked simultaneously
+	 * when pipe 0 is unlocked
+	 * Need PIPE_LOCK_CONTROL_MODE to be 1 for this
+	 */
+	for (i = context->res_ctx.pool->pipe_count - 1; i >= 0; i--) {
+		struct pipe_ctx *pipe_ctx =
+					&context->res_ctx.pipe_ctx[i];
+
+		core_dc->hwss.pipe_control_lock(
+				core_dc->ctx,
+				pipe_ctx->pipe_idx,
+				PIPE_LOCK_CONTROL_GRAPHICS |
+				PIPE_LOCK_CONTROL_SCL |
+				PIPE_LOCK_CONTROL_BLENDER |
+				PIPE_LOCK_CONTROL_SURFACE,
+				false);
 	}
 
-	if (core_dc->pending_context) {
-		ASSERT(core_dc->retired_context == NULL || core_dc->retired_context == core_dc->current_context);
-		core_dc->retired_context = core_dc->current_context;
-		core_dc->current_context = core_dc->pending_context;
-		core_dc->pending_context = NULL;
-	}
+	core_dc->temp_flip_context = core_dc->current_context;
+	core_dc->current_context = context;
 
-	return status == DC_OK;
+	return true;
 }
 
 bool dc_post_commit_surfaces_to_target(struct dc *dc)
@@ -1153,12 +1138,6 @@ bool dc_post_commit_surfaces_to_target(struct dc *dc)
 	pplib_apply_display_requirements(
 			core_dc, core_dc->current_context, &core_dc->current_context->pp_display_cfg);
 
-	if (core_dc->retired_context) {
-		resource_validate_ctx_destruct(core_dc->retired_context);
-		dm_free(core_dc->retired_context);
-		core_dc->retired_context = NULL;
-	}
-
 	return true;
 }
 
@@ -1175,7 +1154,7 @@ bool dc_commit_surfaces_to_target(
 			dc_target))
 		return false;
 
-	if (!dc_isr_commit_surfaces_to_target(dc, NULL, new_surfaces, new_surface_count))
+	if (!dc_isr_commit_surfaces_to_target(dc, new_surfaces, new_surface_count, dc_target))
 		return false;
 
 	if (!dc_post_commit_surfaces_to_target(dc))

@@ -1918,22 +1918,16 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 	struct out_csc_color_matrix tbl_entry;
 	unsigned int i;
 
-	int lock_mask =
-		PIPE_LOCK_CONTROL_GRAPHICS |
-		PIPE_LOCK_CONTROL_SCL |
-		PIPE_LOCK_CONTROL_BLENDER |
-		PIPE_LOCK_CONTROL_MODE;
-
 	memset(&tbl_entry, 0, sizeof(tbl_entry));
-
-	if (!pipe_ctx->surface->public.flip_immediate)
-		lock_mask |= PIPE_LOCK_CONTROL_SURFACE;
 
 	if (blender_configuration_changed(pipe_ctx, &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx]))
 		dc->hwss.pipe_control_lock(
 				dc->ctx,
 				pipe_ctx->pipe_idx,
-				lock_mask,
+				PIPE_LOCK_CONTROL_GRAPHICS |
+				PIPE_LOCK_CONTROL_SCL |
+				PIPE_LOCK_CONTROL_BLENDER |
+				PIPE_LOCK_CONTROL_MODE,
 				true);
 
 	if (dc->current_context)
@@ -2014,8 +2008,6 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 				&surface->public.tiling_info,
 				surface->public.rotation);
 
-	dc->hwss.update_plane_addr(dc, pipe_ctx);
-
 	dal_logger_write(dc->ctx->logger,
 			LOG_MAJOR_INTERFACE_TRACE,
 			LOG_MINOR_COMPONENT_SURFACE,
@@ -2078,31 +2070,16 @@ static void dce110_prepare_pipe_for_surface_commit(
 			gamma, pipe_ctx->surface);
 }
 
-static enum dc_status apply_ctx_to_surface_locked(
+static void dce110_prepare_pipe_for_context(
 		struct core_dc *dc,
+		struct pipe_ctx *pipe_ctx,
 		struct validate_context *context)
 {
-	int i;
-
-	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
-		struct pipe_ctx *head_pipe = &context->res_ctx.pipe_ctx[i];
-
-		if (!head_pipe->surface || head_pipe->top_pipe != NULL)
-			continue;
-
-		hw_sequencer_program_pipe_tree(dc, context, head_pipe,
-				dce110_power_on_pipe_if_needed);
-
-		hw_sequencer_program_pipe_tree(dc, context, head_pipe,
-				dce110_prepare_pipe_for_surface_commit);
-
-	}
-
-
-	return DC_OK;
+	dce110_power_on_pipe_if_needed(dc, pipe_ctx, context);
+	dce110_prepare_pipe_for_surface_commit(dc, pipe_ctx, context);
 }
 
-static enum dc_status apply_ctx_to_surface_unlock(
+static enum dc_status dce110_apply_ctx_to_surface(
 		struct core_dc *dc,
 		struct validate_context *context)
 {
@@ -2119,24 +2096,6 @@ static enum dc_status apply_ctx_to_surface_unlock(
 
 		hw_sequencer_program_pipe_tree(dc, context, head_pipe,
 				dce110_program_blending);
-	}
-
-	/* Go in reverse order so that all pipes are unlocked simultaneously
-	 * when pipe 0 is unlocked
-	 * Need PIPE_LOCK_CONTROL_MODE to be 1 for this
-	 */
-	for (i = context->res_ctx.pool->pipe_count - 1; i >= 0; i--) {
-		struct pipe_ctx *pipe_ctx =
-					&context->res_ctx.pipe_ctx[i];
-
-		dc->hwss.pipe_control_lock(
-				dc->ctx,
-				pipe_ctx->pipe_idx,
-				PIPE_LOCK_CONTROL_GRAPHICS |
-				PIPE_LOCK_CONTROL_SCL |
-				PIPE_LOCK_CONTROL_BLENDER |
-				PIPE_LOCK_CONTROL_SURFACE,
-				false);
 	}
 
 	return DC_OK;
@@ -2167,8 +2126,8 @@ static void update_plane_surface(
 static const struct hw_sequencer_funcs dce110_funcs = {
 	.init_hw = init_hw,
 	.apply_ctx_to_hw = apply_ctx_to_hw,
-	.apply_ctx_to_surface_locked = apply_ctx_to_surface_locked,
-	.apply_ctx_to_surface_unlock = apply_ctx_to_surface_unlock,
+	.prepare_pipe_for_context = dce110_prepare_pipe_for_context,
+	.apply_ctx_to_surface = dce110_apply_ctx_to_surface,
 	.set_plane_config = set_plane_config,
 	.update_plane_addr = update_plane_addr,
 	.update_pending_status = update_pending_status,

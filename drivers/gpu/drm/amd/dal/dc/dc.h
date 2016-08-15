@@ -241,9 +241,9 @@ bool dc_pre_commit_surfaces_to_target(
 
 bool dc_isr_commit_surfaces_to_target(
 		struct dc *dc,
-		struct dc_flip_addrs flip_addrs[],
 		struct dc_surface *new_surfaces[],
-		int new_surface_count);
+		int new_surface_count,
+		struct dc_target *dc_target);
 
 bool dc_post_commit_surfaces_to_target(
 		struct dc *dc);
