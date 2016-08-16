@@ -214,67 +214,90 @@ enum tile_mode_values {
 	DC_ADDR_SURF_MICRO_TILING_NON_DISPLAY = 0x1,
 };
 
-struct dc_tiling_info {
+enum swizzle_mode_values {
+	SW_LINEAR = 0,
+	SW_256B_S = 1,
+	SW_4KB_S = 5,
+	SW_4KB_D = 6,
+	SW_64KB_S = 9,
+	SW_64KB_D = 10,
+	SW_VAR_S = 13,
+	SW_VAR_D = 14,
+	SW_64KB_S_T = 17,
+	SW_64KB_D_T = 18,
+	SW_4KB_S_X = 21,
+	SW_4KB_D_X = 22,
+	SW_64KB_S_X = 25,
+	SW_64KB_D_X = 26,
+	SW_VAR_S_X = 29,
+	SW_VAR_D_X = 30,
+	SW_MAX
+};
 
-	/* Specifies the number of memory banks for tiling
-	 *	purposes.
-	 * Only applies to 2D and 3D tiling modes.
-	 *	POSSIBLE VALUES: 2,4,8,16
-	 */
-	unsigned int num_banks;
-	/* Specifies the number of tiles in the x direction
-	 *	to be incorporated into the same bank.
-	 * Only applies to 2D and 3D tiling modes.
-	 *	POSSIBLE VALUES: 1,2,4,8
-	 */
-	unsigned int bank_width;
-	unsigned int bank_width_c;
-	/* Specifies the number of tiles in the y direction to
-	 *	be incorporated into the same bank.
-	 * Only applies to 2D and 3D tiling modes.
-	 *	POSSIBLE VALUES: 1,2,4,8
-	 */
-	unsigned int bank_height;
-	unsigned int bank_height_c;
-	/* Specifies the macro tile aspect ratio. Only applies
-	 * to 2D and 3D tiling modes.
-	 */
-	unsigned int tile_aspect;
-	unsigned int tile_aspect_c;
-	/* Specifies the number of bytes that will be stored
-	 *	contiguously for each tile.
-	 * If the tile data requires more storage than this
-	 *	amount, it is split into multiple slices.
-	 * This field must not be larger than
-	 *	GB_ADDR_CONFIG.DRAM_ROW_SIZE.
-	 * Only applies to 2D and 3D tiling modes.
-	 * For color render targets, TILE_SPLIT >= 256B.
-	 */
-	enum tile_split_values tile_split;
-	enum tile_split_values tile_split_c;
-	/* Specifies the addressing within a tile.
-	 *	0x0 - DISPLAY_MICRO_TILING
-	 *	0x1 - THIN_MICRO_TILING
-	 *	0x2 - DEPTH_MICRO_TILING
-	 *	0x3 - ROTATED_MICRO_TILING
-	 */
-	enum tile_mode_values tile_mode;
-	enum tile_mode_values tile_mode_c;
-	/* Specifies the number of pipes and how they are
-	 *	interleaved in the surface.
-	 * Refer to memory addressing document for complete
-	 *	details and constraints.
-	 */
-	unsigned int pipe_config;
-	/* Specifies the tiling mode of the surface.
-	 * THIN tiles use an 8x8x1 tile size.
-	 * THICK tiles use an 8x8x4 tile size.
-	 * 2D tiling modes rotate banks for successive Z slices
-	 * 3D tiling modes rotate pipes and banks for Z slices
-	 * Refer to memory addressing document for complete
-	 *	details and constraints.
-	 */
-	enum array_mode_values array_mode;
+union dc_tiling_info {
+
+	struct {
+		/* Specifies the number of memory banks for tiling
+		 *	purposes.
+		 * Only applies to 2D and 3D tiling modes.
+		 *	POSSIBLE VALUES: 2,4,8,16
+		 */
+		unsigned int num_banks;
+		/* Specifies the number of tiles in the x direction
+		 *	to be incorporated into the same bank.
+		 * Only applies to 2D and 3D tiling modes.
+		 *	POSSIBLE VALUES: 1,2,4,8
+		 */
+		unsigned int bank_width;
+		unsigned int bank_width_c;
+		/* Specifies the number of tiles in the y direction to
+		 *	be incorporated into the same bank.
+		 * Only applies to 2D and 3D tiling modes.
+		 *	POSSIBLE VALUES: 1,2,4,8
+		 */
+		unsigned int bank_height;
+		unsigned int bank_height_c;
+		/* Specifies the macro tile aspect ratio. Only applies
+		 * to 2D and 3D tiling modes.
+		 */
+		unsigned int tile_aspect;
+		unsigned int tile_aspect_c;
+		/* Specifies the number of bytes that will be stored
+		 *	contiguously for each tile.
+		 * If the tile data requires more storage than this
+		 *	amount, it is split into multiple slices.
+		 * This field must not be larger than
+		 *	GB_ADDR_CONFIG.DRAM_ROW_SIZE.
+		 * Only applies to 2D and 3D tiling modes.
+		 * For color render targets, TILE_SPLIT >= 256B.
+		 */
+		enum tile_split_values tile_split;
+		enum tile_split_values tile_split_c;
+		/* Specifies the addressing within a tile.
+		 *	0x0 - DISPLAY_MICRO_TILING
+		 *	0x1 - THIN_MICRO_TILING
+		 *	0x2 - DEPTH_MICRO_TILING
+		 *	0x3 - ROTATED_MICRO_TILING
+		 */
+		enum tile_mode_values tile_mode;
+		enum tile_mode_values tile_mode_c;
+		/* Specifies the number of pipes and how they are
+		 *	interleaved in the surface.
+		 * Refer to memory addressing document for complete
+		 *	details and constraints.
+		 */
+		unsigned int pipe_config;
+		/* Specifies the tiling mode of the surface.
+		 * THIN tiles use an 8x8x1 tile size.
+		 * THICK tiles use an 8x8x4 tile size.
+		 * 2D tiling modes rotate banks for successive Z slices
+		 * 3D tiling modes rotate pipes and banks for Z slices
+		 * Refer to memory addressing document for complete
+		 *	details and constraints.
+		 */
+		enum array_mode_values array_mode;
+	} gfx8;
+
 };
 
 /* Rotation angle */

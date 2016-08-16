@@ -464,21 +464,21 @@ static void fill_plane_attributes_from_fb(
 		num_banks = AMDGPU_TILING_GET(tiling_flags, NUM_BANKS);
 
 		/* XXX fix me for VI */
-		surface->tiling_info.num_banks = num_banks;
-		surface->tiling_info.array_mode =
+		surface->tiling_info.gfx8.num_banks = num_banks;
+		surface->tiling_info.gfx8.array_mode =
 				DC_ARRAY_2D_TILED_THIN1;
-		surface->tiling_info.tile_split = tile_split;
-		surface->tiling_info.bank_width = bankw;
-		surface->tiling_info.bank_height = bankh;
-		surface->tiling_info.tile_aspect = mtaspect;
-		surface->tiling_info.tile_mode =
+		surface->tiling_info.gfx8.tile_split = tile_split;
+		surface->tiling_info.gfx8.bank_width = bankw;
+		surface->tiling_info.gfx8.bank_height = bankh;
+		surface->tiling_info.gfx8.tile_aspect = mtaspect;
+		surface->tiling_info.gfx8.tile_mode =
 				DC_ADDR_SURF_MICRO_TILING_DISPLAY;
 	} else if (AMDGPU_TILING_GET(tiling_flags, ARRAY_MODE)
 			== DC_ARRAY_1D_TILED_THIN1) {
-		surface->tiling_info.array_mode = DC_ARRAY_1D_TILED_THIN1;
+		surface->tiling_info.gfx8.array_mode = DC_ARRAY_1D_TILED_THIN1;
 	}
 
-	surface->tiling_info.pipe_config =
+	surface->tiling_info.gfx8.pipe_config =
 			AMDGPU_TILING_GET(tiling_flags, PIPE_CONFIG);
 
 	surface->plane_size.grph.surface_size.x = 0;

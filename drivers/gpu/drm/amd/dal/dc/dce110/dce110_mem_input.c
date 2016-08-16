@@ -104,7 +104,7 @@ static void enable(struct dce110_mem_input *mem_input110)
 
 static void program_tiling(
 	struct dce110_mem_input *mem_input110,
-	const struct dc_tiling_info *info,
+	const union dc_tiling_info *info,
 	const enum surface_pixel_format pixel_format)
 {
 	uint32_t value = 0;
@@ -113,28 +113,28 @@ static void program_tiling(
 			mem_input110->base.ctx,
 			DCP_REG(mmGRPH_CONTROL));
 
-	set_reg_field_value(value, info->num_banks,
+	set_reg_field_value(value, info->gfx8.num_banks,
 		GRPH_CONTROL, GRPH_NUM_BANKS);
 
-	set_reg_field_value(value, info->bank_width,
+	set_reg_field_value(value, info->gfx8.bank_width,
 		GRPH_CONTROL, GRPH_BANK_WIDTH);
 
-	set_reg_field_value(value, info->bank_height,
+	set_reg_field_value(value, info->gfx8.bank_height,
 		GRPH_CONTROL, GRPH_BANK_HEIGHT);
 
-	set_reg_field_value(value, info->tile_aspect,
+	set_reg_field_value(value, info->gfx8.tile_aspect,
 		GRPH_CONTROL, GRPH_MACRO_TILE_ASPECT);
 
-	set_reg_field_value(value, info->tile_split,
+	set_reg_field_value(value, info->gfx8.tile_split,
 		GRPH_CONTROL, GRPH_TILE_SPLIT);
 
-	set_reg_field_value(value, info->tile_mode,
+	set_reg_field_value(value, info->gfx8.tile_mode,
 		GRPH_CONTROL, GRPH_MICRO_TILE_MODE);
 
-	set_reg_field_value(value, info->pipe_config,
+	set_reg_field_value(value, info->gfx8.pipe_config,
 		GRPH_CONTROL, GRPH_PIPE_CONFIG);
 
-	set_reg_field_value(value, info->array_mode,
+	set_reg_field_value(value, info->gfx8.array_mode,
 		GRPH_CONTROL, GRPH_ARRAY_MODE);
 
 	set_reg_field_value(value, 1,
@@ -429,7 +429,7 @@ static const unsigned int dvmm_Hw_Setting_Linear[4][9] = {
 
 /* Helper to get table entry from surface info */
 static const unsigned int *get_dvmm_hw_setting(
-		struct dc_tiling_info *tiling_info,
+		union dc_tiling_info *tiling_info,
 		enum surface_pixel_format format)
 {
 	enum bits_per_pixel {
@@ -448,7 +448,7 @@ static const unsigned int *get_dvmm_hw_setting(
 	else
 		bpp = bpp_8;
 
-	switch (tiling_info->array_mode) {
+	switch (tiling_info->gfx8.array_mode) {
 	case DC_ARRAY_1D_TILED_THIN1:
 	case DC_ARRAY_1D_TILED_THICK:
 	case DC_ARRAY_PRT_TILED_THIN1:
@@ -470,7 +470,7 @@ static const unsigned int *get_dvmm_hw_setting(
 bool dce110_mem_input_program_pte_vm(
 		struct mem_input *mem_input,
 		enum surface_pixel_format format,
-		struct dc_tiling_info *tiling_info,
+		union dc_tiling_info *tiling_info,
 		enum dc_rotation_angle rotation)
 {
 	struct dce110_mem_input *mem_input110 = TO_DCE110_MEM_INPUT(mem_input);
@@ -519,7 +519,7 @@ bool dce110_mem_input_program_pte_vm(
 bool dce110_mem_input_program_surface_config(
 	struct mem_input *mem_input,
 	enum surface_pixel_format format,
-	struct dc_tiling_info *tiling_info,
+	union dc_tiling_info *tiling_info,
 	union plane_size *plane_size,
 	enum dc_rotation_angle rotation)
 {

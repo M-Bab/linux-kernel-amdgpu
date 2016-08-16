@@ -71,13 +71,13 @@ struct mem_input_funcs {
 	bool (*mem_input_program_pte_vm)(
 		struct mem_input *mem_input,
 		enum surface_pixel_format format,
-		struct dc_tiling_info *tiling_info,
+		union dc_tiling_info *tiling_info,
 		enum dc_rotation_angle rotation);
 
 	bool (*mem_input_program_surface_config)(
 		struct mem_input *mem_input,
 		enum surface_pixel_format format,
-		struct dc_tiling_info *tiling_info,
+		union dc_tiling_info *tiling_info,
 		union plane_size *plane_size,
 		enum dc_rotation_angle rotation);
 

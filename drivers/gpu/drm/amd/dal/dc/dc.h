@@ -150,7 +150,7 @@ struct dc_surface {
 	struct rect clip_rect;
 
 	union plane_size plane_size;
-	struct dc_tiling_info tiling_info;
+	union dc_tiling_info tiling_info;
 	enum dc_color_space color_space;
 
 	enum surface_pixel_format format;
