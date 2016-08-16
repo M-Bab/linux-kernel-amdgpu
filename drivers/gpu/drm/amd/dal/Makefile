@@ -5,8 +5,6 @@
 
 AMDDALPATH = $(RELATIVE_AMD_DAL_PATH)
 
-subdir-ccflags-y += -Werror
-
 subdir-ccflags-y += -I$(AMDDALPATH)/ -I$(AMDDALPATH)/include
 
 subdir-ccflags-y += -I$(FULL_AMD_DAL_PATH)/dc/inc/
