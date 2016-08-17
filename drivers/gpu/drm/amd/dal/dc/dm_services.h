@@ -239,8 +239,6 @@ bool dm_get_platform_info(
 	struct dc_context *ctx,
 	struct platform_info_params *params);
 
-static const unsigned int MAX_NAME_LENGTH = 256;
-
 struct persistent_data_flag {
 	bool save_per_link;
 	bool save_per_edid;
