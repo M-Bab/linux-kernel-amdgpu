@@ -67,6 +67,7 @@ static const struct spread_spectrum_data *get_ss_data_entry(
 	case SIGNAL_TYPE_DISPLAY_PORT:
 	case SIGNAL_TYPE_DISPLAY_PORT_MST:
 	case SIGNAL_TYPE_EDP:
+	case SIGNAL_TYPE_VIRTUAL:
 		ss_parm = clk_src->dp_ss_params;
 		entrys_num = clk_src->dp_ss_params_cnt;
 		break;

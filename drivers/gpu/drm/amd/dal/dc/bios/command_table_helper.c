@@ -160,6 +160,7 @@ uint32_t dal_cmd_table_helper_encoder_mode_bp_to_atom(
 	case SIGNAL_TYPE_EDP:
 	case SIGNAL_TYPE_DISPLAY_PORT_MST:
 	case SIGNAL_TYPE_DISPLAY_PORT:
+	case SIGNAL_TYPE_VIRTUAL:
 		if (enable_dp_audio)
 			return ATOM_ENCODER_MODE_DP_AUDIO;
 		else
