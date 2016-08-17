@@ -396,6 +396,12 @@ enum dc_color_space {
 	COLOR_SPACE_YCBCR709_LIMITED
 };
 
+enum dc_rgb_range {
+	RGB_RANGE_UNKNOWN,
+	RGB_RANGE_FULL,
+	RGB_RANGE_LIMITED
+};
+
 /* XFM */
 
 /* used in  struct dc_surface */

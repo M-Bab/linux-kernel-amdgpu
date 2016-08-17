@@ -168,4 +168,10 @@ bool mod_color_set_saturation(struct mod_color *mod_color,
 		const struct dc_stream **streams, int num_streams,
 		int saturation_value);
 
+bool mod_color_set_rgb_range(struct mod_color *mod_color,
+		const struct dc_sink *sink, enum dc_rgb_range rgb_range);
+
+bool mod_color_get_rgb_range(struct mod_color *mod_color,
+		const struct dc_sink *sink, enum dc_rgb_range *rgb_range);
+
 #endif /* MOD_COLOR_H_ */
