@@ -2429,7 +2429,7 @@ int amdgpu_dm_atomic_commit(
 	struct drm_plane *plane;
 	struct drm_plane_state *old_plane_state;
 	uint32_t i;
-	int32_t ret;
+	int32_t ret = 0;
 	uint32_t commit_targets_count = 0;
 	uint32_t new_crtcs_count = 0;
 	struct drm_crtc *crtc;
@@ -2695,13 +2695,14 @@ int amdgpu_dm_atomic_commit(
 			continue;
 
 		if (page_flip_needed(plane_state, old_plane_state, false)) {
-			amdgpu_crtc_page_flip(
-				crtc,
-				fb,
-				crtc->state->event,
-				acrtc->flip_flags);
+			ret = amdgpu_crtc_page_flip(crtc,
+						    fb,
+						    crtc->state->event,
+						    acrtc->flip_flags);
 			/*clean up the flags for next usage*/
 			acrtc->flip_flags = 0;
+			if (ret)
+				return ret;
 		}
 	}
 
@@ -2713,7 +2714,7 @@ int amdgpu_dm_atomic_commit(
 
 	drm_atomic_state_free(state);
 
-	return 0;
+	return ret;
 }
 /*
  * This functions handle all cases when set mode does not come upon hotplug.
