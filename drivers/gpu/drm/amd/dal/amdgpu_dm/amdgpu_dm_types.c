@@ -2419,6 +2419,27 @@ static bool is_scaling_state_different(
 	return false;
 }
 
+static void remove_target(struct amdgpu_device *adev, struct amdgpu_crtc *acrtc)
+{
+	int i;
+
+	/*
+	 * we evade vblanks and pflips on crtc that
+	 * should be changed
+	 */
+	manage_dm_interrupts(adev, acrtc, false);
+	/* this is the update mode case */
+	if (adev->dm.freesync_module)
+		for (i = 0; i < acrtc->target->stream_count; i++)
+			mod_freesync_remove_stream(
+					adev->dm.freesync_module,
+					acrtc->target->streams[i]);
+	dc_target_release(acrtc->target);
+	acrtc->target = NULL;
+	acrtc->otg_inst = -1;
+	acrtc->enabled = false;
+}
+
 int amdgpu_dm_atomic_commit(
 	struct drm_device *dev,
 	struct drm_atomic_state *state,
@@ -2428,7 +2449,7 @@ int amdgpu_dm_atomic_commit(
 	struct amdgpu_display_manager *dm = &adev->dm;
 	struct drm_plane *plane;
 	struct drm_plane_state *old_plane_state;
-	uint32_t i;
+	uint32_t i, j;
 	int32_t ret = 0;
 	uint32_t commit_targets_count = 0;
 	uint32_t new_crtcs_count = 0;
@@ -2530,17 +2551,8 @@ int amdgpu_dm_atomic_commit(
 				break;
 			}
 
-			if (acrtc->target) {
-				/*
-				 * we evade vblanks and pflips on crtc that
-				 * should be changed
-				 */
-				manage_dm_interrupts(adev, acrtc, false);
-				/* this is the update mode case */
-				dc_target_release(acrtc->target);
-				acrtc->target = NULL;
-				acrtc->otg_inst = -1;
-			}
+			if (acrtc->target)
+				remove_target(adev, acrtc);
 
 			/*
 			 * this loop saves set mode crtcs
@@ -2555,10 +2567,10 @@ int amdgpu_dm_atomic_commit(
 			acrtc->hw_mode = crtc->state->mode;
 			crtc->hwmode = crtc->state->mode;
 			if (adev->dm.freesync_module)
-				mod_freesync_notify_mode_change(
-					adev->dm.freesync_module,
-					new_target->streams,
-					new_target->stream_count);
+				for (j = 0; j < acrtc->target->stream_count; j++)
+					mod_freesync_add_stream(
+							adev->dm.freesync_module,
+							acrtc->target->streams[j]);
 			break;
 		}
 
@@ -2579,13 +2591,8 @@ int amdgpu_dm_atomic_commit(
 		case DM_COMMIT_ACTION_RESET:
 			DRM_INFO("Atomic commit: RESET. crtc id %d:[%p]\n", acrtc->crtc_id, acrtc);
 			/* i.e. reset mode */
-			if (acrtc->target) {
-				manage_dm_interrupts(adev, acrtc, false);
-
-				dc_target_release(acrtc->target);
-				acrtc->target = NULL;
-				acrtc->enabled = false;
-			}
+			if (acrtc->target)
+				remove_target(adev, acrtc);
 			break;
 		} /* switch() */
 	} /* for_each_crtc_in_state() */
@@ -2678,6 +2685,12 @@ int amdgpu_dm_atomic_commit(
 		 */
 		struct amdgpu_crtc *acrtc = new_crtcs[i];
 
+		if (adev->dm.freesync_module)
+			mod_freesync_notify_mode_change(
+						adev->dm.freesync_module,
+						acrtc->target->streams,
+						acrtc->target->stream_count);
+
 		manage_dm_interrupts(adev, acrtc, true);
 		dm_crtc_cursor_reset(&acrtc->base);
 
@@ -2732,6 +2745,7 @@ void dm_restore_drm_connector_state(struct drm_device *dev, struct drm_connector
 	struct dc_target *commit_targets[6];
 	struct dc_target *current_target;
 	uint32_t commit_targets_count = 0;
+	int i;
 
 	if (!aconnector->dc_sink || !connector->state || !connector->encoder)
 		return;
@@ -2783,15 +2797,32 @@ void dm_restore_drm_connector_state(struct drm_device *dev, struct drm_connector
 			}
 		}
 
+		if (adev->dm.freesync_module)
+			for (i = 0; i < disconnected_acrtc->target->stream_count; i++)
+				mod_freesync_add_stream(
+						adev->dm.freesync_module,
+						disconnected_acrtc->target->streams[i]);
+
 		/* DC is optimized not to do anything if 'targets' didn't change. */
 		if (!dc_commit_targets(dc, commit_targets,
 				commit_targets_count)) {
 			DRM_INFO("Failed to restore connector state!\n");
+			if (adev->dm.freesync_module)
+				for (i = 0; i < disconnected_acrtc->target->stream_count; i++)
+					mod_freesync_remove_stream(
+							adev->dm.freesync_module,
+							disconnected_acrtc->target->streams[i]);
 			dc_target_release(disconnected_acrtc->target);
 			disconnected_acrtc->target = current_target;
 			manage_dm_interrupts(adev, disconnected_acrtc, true);
 			return;
 		}
+
+		if (adev->dm.freesync_module)
+			for (i = 0; i < current_target->stream_count; i++)
+				mod_freesync_remove_stream(
+						adev->dm.freesync_module,
+						current_target->streams[i]);
 
 		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 			struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
