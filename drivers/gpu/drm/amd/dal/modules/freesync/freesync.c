@@ -777,8 +777,14 @@ void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 			freesync_program_required = true;
 			break;
 		case FREESYNC_STATE_STATIC_SCREEN:
-			/* Change core variables only if there is a change*/
-			if (state->static_screen != freesync_params->enable) {
+			/* Static screen ramp is only enabled for embedded
+			 * panels. Also change core variables only if there
+			 * is a change.
+			 */
+			if (dc_is_embedded_signal(
+				streams[stream_index]->sink->sink_signal) &&
+				state->static_screen !=
+				freesync_params->enable) {
 
 				/* Change the state flag */
 				state->static_screen = freesync_params->enable;
