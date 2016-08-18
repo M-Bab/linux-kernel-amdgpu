@@ -1341,21 +1341,24 @@ static void set_avi_info_frame(
 			cn0_cn1;
 	}
 
-	/* TODO: un-hardcode q0_q1 */
-	if (color_space == COLOR_SPACE_SRGB)
+	/* TODO : We should handle YCC quantization */
+	/* but we do not have matrix calculation */
+	if (color_space == COLOR_SPACE_SRGB) {
 		info_frame.avi_info_packet.info_packet_hdmi.bits.Q0_Q1 =
 						RGB_QUANTIZATION_FULL_RANGE;
-	else if (color_space == COLOR_SPACE_SRGB_LIMITED)
+		info_frame.avi_info_packet.info_packet_hdmi.bits.YQ0_YQ1 =
+						YYC_QUANTIZATION_FULL_RANGE;
+	} else if (color_space == COLOR_SPACE_SRGB_LIMITED) {
 		info_frame.avi_info_packet.info_packet_hdmi.bits.Q0_Q1 =
 						RGB_QUANTIZATION_LIMITED_RANGE;
-	else
+		info_frame.avi_info_packet.info_packet_hdmi.bits.YQ0_YQ1 =
+						YYC_QUANTIZATION_LIMITED_RANGE;
+	} else {
 		info_frame.avi_info_packet.info_packet_hdmi.bits.Q0_Q1 =
 						RGB_QUANTIZATION_DEFAULT_RANGE;
-
-	/* TODO : We should handle YCC quantization,
-	 * but we do not have matrix calculation */
-	info_frame.avi_info_packet.info_packet_hdmi.bits.YQ0_YQ1 =
-					YYC_QUANTIZATION_LIMITED_RANGE;
+		info_frame.avi_info_packet.info_packet_hdmi.bits.YQ0_YQ1 =
+						YYC_QUANTIZATION_LIMITED_RANGE;
+	}
 
 	info_frame.avi_info_packet.info_packet_hdmi.bits.VIC0_VIC7 =
 					stream->public.timing.vic;

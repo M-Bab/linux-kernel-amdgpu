@@ -69,7 +69,7 @@ struct color_state {
 	struct color_range saturation;
 	struct color_range brightness;
 	struct color_range hue;
-	enum dc_rgb_range rgb_range;
+	enum dc_quantization_range preferred_quantization_range;
 };
 
 struct core_color {
@@ -1260,7 +1260,7 @@ bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 	int persistent_contrast;
 	int persistent_hue;
 	int persistent_saturation;
-	enum dc_rgb_range persistent_rgb_range;
+	enum dc_quantization_range persistent_quantization_range;
 	struct persistent_data_flag flag;
 
 	if (core_color->num_sinks < MOD_COLOR_MAX_CONCURRENT_SINKS) {
@@ -1396,14 +1396,15 @@ bool mod_color_add_sink(struct mod_color *mod_color, const struct dc_sink *sink)
 
 		if (dm_read_persistent_data(core_dc->ctx, sink,
 						COLOR_REGISTRY_NAME,
-						"rgb_range",
-						&persistent_rgb_range,
+						"preferred_quantization_range",
+						&persistent_quantization_range,
 						sizeof(int), &flag))
-			core_color->state[core_color->num_sinks].rgb_range =
-					persistent_rgb_range;
+			core_color->state[core_color->num_sinks].
+			preferred_quantization_range =
+					persistent_quantization_range;
 		else
-			core_color->state[core_color->num_sinks].rgb_range =
-					RGB_RANGE_FULL;
+			core_color->state[core_color->num_sinks].
+			preferred_quantization_range = QUANTIZATION_RANGE_FULL;
 
 		core_color->num_sinks++;
 		return true;
@@ -2051,8 +2052,9 @@ bool mod_color_set_saturation(struct mod_color *mod_color,
 	return true;
 }
 
-bool mod_color_set_rgb_range(struct mod_color *mod_color,
-		const struct dc_sink *sink, enum dc_rgb_range rgb_range)
+bool mod_color_set_preferred_quantization_range(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		enum dc_quantization_range quantization_range)
 {
 	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
 	struct core_dc *core_dc = DC_TO_CORE(core_color->dc);
@@ -2061,16 +2063,16 @@ bool mod_color_set_rgb_range(struct mod_color *mod_color,
 
 	sink_index = sink_index_from_sink(core_color, sink);
 	if (core_color->state[sink_index].
-			rgb_range != rgb_range) {
-		core_color->state[sink_index].rgb_range =
-				rgb_range;
+			preferred_quantization_range != quantization_range) {
+		core_color->state[sink_index].preferred_quantization_range =
+				quantization_range;
 		flag.save_per_edid = true;
 		flag.save_per_link = false;
 		dm_write_persistent_data(core_dc->ctx,
 					sink,
 					COLOR_REGISTRY_NAME,
-					"rgb_range",
-					&rgb_range,
+					"quantization_range",
+					&quantization_range,
 					sizeof(int),
 					&flag);
 	}
@@ -2078,13 +2080,15 @@ bool mod_color_set_rgb_range(struct mod_color *mod_color,
 	return true;
 }
 
-bool mod_color_get_rgb_range(struct mod_color *mod_color,
-		const struct dc_sink *sink, enum dc_rgb_range *rgb_range)
+bool mod_color_get_preferred_quantization_range(struct mod_color *mod_color,
+		const struct dc_sink *sink,
+		enum dc_quantization_range *quantization_range)
 {
 	struct core_color *core_color = MOD_COLOR_TO_CORE(mod_color);
 	unsigned int sink_index;
 
 	sink_index = sink_index_from_sink(core_color, sink);
-	*rgb_range = core_color->state[sink_index].rgb_range;
+	*quantization_range = core_color->state[sink_index].
+			preferred_quantization_range;
 	return true;
 }
