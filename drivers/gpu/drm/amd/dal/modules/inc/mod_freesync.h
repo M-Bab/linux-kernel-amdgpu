@@ -61,7 +61,7 @@ struct mod_freesync_caps {
 struct mod_freesync_params {
 	enum mod_freesync_state state;
 	bool enable;
-	unsigned int duration_in_ns;
+	unsigned int update_duration_in_ns;
 };
 
 struct mod_freesync *mod_freesync_create(struct dc *dc);
