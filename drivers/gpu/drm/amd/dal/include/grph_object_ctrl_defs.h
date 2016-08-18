@@ -161,6 +161,7 @@ struct embedded_panel_info {
 	struct supported_refresh_rate supported_rr;
 	uint32_t drr_enabled;
 	uint32_t min_drr_refresh_rate;
+	bool realtek_eDPToLVDS;
 };
 
 struct firmware_info {
@@ -182,6 +183,12 @@ struct firmware_info {
 	uint32_t smu_gpu_pll_output_freq; /* in KHz */
 	uint8_t min_allowed_bl_level;
 	uint8_t remote_display_config;
+	uint32_t default_memory_clk; /* in KHz */
+	uint32_t default_engine_clk; /* in KHz */
+	uint32_t dp_phy_ref_clk; /* in KHz - DCE12 only */
+	uint32_t i2c_engine_ref_clk; /* in KHz - DCE12 only */
+
+
 };
 
 struct step_and_delay_info {

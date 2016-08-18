@@ -235,6 +235,8 @@ struct dc_vbios_funcs {
 	void (*destroy_integrated_info)(
 		struct dc_bios *dcb,
 		struct integrated_info **info);
+
+	void (*bios_parser_destroy)(struct dc_bios **dcb);
 };
 
 struct dc_bios {

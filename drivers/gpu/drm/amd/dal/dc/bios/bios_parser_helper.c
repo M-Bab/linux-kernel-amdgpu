@@ -31,7 +31,7 @@
 #include "bios_parser_helper.h"
 #include "command_table_helper.h"
 #include "command_table.h"
-#include "bios_parser.h"
+#include "bios_parser_types_internal.h"
 
 bool dal_bios_parser_init_bios_helper(
 	struct bios_parser *bp,

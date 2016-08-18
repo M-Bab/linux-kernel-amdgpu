@@ -316,6 +316,8 @@ struct bp_spread_spectrum_parameters {
 struct bp_encoder_cap_info {
 	uint32_t DP_HBR2_CAP:1;
 	uint32_t DP_HBR2_EN:1;
+	uint32_t DP_HBR3_EN:1;
+	uint32_t HDMI_6GB_EN:1;
 	uint32_t RESERVED:30;
 };
 

@@ -41,6 +41,7 @@
 #endif
 #include "command_table_helper.h"
 #include "bios_parser.h"
+#include "bios_parser_types_internal.h"
 #include "bios_parser_interface.h"
 
 #define THREE_PERCENT_OF_10000 300
@@ -112,7 +113,7 @@ static enum bp_result bios_parser_get_embedded_panel_info(
 
 /*****************************************************************************/
 
-struct dc_bios *dal_bios_parser_create(
+struct dc_bios *bios_parser_create(
 	struct bp_init_data *init,
 	enum dce_version dce_version)
 {
@@ -136,7 +137,7 @@ static void destruct(struct bios_parser *bp)
 		dm_free(bp->bios_local_image);
 }
 
-void dal_bios_parser_destroy(struct dc_bios **dcb)
+static void bios_parser_destroy(struct dc_bios **dcb)
 {
 	struct bios_parser *bp = BP_FROM_DCB(*dcb);
 
@@ -530,7 +531,10 @@ static enum bp_result bios_parser_get_voltage_ddc_info(struct dc_bios *dcb,
 	return result;
 }
 
-enum bp_result bios_parser_get_ddc_info_for_i2c_line(struct bios_parser *bp,
+/* TODO: temporary commented out to suppress 'defined but not used' warning */
+#if 0
+static enum bp_result bios_parser_get_ddc_info_for_i2c_line(
+	struct bios_parser *bp,
 	uint8_t i2c_line, struct graphics_object_i2c_info *info)
 {
 	uint32_t offset;
@@ -593,6 +597,7 @@ enum bp_result bios_parser_get_ddc_info_for_i2c_line(struct bios_parser *bp,
 
 	return BP_RESULT_NORECORD;
 }
+#endif
 
 static enum bp_result bios_parser_get_hpd_info(struct dc_bios *dcb,
 	struct graphics_object_id id,
@@ -3906,7 +3911,7 @@ static void process_ext_display_connection_info(struct bios_parser *bp,
 	}
 }
 
-void bios_parser_post_init(struct dc_bios *dcb,
+static void bios_parser_post_init(struct dc_bios *dcb,
 		       struct adapter_service *as)
 {
 	struct bios_parser *bp = BP_FROM_DCB(dcb);
@@ -4449,6 +4454,8 @@ static const struct dc_vbios_funcs vbios_funcs = {
 	.create_integrated_info = bios_parser_create_integrated_info,
 
 	.destroy_integrated_info = bios_parser_destroy_integrated_info,
+
+	.bios_parser_destroy = bios_parser_destroy,
 };
 
 static bool bios_parser_construct(
@@ -4459,6 +4466,7 @@ static bool bios_parser_construct(
 	uint16_t *rom_header_offset = NULL;
 	ATOM_ROM_HEADER *rom_header = NULL;
 	ATOM_OBJECT_HEADER *object_info_tbl;
+	struct atom_data_revision tbl_rev = {0};
 
 	if (!init)
 		return false;
@@ -4483,6 +4491,10 @@ static bool bios_parser_construct(
 	rom_header = GET_IMAGE(ATOM_ROM_HEADER, *rom_header_offset);
 
 	if (!rom_header)
+		return false;
+
+	get_atom_data_table_revision(&rom_header->sHeader, &tbl_rev);
+	if (tbl_rev.major >= 2 && tbl_rev.minor >= 2)
 		return false;
 
 	bp->master_data_tbl =

@@ -32,7 +32,7 @@
 #include "command_table.h"
 #include "command_table_helper.h"
 #include "bios_parser_helper.h"
-#include "bios_parser.h"
+#include "bios_parser_types_internal.h"
 
 #define EXEC_BIOS_CMD_TABLE(command, params)\
 	(cgs_atom_exec_cmd_table(bp->ctx->cgs_device, \

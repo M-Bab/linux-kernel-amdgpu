@@ -23,23 +23,60 @@
  *
  */
 
-#ifndef __DAL_BIOS_PARSER_INTERFACE_H__
-#define __DAL_BIOS_PARSER_INTERFACE_H__
+#ifndef __DAL_BIOS_PARSER_TYPES_BIOS_H__
+#define __DAL_BIOS_PARSER_TYPES_BIOS_H__
 
 #include "dc_bios_types.h"
+#include "bios_parser_helper.h"
 
-struct adapter_service;
-struct bios_parser;
-
-struct bp_init_data {
-	struct dc_context *ctx;
-	uint8_t *bios;
+struct atom_data_revision {
+	uint32_t major;
+	uint32_t minor;
 };
 
-struct dc_bios *dal_bios_parser_create(
-	struct bp_init_data *init,
-	enum dce_version dce_version);
+struct object_info_table {
+	struct atom_data_revision revision;
+	union {
+		ATOM_OBJECT_HEADER *v1_1;
+		ATOM_OBJECT_HEADER_V3 *v1_3;
+	};
+};
 
-void dal_bios_parser_destroy(struct dc_bios **dcb);
+enum spread_spectrum_id {
+	SS_ID_UNKNOWN = 0,
+	SS_ID_DP1 = 0xf1,
+	SS_ID_DP2 = 0xf2,
+	SS_ID_LVLINK_2700MHZ = 0xf3,
+	SS_ID_LVLINK_1620MHZ = 0xf4
+};
 
-#endif /* __DAL_BIOS_PARSER_INTERFACE_H__ */
+struct bios_parser {
+	struct dc_bios base;
+	struct dc_context *ctx;
+
+	struct object_info_table object_info_tbl;
+	uint32_t object_info_tbl_offset;
+	ATOM_MASTER_DATA_TABLE *master_data_tbl;
+
+	uint8_t *bios;
+	uint32_t bios_size;
+
+#if defined(CONFIG_DRM_AMD_DAL_VBIOS_PRESENT)
+	const struct bios_parser_helper *bios_helper;
+#endif /* CONFIG_DRM_AMD_DAL_VBIOS_PRESENT */
+
+	const struct command_table_helper *cmd_helper;
+	struct cmd_tbl cmd_tbl;
+
+	uint8_t *bios_local_image;
+	enum lcd_scale lcd_scale;
+
+	bool remap_device_tags;
+	bool headless_no_opm;
+};
+
+/* Bios Parser from DC Bios */
+#define BP_FROM_DCB(dc_bios) \
+	container_of(dc_bios, struct bios_parser, base)
+
+#endif

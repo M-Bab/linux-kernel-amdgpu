@@ -821,7 +821,8 @@ static bool adapter_service_construct(
 	}
 
 	/* Integrated info is not provided on discrete ASIC. NULL is allowed */
-	as->integrated_info = dcb->funcs->create_integrated_info(dcb);
+	if (dcb->funcs->create_integrated_info)
+		as->integrated_info = dcb->funcs->create_integrated_info(dcb);
 
 	dcb->funcs->post_init(dcb, as);
 
