@@ -720,6 +720,11 @@ static bool is_timing_changed(const struct core_stream *cur_stream,
 	if (cur_stream->sink != new_stream->sink)
 		return true;
 
+	/* If output color space is changed, need to reprogram info frames */
+	if (cur_stream->public.output_color_space !=
+			new_stream->public.output_color_space)
+		return true;
+
 	return memcmp(
 		&cur_stream->public.timing,
 		&new_stream->public.timing,
