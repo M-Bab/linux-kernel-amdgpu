@@ -500,7 +500,8 @@ static void calc_v_total_for_static_ramp(struct core_freesync *core_freesync,
 static void reset_freesync_state_variables(struct freesync_state* state)
 {
 	state->static_ramp.ramp_is_active = false;
-	state->static_ramp.ramp_current_frame_duration_in_ns =
+	if (state->nominal_refresh_rate_in_micro_hz)
+		state->static_ramp.ramp_current_frame_duration_in_ns =
 			((unsigned int) (div64_u64(
 			(1000000000ULL * 1000000),
 			state->nominal_refresh_rate_in_micro_hz)));
