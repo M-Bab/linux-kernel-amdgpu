@@ -242,6 +242,7 @@ bool dm_get_platform_info(
 struct persistent_data_flag {
 	bool save_per_link;
 	bool save_per_edid;
+	bool save_per_mode;
 };
 
 /* Call to write data in registry editor for persistent data storage.
