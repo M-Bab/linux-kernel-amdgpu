@@ -2827,9 +2827,16 @@ void dm_restore_drm_connector_state(struct drm_device *dev, struct drm_connector
 		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 			struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
 
-			if (acrtc->target != NULL)
+			if (acrtc->target != NULL) {
 				acrtc->otg_inst =
 					dc_target_get_status(acrtc->target)->primary_otg_inst;
+
+				if (adev->dm.freesync_module)
+					mod_freesync_notify_mode_change(
+							adev->dm.freesync_module,
+							acrtc->target->streams,
+							acrtc->target->stream_count);
+			}
 		}
 
 		dc_target_release(current_target);
