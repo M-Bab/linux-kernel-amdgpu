@@ -2079,7 +2079,7 @@ static void dce110_prepare_pipe_for_context(
 	dce110_prepare_pipe_for_surface_commit(dc, pipe_ctx, context);
 }
 
-static enum dc_status dce110_apply_ctx_to_surface(
+static void dce110_apply_ctx_to_surface(
 		struct core_dc *dc,
 		struct validate_context *context)
 {
@@ -2098,7 +2098,6 @@ static enum dc_status dce110_apply_ctx_to_surface(
 				dce110_program_blending);
 	}
 
-	return DC_OK;
 }
 
 static void update_plane_surface(

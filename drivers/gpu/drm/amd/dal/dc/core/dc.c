@@ -1043,7 +1043,6 @@ bool dc_isr_commit_surfaces_to_target(
 {
 	int i, j;
 	struct core_dc *core_dc = DC_TO_CORE(dc);
-	int pipe_count = core_dc->res_pool->pipe_count;
 	struct validate_context *context = core_dc->temp_flip_context;
 
 	*context = *core_dc->current_context;
