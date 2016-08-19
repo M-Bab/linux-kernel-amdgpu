@@ -1015,6 +1015,9 @@ bool dc_pre_commit_surfaces_to_target(
 		if (target == core_dc->current_context->targets[i])
 			break;
 
+	if (i == core_dc->current_context->target_count)
+		return false;
+
 	target_status = &core_dc->current_context->target_status[i];
 
 	if (new_surface_count == target_status->surface_count) {
@@ -1132,9 +1135,9 @@ bool dc_pre_commit_surfaces_to_target(
 				&core_dc->current_context->res_ctx);
 
 unexpected_fail:
-val_ctx_fail:
 	resource_validate_ctx_destruct(context);
 	dm_free(context);
+val_ctx_fail:
 
 	return ret;
 }
@@ -1148,9 +1151,38 @@ bool dc_isr_commit_surfaces_to_target(
 	int i, j;
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	struct validate_context *context = core_dc->temp_flip_context;
+	struct core_target *target = DC_TARGET_TO_CORE(dc_target);
+	struct dc_target_status *target_status = NULL;
+	bool surface_needs_programming = false;
+
+	if (core_dc->current_context->target_count == 0)
+		return false;
+
+	/* Cannot commit surface to a target that is not commited */
+	for (i = 0; i < core_dc->current_context->target_count; i++)
+		if (target == core_dc->current_context->targets[i])
+			break;
+	if (i == core_dc->current_context->target_count)
+		return false;
+
+	target_status = &core_dc->current_context->target_status[i];
+
+	if (new_surface_count != target_status->surface_count)
+		surface_needs_programming = true;
+	else
+		for (i = 0; i < target_status->surface_count; i++) {
+			struct dc_surface temp_surf = { 0 };
+
+			temp_surf = *target_status->surfaces[i];
+			temp_surf.address = new_surfaces[i]->address;
+
+			if (memcmp(&temp_surf, new_surfaces[i], sizeof(temp_surf)) != 0) {
+				surface_needs_programming = true;
+				break;
+			}
+		}
 
 	*context = *core_dc->current_context;
-
 	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		struct pipe_ctx *cur_pipe = &context->res_ctx.pipe_ctx[i];
 
@@ -1177,11 +1209,13 @@ bool dc_isr_commit_surfaces_to_target(
 					DC_SURFACE_TO_CORE(new_surfaces[i]))
 				continue;
 
-			resource_build_scaling_params(new_surfaces[i], pipe_ctx);
+			if (surface_needs_programming) {
+				resource_build_scaling_params(new_surfaces[i], pipe_ctx);
 
-			if (dc->debug.surface_visual_confirm) {
-				pipe_ctx->scl_data.recout.height -= 2;
-				pipe_ctx->scl_data.recout.width -= 2;
+				if (dc->debug.surface_visual_confirm) {
+					pipe_ctx->scl_data.recout.height -= 2;
+					pipe_ctx->scl_data.recout.width -= 2;
+				}
 			}
 
 			core_dc->hwss.pipe_control_lock(
@@ -1193,7 +1227,8 @@ bool dc_isr_commit_surfaces_to_target(
 			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
 		}
 
-	core_dc->hwss.apply_ctx_to_surface(core_dc, context);
+	if (surface_needs_programming)
+		core_dc->hwss.apply_ctx_to_surface(core_dc, context);
 
 	/* Go in reverse order so that all pipes are unlocked simultaneously
 	 * when pipe 0 is unlocked
