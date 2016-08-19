@@ -498,6 +498,40 @@ void dc_destroy(struct dc **dc)
 	*dc = NULL;
 }
 
+static bool is_validation_required(
+		const struct core_dc *dc,
+		const struct dc_validation_set set[],
+		int set_count)
+{
+	const struct validate_context *context = dc->current_context;
+	int i, j;
+
+	if (context->target_count != set_count)
+		return true;
+
+	for (i = 0; i < set_count; i++) {
+
+		if (set[i].surface_count != context->target_status[i].surface_count)
+			return true;
+		if (!is_target_unchanged(DC_TARGET_TO_CORE(set[i].target), context->targets[i]))
+			return true;
+
+		for (j = 0; j < set[i].surface_count; j++) {
+			struct dc_surface temp_surf = { 0 };
+
+			temp_surf = *context->target_status[i].surfaces[j];
+			temp_surf.clip_rect = set[i].surfaces[j]->clip_rect;
+			temp_surf.dst_rect.x = set[i].surfaces[j]->dst_rect.x;
+			temp_surf.dst_rect.y = set[i].surfaces[j]->dst_rect.y;
+
+			if (memcmp(&temp_surf, set[i].surfaces[j], sizeof(temp_surf)) != 0)
+				return true;
+		}
+	}
+
+	return false;
+}
+
 bool dc_validate_resources(
 		const struct dc *dc,
 		const struct dc_validation_set set[],
@@ -506,6 +540,9 @@ bool dc_validate_resources(
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	enum dc_status result = DC_ERROR_UNEXPECTED;
 	struct validate_context *context;
+
+	if (!is_validation_required(core_dc, set, set_count))
+		return true;
 
 	context = dm_alloc(sizeof(struct validate_context));
 	if(context == NULL)
@@ -971,7 +1008,35 @@ bool dc_pre_commit_surfaces_to_target(
 	int new_enabled_surface_count = 0;
 
 	if (core_dc->current_context->target_count == 0)
-		return NULL;
+		return false;
+
+	/* Cannot commit surface to a target that is not commited */
+	for (i = 0; i < core_dc->current_context->target_count; i++)
+		if (target == core_dc->current_context->targets[i])
+			break;
+
+	target_status = &core_dc->current_context->target_status[i];
+
+	if (new_surface_count == target_status->surface_count) {
+		bool skip_pre = true;
+
+		for (i = 0; i < target_status->surface_count; i++) {
+			struct dc_surface temp_surf = { 0 };
+
+			temp_surf = *target_status->surfaces[i];
+			temp_surf.clip_rect = new_surfaces[i]->clip_rect;
+			temp_surf.dst_rect.x = new_surfaces[i]->dst_rect.x;
+			temp_surf.dst_rect.y = new_surfaces[i]->dst_rect.y;
+
+			if (memcmp(&temp_surf, new_surfaces[i], sizeof(temp_surf)) != 0) {
+				skip_pre = false;
+				break;
+			}
+		}
+
+		if (skip_pre)
+			return true;
+	}
 
 	context = dm_alloc(sizeof(struct validate_context));
 
@@ -982,13 +1047,6 @@ bool dc_pre_commit_surfaces_to_target(
 	}
 
 	resource_validate_ctx_copy_construct(core_dc->current_context, context);
-
-	/* Cannot commit surface to a target that is not commited */
-	for (i = 0; i < context->target_count; i++)
-		if (target == context->targets[i])
-			break;
-
-	target_status = &context->target_status[i];
 
 	for (i = 0; i < target_status->surface_count; i++)
 		if (target_status->surfaces[i]->visible)

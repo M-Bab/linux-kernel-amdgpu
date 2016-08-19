@@ -741,7 +741,7 @@ static bool are_stream_backends_same(
 	return true;
 }
 
-static bool is_target_unchanged(
+bool is_target_unchanged(
 	const struct core_target *old_target, const struct core_target *target)
 {
 	int i;

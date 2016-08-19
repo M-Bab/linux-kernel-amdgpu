@@ -93,6 +93,8 @@ struct pipe_ctx *find_idle_secondary_pipe(struct resource_context *res_ctx);
 bool resource_is_stream_unchanged(
 	const struct validate_context *old_context, struct core_stream *stream);
 
+bool is_target_unchanged(
+	const struct core_target *old_target, const struct core_target *target);
 bool resource_validate_attach_surfaces(
 		const struct dc_validation_set set[],
 		int set_count,
