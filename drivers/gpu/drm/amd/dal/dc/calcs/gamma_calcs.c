@@ -1316,7 +1316,7 @@ bool calculate_regamma_params(struct pwl_params *params,
 	rgb_oem = dm_alloc(sizeof(*rgb_oem) * (FLOAT_GAMMA_RAMP_MAX + 3));
 	if (!rgb_oem)
 		goto rgb_oem_alloc_fail;
-	axix_x_256 = dm_alloc(sizeof(*axix_x_256) * 256);
+	axix_x_256 = dm_alloc(sizeof(*axix_x_256) * (256 + 3));
 	if (!axix_x_256)
 		goto axix_x_256_alloc_fail;
 	coeff128_oem = dm_alloc(sizeof(*coeff128_oem) * (256 + 3));
