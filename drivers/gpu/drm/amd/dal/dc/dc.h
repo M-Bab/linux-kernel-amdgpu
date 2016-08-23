@@ -178,7 +178,7 @@ struct dc_plane_info {
 	enum surface_pixel_format format;
 	enum dc_rotation_angle rotation;
 	enum plane_stereo_format stereo_format;
-	enum dc_color_space color_space;
+	enum dc_color_space color_space; /*todo: wrong place, fits in scaling info*/
 	bool visible;
 };
 

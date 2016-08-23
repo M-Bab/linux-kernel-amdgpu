@@ -148,14 +148,6 @@ struct hw_sequencer_funcs {
 			int vmin, int vmax);
 };
 
-void hw_sequencer_program_pipe_tree(
-	struct core_dc *dc,
-	struct validate_context *context,
-	struct pipe_ctx *const head_pipe_ctx,
-	void (*program_func)(struct core_dc *dc,
-			struct pipe_ctx *pipe_ctx,
-			struct validate_context *context));
-
 void color_space_to_black_color(
 		enum dc_color_space colorspace,
 	struct tg_color *black_color);

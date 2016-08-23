@@ -1403,19 +1403,7 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 			return;
 		}
 
-		if (updates[i].flip_addr)
-			core_dc->hwss.pipe_control_lock(
-						core_dc->ctx,
-						pipe_ctx->pipe_idx,
-						PIPE_LOCK_CONTROL_SURFACE,
-						true);
-
 		if (updates[i].plane_info || updates[i].scaling_info || is_new_surface[i]) {
-
-			if (updates[i].flip_addr) {
-				surface->public.address = updates[i].flip_addr->address;
-				surface->public.flip_immediate = updates[i].flip_addr->flip_immediate;
-			}
 
 			if (updates[i].plane_info) {
 				surface->public.color_space = updates[i].plane_info->color_space;
@@ -1439,13 +1427,17 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 				pipe_ctx->scl_data.recout.height -= 2;
 				pipe_ctx->scl_data.recout.width -= 2;
 			}
-			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
 
-
-		} else if (updates[i].flip_addr) {
+		}
+		if (updates[i].flip_addr) {
 			surface->public.address = updates[i].flip_addr->address;
 			surface->public.flip_immediate = updates[i].flip_addr->flip_immediate;
 
+			core_dc->hwss.pipe_control_lock(
+						core_dc->ctx,
+						pipe_ctx->pipe_idx,
+						PIPE_LOCK_CONTROL_SURFACE,
+						true);
 			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
 		}
 

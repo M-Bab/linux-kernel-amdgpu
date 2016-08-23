@@ -1517,29 +1517,21 @@ static void set_default_colors(struct pipe_ctx *pipe_ctx)
 					pipe_ctx->opp, &default_adjust);
 }
 
-static bool blender_configuration_changed(struct pipe_ctx *pipe_ctx, struct pipe_ctx *old_pipe_ctx)
-{
-	if (pipe_ctx->bottom_pipe && !old_pipe_ctx->bottom_pipe)
-		return true;
-
-	if (!pipe_ctx->bottom_pipe && old_pipe_ctx->bottom_pipe)
-		return true;
-
-	return false;
-}
-
 static void program_blender_if_needed(const struct core_dc *dc,
 		struct pipe_ctx *pipe_ctx)
 {
-	struct pipe_ctx *old_pipe_ctx = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
 	enum blender_mode blender_mode = BLENDER_MODE_CURRENT_PIPE;
 
-	if (!old_pipe_ctx->stream || blender_configuration_changed(pipe_ctx, old_pipe_ctx)) {
-		if (pipe_ctx->bottom_pipe)
-			blender_mode = BLENDER_MODE_BLENDING;
-		dc->hwss.set_blender_mode(
-			(struct core_dc *)dc, pipe_ctx->pipe_idx, blender_mode);
+	if (pipe_ctx->bottom_pipe) {
+		if (pipe_ctx->bottom_pipe->surface->public.visible) {
+			if (pipe_ctx->surface->public.visible)
+				blender_mode = BLENDER_MODE_BLENDING;
+			else
+				blender_mode = BLENDER_MODE_OTHER_PIPE;
+		}
 	}
+	dc->hwss.set_blender_mode(
+		(struct core_dc *)dc, pipe_ctx->pipe_idx, blender_mode);
 }
 
 /**
@@ -1893,13 +1885,6 @@ static void dce110_set_bandwidth(struct core_dc *dc)
 	dc->hwss.set_display_clock(dc->current_context);
 }
 
-static void dce110_program_blending(struct core_dc *dc,
-		struct pipe_ctx *pipe_ctx,
-		struct validate_context *context)
-{
-	program_blender_if_needed(dc, pipe_ctx);
-}
-
 static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 		struct pipe_ctx *pipe_ctx,
 		struct validate_context *context)
@@ -1914,15 +1899,14 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 
 	memset(&tbl_entry, 0, sizeof(tbl_entry));
 
-	if (blender_configuration_changed(pipe_ctx, &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx]))
-		dc->hwss.pipe_control_lock(
-				dc->ctx,
-				pipe_ctx->pipe_idx,
-				PIPE_LOCK_CONTROL_GRAPHICS |
-				PIPE_LOCK_CONTROL_SCL |
-				PIPE_LOCK_CONTROL_BLENDER |
-				PIPE_LOCK_CONTROL_MODE,
-				true);
+	dc->hwss.pipe_control_lock(
+			dc->ctx,
+			pipe_ctx->pipe_idx,
+			PIPE_LOCK_CONTROL_GRAPHICS |
+			PIPE_LOCK_CONTROL_SCL |
+			PIPE_LOCK_CONTROL_BLENDER |
+			PIPE_LOCK_CONTROL_MODE,
+			true);
 
 	if (dc->current_context)
 		old_pipe = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
@@ -2079,16 +2063,14 @@ static void dce110_apply_ctx_to_surface(
 	int i;
 
 	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
-		struct pipe_ctx *head_pipe = &context->res_ctx.pipe_ctx[i];
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
-		if (!head_pipe->surface || head_pipe->top_pipe != NULL)
+		if (!pipe_ctx->surface)
 			continue;
 
-		hw_sequencer_program_pipe_tree(dc, context, head_pipe,
-				dce110_program_front_end_for_pipe);
+		dce110_program_front_end_for_pipe(dc, pipe_ctx, context);
+		program_blender_if_needed(dc, pipe_ctx);
 
-		hw_sequencer_program_pipe_tree(dc, context, head_pipe,
-				dce110_program_blending);
 	}
 
 }

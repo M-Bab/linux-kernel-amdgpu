@@ -917,9 +917,9 @@ static bool dce110_validate_surface_sets(
 		if (set[i].surface_count > 2)
 			return false;
 
-		if (set[i].surfaces[0]->clip_rect.width
+		if (set[i].surfaces[0]->src_rect.width
 				!= set[i].target->streams[0]->src.width
-				|| set[i].surfaces[0]->clip_rect.height
+				|| set[i].surfaces[0]->src_rect.height
 				!= set[i].target->streams[0]->src.height)
 			return false;
 		if (set[i].surfaces[0]->format
