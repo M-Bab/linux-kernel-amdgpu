@@ -1204,19 +1204,23 @@ bool dc_isr_commit_surfaces_to_target(
 	for (i = 0; i < new_surface_count; i++)
 		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
 			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
+			struct pipe_ctx *old_pipe_ctx = &core_dc->current_context->res_ctx.pipe_ctx[j];
 
 			if (pipe_ctx->surface !=
 					DC_SURFACE_TO_CORE(new_surfaces[i]))
 				continue;
 
-			if (surface_needs_programming) {
-				resource_build_scaling_params(new_surfaces[i], pipe_ctx);
+			resource_build_scaling_params(new_surfaces[i], pipe_ctx);
 
-				if (dc->debug.surface_visual_confirm) {
-					pipe_ctx->scl_data.recout.height -= 2;
-					pipe_ctx->scl_data.recout.width -= 2;
-				}
+			if (dc->debug.surface_visual_confirm) {
+				pipe_ctx->scl_data.recout.height -= 2;
+				pipe_ctx->scl_data.recout.width -= 2;
 			}
+
+			if (memcmp(&pipe_ctx->scl_data,
+					&old_pipe_ctx->scl_data,
+					sizeof(pipe_ctx->scl_data)))
+				surface_needs_programming = true;
 
 			core_dc->hwss.pipe_control_lock(
 					core_dc->ctx,
