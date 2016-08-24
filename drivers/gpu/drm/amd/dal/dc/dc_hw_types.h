@@ -65,6 +65,7 @@ struct dc_plane_address {
 	union {
 		struct{
 			PHYSICAL_ADDRESS_LOC addr;
+			PHYSICAL_ADDRESS_LOC meta;
 		} grph;
 
 		/*stereo*/
@@ -102,6 +103,8 @@ union plane_size {
 		 * is 32 pixel aligned.
 		 */
 		uint32_t surface_pitch;
+
+		uint32_t meta_pitch;
 	} grph;
 
 	struct {

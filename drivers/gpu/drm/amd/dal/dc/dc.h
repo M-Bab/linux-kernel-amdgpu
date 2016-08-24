@@ -168,6 +168,7 @@ struct dc_surface {
 	union plane_size plane_size;
 	union dc_tiling_info tiling_info;
 	enum dc_color_space color_space;
+	bool compressed;
 
 	enum surface_pixel_format format;
 	enum dc_rotation_angle rotation;

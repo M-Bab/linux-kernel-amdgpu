@@ -79,7 +79,8 @@ struct mem_input_funcs {
 		enum surface_pixel_format format,
 		union dc_tiling_info *tiling_info,
 		union plane_size *plane_size,
-		enum dc_rotation_angle rotation);
+		enum dc_rotation_angle rotation,
+		bool compressed);
 
 	bool (*mem_input_is_flip_pending)(struct mem_input *mem_input);
 };

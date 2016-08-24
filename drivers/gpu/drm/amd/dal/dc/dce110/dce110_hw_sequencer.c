@@ -1645,7 +1645,8 @@ static void set_plane_config(
 			surface->public.format,
 			&surface->public.tiling_info,
 			&surface->public.plane_size,
-			surface->public.rotation);
+			surface->public.rotation,
+			false);
 
 	if (dc->public.config.gpu_vm_support)
 		mi->funcs->mem_input_program_pte_vm(
@@ -1988,7 +1989,8 @@ static void dce110_program_front_end_for_pipe(
 			surface->public.format,
 			&surface->public.tiling_info,
 			&surface->public.plane_size,
-			surface->public.rotation);
+			surface->public.rotation,
+			false);
 
 	if (dc->public.config.gpu_vm_support)
 		mi->funcs->mem_input_program_pte_vm(
