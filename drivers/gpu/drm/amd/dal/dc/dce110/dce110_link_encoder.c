@@ -36,6 +36,14 @@
 #include "dce/dce_11_0_sh_mask.h"
 #include "dce/dce_11_0_enum.h"
 
+#ifndef ATOM_S2_CURRENT_BL_LEVEL_MASK
+#define ATOM_S2_CURRENT_BL_LEVEL_MASK   0x0000FF00L
+#endif
+
+#ifndef ATOM_S2_CURRENT_BL_LEVEL_SHIFT
+#define ATOM_S2_CURRENT_BL_LEVEL_SHIFT  8
+#endif
+
 #define LINK_REG(reg)\
 	(enc110->link_regs->reg)
 
@@ -44,6 +52,9 @@
 
 #define BL_REG(reg)\
 	(enc110->bl_regs->reg)
+
+#define DMCU_REG(reg)\
+	(enc110->dmcu_regs->reg)
 
 /* For current ASICs pixel clock - 600MHz */
 #define MAX_ENCODER_CLK 600000
@@ -102,7 +113,8 @@ static const struct link_encoder_funcs dce110_lnk_enc_funcs = {
 	.dp_set_phy_pattern = dce110_link_encoder_dp_set_phy_pattern,
 	.update_mst_stream_allocation_table =
 		dce110_link_encoder_update_mst_stream_allocation_table,
-	.set_lcd_backlight_level = dce110_link_encoder_set_lcd_backlight_level,
+	.set_dmcu_backlight_level =
+			dce110_link_encoder_set_dmcu_backlight_level,
 	.backlight_control = dce110_link_encoder_edp_backlight_control,
 	.power_control = dce110_link_encoder_edp_power_control,
 	.connect_dig_be_to_fe = dce110_link_encoder_connect_dig_be_to_fe,
@@ -1013,7 +1025,8 @@ bool dce110_link_encoder_construct(
 	const struct encoder_init_data *init_data,
 	const struct dce110_link_enc_registers *link_regs,
 	const struct dce110_link_enc_aux_registers *aux_regs,
-	const struct dce110_link_enc_bl_registers *bl_regs)
+	const struct dce110_link_enc_bl_registers *bl_regs,
+	const struct dce110_link_enc_dmcu_registers *dmcu_regs)
 {
 	struct graphics_object_encoder_cap_info enc_cap_info = {0};
 	struct adapter_service *as = init_data->adapter_service;
@@ -1076,6 +1089,7 @@ bool dce110_link_encoder_construct(
 	enc110->link_regs = link_regs;
 	enc110->aux_regs = aux_regs;
 	enc110->bl_regs = bl_regs;
+	enc110->dmcu_regs = dmcu_regs;
 
 	switch (enc110->base.transmitter) {
 	case TRANSMITTER_UNIPHY_A:
@@ -1747,138 +1761,76 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 	} while (retries < DP_MST_UPDATE_MAX_RETRY);
 }
 
-/* black light programming */
-void dce110_link_encoder_set_lcd_backlight_level(
+void dce110_link_encoder_set_dmcu_backlight_level(
 	struct link_encoder *enc,
-	uint32_t level)
+	uint32_t level,
+	uint32_t frame_ramp)
 {
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
 	struct dc_context *ctx = enc110->base.ctx;
+	unsigned int dmcu_max_retry_on_wait_reg_ready = 801;
+	unsigned int dmcu_wait_reg_ready_interval = 100;
 
-	const uint32_t backlight_update_pending_max_retry = 1000;
+	unsigned int backlight_17bit = level * 0x10101;
+	unsigned char temp_uchar =
+			(unsigned char)(((backlight_17bit & 0x80) >> 7) & 1);
+	unsigned int regValue;
+	uint32_t pwmUserLevel;
+	uint32_t masterCmd;
+	uint32_t masterComCntl;
+	uint32_t s2;
 
-	uint32_t backlight;
-	uint32_t backlight_period;
-	uint32_t backlight_lock;
+	backlight_17bit = (backlight_17bit >> 8) + temp_uchar;
 
-	uint32_t i;
-	uint32_t backlight_24bit;
-	uint32_t backlight_17bit;
-	uint32_t backlight_16bit;
-	uint32_t masked_pwm_period;
-	uint8_t rounding_bit;
-	uint8_t bit_count;
-	uint64_t active_duty_cycle;
+	/* waitDMCUReadyForCmd */
+	do {
+		dm_delay_in_microseconds(ctx, dmcu_wait_reg_ready_interval);
+		regValue = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG));
+		dmcu_max_retry_on_wait_reg_ready--;
+	} while
+	((MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & regValue) !=
+		(MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & 0) &&
+		dmcu_max_retry_on_wait_reg_ready > 0);
 
-	backlight = dm_read_reg(ctx, BL_REG(BL_PWM_CNTL));
-	backlight_period = dm_read_reg(ctx, BL_REG(BL_PWM_PERIOD_CNTL));
-	backlight_lock = dm_read_reg(ctx, BL_REG(BL_PWM_GRP1_REG_LOCK));
-
-	/*
-	 * 1. Convert 8-bit value to 17 bit U1.16 format
-	 * (1 integer, 16 fractional bits)
-	 */
-
-	/* 1.1 multiply 8 bit value by 0x10101 to get a 24 bit value,
-	 * effectively multiplying value by 256/255
-	 * eg. for a level of 0xEF, backlight_24bit = 0xEF * 0x10101 = 0xEFEFEF
-	 */
-	backlight_24bit = level * 0x10101;
-
-	/* 1.2 The upper 16 bits of the 24 bit value is the fraction, lower 8
-	 * used for rounding, take most significant bit of fraction for
-	 * rounding, e.g. for 0xEFEFEF, rounding bit is 1
-	 */
-	rounding_bit = (backlight_24bit >> 7) & 1;
-
-	/* 1.3 Add the upper 16 bits of the 24 bit value with the rounding bit
-	 * resulting in a 17 bit value e.g. 0xEFF0 = (0xEFEFEF >> 8) + 1
-	 */
-	backlight_17bit = (backlight_24bit >> 8) + rounding_bit;
-
-	/*
-	 * 2. Find  16 bit backlight active duty cycle, where 0 <= backlight
-	 * active duty cycle <= backlight period
-	 */
-
-	/* 2.1 Apply bitmask for backlight period value based on value of BITCNT
-	 */
-	{
-		uint32_t pwm_period_bitcnt = get_reg_field_value(
-			backlight_period,
-			BL_PWM_PERIOD_CNTL,
-			BL_PWM_PERIOD_BITCNT);
-		if (pwm_period_bitcnt == 0)
-			bit_count = 16;
-		else
-			bit_count = pwm_period_bitcnt;
-	}
-
-	/* e.g. maskedPwmPeriod = 0x24 when bitCount is 6 */
-	masked_pwm_period =
-	get_reg_field_value(
-		backlight_period,
-		BL_PWM_PERIOD_CNTL,
-		BL_PWM_PERIOD) & ((1 << bit_count) - 1);
-
-	/* 2.2 Calculate integer active duty cycle required upper 16 bits
-	 * contain integer component, lower 16 bits contain fractional component
-	 * of active duty cycle e.g. 0x21BDC0 = 0xEFF0 * 0x24
-	 */
-	active_duty_cycle = backlight_17bit * masked_pwm_period;
-
-	/* 2.3 Calculate 16 bit active duty cycle from integer and fractional
-	 * components shift by bitCount then mask 16 bits and add rounding bit
-	 * from MSB of fraction e.g. 0x86F7 = ((0x21BDC0 >> 6) & 0xFFF) + 0
-	 */
-	backlight_16bit = active_duty_cycle >> bit_count;
-	backlight_16bit &= 0xFFFF;
-	backlight_16bit += (active_duty_cycle >> (bit_count - 1)) & 0x1;
+	/* setDMCUParam_BL */
+	pwmUserLevel = dm_read_reg(ctx, DMCU_REG(BL1_PWM_USER_LEVEL));
 	set_reg_field_value(
-		backlight,
-		backlight_16bit,
-		BL_PWM_CNTL,
-		BL_ACTIVE_INT_FRAC_CNT);
+			pwmUserLevel,
+			backlight_17bit,
+			BL1_PWM_USER_LEVEL,
+			BL1_PWM_USER_LEVEL);
+	dm_write_reg(ctx, DMCU_REG(BL1_PWM_USER_LEVEL), pwmUserLevel);
 
-	/*
-	 * 3. Program register with updated value
-	 */
+	/* write ramp */
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_DATA_REG1), frame_ramp);
 
-	/* 3.1 Lock group 2 backlight registers */
+	/* setDMCUParam_Cmd */
+	masterCmd = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG));
 	set_reg_field_value(
-		backlight_lock,
-		1,
-		BL_PWM_GRP1_REG_LOCK,
-		BL_PWM_GRP1_IGNORE_MASTER_LOCK_EN);
+			masterCmd,
+			0x67,
+			MASTER_COMM_CMD_REG,
+			MASTER_COMM_CMD_REG_BYTE0);
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG), masterCmd);
+
+	/* notifyDMCUMsg */
+	masterComCntl = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG));
 	set_reg_field_value(
-		backlight_lock,
-		1,
-		BL_PWM_GRP1_REG_LOCK,
-		BL_PWM_GRP1_REG_LOCK);
-	dm_write_reg(ctx, BL_REG(BL_PWM_GRP1_REG_LOCK), backlight_lock);
+			masterComCntl,
+			1,
+			MASTER_COMM_CNTL_REG,
+			MASTER_COMM_INTERRUPT);
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG), masterComCntl);
 
-	/* 3.2 Write new active duty cycle */
-	dm_write_reg(ctx, BL_REG(BL_PWM_CNTL), backlight);
+	/* UpdateRequestedBacklightLevel */
+	s2 = dm_read_reg(ctx, DMCU_REG(BIOS_SCRATCH_2));
 
-	/* 3.3 Unlock group 2 backlight registers */
-	set_reg_field_value(
-		backlight_lock,
-		0,
-		BL_PWM_GRP1_REG_LOCK,
-		BL_PWM_GRP1_REG_LOCK);
-	dm_write_reg(ctx, BL_REG(BL_PWM_GRP1_REG_LOCK), backlight_lock);
+	s2 &= ~ATOM_S2_CURRENT_BL_LEVEL_MASK;
+	level &= (ATOM_S2_CURRENT_BL_LEVEL_MASK >>
+				ATOM_S2_CURRENT_BL_LEVEL_SHIFT);
+	s2 |= (level << ATOM_S2_CURRENT_BL_LEVEL_SHIFT);
 
-	/* 5.4.4 Wait for pending bit to be cleared */
-	for (i = 0; i < backlight_update_pending_max_retry; ++i) {
-		backlight_lock = dm_read_reg(ctx, BL_REG(BL_PWM_GRP1_REG_LOCK));
-		if (!get_reg_field_value(
-			backlight_lock,
-			BL_PWM_GRP1_REG_LOCK,
-			BL_PWM_GRP1_REG_UPDATE_PENDING))
-			break;
-
-		udelay(10);
-	}
+	dm_write_reg(ctx, DMCU_REG(BIOS_SCRATCH_2), s2);
 }
 
 void dce110_link_encoder_connect_dig_be_to_fe(

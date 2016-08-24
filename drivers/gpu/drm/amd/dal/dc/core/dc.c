@@ -253,7 +253,6 @@ static bool set_gamut_remap(struct dc *dc,
 	return ret;
 }
 
-
 /* This function is not expected to fail, proper implementation of
  * validation will prevent this from ever being called for unsupported
  * configurations.
@@ -297,6 +296,20 @@ static void stream_update_scaling(
 	}
 }
 
+static bool set_backlight(struct dc *dc, unsigned int backlight_level,
+						unsigned int frame_ramp)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	int i;
+
+	for (i = 0; i < core_dc->link_count; i++)
+		dc_link_set_backlight_level(&core_dc->links[i]->public,
+				backlight_level, frame_ramp);
+
+	return true;
+
+}
+
 static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 {
 	core_dc->public.stream_funcs.stream_update_scaling = stream_update_scaling;
@@ -307,6 +320,9 @@ static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 
 	core_dc->public.stream_funcs.set_gamut_remap =
 			set_gamut_remap;
+
+	core_dc->public.stream_funcs.set_backlight =
+			set_backlight;
 }
 
 static bool construct(struct core_dc *dc,

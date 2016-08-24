@@ -39,6 +39,14 @@ struct dce110_link_enc_bl_registers {
 	uint32_t LVTMA_PWRSEQ_STATE;
 };
 
+struct dce110_link_enc_dmcu_registers {
+	uint32_t BL1_PWM_USER_LEVEL;
+	uint32_t MASTER_COMM_DATA_REG1;
+	uint32_t MASTER_COMM_CMD_REG;
+	uint32_t MASTER_COMM_CNTL_REG;
+	uint32_t BIOS_SCRATCH_2;
+};
+
 struct dce110_link_enc_aux_registers {
 	uint32_t AUX_CONTROL;
 	uint32_t AUX_DPHY_RX_CONTROL0;
@@ -70,6 +78,7 @@ struct dce110_link_encoder {
 	const struct dce110_link_enc_registers *link_regs;
 	const struct dce110_link_enc_aux_registers *aux_regs;
 	const struct dce110_link_enc_bl_registers *bl_regs;
+	const struct dce110_link_enc_dmcu_registers *dmcu_regs;
 };
 
 bool dce110_link_encoder_construct(
@@ -77,7 +86,9 @@ bool dce110_link_encoder_construct(
 	const struct encoder_init_data *init_data,
 	const struct dce110_link_enc_registers *link_regs,
 	const struct dce110_link_enc_aux_registers *aux_regs,
-	const struct dce110_link_enc_bl_registers *bl_regs);
+	const struct dce110_link_enc_bl_registers *bl_regs,
+	const struct dce110_link_enc_dmcu_registers *dmcu_regs);
+
 bool dce110_link_encoder_validate_dvi_output(
 	const struct dce110_link_encoder *enc110,
 	enum signal_type connector_signal,
@@ -154,9 +165,10 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 	struct link_encoder *enc,
 	const struct link_mst_stream_allocation_table *table);
 
-void dce110_link_encoder_set_lcd_backlight_level(
+void dce110_link_encoder_set_dmcu_backlight_level(
 	struct link_encoder *enc,
-	uint32_t level);
+	uint32_t level,
+	uint32_t frame_ramp);
 
 void dce110_link_encoder_edp_backlight_control(
 	struct link_encoder *enc,

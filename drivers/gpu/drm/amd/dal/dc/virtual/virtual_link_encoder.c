@@ -74,9 +74,10 @@ static void virtual_link_encoder_update_mst_stream_allocation_table(
 	struct link_encoder *enc,
 	const struct link_mst_stream_allocation_table *table) {}
 
-static void virtual_link_encoder_set_lcd_backlight_level(
+static void virtual_link_encoder_set_dmcu_backlight_level(
 	struct link_encoder *enc,
-	uint32_t level) {}
+	uint32_t level,
+	uint32_t frame_ramp) {}
 
 static void virtual_link_encoder_edp_backlight_control(
 	struct link_encoder *enc,
@@ -111,7 +112,8 @@ static const struct link_encoder_funcs virtual_lnk_enc_funcs = {
 	.dp_set_phy_pattern = virtual_link_encoder_dp_set_phy_pattern,
 	.update_mst_stream_allocation_table =
 		virtual_link_encoder_update_mst_stream_allocation_table,
-	.set_lcd_backlight_level = virtual_link_encoder_set_lcd_backlight_level,
+	.set_dmcu_backlight_level =
+			virtual_link_encoder_set_dmcu_backlight_level,
 	.backlight_control = virtual_link_encoder_edp_backlight_control,
 	.power_control = virtual_link_encoder_edp_power_control,
 	.connect_dig_be_to_fe = virtual_link_encoder_connect_dig_be_to_fe,

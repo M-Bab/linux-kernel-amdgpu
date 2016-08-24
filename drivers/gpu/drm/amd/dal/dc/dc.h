@@ -69,6 +69,8 @@ struct dc_stream_funcs {
 			const struct rect *dst);
 	bool (*set_gamut_remap)(struct dc *dc,
 			const struct dc_stream **stream, int num_streams);
+	bool (*set_backlight)(struct dc *dc, unsigned int backlight_level,
+			unsigned int frame_ramp);
 };
 
 /* Structure to hold configuration flags set by dm at dc creation. */
@@ -494,7 +496,8 @@ const struct graphics_object_id dc_get_link_id_at_index(
 		struct dc *dc, uint32_t link_index);
 
 /* Set backlight level of an embedded panel (eDP, LVDS). */
-bool dc_link_set_backlight_level(const struct dc_link *dc_link, uint32_t level);
+bool dc_link_set_backlight_level(const struct dc_link *dc_link, uint32_t level,
+		uint32_t frame_ramp);
 
 /* Request DC to detect if there is a Panel connected.
  * boot - If this call is during initial boot.

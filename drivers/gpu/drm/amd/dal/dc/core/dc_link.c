@@ -1372,7 +1372,8 @@ enum dc_status dc_link_validate_mode_timing(
 	return DC_OK;
 }
 
-bool dc_link_set_backlight_level(const struct dc_link *public, uint32_t level)
+bool dc_link_set_backlight_level(const struct dc_link *public, uint32_t level,
+		uint32_t frame_ramp)
 {
 	struct core_link *link = DC_LINK_TO_CORE(public);
 	struct dc_context *ctx = link->ctx;
@@ -1381,8 +1382,10 @@ bool dc_link_set_backlight_level(const struct dc_link *public, uint32_t level)
 			LOG_MINOR_BACKLIGHT_INTERFACE,
 			"New Backlight level: %d (0x%X)\n", level, level);
 
-	link->link_enc->funcs->set_lcd_backlight_level(link->link_enc, level);
-
+	/* always assume dmcu is running */
+	link->link_enc->funcs->set_dmcu_backlight_level
+						(link->link_enc, level,
+						frame_ramp);
 	return true;
 }
 

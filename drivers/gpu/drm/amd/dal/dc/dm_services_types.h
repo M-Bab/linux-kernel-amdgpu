@@ -156,4 +156,41 @@ struct dm_pp_display_configuration {
 	uint32_t line_time_in_us;
 };
 
+struct dm_bl_data_point {
+		/* Brightness level in percentage */
+		uint8_t luminance;
+		/* Brightness level as effective value in range 0-255,
+		 * corresponding to above percentage
+		 */
+		uint8_t signalLevel;
+};
+
+/* Total size of the structure should not exceed 256 bytes */
+struct dm_acpi_atif_backlight_caps {
+
+
+	uint16_t size; /* Bytes 0-1 (2 bytes) */
+	uint16_t flags; /* Byted 2-3 (2 bytes) */
+	uint8_t  errorCode; /* Byte 4 */
+	uint8_t  acLevelPercentage; /* Byte 5 */
+	uint8_t  dcLevelPercentage; /* Byte 6 */
+	uint8_t  minInputSignal; /* Byte 7 */
+	uint8_t  maxInputSignal; /* Byte 8 */
+	uint8_t  numOfDataPoints; /* Byte 9 */
+	struct dm_bl_data_point dataPoints[99]; /* Bytes 10-207 (198 bytes)*/
+};
+
+enum dm_acpi_display_type {
+	AcpiDisplayType_LCD1 = 0,
+	AcpiDisplayType_CRT1 = 1,
+	AcpiDisplayType_DFP1 = 3,
+	AcpiDisplayType_CRT2 = 4,
+	AcpiDisplayType_LCD2 = 5,
+	AcpiDisplayType_DFP2 = 7,
+	AcpiDisplayType_DFP3 = 9,
+	AcpiDisplayType_DFP4 = 10,
+	AcpiDisplayType_DFP5 = 11,
+	AcpiDisplayType_DFP6 = 12
+};
+
 #endif

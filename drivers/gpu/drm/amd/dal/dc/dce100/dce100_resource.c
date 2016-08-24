@@ -59,6 +59,10 @@
 	#define mmDP8_DP_DPHY_INTERNAL_CTRL 0x57a7
 #endif
 
+#ifndef mmBIOS_SCRATCH_2
+	#define mmBIOS_SCRATCH_2 0x05CB
+#endif
+
 static const struct dce110_timing_generator_offsets dce100_tg_offsets[] = {
 	{
 		.crtc = (mmCRTC0_CRTC_CONTROL - mmCRTC_CONTROL),
@@ -209,6 +213,15 @@ static const struct dce110_link_enc_bl_registers link_enc_bl_regs = {
 		.LVTMA_PWRSEQ_CNTL = mmLVTMA_PWRSEQ_CNTL,
 		.LVTMA_PWRSEQ_STATE = mmLVTMA_PWRSEQ_STATE
 };
+
+static const struct dce110_link_enc_dmcu_registers link_enc_dmcu_regs = {
+		.BL1_PWM_USER_LEVEL = mmBL1_PWM_USER_LEVEL,
+		.MASTER_COMM_DATA_REG1 = mmMASTER_COMM_DATA_REG1,
+		.MASTER_COMM_CMD_REG = mmMASTER_COMM_CMD_REG,
+		.MASTER_COMM_CNTL_REG = mmMASTER_COMM_CNTL_REG,
+		.BIOS_SCRATCH_2 = mmBIOS_SCRATCH_2
+};
+
 
 #define aux_regs(id)\
 [id] = {\
@@ -449,7 +462,8 @@ struct link_encoder *dce100_link_encoder_create(
 			enc_init_data,
 			&link_enc_regs[enc_init_data->transmitter],
 			&link_enc_aux_regs[enc_init_data->channel - 1],
-			&link_enc_bl_regs))
+			&link_enc_bl_regs,
+			&link_enc_dmcu_regs))
 		return &enc110->base;
 
 	BREAK_TO_DEBUGGER();

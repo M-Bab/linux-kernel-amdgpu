@@ -37,6 +37,7 @@ bool dce100_link_encoder_construct(
 	const struct encoder_init_data *init_data,
 	const struct dce110_link_enc_registers *link_regs,
 	const struct dce110_link_enc_aux_registers *aux_regs,
-	const struct dce110_link_enc_bl_registers *bl_regs);
+	const struct dce110_link_enc_bl_registers *bl_regs,
+	const struct dce110_link_enc_dmcu_registers *dmcu_regs);
 
 #endif /* __DC_LINK_ENCODER__DCE100_H__ */

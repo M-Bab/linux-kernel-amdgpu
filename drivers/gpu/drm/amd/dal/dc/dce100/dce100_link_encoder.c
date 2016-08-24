@@ -54,7 +54,8 @@ static const struct link_encoder_funcs dce100_lnk_enc_funcs = {
 	.dp_set_phy_pattern = dce110_link_encoder_dp_set_phy_pattern,
 	.update_mst_stream_allocation_table =
 		dce110_link_encoder_update_mst_stream_allocation_table,
-	.set_lcd_backlight_level = dce110_link_encoder_set_lcd_backlight_level,
+	.set_dmcu_backlight_level =
+		dce110_link_encoder_set_dmcu_backlight_level,
 	.backlight_control = dce110_link_encoder_edp_backlight_control,
 	.power_control = dce110_link_encoder_edp_power_control,
 	.connect_dig_be_to_fe = dce110_link_encoder_connect_dig_be_to_fe,
@@ -66,14 +67,16 @@ bool dce100_link_encoder_construct(
 		const struct encoder_init_data *init_data,
 		const struct dce110_link_enc_registers *link_regs,
 		const struct dce110_link_enc_aux_registers *aux_regs,
-		const struct dce110_link_enc_bl_registers *bl_regs)
+		const struct dce110_link_enc_bl_registers *bl_regs,
+		const struct dce110_link_enc_dmcu_registers *dmcu_regs)
 {
 	dce110_link_encoder_construct(
 			enc110,
 			init_data,
 			link_regs,
 			aux_regs,
-			bl_regs);
+			bl_regs,
+			dmcu_regs);
 
 	enc110->base.funcs = &dce100_lnk_enc_funcs;
 
