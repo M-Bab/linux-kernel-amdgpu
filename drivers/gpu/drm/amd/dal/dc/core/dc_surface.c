@@ -64,8 +64,7 @@ static bool construct(struct dc_context *ctx, struct surface *surface)
 
 static void destruct(struct surface *surface)
 {
-	if (surface->protected.public.gamma_correction)
-		dc_gamma_release(surface->protected.public.gamma_correction);
+
 }
 
 /*******************************************************************************
