@@ -167,9 +167,20 @@ struct dc_surface {
 	enum dc_rotation_angle rotation;
 	enum plane_stereo_format stereo_format;
 
-	struct dc_gamma *gamma_correction;
+	const struct dc_gamma *gamma_correction;
 };
 
+struct dc_surface_update {
+	const struct dc_surface *surface;
+
+	/* update parameters.  null means no updates */
+	struct dc_plane_address *address;
+	bool *flip_immediate;
+/*	struct rect *src_rect;
+	struct rect *dst_rect;
+	struct rect *clip_rect;*/
+
+};
 /*
  * This structure is filled in by dc_surface_get_status and contains
  * the last requested address and the currently active address so the called
@@ -265,6 +276,7 @@ bool dc_update_surfaces_for_target(
 		uint8_t surface_count,
 		struct dc_target *dc_target);
 
+void dc_isr_surface_update(struct dc *dc, struct dc_surface_update *update);
 /*******************************************************************************
  * Target Interfaces
  ******************************************************************************/

@@ -1363,6 +1363,45 @@ bool dc_update_surfaces_for_target(
 	return true;
 }
 
+static struct pipe_ctx *find_pipe_ctx_by_surface(struct validate_context *context,
+		const struct core_surface *surface)
+{
+	int i;
+	struct pipe_ctx *pipe_ctx = NULL;
+
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
+		pipe_ctx = &context->res_ctx.pipe_ctx[i];
+		if (pipe_ctx->surface == surface)
+			break;
+		pipe_ctx = NULL;
+	}
+	ASSERT(pipe_ctx);
+	return pipe_ctx;
+}
+
+void dc_isr_surface_update(struct dc *dc, struct dc_surface_update *update)
+{
+	struct core_surface *surface = DC_SURFACE_TO_CORE(update->surface);
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	struct validate_context *context = core_dc->current_context;
+	struct pipe_ctx *pipe_ctx = NULL;
+
+	pipe_ctx = find_pipe_ctx_by_surface(context, surface);
+
+	if (!pipe_ctx)
+		return;
+
+	if (update->address || update->flip_immediate) {
+		if (update->address)
+			surface->public.address = *update->address;
+
+		if (update->flip_immediate)
+			surface->public.flip_immediate = *update->flip_immediate;
+
+		core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
+	}
+}
+
 uint8_t dc_get_current_target_count(const struct dc *dc)
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
