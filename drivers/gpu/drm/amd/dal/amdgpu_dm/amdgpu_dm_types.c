@@ -2986,10 +2986,15 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 		case DM_COMMIT_ACTION_DPMS_ON:
 		case DM_COMMIT_ACTION_SET: {
 			struct dc_target *new_target = NULL;
+			struct drm_connector_state *conn_state = NULL;
 			struct dm_connector_state *dm_state = NULL;
 
-			if (aconnector)
-				dm_state = to_dm_connector_state(aconnector->base.state);
+			if (aconnector) {
+				conn_state = drm_atomic_get_connector_state(state, &aconnector->base);
+				if (IS_ERR(conn_state))
+					return ret;
+				dm_state = to_dm_connector_state(conn_state);
+			}
 
 			new_target = create_target_for_sink(aconnector, &crtc_state->mode, dm_state);
 
