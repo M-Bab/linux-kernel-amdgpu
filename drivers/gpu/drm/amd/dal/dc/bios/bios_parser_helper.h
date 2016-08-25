@@ -48,8 +48,6 @@ struct bios_parser_helper {
 		enum signal_type signal);
 	bool (*is_accelerated_mode)(
 		struct dc_context *ctx);
-	enum lcd_scale (*get_scratch_lcd_scale)(
-		struct dc_context *ctx);
 };
 
 bool dal_bios_parser_init_bios_helper(

@@ -151,12 +151,6 @@ static void bios_parser_destroy(struct dc_bios **dcb)
 
 static void bios_parser_power_up(struct dc_bios *dcb)
 {
-#if defined(CONFIG_DRM_AMD_DAL_VBIOS_PRESENT)
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	if (bp->lcd_scale == LCD_SCALE_UNKNOWN)
-		bp->lcd_scale = bp->bios_helper->get_scratch_lcd_scale(bp->ctx);
-#endif
 }
 
 static uint8_t get_number_of_objects(struct bios_parser *bp, uint32_t offset)
@@ -4464,7 +4458,6 @@ static bool bios_parser_construct(
 
 	bp->ctx = init->ctx;
 	bp->bios_local_image = NULL;
-	bp->lcd_scale = LCD_SCALE_UNKNOWN;
 
 	rom_header_offset =
 	GET_IMAGE(uint16_t, OFFSET_TO_POINTER_TO_ATOM_ROM_HEADER);

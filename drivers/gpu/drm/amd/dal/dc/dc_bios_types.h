@@ -130,8 +130,6 @@ struct dc_vbios_funcs {
 		struct dc_bios *bios);
 	bool (*is_accelerated_mode)(
 		struct dc_bios *bios);
-	enum lcd_scale  (*get_scratch_lcd_scale)(
-		struct dc_bios *bios);
 	void (*get_bios_event_info)(
 		struct dc_bios *bios,
 		struct bios_event_info *info);

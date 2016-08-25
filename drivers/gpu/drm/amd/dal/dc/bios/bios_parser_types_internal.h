@@ -66,7 +66,6 @@ struct bios_parser {
 	struct cmd_tbl cmd_tbl;
 
 	uint8_t *bios_local_image;
-	enum lcd_scale lcd_scale;
 
 	bool remap_device_tags;
 	bool headless_no_opm;

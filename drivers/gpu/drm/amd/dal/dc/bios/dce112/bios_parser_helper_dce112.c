@@ -36,24 +36,6 @@
 #include "dce/dce_11_0_d.h"
 #include "bif/bif_5_1_d.h"
 
-/**
- * get LCD Scale Mode from VBIOS scratch register
- */
-static enum lcd_scale get_scratch_lcd_scale(
-	struct dc_context *ctx)
-{
-	uint32_t addr = mmBIOS_SCRATCH_6;
-	uint32_t value = 0;
-
-	value = dm_read_reg(ctx, addr);
-
-	if (value & ATOM_S6_REQ_LCD_EXPANSION_FULL)
-		return LCD_SCALE_FULLPANEL;
-	else if (value & ATOM_S6_REQ_LCD_EXPANSION_ASPEC_RATIO)
-		return LCD_SCALE_ASPECTRATIO;
-	else
-		return LCD_SCALE_NONE;
-}
 
 /*
  * is_accelerated_mode
@@ -151,8 +133,6 @@ static enum signal_type detect_sink(
 /* function table */
 static const struct bios_parser_helper bios_parser_helper_funcs = {
 	.detect_sink = detect_sink,
-
-	.get_scratch_lcd_scale = get_scratch_lcd_scale,
 	.is_accelerated_mode = is_accelerated_mode,
 };
 

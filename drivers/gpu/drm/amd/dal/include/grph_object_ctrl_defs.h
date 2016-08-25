@@ -48,16 +48,6 @@ enum display_output_bit_depth {
 	PANEL_16BIT_COLOR = 5,
 };
 
-enum lcd_scale {
-	/* No request to turn on LCD SCALER (Centering or Replication) */
-	LCD_SCALE_NONE = 0,
-	/* Request LCD SCALER in full panel mode */
-	LCD_SCALE_FULLPANEL,
-	/* Request LCD SCALER in aspect-ratio mode */
-	LCD_SCALE_ASPECTRATIO,
-
-	LCD_SCALE_UNKNOWN = (-1L),
-};
 
 /* Device type as abstracted by ATOM BIOS */
 enum dal_device_type {
