@@ -66,3 +66,14 @@ bool dal_bios_parser_init_bios_helper(
 		return false;
 	}
 }
+
+
+uint8_t *get_image(struct dc_bios *bp,
+	uint32_t offset,
+	uint32_t size)
+{
+	if (bp->bios && offset + size < bp->bios_size)
+		return bp->bios + offset;
+	else
+		return NULL;
+}

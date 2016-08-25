@@ -55,11 +55,8 @@ static const uint8_t ext_display_connection_guid[NUMBER_OF_UCHAR_FOR_GUID] = {
 	0x39, 0x8E, 0x00, 0xA0,
 	0xC9, 0x69, 0x72, 0x3B};
 
-#define GET_IMAGE(type, offset) ((type *) get_image(bp, offset, sizeof(type)))
 #define DATA_TABLES(table) (bp->master_data_tbl->ListOfDataTables.table)
 
-static uint8_t *get_image(struct bios_parser *bp, uint32_t offset,
-	uint32_t size);
 static enum object_type object_type_from_bios_object_id(
 	uint32_t bios_object_id);
 static struct graphics_object_id object_id_from_bios_object_id(
@@ -502,9 +499,7 @@ static enum bp_result bios_parser_get_voltage_ddc_info(struct dc_bios *dcb,
 	if (!DATA_TABLES(VoltageObjectInfo))
 		return result;
 
-	voltage_info_address = get_image(bp,
-		DATA_TABLES(VoltageObjectInfo),
-		sizeof(ATOM_COMMON_TABLE_HEADER));
+	voltage_info_address = get_image(&bp->base, DATA_TABLES(VoltageObjectInfo), sizeof(ATOM_COMMON_TABLE_HEADER));
 
 	header = (ATOM_COMMON_TABLE_HEADER *) voltage_info_address;
 
@@ -2646,8 +2641,7 @@ static uint32_t get_dest_obj_list(struct bios_parser *bp,
 		return 0;
 
 	offset += sizeof(uint8_t);
-	*id_list = (uint16_t *)get_image(bp, offset,
-			*number * sizeof(uint16_t));
+	*id_list = (uint16_t *)get_image(&bp->base, offset, *number * sizeof(uint16_t));
 
 	if (!*id_list)
 		return 0;
@@ -2674,8 +2668,7 @@ static uint32_t get_src_obj_list(struct bios_parser *bp, ATOM_OBJECT *object,
 		return 0;
 
 	offset += sizeof(uint8_t);
-	*id_list = (uint16_t *)get_image(bp, offset,
-			*number * sizeof(uint16_t));
+	*id_list = (uint16_t *)get_image(&bp->base, offset, *number * sizeof(uint16_t));
 
 	if (!*id_list)
 		return 0;
@@ -2712,15 +2705,6 @@ static uint32_t get_dst_number_from_object(struct bios_parser *bp,
 	return *number;
 }
 
-static uint8_t *get_image(struct bios_parser *bp,
-	uint32_t offset,
-	uint32_t size)
-{
-	if (bp->bios && offset + size < bp->bios_size)
-		return bp->bios + offset;
-	else
-		return NULL;
-}
 
 static struct graphics_object_id object_id_from_bios_object_id(
 	uint32_t bios_object_id)
@@ -3861,16 +3845,16 @@ static void process_ext_display_connection_info(struct bios_parser *bp,
 		uint8_t *original_bios;
 		/* Step 1: Replace bios image with the new copy which will be
 		 * patched */
-		bp->bios_local_image = dm_alloc(bp->bios_size);
+		bp->bios_local_image = dm_alloc(bp->base.bios_size);
 		if (bp->bios_local_image == NULL) {
 			BREAK_TO_DEBUGGER();
 			/* Failed to alloc bp->bios_local_image */
 			return;
 		}
 
-		memmove(bp->bios_local_image, bp->bios, bp->bios_size);
-		original_bios = bp->bios;
-		bp->bios = bp->bios_local_image;
+		memmove(bp->bios_local_image, bp->base.bios, bp->base.bios_size);
+		original_bios = bp->base.bios;
+		bp->base.bios = bp->bios_local_image;
 		connector_tbl =
 				GET_IMAGE(ATOM_OBJECT_TABLE, connector_tbl_offset);
 
@@ -3885,7 +3869,7 @@ static void process_ext_display_connection_info(struct bios_parser *bp,
 			memmove(
 					bp->bios_local_image,
 					original_bios,
-					bp->bios_size);
+					bp->base.bios_size);
 		}
 
 		/* Step 3: Compact connector table (remove null entries, valid
@@ -4475,10 +4459,10 @@ static bool bios_parser_construct(
 		return false;
 
 	bp->base.funcs = &vbios_funcs;
+	bp->base.bios = init->bios;
+	bp->base.bios_size = bp->base.bios[BIOS_IMAGE_SIZE_OFFSET] * BIOS_IMAGE_SIZE_UNIT;
 
 	bp->ctx = init->ctx;
-	bp->bios = init->bios;
-	bp->bios_size = bp->bios[BIOS_IMAGE_SIZE_OFFSET] * BIOS_IMAGE_SIZE_UNIT;
 	bp->bios_local_image = NULL;
 	bp->lcd_scale = LCD_SCALE_UNKNOWN;
 

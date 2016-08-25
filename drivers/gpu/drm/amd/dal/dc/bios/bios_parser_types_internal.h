@@ -58,9 +58,6 @@ struct bios_parser {
 	uint32_t object_info_tbl_offset;
 	ATOM_MASTER_DATA_TABLE *master_data_tbl;
 
-	uint8_t *bios;
-	uint32_t bios_size;
-
 #if defined(CONFIG_DRM_AMD_DAL_VBIOS_PRESENT)
 	const struct bios_parser_helper *bios_helper;
 #endif /* CONFIG_DRM_AMD_DAL_VBIOS_PRESENT */

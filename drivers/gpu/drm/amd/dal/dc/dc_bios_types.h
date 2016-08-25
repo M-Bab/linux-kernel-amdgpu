@@ -241,6 +241,9 @@ struct dc_vbios_funcs {
 
 struct dc_bios {
 	const struct dc_vbios_funcs *funcs;
+
+	uint8_t *bios;
+	uint32_t bios_size;
 };
 
 #endif /* DC_BIOS_TYPES_H */

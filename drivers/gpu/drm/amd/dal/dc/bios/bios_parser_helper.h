@@ -56,4 +56,14 @@ bool dal_bios_parser_init_bios_helper(
 	struct bios_parser *bp,
 	enum dce_version ver);
 
+
+uint8_t *get_image(struct dc_bios *bp, uint32_t offset,
+	uint32_t size);
+
+#define GET_IMAGE(type, offset) ((type *) get_image(&bp->base, offset, sizeof(type)))
+
+
+
+
+
 #endif
