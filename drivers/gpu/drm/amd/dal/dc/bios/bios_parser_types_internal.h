@@ -67,7 +67,6 @@ struct bios_parser {
 	uint8_t *bios_local_image;
 
 	bool remap_device_tags;
-	bool headless_no_opm;
 };
 
 /* Bios Parser from DC Bios */

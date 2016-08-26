@@ -3577,18 +3577,6 @@ static enum bp_result patch_bios_image_from_ext_display_connection_info(
 	if (get_ext_display_connection_info(bp, as,
 					    opm_object,
 					    &ext_display_connection_info_tbl) != BP_RESULT_OK) {
-		if (bp->headless_no_opm) {
-			/* Failed to read OPM, remove all non-CF connectors. */
-			for (i = 0; i < connector_tbl->ucNumberOfObjects; ++i) {
-				object = &connector_tbl->asObjects[i];
-				object_id = object_id_from_bios_object_id(
-						le16_to_cpu(object->usObjectID));
-				if (OBJECT_TYPE_CONNECTOR == object_id.type)
-					object->usObjectID = cpu_to_le16(0);
-			}
-
-			return BP_RESULT_OK;
-		}
 
 		dal_logger_write(bp->base.ctx->logger,
 				LOG_MAJOR_BIOS,
