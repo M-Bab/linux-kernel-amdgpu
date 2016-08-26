@@ -130,8 +130,8 @@ struct dc_bios *bios_parser_create(
 
 static void destruct(struct bios_parser *bp)
 {
-	if (bp->bios_local_image)
-		dm_free(bp->bios_local_image);
+	if (bp->base.bios_local_image)
+		dm_free(bp->base.bios_local_image);
 }
 
 static void bios_parser_destroy(struct dc_bios **dcb)
@@ -3812,16 +3812,16 @@ static void process_ext_display_connection_info(struct bios_parser *bp,
 		uint8_t *original_bios;
 		/* Step 1: Replace bios image with the new copy which will be
 		 * patched */
-		bp->bios_local_image = dm_alloc(bp->base.bios_size);
-		if (bp->bios_local_image == NULL) {
+		bp->base.bios_local_image = dm_alloc(bp->base.bios_size);
+		if (bp->base.bios_local_image == NULL) {
 			BREAK_TO_DEBUGGER();
-			/* Failed to alloc bp->bios_local_image */
+			/* Failed to alloc bp->base.bios_local_image */
 			return;
 		}
 
-		memmove(bp->bios_local_image, bp->base.bios, bp->base.bios_size);
+		memmove(bp->base.bios_local_image, bp->base.bios, bp->base.bios_size);
 		original_bios = bp->base.bios;
-		bp->base.bios = bp->bios_local_image;
+		bp->base.bios = bp->base.bios_local_image;
 		connector_tbl =
 				GET_IMAGE(ATOM_OBJECT_TABLE, connector_tbl_offset);
 
@@ -3834,7 +3834,7 @@ static void process_ext_display_connection_info(struct bios_parser *bp,
 			 * again original image provided and afterwards
 			 * only remove null entries */
 			memmove(
-					bp->bios_local_image,
+					bp->base.bios_local_image,
 					original_bios,
 					bp->base.bios_size);
 		}
@@ -4428,7 +4428,7 @@ static bool bios_parser_construct(
 	bp->base.bios_size = bp->base.bios[BIOS_IMAGE_SIZE_OFFSET] * BIOS_IMAGE_SIZE_UNIT;
 
 	bp->base.ctx = init->ctx;
-	bp->bios_local_image = NULL;
+	bp->base.bios_local_image = NULL;
 
 	rom_header_offset =
 	GET_IMAGE(uint16_t, OFFSET_TO_POINTER_TO_ATOM_ROM_HEADER);

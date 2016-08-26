@@ -243,6 +243,8 @@ struct dc_bios {
 	uint8_t *bios;
 	uint32_t bios_size;
 
+	uint8_t *bios_local_image;
+
 	struct dc_context *ctx;
 };
 

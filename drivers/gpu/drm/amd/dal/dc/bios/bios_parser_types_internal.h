@@ -64,8 +64,6 @@ struct bios_parser {
 	const struct command_table_helper *cmd_helper;
 	struct cmd_tbl cmd_tbl;
 
-	uint8_t *bios_local_image;
-
 	bool remap_device_tags;
 };
 
