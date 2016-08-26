@@ -110,10 +110,6 @@ struct dc_vbios_funcs {
 		struct dc_bios *bios,
 		struct graphics_object_id object_id,
 		struct bp_encoder_cap_info *info);
-	enum bp_result (*get_din_connector_info)(
-		struct dc_bios *bios,
-		struct graphics_object_id id,
-		struct din_connector_info *info);
 
 	bool (*is_lid_status_changed)(
 		struct dc_bios *bios);

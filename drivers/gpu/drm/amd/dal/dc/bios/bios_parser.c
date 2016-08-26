@@ -2042,83 +2042,6 @@ static ATOM_ENCODER_CAP_RECORD *get_encoder_cap_record(
 	return NULL;
 }
 
-/**
- * bios_parser_get_din_connector_info
- * @brief
- *   Get GPIO record for the DIN connector, this GPIO tells whether there is a
- *    CV dumb dongle
- *   attached to the DIN connector to perform load detection for the the
- *    appropriate signal
- *
- * @param id - DIN connector object id
- * @param info             - GPIO record infor
- * @return Bios parser result code
- */
-static enum bp_result bios_parser_get_din_connector_info(
-	struct dc_bios *dcb,
-	struct graphics_object_id id,
-	struct din_connector_info *info)
-{
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-	ATOM_COMMON_RECORD_HEADER *header;
-	ATOM_CONNECTOR_CVTV_SHARE_DIN_RECORD *record = NULL;
-	ATOM_OBJECT *object;
-	uint32_t offset;
-	enum bp_result result = BP_RESULT_NORECORD;
-
-	/* no output buffer provided */
-	if (!info) {
-		BREAK_TO_DEBUGGER(); /* Invalid output buffer */
-		return BP_RESULT_BADINPUT;
-	}
-
-	object = get_bios_object(bp, id);
-	if (!object) {
-		BREAK_TO_DEBUGGER(); /* Invalid object id */;
-		return BP_RESULT_BADINPUT;
-	}
-
-	offset = le16_to_cpu(object->usRecordOffset)
-						+ bp->object_info_tbl_offset;
-
-	for (;;) {
-		header = GET_IMAGE(ATOM_COMMON_RECORD_HEADER, offset);
-
-		if (!header) {
-			result = BP_RESULT_BADBIOSTABLE;
-			break;
-		}
-
-		offset += header->ucRecordSize;
-
-		/* get out of the loop if no more records */
-		if (LAST_RECORD_TYPE == header->ucRecordType ||
-				!header->ucRecordSize)
-			break;
-
-		if (ATOM_CONNECTOR_CVTV_SHARE_DIN_RECORD_TYPE !=
-				header->ucRecordType)
-			continue;
-
-		if (sizeof(ATOM_CONNECTOR_CVTV_SHARE_DIN_RECORD)
-				> header->ucRecordSize)
-			continue;
-
-		record = (ATOM_CONNECTOR_CVTV_SHARE_DIN_RECORD *)header;
-		result = BP_RESULT_OK;
-		break;
-	}
-
-	/* return if the record not found */
-	if (result != BP_RESULT_OK)
-		return result;
-
-	info->gpio_id = record->ucGPIOID;
-	info->gpio_tv_active_state = (record->ucTVActiveState != 0);
-
-	return result;
-}
-
 static uint32_t get_ss_entry_number(
 	struct bios_parser *bp,
 	uint32_t id);
@@ -4277,8 +4200,6 @@ static const struct dc_vbios_funcs vbios_funcs = {
 	.get_gpio_pin_info = bios_parser_get_gpio_pin_info,
 
 	.get_encoder_cap_info = bios_parser_get_encoder_cap_info,
-
-	.get_din_connector_info = bios_parser_get_din_connector_info,
 
 	.is_accelerated_mode = bios_parser_is_accelerated_mode,
 
