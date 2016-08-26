@@ -426,14 +426,9 @@ static bool set_gamma_ramp(
 	const struct core_gamma *ramp,
 	const struct core_surface *surface)
 {
-	struct ipp_prescale_params *prescale_params;
+	struct ipp_prescale_params prescale_params = { 0 };
 	struct pwl_params *regamma_params;
 	bool result = false;
-
-	prescale_params = dm_alloc(sizeof(struct ipp_prescale_params));
-
-	if (prescale_params == NULL)
-		goto prescale_alloc_fail;
 
 	regamma_params = dm_alloc(sizeof(struct pwl_params));
 	if (regamma_params == NULL)
@@ -444,8 +439,8 @@ static bool set_gamma_ramp(
 	opp->funcs->opp_power_on_regamma_lut(opp, true);
 
 	if (ipp) {
-		build_prescale_params(prescale_params, surface);
-		ipp->funcs->ipp_program_prescale(ipp, prescale_params);
+		build_prescale_params(&prescale_params, surface);
+		ipp->funcs->ipp_program_prescale(ipp, &prescale_params);
 	}
 
 	if (ramp && calculate_regamma_params(regamma_params, ramp, surface)) {
@@ -467,8 +462,6 @@ static bool set_gamma_ramp(
 	dm_free(regamma_params);
 
 regamma_alloc_fail:
-	dm_free(prescale_params);
-prescale_alloc_fail:
 	return result;
 }
 

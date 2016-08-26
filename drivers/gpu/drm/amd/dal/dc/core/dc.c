@@ -1392,28 +1392,118 @@ static struct pipe_ctx *find_pipe_ctx_by_surface(struct validate_context *contex
 	return pipe_ctx;
 }
 
-void dc_isr_surface_update(struct dc *dc, struct dc_surface_update *update)
+void dc_surfaces_update(struct dc *dc, struct dc_surface_update *updates,
+		int surface_count, struct dc_target *dc_target)
 {
-	struct core_surface *surface = DC_SURFACE_TO_CORE(update->surface);
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	struct validate_context *context = core_dc->current_context;
-	struct pipe_ctx *pipe_ctx = NULL;
+	int i;
 
-	pipe_ctx = find_pipe_ctx_by_surface(context, surface);
+	if (dc_target) {
+		const struct dc_surface *new_surfaces[MAX_SURFACES] = { 0 };
+		struct core_target *target = DC_TARGET_TO_CORE(dc_target);
 
-	if (!pipe_ctx) {
-		ASSERT(pipe_ctx);
-		return;
+		if (core_dc->current_context->target_count == 0)
+			return;
+
+		/* Cannot commit surface to a target that is not commited */
+		for (i = 0; i < core_dc->current_context->target_count; i++)
+			if (target == core_dc->current_context->targets[i])
+				break;
+		if (i == core_dc->current_context->target_count)
+			return;
+
+		for (i = 0 ; i < surface_count; i++) {
+			new_surfaces[i] = updates[i].surface;
+		}
+		context = core_dc->temp_flip_context;
+		*context = *core_dc->current_context;
+
+		for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
+			struct pipe_ctx *cur_pipe = &context->res_ctx.pipe_ctx[i];
+
+			if (cur_pipe->top_pipe)
+				cur_pipe->top_pipe =
+					&context->res_ctx.pipe_ctx[cur_pipe->top_pipe->pipe_idx];
+
+			if (cur_pipe->bottom_pipe)
+				cur_pipe->bottom_pipe =
+					&context->res_ctx.pipe_ctx[cur_pipe->bottom_pipe->pipe_idx];
+		}
+
+		if (!resource_attach_surfaces_to_context(
+				new_surfaces, surface_count, dc_target, context)) {
+			BREAK_TO_DEBUGGER();
+			return;
+		}
 	}
 
-	if (update->address || update->flip_immediate) {
-		if (update->address)
-			surface->public.address = *update->address;
+	for (i = 0; i < surface_count; i++) {
+		struct core_surface *surface = DC_SURFACE_TO_CORE(updates[i].surface);
+		struct pipe_ctx *pipe_ctx = find_pipe_ctx_by_surface(context, surface);
 
-		if (update->flip_immediate)
-			surface->public.flip_immediate = *update->flip_immediate;
+		if (!pipe_ctx) {
+			ASSERT(pipe_ctx);
+			return;
+		}
 
-		core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
+		if (updates[i].plane_info || updates[i].scaling_info) {
+
+			surface->public.address = updates[i].flip_addr->address;
+			surface->public.flip_immediate = updates[i].flip_addr->flip_immediate;
+
+			surface->public.color_space = updates[i].plane_info->color_space;
+			surface->public.format = updates[i].plane_info->format;
+			surface->public.plane_size = updates[i].plane_info->plane_size;
+			surface->public.rotation = updates[i].plane_info->rotation;
+			surface->public.stereo_format = updates[i].plane_info->stereo_format;
+			surface->public.tiling_info = updates[i].plane_info->tiling_info;
+			surface->public.visible = updates[i].plane_info->visible;
+
+			surface->public.scaling_quality = updates[i].scaling_info->scaling_quality;
+			surface->public.dst_rect = updates[i].scaling_info->dst_rect;
+			surface->public.src_rect = updates[i].scaling_info->src_rect;
+			surface->public.clip_rect = updates[i].scaling_info->clip_rect;
+
+			resource_build_scaling_params(updates[i].surface, pipe_ctx);
+			if (dc->debug.surface_visual_confirm) {
+				pipe_ctx->scl_data.recout.height -= 2;
+				pipe_ctx->scl_data.recout.width -= 2;
+			}
+
+			core_dc->hwss.pipe_control_lock(
+					core_dc->ctx,
+					pipe_ctx->pipe_idx,
+					PIPE_LOCK_CONTROL_SURFACE,
+					true);
+
+			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
+
+			core_dc->hwss.apply_ctx_to_surface(core_dc, context);
+
+			core_dc->hwss.pipe_control_lock(
+					core_dc->ctx,
+					pipe_ctx->pipe_idx,
+					PIPE_LOCK_CONTROL_GRAPHICS |
+					PIPE_LOCK_CONTROL_SCL |
+					PIPE_LOCK_CONTROL_BLENDER |
+					PIPE_LOCK_CONTROL_SURFACE,
+					false);
+
+		} else if (updates[i].flip_addr) {
+			surface->public.address = updates[i].flip_addr->address;
+			surface->public.flip_immediate = updates[i].flip_addr->flip_immediate;
+
+			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
+		}
+
+		if (updates[i].gamma)
+			core_dc->hwss.prepare_pipe_for_context(core_dc, pipe_ctx, context);
+	}
+
+	if (dc_target) {
+		core_dc->temp_flip_context = core_dc->current_context;
+		core_dc->current_context = context;
 	}
 }
 
@@ -1464,33 +1554,6 @@ const struct audio **dc_get_audios(struct dc *dc)
 	return (const struct audio **)core_dc->res_pool->audios;
 }
 
-void dc_flip_surface_addrs_on_context(
-		struct dc *dc,
-		struct validate_context *context,
-		const struct dc_surface *const *surfaces,
-		struct dc_flip_addrs flip_addrs[],
-		uint32_t count)
-{
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-	int i, j;
-	int pipe_count = core_dc->res_pool->pipe_count;
-
-	for (i = 0; i < count; i++)
-		for (j = 0; j < pipe_count; j++) {
-			struct pipe_ctx *pipe_ctx =
-				&context->res_ctx.pipe_ctx[j];
-			struct core_surface *ctx_surface = pipe_ctx->surface;
-
-			if (DC_SURFACE_TO_CORE(surfaces[i]) != ctx_surface)
-				continue;
-
-			ctx_surface->public.address = flip_addrs[i].address;
-			ctx_surface->public.flip_immediate = flip_addrs[i].flip_immediate;
-
-			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
-		}
-}
-
 void dc_flip_surface_addrs(
 		struct dc *dc,
 		const struct dc_surface *const surfaces[],
@@ -1498,14 +1561,12 @@ void dc_flip_surface_addrs(
 		uint32_t count)
 {
 	int i;
-
+	struct dc_surface_update updates[MAX_SURFACE_NUM] = { 0 };
 	for (i = 0; i < count; i++) {
-		struct dc_surface_update update = { 0 };
-		update.address = &flip_addrs[i].address;
-		update.flip_immediate = &flip_addrs[i].flip_immediate;
-		update.surface = surfaces[i];
-		dc_isr_surface_update(dc, &update);
+		updates[i].flip_addr = &flip_addrs[i];
+		updates[i].surface = surfaces[i];
 	}
+	dc_surfaces_update(dc, updates, count, NULL);
 }
 
 enum dc_irq_source dc_interrupt_to_irq_source(

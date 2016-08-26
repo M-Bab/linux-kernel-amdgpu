@@ -172,15 +172,35 @@ struct dc_surface {
 	const struct dc_gamma *gamma_correction;
 };
 
+struct dc_plane_info {
+	union plane_size plane_size;
+	union dc_tiling_info tiling_info;
+	enum surface_pixel_format format;
+	enum dc_rotation_angle rotation;
+	enum plane_stereo_format stereo_format;
+	enum dc_color_space color_space;
+	bool visible;
+};
+
+struct dc_scaling_info {
+		struct rect src_rect;
+		struct rect dst_rect;
+		struct rect clip_rect;
+		struct scaling_taps scaling_quality;
+};
+
 struct dc_surface_update {
 	const struct dc_surface *surface;
 
-	/* update parameters.  null means no updates */
-	struct dc_plane_address *address;
-	bool *flip_immediate;
-/*	struct rect *src_rect;
-	struct rect *dst_rect;
-	struct rect *clip_rect;*/
+	/* isr safe update parameters.  null means no updates */
+	struct dc_flip_addrs *flip_addr;
+	struct dc_plane_info *plane_info;
+	struct dc_scaling_info *scaling_info;
+	/* following updates require alloc/sleep/spin that is not isr safe,
+	 * null means no updates
+	 */
+	struct dc_gamma *gamma;
+
 
 };
 /*
@@ -242,14 +262,6 @@ void dc_flip_surface_addrs(struct dc *dc,
  *   This does not trigger a flip.  No surface address is programmed.
  */
 
-
-void dc_flip_surface_addrs_on_context(
-		struct dc *dc,
-		struct validate_context *context,
-		const struct dc_surface *const *surfaces,
-		struct dc_flip_addrs flip_addrs[],
-		uint32_t count);
-
 bool dc_commit_surfaces_to_target(
 		struct dc *dc,
 		const struct dc_surface **dc_surfaces,
@@ -278,7 +290,8 @@ bool dc_update_surfaces_for_target(
 		uint8_t surface_count,
 		struct dc_target *dc_target);
 
-void dc_isr_surface_update(struct dc *dc, struct dc_surface_update *update);
+void dc_surfaces_update(struct dc *dc, struct dc_surface_update *updates,
+		int surface_count, struct dc_target *dc_target);
 /*******************************************************************************
  * Target Interfaces
  ******************************************************************************/
