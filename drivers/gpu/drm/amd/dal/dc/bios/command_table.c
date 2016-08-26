@@ -35,16 +35,16 @@
 #include "bios_parser_types_internal.h"
 
 #define EXEC_BIOS_CMD_TABLE(command, params)\
-	(cgs_atom_exec_cmd_table(bp->ctx->cgs_device, \
+	(cgs_atom_exec_cmd_table(bp->base.ctx->cgs_device, \
 		GetIndexIntoMasterTable(COMMAND, command), \
 		&params) == 0)
 
 #define BIOS_CMD_TABLE_REVISION(command, frev, crev)\
-	cgs_atom_get_cmd_table_revs(bp->ctx->cgs_device, \
+	cgs_atom_get_cmd_table_revs(bp->base.ctx->cgs_device, \
 		GetIndexIntoMasterTable(COMMAND, command), &frev, &crev)
 
 #define BIOS_CMD_TABLE_PARA_REVISION(command)\
-	bios_cmd_table_para_revision(bp->ctx->cgs_device, \
+	bios_cmd_table_para_revision(bp->base.ctx->cgs_device, \
 		GetIndexIntoMasterTable(COMMAND, command))
 
 static void init_dig_encoder_control(struct bios_parser *bp);

@@ -3590,7 +3590,7 @@ static enum bp_result patch_bios_image_from_ext_display_connection_info(
 			return BP_RESULT_OK;
 		}
 
-		dal_logger_write(bp->ctx->logger,
+		dal_logger_write(bp->base.ctx->logger,
 				LOG_MAJOR_BIOS,
 				LOG_MINOR_BIOS_CMD_TABLE,
 				"%s: Failed to read Connection Info Table", __func__);
@@ -3889,9 +3889,9 @@ static bool bios_parser_is_accelerated_mode(
 
 #ifdef CONFIG_DRM_AMD_DAL_VBIOS_PRESENT
 	return bp->bios_helper->is_accelerated_mode(
-			bp->ctx);
+			bp->base.ctx);
 #else
-	dal_logger_write(bp->ctx->logger,
+	dal_logger_write(bp->base.ctx->logger,
 			LOG_MAJOR_BIOS,
 			LOG_MINOR_BIOS_CMD_TABLE,
 			"%s: VBIOS is not supported", __func__);
@@ -3916,9 +3916,9 @@ static void bios_parser_set_scratch_critical_state(
 
 #ifdef CONFIG_DRM_AMD_DAL_VBIOS_PRESENT
 	dce110_set_scratch_critical_state(
-			bp->ctx, state);
+			bp->base.ctx, state);
 #else
-	dal_logger_write(bp->ctx->logger,
+	dal_logger_write(bp->base.ctx->logger,
 			LOG_MAJOR_BIOS,
 			LOG_MINOR_BIOS_CMD_TABLE,
 			"%s: VBIOS is not supported", __func__);
@@ -4439,7 +4439,7 @@ static bool bios_parser_construct(
 	bp->base.bios = init->bios;
 	bp->base.bios_size = bp->base.bios[BIOS_IMAGE_SIZE_OFFSET] * BIOS_IMAGE_SIZE_UNIT;
 
-	bp->ctx = init->ctx;
+	bp->base.ctx = init->ctx;
 	bp->bios_local_image = NULL;
 
 	rom_header_offset =

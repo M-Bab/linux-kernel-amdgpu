@@ -242,6 +242,8 @@ struct dc_bios {
 
 	uint8_t *bios;
 	uint32_t bios_size;
+
+	struct dc_context *ctx;
 };
 
 #endif /* DC_BIOS_TYPES_H */
