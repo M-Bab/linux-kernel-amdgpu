@@ -178,34 +178,20 @@ struct dc_vbios_funcs {
 	enum bp_result (*program_crtc_timing)(
 		struct dc_bios *bios,
 		struct bp_hw_crtc_timing_parameters *bp_params);
-	enum bp_result (*blank_crtc)(
-		struct dc_bios *bios,
-		struct bp_blank_crtc_parameters *bp_params,
-		bool blank);
-	enum bp_result (*set_overscan)(
-		struct dc_bios *bios,
-		struct bp_hw_crtc_overscan_parameters *bp_params);
+
 	enum bp_result (*crtc_source_select)(
 		struct dc_bios *bios,
 		struct bp_crtc_source_select *bp_params);
 	enum bp_result (*program_display_engine_pll)(
 		struct dc_bios *bios,
 		struct bp_pixel_clock_parameters *bp_params);
-	enum bp_result (*get_divider_for_target_display_clock)(
-		struct dc_bios *bios,
-		struct bp_display_clock_parameters *bp_params);
+
 	enum signal_type (*dac_load_detect)(
 		struct dc_bios *bios,
 		struct graphics_object_id encoder,
 		struct graphics_object_id connector,
 		enum signal_type display_signal);
-	enum bp_result (*enable_memory_requests)(
-		struct dc_bios *bios,
-		enum controller_id controller_id,
-		bool enable);
-	enum bp_result (*external_encoder_control)(
-		struct dc_bios *bios,
-		struct bp_external_encoder_control *cntl);
+
 	enum bp_result (*enable_disp_power_gating)(
 		struct dc_bios *bios,
 		enum controller_id controller_id,

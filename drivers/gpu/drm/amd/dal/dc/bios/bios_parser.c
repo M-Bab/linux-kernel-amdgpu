@@ -1156,17 +1156,6 @@ static enum bp_result bios_parser_program_display_engine_pll(
 
 }
 
-static enum bp_result bios_parser_get_divider_for_target_display_clock(
-	struct dc_bios *dcb,
-	struct bp_display_clock_parameters *bp_params)
-{
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	if (!bp->cmd_tbl.compute_memore_engine_pll)
-		return BP_RESULT_FAILURE;
-
-	return bp->cmd_tbl.compute_memore_engine_pll(bp, bp_params);
-}
 
 static enum bp_result bios_parser_enable_crtc(
 	struct dc_bios *dcb,
@@ -1181,19 +1170,6 @@ static enum bp_result bios_parser_enable_crtc(
 	return bp->cmd_tbl.enable_crtc(bp, id, enable);
 }
 
-static enum bp_result bios_parser_blank_crtc(
-	struct dc_bios *dcb,
-	struct bp_blank_crtc_parameters *bp_params,
-	bool blank)
-{
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	if (!bp->cmd_tbl.blank_crtc)
-		return BP_RESULT_FAILURE;
-
-	return bp->cmd_tbl.blank_crtc(bp, bp_params, blank);
-}
-
 static enum bp_result bios_parser_crtc_source_select(
 	struct dc_bios *dcb,
 	struct bp_crtc_source_select *bp_params)
@@ -1204,43 +1180,6 @@ static enum bp_result bios_parser_crtc_source_select(
 		return BP_RESULT_FAILURE;
 
 	return bp->cmd_tbl.select_crtc_source(bp, bp_params);
-}
-
-static enum bp_result bios_parser_set_overscan(
-	struct dc_bios *dcb,
-	struct bp_hw_crtc_overscan_parameters *bp_params)
-{
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	if (!bp->cmd_tbl.set_crtc_overscan)
-		return BP_RESULT_FAILURE;
-
-	return bp->cmd_tbl.set_crtc_overscan(bp, bp_params);
-}
-
-static enum bp_result bios_parser_enable_memory_requests(
-	struct dc_bios *dcb,
-	enum controller_id controller_id,
-	bool enable)
-{
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	if (!bp->cmd_tbl.enable_crtc_mem_req)
-		return BP_RESULT_FAILURE;
-
-	return bp->cmd_tbl.enable_crtc_mem_req(bp, controller_id, enable);
-}
-
-static enum bp_result bios_parser_external_encoder_control(
-	struct dc_bios *dcb,
-	struct bp_external_encoder_control *cntl)
-{
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	if (!bp->cmd_tbl.external_encoder_control)
-		return BP_RESULT_FAILURE;
-
-	return bp->cmd_tbl.external_encoder_control(bp, cntl);
 }
 
 static enum bp_result bios_parser_enable_disp_power_gating(
@@ -4201,6 +4140,7 @@ static const struct dc_vbios_funcs vbios_funcs = {
 
 	.get_encoder_cap_info = bios_parser_get_encoder_cap_info,
 
+	/* bios scratch register communication */
 	.is_accelerated_mode = bios_parser_is_accelerated_mode,
 
 	.set_scratch_critical_state = bios_parser_set_scratch_critical_state,
@@ -4212,7 +4152,7 @@ static const struct dc_vbios_funcs vbios_funcs = {
 
 	.transmitter_control = bios_parser_transmitter_control,
 
-	.crt_control = bios_parser_crt_control,
+	.crt_control = bios_parser_crt_control,  /* not used in DAL3.  keep for now in case we need to support VGA on Bonaire */
 
 	.enable_crtc = bios_parser_enable_crtc,
 
@@ -4224,25 +4164,16 @@ static const struct dc_vbios_funcs vbios_funcs = {
 
 	.enable_spread_spectrum_on_ppll = bios_parser_enable_spread_spectrum_on_ppll,
 
-	.program_crtc_timing = bios_parser_program_crtc_timing,
+	.program_crtc_timing = bios_parser_program_crtc_timing, /* still use.  should probably retire and program directly */
 
-	.blank_crtc = bios_parser_blank_crtc,
-
-	.set_overscan = bios_parser_set_overscan,
-
-	.crtc_source_select = bios_parser_crtc_source_select,
+	.crtc_source_select = bios_parser_crtc_source_select,  /* still use.  should probably retire and program directly */
 
 	.program_display_engine_pll = bios_parser_program_display_engine_pll,
 
-	.get_divider_for_target_display_clock = bios_parser_get_divider_for_target_display_clock,
-
-	.enable_memory_requests = bios_parser_enable_memory_requests,
-
-	.external_encoder_control = bios_parser_external_encoder_control,
-
 	.enable_disp_power_gating = bios_parser_enable_disp_power_gating,
 
-	.post_init = bios_parser_post_init,
+	/* SW init and patch */
+	.post_init = bios_parser_post_init,  /* patch vbios table for mxm module by reading i2c */
 
 	.create_integrated_info = bios_parser_create_integrated_info,
 
