@@ -40,7 +40,6 @@
 
 struct dc_vbios_funcs {
 	uint8_t (*get_connectors_number)(struct dc_bios *bios);
-	uint32_t (*get_oem_ddc_lines_number)(struct dc_bios *bios);
 
 	struct graphics_object_id (*get_encoder_id)(
 		struct dc_bios *bios,
@@ -66,10 +65,6 @@ struct dc_vbios_funcs {
 		struct dc_bios *bios,
 		struct graphics_object_id object_id, uint32_t index,
 		struct graphics_object_id *dest_object_id);
-	enum bp_result (*get_oem_ddc_info)(
-		struct dc_bios *bios,
-		uint32_t index,
-		struct graphics_object_i2c_info *info);
 
 	enum bp_result (*get_i2c_info)(
 		struct dc_bios *dcb,

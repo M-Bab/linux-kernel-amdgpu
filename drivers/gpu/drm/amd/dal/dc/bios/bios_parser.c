@@ -175,30 +175,6 @@ static uint8_t bios_parser_get_connectors_number(struct dc_bios *dcb)
 		le16_to_cpu(bp->object_info_tbl.v1_1->usConnectorObjectTableOffset));
 }
 
-static uint32_t bios_parser_get_oem_ddc_lines_number(struct dc_bios *dcb)
-{
-	uint32_t number = 0;
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	if (DATA_TABLES(OemInfo) != 0) {
-		ATOM_OEM_INFO *info;
-
-		info = GET_IMAGE(ATOM_OEM_INFO,
-			DATA_TABLES(OemInfo));
-
-		if (le16_to_cpu(info->sHeader.usStructureSize)
-			> sizeof(ATOM_COMMON_TABLE_HEADER)) {
-
-			number = (le16_to_cpu(info->sHeader.usStructureSize)
-				- sizeof(ATOM_COMMON_TABLE_HEADER))
-				/ sizeof(ATOM_I2C_ID_CONFIG_ACCESS);
-
-		}
-	}
-
-	return number;
-}
-
 static struct graphics_object_id bios_parser_get_encoder_id(
 	struct dc_bios *dcb,
 	uint32_t i)
@@ -305,43 +281,6 @@ static enum bp_result bios_parser_get_dst_obj(struct dc_bios *dcb,
 	*dest_object_id = object_id_from_bios_object_id(id[index]);
 
 	return BP_RESULT_OK;
-}
-
-static enum bp_result bios_parser_get_oem_ddc_info(struct dc_bios *dcb,
-	uint32_t index,
-	struct graphics_object_i2c_info *info)
-{
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	if (!info)
-		return BP_RESULT_BADINPUT;
-
-	if (DATA_TABLES(OemInfo) != 0) {
-		ATOM_OEM_INFO *tbl;
-
-		tbl = GET_IMAGE(ATOM_OEM_INFO, DATA_TABLES(OemInfo));
-
-		if (le16_to_cpu(tbl->sHeader.usStructureSize)
-			> sizeof(ATOM_COMMON_TABLE_HEADER)) {
-			ATOM_I2C_RECORD record;
-			ATOM_I2C_ID_CONFIG_ACCESS *config;
-
-			memset(&record, 0, sizeof(record));
-
-			config = &tbl->sucI2cId + index - 1;
-
-			record.sucI2cId.bfHW_Capable =
-				config->sbfAccess.bfHW_Capable;
-			record.sucI2cId.bfI2C_LineMux =
-				config->sbfAccess.bfI2C_LineMux;
-			record.sucI2cId.bfHW_EngineID =
-				config->sbfAccess.bfHW_EngineID;
-
-			return get_gpio_i2c_info(bp, &record, info);
-		}
-	}
-
-	return BP_RESULT_NORECORD;
 }
 
 static enum bp_result bios_parser_get_i2c_info(struct dc_bios *dcb,
@@ -4301,8 +4240,6 @@ static void bios_parser_destroy_integrated_info(
 static const struct dc_vbios_funcs vbios_funcs = {
 	.get_connectors_number = bios_parser_get_connectors_number,
 
-	.get_oem_ddc_lines_number = bios_parser_get_oem_ddc_lines_number,
-
 	.get_encoder_id = bios_parser_get_encoder_id,
 
 	.get_connector_id = bios_parser_get_connector_id,
@@ -4316,8 +4253,6 @@ static const struct dc_vbios_funcs vbios_funcs = {
 	.get_dst_obj = bios_parser_get_dst_obj,
 
 	.get_i2c_info = bios_parser_get_i2c_info,
-
-	.get_oem_ddc_info = bios_parser_get_oem_ddc_info,
 
 	.get_voltage_ddc_info = bios_parser_get_voltage_ddc_info,
 
