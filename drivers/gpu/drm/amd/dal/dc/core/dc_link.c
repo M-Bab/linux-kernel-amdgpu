@@ -926,6 +926,7 @@ static bool construct(
 	struct dc_context *dc_ctx = init_params->ctx;
 	struct encoder_init_data enc_init_data = { 0 };
 	struct integrated_info info = {{{ 0 }}};
+	struct dc_bios *bios = init_params->dc->ctx->dc_bios;
 
 	link->public.irq_source_hpd = DC_IRQ_SOURCE_INVALID;
 	link->public.irq_source_hpd_rx = DC_IRQ_SOURCE_INVALID;
@@ -937,9 +938,7 @@ static bool construct(
 	link->ctx = dc_ctx;
 	link->public.link_index = init_params->link_index;
 
-	link->link_id = dal_adapter_service_get_connector_obj_id(
-			as,
-			init_params->connector_index);
+	link->link_id = bios->funcs->get_connector_id(bios, init_params->connector_index);
 
 	if (link->link_id.type != OBJECT_TYPE_CONNECTOR) {
 		dm_error("%s: Invalid Connector ObjectID from Adapter Service for connector index:%d!\n",

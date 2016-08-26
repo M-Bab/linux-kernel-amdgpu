@@ -77,13 +77,11 @@ static bool create_links(
 {
 	int i;
 	int connectors_num;
-	struct dc_bios *dcb;
+	struct dc_bios *bios = dc->ctx->dc_bios;
 
 	dc->link_count = 0;
 
-	dcb = dc->ctx->dc_bios;
-
-	connectors_num = dcb->funcs->get_connectors_number(dcb);
+	connectors_num = bios->funcs->get_connectors_number(bios);
 
 	if (connectors_num > ENUM_ID_COUNT) {
 		dm_error(

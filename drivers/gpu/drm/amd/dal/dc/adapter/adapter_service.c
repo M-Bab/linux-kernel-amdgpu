@@ -998,32 +998,6 @@ struct graphics_object_id dal_adapter_service_get_src_obj(
 	return src_object_id;
 }
 
-/** Get connector object id associated with a connector index.
- *
- * \param as	Adapter Service
- *
- * \param connector_index Index of connector between zero and total number
- *	returned by dal_adapter_service_get_connectors_num()
- *
- * \return graphics object id corresponding to the connector_index.
- */
-struct graphics_object_id dal_adapter_service_get_connector_obj_id(
-		struct adapter_service *as,
-		uint8_t connector_index)
-{
-	struct dc_bios *dcb;
-	uint8_t bios_connectors_num;
-
-	dcb = dal_adapter_service_get_bios_parser(as);
-
-	bios_connectors_num = dcb->funcs->get_connectors_number(dcb);
-
-	if (connector_index >= bios_connectors_num)
-		return wireless_get_connector_id(as, connector_index);
-	else
-		return dcb->funcs->get_connector_id(dcb, connector_index);
-}
-
 bool dal_adapter_service_get_device_tag(
 		struct adapter_service *as,
 		struct graphics_object_id connector_object_id,

@@ -352,11 +352,6 @@ uint8_t dal_adapter_service_get_func_controllers_num(
 uint8_t dal_adapter_service_get_stream_engines_num(
 	struct adapter_service *as);
 
-/* functions to get object id based on object index */
-struct graphics_object_id dal_adapter_service_get_connector_obj_id(
-	struct adapter_service *as,
-	uint8_t connector_index);
-
 /* Get number of spread spectrum entries from BIOS */
 uint32_t dal_adapter_service_get_ss_info_num(
 	struct adapter_service *as,
