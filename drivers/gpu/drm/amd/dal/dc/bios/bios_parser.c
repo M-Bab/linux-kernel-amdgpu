@@ -4309,8 +4309,6 @@ static void bios_parser_destroy_integrated_info(
 static const struct dc_vbios_funcs vbios_funcs = {
 	.get_connectors_number = bios_parser_get_connectors_number,
 
-	.power_up = bios_parser_power_up,
-
 	.get_encoders_number = bios_parser_get_encoders_number,
 
 	.get_oem_ddc_lines_number = bios_parser_get_oem_ddc_lines_number,

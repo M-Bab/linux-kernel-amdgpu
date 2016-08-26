@@ -1799,7 +1799,6 @@ static void init_hw(struct core_dc *dc)
 	}
 
 	dc->hwss.clock_gating_power_up(dc->ctx, false);
-	bp->funcs->power_up(bp);
 	/***************************************/
 
 	for (i = 0; i < dc->link_count; i++) {
