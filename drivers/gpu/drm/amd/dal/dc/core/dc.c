@@ -1375,7 +1375,6 @@ static struct pipe_ctx *find_pipe_ctx_by_surface(struct validate_context *contex
 			break;
 		pipe_ctx = NULL;
 	}
-	ASSERT(pipe_ctx);
 	return pipe_ctx;
 }
 
@@ -1388,8 +1387,10 @@ void dc_isr_surface_update(struct dc *dc, struct dc_surface_update *update)
 
 	pipe_ctx = find_pipe_ctx_by_surface(context, surface);
 
-	if (!pipe_ctx)
+	if (!pipe_ctx) {
+		ASSERT(pipe_ctx);
 		return;
+	}
 
 	if (update->address || update->flip_immediate) {
 		if (update->address)
@@ -1482,49 +1483,15 @@ void dc_flip_surface_addrs(
 		struct dc_flip_addrs flip_addrs[],
 		uint32_t count)
 {
-	int i, j;
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-	int pipe_count = core_dc->res_pool->pipe_count;
+	int i;
 
-	for (i = 0; i < count; i++)
-		for (j = 0; j < pipe_count; j++) {
-			struct pipe_ctx *pipe_ctx =
-				&core_dc->current_context->res_ctx.pipe_ctx[j];
-			struct core_surface *ctx_surface = pipe_ctx->surface;
-
-			if (DC_SURFACE_TO_CORE(surfaces[i]) != ctx_surface)
-				continue;
-
-			ctx_surface->public.address = flip_addrs[i].address;
-			ctx_surface->public.flip_immediate = flip_addrs[i].flip_immediate;
-
-			if (!ctx_surface->public.flip_immediate)
-				core_dc->hwss.pipe_control_lock(
-						core_dc->ctx,
-						pipe_ctx->pipe_idx,
-						PIPE_LOCK_CONTROL_SURFACE |
-						PIPE_LOCK_CONTROL_MODE,
-						true);
-
-			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
-		}
-
-	for (j = pipe_count - 1; j >= 0; j--)
-		for (i = count - 1; i >= 0; i--) {
-			struct pipe_ctx *pipe_ctx =
-				&core_dc->current_context->res_ctx.pipe_ctx[j];
-			struct core_surface *ctx_surface = pipe_ctx->surface;
-
-			if (DC_SURFACE_TO_CORE(surfaces[i]) != ctx_surface)
-				continue;
-
-			if (!ctx_surface->public.flip_immediate)
-				core_dc->hwss.pipe_control_lock(
-						core_dc->ctx,
-						pipe_ctx->pipe_idx,
-						PIPE_LOCK_CONTROL_SURFACE,
-						false);
-		}
+	for (i = 0; i < count; i++) {
+		struct dc_surface_update update = { 0 };
+		update.address = &flip_addrs[i].address;
+		update.flip_immediate = &flip_addrs[i].flip_immediate;
+		update.surface = surfaces[i];
+		dc_isr_surface_update(dc, &update);
+	}
 }
 
 enum dc_irq_source dc_interrupt_to_irq_source(
