@@ -54,7 +54,6 @@ static void init_enable_spread_spectrum_on_ppll(struct bios_parser *bp);
 static void init_adjust_display_pll(struct bios_parser *bp);
 static void init_dac_encoder_control(struct bios_parser *bp);
 static void init_dac_output_control(struct bios_parser *bp);
-static void init_dac_load_detection(struct bios_parser *bp);
 static void init_blank_crtc(struct bios_parser *bp);
 static void init_set_crtc_timing(struct bios_parser *bp);
 static void init_set_crtc_overscan(struct bios_parser *bp);
@@ -76,7 +75,6 @@ void dal_bios_parser_init_cmd_tbl(struct bios_parser *bp)
 	init_adjust_display_pll(bp);
 	init_dac_encoder_control(bp);
 	init_dac_output_control(bp);
-	init_dac_load_detection(bp);
 	init_blank_crtc(bp);
 	init_set_crtc_timing(bp);
 	init_set_crtc_overscan(bp);
@@ -1690,94 +1688,6 @@ static enum bp_result dac2_output_control_v1(
 /*******************************************************************************
  ********************************************************************************
  **
- **                  DAC LOAD DETECTION
- **
- ********************************************************************************
- *******************************************************************************/
-
-static enum signal_type dac_load_detection_v3(
-	struct bios_parser *bp,
-	struct graphics_object_id encoder,
-	struct graphics_object_id connector,
-	enum signal_type display_signal);
-
-static void init_dac_load_detection(struct bios_parser *bp)
-{
-	switch (BIOS_CMD_TABLE_PARA_REVISION(DAC_LoadDetection)) {
-	case 3:
-		bp->cmd_tbl.dac_load_detection = dac_load_detection_v3;
-		break;
-	default:
-		bp->cmd_tbl.dac_load_detection = NULL;
-		break;
-	}
-}
-
-static enum signal_type dac_load_detection_v3(
-	struct bios_parser *bp,
-	struct graphics_object_id encoder,
-	struct graphics_object_id connector,
-	enum signal_type display_signal)
-{
-	DAC_LOAD_DETECTION_PS_ALLOCATION params;
-	enum signal_type signal = SIGNAL_TYPE_NONE;
-
-	memset(&params, 0, sizeof(params));
-
-	/* load detection is cupported for CRT, TV and CV */
-	switch (display_signal) {
-	case SIGNAL_TYPE_RGB:
-		switch (dal_graphics_object_id_get_encoder_id(encoder)) {
-		case ENCODER_ID_INTERNAL_DAC1:
-		case ENCODER_ID_INTERNAL_KLDSCP_DAC1:
-			params.sDacload.usDeviceID =
-				cpu_to_le16(ATOM_DEVICE_CRT1_SUPPORT);
-			break;
-		case ENCODER_ID_INTERNAL_DAC2:
-		case ENCODER_ID_INTERNAL_KLDSCP_DAC2:
-			params.sDacload.usDeviceID =
-				cpu_to_le16(ATOM_DEVICE_CRT2_SUPPORT);
-			break;
-		default:
-			break;
-		}
-		break;
-		default:
-			return signal;
-	}
-
-	/* set the encoder to detect on */
-	switch (dal_graphics_object_id_get_encoder_id(encoder)) {
-	case ENCODER_ID_INTERNAL_DAC1:
-	case ENCODER_ID_INTERNAL_KLDSCP_DAC1:
-		params.sDacload.ucDacType = ATOM_DAC_A;
-		break;
-	case ENCODER_ID_INTERNAL_DAC2:
-	case ENCODER_ID_INTERNAL_KLDSCP_DAC2:
-		params.sDacload.ucDacType = ATOM_DAC_B;
-		break;
-	default:
-		return signal;
-	}
-
-	if (!EXEC_BIOS_CMD_TABLE(DAC_LoadDetection, params))
-		return signal;
-#if defined(CONFIG_DRM_AMD_DAL_VBIOS_PRESENT)
-	signal = bp->bios_helper->detect_sink(
-			bp->ctx,
-			encoder,
-			connector,
-			display_signal);
-#else
-	BREAK_TO_DEBUGGER(); /* VBios is needed */
-#endif
-
-	return signal;
-}
-
-/*******************************************************************************
- ********************************************************************************
- **
  **                 BLANK CRTC
  **
  ********************************************************************************
@@ -2567,25 +2477,6 @@ static enum bp_result external_encoder_control_v3(
 
 	if (EXEC_BIOS_CMD_TABLE(ExternalEncoderControl, params))
 		result = BP_RESULT_OK;
-
-	if (EXTERNAL_ENCODER_CONTROL_DAC_LOAD_DETECT == cntl->action) {
-#if defined(CONFIG_DRM_AMD_DAL_VBIOS_PRESENT)
-		if (BP_RESULT_OK == result)
-			/* get VBIOS result from scratch register.
-			 * ExternalEncoderControl runs detection and save result
-			 * in BIOS scratch registers. */
-			cntl->signal = bp->bios_helper->detect_sink(
-					bp->ctx,
-					encoder,
-					cntl->connector_obj_id,
-					cntl->signal);
-		else/* BIOS table does not work. */
-#endif
-		{
-			BREAK_TO_DEBUGGER(); /* VBios is needed */
-			cntl->signal = SIGNAL_TYPE_NONE;
-		}
-	}
 
 	return result;
 }

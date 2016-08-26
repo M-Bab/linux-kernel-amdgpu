@@ -82,7 +82,6 @@ enum bp_external_encoder_control_action {
 	EXTERNAL_ENCODER_CONTROL_SETUP = 0xf,
 	EXTERNAL_ENCODER_CONTROL_UNBLANK = 0x10,
 	EXTERNAL_ENCODER_CONTROL_BLANK = 0x11,
-	EXTERNAL_ENCODER_CONTROL_DAC_LOAD_DETECT = 0x12
 };
 
 enum bp_pipe_control_action {

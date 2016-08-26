@@ -170,7 +170,6 @@ void dce110_set_scratch_critical_state(struct dc_context *ctx,
 
 /* function table */
 static const struct bios_parser_helper bios_parser_helper_funcs = {
-	.detect_sink = detect_sink,
 	.is_accelerated_mode = is_accelerated_mode,
 };
 

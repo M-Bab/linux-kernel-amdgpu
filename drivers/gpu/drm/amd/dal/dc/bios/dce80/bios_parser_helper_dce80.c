@@ -130,7 +130,6 @@ static bool is_accelerated_mode(
 }
 
 static const struct bios_parser_helper bios_parser_helper_funcs = {
-	.detect_sink = detect_sink,
 	.is_accelerated_mode = is_accelerated_mode,
 };
 

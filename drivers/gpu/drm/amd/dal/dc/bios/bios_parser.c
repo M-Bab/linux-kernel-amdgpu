@@ -1225,21 +1225,6 @@ static enum bp_result bios_parser_program_display_engine_pll(
 
 }
 
-static enum signal_type bios_parser_dac_load_detect(
-	struct dc_bios *dcb,
-	struct graphics_object_id encoder,
-	struct graphics_object_id connector,
-	enum signal_type display_signal)
-{
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	if (!bp->cmd_tbl.dac_load_detection)
-		return SIGNAL_TYPE_NONE;
-
-	return bp->cmd_tbl.dac_load_detection(bp, encoder, connector,
-		display_signal);
-}
-
 static enum bp_result bios_parser_get_divider_for_target_display_clock(
 	struct dc_bios *dcb,
 	struct bp_display_clock_parameters *bp_params)
@@ -4418,8 +4403,6 @@ static const struct dc_vbios_funcs vbios_funcs = {
 	.program_display_engine_pll = bios_parser_program_display_engine_pll,
 
 	.get_divider_for_target_display_clock = bios_parser_get_divider_for_target_display_clock,
-
-	.dac_load_detect = bios_parser_dac_load_detect,
 
 	.enable_memory_requests = bios_parser_enable_memory_requests,
 

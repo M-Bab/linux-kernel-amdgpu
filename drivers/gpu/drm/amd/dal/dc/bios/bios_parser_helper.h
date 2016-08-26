@@ -41,11 +41,6 @@
 struct bios_parser;
 
 struct bios_parser_helper {
-	enum signal_type (*detect_sink)(
-		struct dc_context *ctx,
-		struct graphics_object_id encoder,
-		struct graphics_object_id connector,
-		enum signal_type signal);
 	bool (*is_accelerated_mode)(
 		struct dc_context *ctx);
 };

@@ -68,11 +68,6 @@ struct cmd_tbl {
 	enum bp_result (*dac2_output_control)(
 		struct bios_parser *bp,
 		bool enable);
-	enum signal_type (*dac_load_detection)(
-		struct bios_parser *bp,
-		struct graphics_object_id encoder,
-		struct graphics_object_id connector,
-		enum signal_type display_signal);
 	enum bp_result (*blank_crtc)(
 		struct bios_parser *bp,
 		struct bp_blank_crtc_parameters *bp_params,

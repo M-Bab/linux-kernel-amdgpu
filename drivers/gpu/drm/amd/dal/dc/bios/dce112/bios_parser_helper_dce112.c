@@ -132,7 +132,6 @@ static enum signal_type detect_sink(
 
 /* function table */
 static const struct bios_parser_helper bios_parser_helper_funcs = {
-	.detect_sink = detect_sink,
 	.is_accelerated_mode = is_accelerated_mode,
 };
 
