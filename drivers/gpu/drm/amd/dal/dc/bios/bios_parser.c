@@ -167,14 +167,6 @@ static uint8_t get_number_of_objects(struct bios_parser *bp, uint32_t offset)
 		return table->ucNumberOfObjects;
 }
 
-static uint8_t bios_parser_get_encoders_number(struct dc_bios *dcb)
-{
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	return get_number_of_objects(bp,
-		le16_to_cpu(bp->object_info_tbl.v1_1->usEncoderObjectTableOffset));
-}
-
 static uint8_t bios_parser_get_connectors_number(struct dc_bios *dcb)
 {
 	struct bios_parser *bp = BP_FROM_DCB(dcb);
@@ -4308,8 +4300,6 @@ static void bios_parser_destroy_integrated_info(
 
 static const struct dc_vbios_funcs vbios_funcs = {
 	.get_connectors_number = bios_parser_get_connectors_number,
-
-	.get_encoders_number = bios_parser_get_encoders_number,
 
 	.get_oem_ddc_lines_number = bios_parser_get_oem_ddc_lines_number,
 

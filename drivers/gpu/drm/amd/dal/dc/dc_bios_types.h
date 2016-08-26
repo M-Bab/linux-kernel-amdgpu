@@ -40,7 +40,6 @@
 
 struct dc_vbios_funcs {
 	uint8_t (*get_connectors_number)(struct dc_bios *bios);
-	uint8_t (*get_encoders_number)(struct dc_bios *bios);
 	uint32_t (*get_oem_ddc_lines_number)(struct dc_bios *bios);
 
 	struct graphics_object_id (*get_encoder_id)(
