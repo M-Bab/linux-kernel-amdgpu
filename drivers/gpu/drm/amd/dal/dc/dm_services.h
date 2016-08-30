@@ -139,6 +139,9 @@ static inline uint32_t set_reg_field_value_ex(
 		reg_name ## __ ## reg_field ## _MASK,\
 		reg_name ## __ ## reg_field ## __SHIFT)
 
+void generic_reg_update_ex(const struct dc_context *ctx,
+		uint32_t addr, uint32_t reg_val, int n, ...);
+
 /**************************************
  * Power Play (PP) interfaces
  **************************************/

@@ -30,7 +30,10 @@ dc_surface.o dc_link_hwss.o dc_link_dp.o dc_link_ddc.o
 
 AMD_DISPLAY_CORE = $(addprefix $(AMDDALPATH)/dc/core/,$(DISPLAY_CORE))
 
+AMD_DM_REG_UPDATE = $(addprefix $(AMDDALPATH)/dc/,dc_helper.o)
+
 AMD_DAL_FILES += $(AMD_DISPLAY_CORE)
+AMD_DAL_FILES += $(AMD_DM_REG_UPDATE)
 
 
 
