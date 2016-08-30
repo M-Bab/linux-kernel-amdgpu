@@ -1005,7 +1005,7 @@ context_alloc_fail:
 
 bool dc_pre_commit_surfaces_to_target(
 		struct dc *dc,
-		const struct dc_surface **new_surfaces,
+		const struct dc_surface *const *new_surfaces,
 		uint8_t new_surface_count,
 		struct dc_target *dc_target)
 {
