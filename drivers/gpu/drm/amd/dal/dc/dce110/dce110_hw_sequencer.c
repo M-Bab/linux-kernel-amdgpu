@@ -1505,10 +1505,7 @@ static void set_default_colors(struct pipe_ctx *pipe_ctx)
 		pipe_ctx->stream->public.timing.display_color_depth;
 
 	/* Lb color depth */
-	default_adjust.lb_color_depth = LB_PIXEL_DEPTH_30BPP;
-	/*dal_hw_sequencer_translate_to_lb_color_depth(
-			build_params->
-			line_buffer_params[path_id][plane_id].depth);*/
+	default_adjust.lb_color_depth = pipe_ctx->scl_data.lb_bpp;
 
 	pipe_ctx->opp->funcs->opp_set_csc_default(
 					pipe_ctx->opp, &default_adjust);
@@ -1567,6 +1564,7 @@ static void set_plane_config(
 
 	dc->hwss.enable_fe_clock(ctx, pipe_ctx->pipe_idx, true);
 
+	set_default_colors(pipe_ctx);
 	if (pipe_ctx->stream->public.csc_color_matrix.enable_adjustment
 			== true) {
 		tbl_entry.color_space =
@@ -1578,8 +1576,6 @@ static void set_plane_config(
 
 		pipe_ctx->opp->funcs->opp_set_csc_adjustment
 				(pipe_ctx->opp, &tbl_entry);
-	} else {
-		set_default_colors(pipe_ctx);
 	}
 
 	if (pipe_ctx->stream->public.gamut_remap_matrix.enable_remap == true) {
@@ -1930,6 +1926,7 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 
 	dc->hwss.enable_fe_clock(ctx, pipe_ctx->pipe_idx, true);
 
+	set_default_colors(pipe_ctx);
 	if (pipe_ctx->stream->public.csc_color_matrix.enable_adjustment
 			== true) {
 		tbl_entry.color_space =
@@ -1941,8 +1938,6 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 
 		pipe_ctx->opp->funcs->opp_set_csc_adjustment
 				(pipe_ctx->opp, &tbl_entry);
-	} else {
-		set_default_colors(pipe_ctx);
 	}
 
 	if (pipe_ctx->stream->public.gamut_remap_matrix.enable_remap == true) {

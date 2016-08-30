@@ -27,6 +27,7 @@
 #define __DAL_OPP_H__
 
 #include "hw_shared.h"
+#include "transform.h"
 
 struct fixed31_32;
 struct gamma_parameters;
@@ -220,7 +221,7 @@ enum graphics_csc_adjust_type {
 };
 
 struct default_adjustment {
-	uint32_t lb_color_depth;
+	enum lb_pixel_depth lb_color_depth;
 	enum dc_color_space out_color_space;
 	enum dc_color_space in_color_space;
 	enum dc_color_depth color_depth;
