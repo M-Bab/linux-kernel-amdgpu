@@ -1561,7 +1561,7 @@ void dc_flip_surface_addrs(
 		uint32_t count)
 {
 	int i;
-	struct dc_surface_update updates[MAX_SURFACE_NUM] = { 0 };
+	struct dc_surface_update updates[MAX_SURFACE_NUM] = { { 0 } };
 	for (i = 0; i < count; i++) {
 		updates[i].flip_addr = &flip_addrs[i];
 		updates[i].surface = surfaces[i];
