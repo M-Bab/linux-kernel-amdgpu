@@ -1116,7 +1116,7 @@ static int amdgpu_dm_backlight_update_status(struct backlight_device *bd)
 	struct amdgpu_display_manager *dm = bl_get_data(bd);
 
 	if (dc_link_set_backlight_level(dm->backlight_link,
-			bd->props.brightness, 0))
+			bd->props.brightness, 0, 0))
 		return 0;
 	else
 		return 1;

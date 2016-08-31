@@ -109,7 +109,7 @@ struct link_encoder_funcs {
 		struct link_encoder *enc,
 		const struct link_mst_stream_allocation_table *table);
 	void (*set_dmcu_backlight_level)(struct link_encoder *enc,
-		uint32_t level, uint32_t frame_ramp);
+		uint32_t level, uint32_t frame_ramp, uint32_t controller_id);
 	void (*backlight_control) (struct link_encoder *enc,
 		bool enable);
 	void (*power_control) (struct link_encoder *enc,

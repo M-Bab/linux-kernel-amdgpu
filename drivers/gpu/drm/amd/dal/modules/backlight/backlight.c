@@ -38,7 +38,6 @@ struct sink_caps {
 
 struct backlight_state {
 	unsigned int backlight;
-	unsigned int abm_level;
 	unsigned int frame_ramp;
 	bool smooth_brightness_enabled;
 };
@@ -229,6 +228,8 @@ bool mod_backlight_add_sink(struct mod_backlight *mod_backlight,
 		core_backlight->caps[core_backlight->num_sinks].sink = sink;
 		core_backlight->state[core_backlight->num_sinks].
 					smooth_brightness_enabled = false;
+		core_backlight->state[core_backlight->num_sinks].
+					backlight = 100;
 		core_backlight->num_sinks++;
 		return true;
 	}
@@ -301,7 +302,7 @@ bool mod_backlight_set_backlight(struct mod_backlight *mod_backlight,
 	params.bits.frame_ramp = frame_ramp;
 
 	core_backlight->dc->stream_funcs.set_backlight
-		(core_backlight->dc, backlight_8bit, params.u32All);
+		(core_backlight->dc, backlight_8bit, params.u32All, streams[0]);
 
 	return true;
 }
@@ -497,6 +498,7 @@ unsigned int mod_backlight_backlight_level_signal_to_percentage(
 		struct mod_backlight *mod_backlight,
 		unsigned int signalLevel8bit)
 {
+	unsigned int invalid_backlight = (unsigned int)(-1);
 	/* Do lazy initialization of backlight capabilities */
 	if (!backlight_caps_initialized)
 		mod_backlight_initialize_backlight_caps(mod_backlight);
@@ -517,7 +519,7 @@ unsigned int mod_backlight_backlight_level_signal_to_percentage(
 					absolute_backlight_max) {
 		unsigned int min = 0;
 		unsigned int max = 100;
-		unsigned int mid = -1;
+		unsigned int mid = invalid_backlight;
 
 		while (max >= min) {
 			mid = (min + max) / 2; /* floor of half range */
@@ -533,7 +535,7 @@ unsigned int mod_backlight_backlight_level_signal_to_percentage(
 		return mid;
 	}
 
-	return -1;
+	return invalid_backlight;
 }
 
 
@@ -564,5 +566,37 @@ bool mod_backlight_get_panel_backlight_boundaries(
 	return false;
 }
 
+bool mod_backlight_set_smooth_brightness(struct mod_backlight *mod_backlight,
+		const struct dc_sink *sink, bool enable_brightness)
+{
+	struct core_backlight *core_backlight =
+			MOD_BACKLIGHT_TO_CORE(mod_backlight);
+	unsigned int sink_index = sink_index_from_sink(core_backlight, sink);
 
+	core_backlight->state[sink_index].smooth_brightness_enabled
+					= enable_brightness;
+	return true;
+}
+
+bool mod_backlight_notify_mode_change(struct mod_backlight *mod_backlight,
+		const struct dc_stream *stream)
+{
+	struct core_backlight *core_backlight =
+			MOD_BACKLIGHT_TO_CORE(mod_backlight);
+
+	unsigned int sink_index = sink_index_from_sink(core_backlight,
+					stream->sink);
+	unsigned int frame_ramp = core_backlight->state[sink_index].frame_ramp;
+	union dmcu_abm_set_bl_params params;
+
+	params.u32All = 0;
+	params.bits.gradual_change = (frame_ramp > 0);
+	params.bits.frame_ramp = frame_ramp;
+
+	return core_backlight->dc->stream_funcs.set_backlight
+			(core_backlight->dc,
+			core_backlight->state[sink_index].backlight,
+			params.u32All, stream);
+
+}
 

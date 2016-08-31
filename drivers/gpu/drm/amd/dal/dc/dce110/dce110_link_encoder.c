@@ -90,6 +90,11 @@
 /* For current ASICs pixel clock - 600MHz */
 #define MAX_ENCODER_CLOCK 600000
 
+/* Set the ABM Pipe */
+#define MCP_ABM_PIPE_SET 0x66
+/* Set backlight level */
+#define MCP_BL_SET 0x67
+
 enum {
 	DP_MST_UPDATE_MAX_RETRY = 50
 };
@@ -1764,23 +1769,50 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 void dce110_link_encoder_set_dmcu_backlight_level(
 	struct link_encoder *enc,
 	uint32_t level,
-	uint32_t frame_ramp)
+	uint32_t frame_ramp,
+	uint32_t controller_id)
 {
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
 	struct dc_context *ctx = enc110->base.ctx;
 	unsigned int dmcu_max_retry_on_wait_reg_ready = 801;
 	unsigned int dmcu_wait_reg_ready_interval = 100;
-
 	unsigned int backlight_17bit = level * 0x10101;
 	unsigned char temp_uchar =
 			(unsigned char)(((backlight_17bit & 0x80) >> 7) & 1);
 	unsigned int regValue;
+	uint32_t rampingBoundary = 0xFFFF;
 	uint32_t pwmUserLevel;
 	uint32_t masterCmd;
 	uint32_t masterComCntl;
 	uint32_t s2;
 
 	backlight_17bit = (backlight_17bit >> 8) + temp_uchar;
+
+	/* set ramping boundary */
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_DATA_REG1), rampingBoundary);
+
+	/* setDMCUParam_Pipe */
+	masterCmd = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG));
+	set_reg_field_value(
+			masterCmd,
+			MCP_ABM_PIPE_SET,
+			MASTER_COMM_CMD_REG,
+			MASTER_COMM_CMD_REG_BYTE0);
+	set_reg_field_value(
+			masterCmd,
+			controller_id,
+			MASTER_COMM_CMD_REG,
+			MASTER_COMM_CMD_REG_BYTE1);
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG), masterCmd);
+
+	/* notifyDMCUMsg */
+	masterComCntl = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG));
+	set_reg_field_value(
+			masterComCntl,
+			1,
+			MASTER_COMM_CNTL_REG,
+			MASTER_COMM_INTERRUPT);
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG), masterComCntl);
 
 	/* waitDMCUReadyForCmd */
 	do {
@@ -1808,7 +1840,7 @@ void dce110_link_encoder_set_dmcu_backlight_level(
 	masterCmd = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG));
 	set_reg_field_value(
 			masterCmd,
-			0x67,
+			MCP_BL_SET,
 			MASTER_COMM_CMD_REG,
 			MASTER_COMM_CMD_REG_BYTE0);
 	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG), masterCmd);

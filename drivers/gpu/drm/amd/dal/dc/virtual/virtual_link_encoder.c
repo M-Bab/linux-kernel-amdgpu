@@ -77,7 +77,8 @@ static void virtual_link_encoder_update_mst_stream_allocation_table(
 static void virtual_link_encoder_set_dmcu_backlight_level(
 	struct link_encoder *enc,
 	uint32_t level,
-	uint32_t frame_ramp) {}
+	uint32_t frame_ramp,
+	uint32_t controller_id) {}
 
 static void virtual_link_encoder_edp_backlight_control(
 	struct link_encoder *enc,

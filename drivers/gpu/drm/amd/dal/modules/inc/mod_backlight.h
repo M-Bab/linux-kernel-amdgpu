@@ -66,4 +66,9 @@ bool mod_backlight_get_panel_backlight_boundaries
 				unsigned int *output_ac_level_percentage,
 				unsigned int *output_dc_level_percentage);
 
+bool mod_backlight_set_smooth_brightness(struct mod_backlight *mod_backlight,
+		const struct dc_sink *sink, bool enable_brightness);
+
+bool mod_backlight_notify_mode_change(struct mod_backlight *mod_backlight,
+		const struct dc_stream *stream);
 #endif /* MODULES_INC_MOD_BACKLIGHT_H_ */

@@ -295,14 +295,14 @@ static void stream_update_scaling(
 }
 
 static bool set_backlight(struct dc *dc, unsigned int backlight_level,
-						unsigned int frame_ramp)
+			unsigned int frame_ramp, const struct dc_stream *stream)
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	int i;
 
 	for (i = 0; i < core_dc->link_count; i++)
 		dc_link_set_backlight_level(&core_dc->links[i]->public,
-				backlight_level, frame_ramp);
+				backlight_level, frame_ramp, stream);
 
 	return true;
 

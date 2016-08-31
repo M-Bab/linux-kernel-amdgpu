@@ -1372,10 +1372,24 @@ enum dc_status dc_link_validate_mode_timing(
 }
 
 bool dc_link_set_backlight_level(const struct dc_link *public, uint32_t level,
-		uint32_t frame_ramp)
+		uint32_t frame_ramp, const struct dc_stream *stream)
 {
 	struct core_link *link = DC_LINK_TO_CORE(public);
 	struct dc_context *ctx = link->ctx;
+	struct core_dc *core_dc = DC_TO_CORE(ctx->dc);
+	struct core_stream *core_stream = DC_STREAM_TO_CORE(stream);
+	unsigned int controller_id = 0;
+	int i;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream
+				== core_stream)
+			/* dmcu -1 for all controller id values,
+			 * therefore +1 here
+			 */
+			controller_id = core_dc->current_context->res_ctx.
+					pipe_ctx[i].tg->inst + 1;
+	}
 
 	dal_logger_write(ctx->logger, LOG_MAJOR_BACKLIGHT,
 			LOG_MINOR_BACKLIGHT_INTERFACE,
@@ -1384,7 +1398,7 @@ bool dc_link_set_backlight_level(const struct dc_link *public, uint32_t level,
 	/* always assume dmcu is running */
 	link->link_enc->funcs->set_dmcu_backlight_level
 						(link->link_enc, level,
-						frame_ramp);
+						frame_ramp, controller_id);
 	return true;
 }
 
