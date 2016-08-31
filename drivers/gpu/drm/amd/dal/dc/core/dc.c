@@ -1387,6 +1387,17 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 			BREAK_TO_DEBUGGER();
 			return;
 		}
+
+		for (i = 0; i < surface_count; i++) {
+			struct core_surface *surface = DC_SURFACE_TO_CORE(updates[i].surface);
+			struct pipe_ctx *pipe_ctx = find_pipe_ctx_by_surface(context, surface);
+
+			core_dc->hwss.pipe_control_lock(
+						core_dc->ctx,
+						pipe_ctx->pipe_idx,
+						PIPE_LOCK_CONTROL_SURFACE,
+						true);
+		}
 	}
 
 	for (i = 0; i < surface_count; i++) {
@@ -1427,25 +1438,9 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 				pipe_ctx->scl_data.recout.height -= 2;
 				pipe_ctx->scl_data.recout.width -= 2;
 			}
-
-			core_dc->hwss.pipe_control_lock(
-					core_dc->ctx,
-					pipe_ctx->pipe_idx,
-					PIPE_LOCK_CONTROL_SURFACE,
-					true);
-
 			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
 
 			core_dc->hwss.apply_ctx_to_surface(core_dc, context);
-
-			core_dc->hwss.pipe_control_lock(
-					core_dc->ctx,
-					pipe_ctx->pipe_idx,
-					PIPE_LOCK_CONTROL_GRAPHICS |
-					PIPE_LOCK_CONTROL_SCL |
-					PIPE_LOCK_CONTROL_BLENDER |
-					PIPE_LOCK_CONTROL_SURFACE,
-					false);
 
 		} else if (updates[i].flip_addr) {
 			surface->public.address = updates[i].flip_addr->address;
@@ -1459,6 +1454,20 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 	}
 
 	if (dc_target) {
+
+		for (i = context->res_ctx.pool->pipe_count - 1; i >= 0; i--) {
+			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+
+			core_dc->hwss.pipe_control_lock(
+								core_dc->ctx,
+								pipe_ctx->pipe_idx,
+								PIPE_LOCK_CONTROL_GRAPHICS |
+								PIPE_LOCK_CONTROL_SCL |
+								PIPE_LOCK_CONTROL_BLENDER |
+								PIPE_LOCK_CONTROL_SURFACE,
+								false);
+		}
+
 		core_dc->temp_flip_context = core_dc->current_context;
 		core_dc->current_context = context;
 	}
