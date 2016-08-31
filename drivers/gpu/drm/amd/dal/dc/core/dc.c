@@ -385,8 +385,12 @@ static bool construct(struct core_dc *dc,
 
 		dc_ctx->dc_bios = dal_adapter_service_get_bios_parser(as);
 
-		dc->res_pool = dc_create_resource_pool(as, dc,
-				init_params->num_virtual_links, dc_version);
+		dc->res_pool = dc_create_resource_pool(
+				as,
+				dc,
+				init_params->num_virtual_links,
+				dc_version,
+				init_params->asic_id);
 		if (!dc->res_pool)
 			goto create_resource_fail;
 
@@ -399,8 +403,12 @@ static bool construct(struct core_dc *dc,
 		 */
 
 		dc_ctx->dc_bios = init_params->vbios_override;
-		dc->res_pool = dc_create_resource_pool(NULL, dc,
-				init_params->num_virtual_links, dc_version);
+		dc->res_pool = dc_create_resource_pool(
+				NULL,
+				dc,
+				init_params->num_virtual_links,
+				dc_version,
+				init_params->asic_id);
 		if (!dc->res_pool)
 			goto create_resource_fail;
 
@@ -1280,7 +1288,7 @@ bool dc_post_commit_surfaces_to_target(struct dc *dc)
 	for (i = 0; i < core_dc->current_context->res_ctx.pool->pipe_count; i++) {
 		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == NULL) {
 			core_dc->hwss.enable_display_power_gating(
-				core_dc->ctx, i, core_dc->ctx->dc_bios,
+				core_dc, i, core_dc->ctx->dc_bios,
 				PIPE_GATING_CONTROL_ENABLE);
 			if (core_dc->current_context->res_ctx.pipe_ctx[i].xfm)
 				core_dc->current_context->res_ctx.pipe_ctx[i].xfm->funcs->transform_reset(

@@ -107,7 +107,7 @@ struct hw_sequencer_funcs {
 					bool clock_gating);
 
 	bool (*enable_display_power_gating)(
-					struct dc_context *ctx,
+					struct core_dc *dc,
 					uint8_t controller_id,
 					struct dc_bios *dcb,
 					enum pipe_gating_control power_gating);
@@ -128,7 +128,7 @@ struct hw_sequencer_funcs {
 				bool lock);
 
 	void (*set_blender_mode)(
-				struct dc_context *ctx,
+				struct core_dc *dc,
 				uint8_t controller_id,
 				uint32_t mode);
 

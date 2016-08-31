@@ -142,7 +142,7 @@ static bool dce80_pipe_control_lock(
 }
 
 static void dce80_set_blender_mode(
-	struct dc_context *ctx,
+	struct core_dc *dc,
 	uint8_t controller_id,
 	uint32_t mode)
 {
@@ -150,6 +150,8 @@ static void dce80_set_blender_mode(
 	uint32_t addr = HW_REG_BLND(mmBLND_CONTROL, controller_id);
 	uint32_t blnd_mode;
 	uint32_t feedthrough = 0;
+
+	struct dc_context *ctx = dc->ctx;
 
 	switch (mode) {
 	case BLENDER_MODE_OTHER_PIPE:
@@ -179,13 +181,14 @@ static void dce80_set_blender_mode(
 }
 
 static bool dce80_enable_display_power_gating(
-	struct dc_context *ctx,
+	struct core_dc *dc,
 	uint8_t controller_id,
 	struct dc_bios *dcb,
 	enum pipe_gating_control power_gating)
 {
 	enum bp_result bp_result = BP_RESULT_OK;
 	enum bp_pipe_control_action cntl;
+	struct dc_context *ctx = dc->ctx;
 
 	if (power_gating == PIPE_GATING_CONTROL_INIT)
 		cntl = ASIC_PIPE_INIT;

@@ -46,7 +46,8 @@ enum dc_status dce110_resource_build_pipe_hw_param(struct pipe_ctx *pipe_ctx);
 struct resource_pool *dce110_create_resource_pool(
 	struct adapter_service *as,
 	uint8_t num_virtual_links,
-	struct core_dc *dc);
+	struct core_dc *dc,
+	struct hw_asic_id asic_id);
 
 #endif /* __DC_RESOURCE_DCE110_H__ */
 

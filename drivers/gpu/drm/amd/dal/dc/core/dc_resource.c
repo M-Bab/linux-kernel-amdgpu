@@ -88,7 +88,8 @@ enum dce_version resource_parse_asic_id(struct hw_asic_id asic_id)
 struct resource_pool *dc_create_resource_pool(struct adapter_service *adapter_serv,
 				struct core_dc *dc,
 				int num_virtual_links,
-				enum dce_version dc_version)
+				enum dce_version dc_version,
+				struct hw_asic_id asic_id)
 {
 
 	switch (dc_version) {
@@ -105,7 +106,7 @@ struct resource_pool *dc_create_resource_pool(struct adapter_service *adapter_se
 #if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 	case DCE_VERSION_11_0:
 		return dce110_create_resource_pool(
-			adapter_serv, num_virtual_links, dc);
+			adapter_serv, num_virtual_links, dc, asic_id);
 #endif
 #if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 	case DCE_VERSION_11_2:

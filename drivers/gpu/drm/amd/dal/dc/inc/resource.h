@@ -32,7 +32,6 @@
 
 /* TODO unhardcode, 4 for CZ*/
 #define MEMORY_TYPE_MULTIPLIER 4
-#define DCE110_UNDERLAY_IDX 3
 
 enum dce_version resource_parse_asic_id(
 		struct hw_asic_id asic_id);
@@ -40,7 +39,8 @@ enum dce_version resource_parse_asic_id(
 struct resource_pool *dc_create_resource_pool(struct adapter_service *adapter_serv,
 				struct core_dc *dc,
 				int num_virtual_links,
-				enum dce_version dc_version);
+				enum dce_version dc_version,
+				struct hw_asic_id asic_id);
 
 void dc_destroy_resource_pool(struct resource_pool **pool,
 				enum dce_version dc_version);

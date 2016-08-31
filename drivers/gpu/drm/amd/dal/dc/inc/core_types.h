@@ -236,6 +236,7 @@ struct resource_pool {
 	struct stream_encoder *stream_enc[MAX_PIPES * 2];
 
 	unsigned int pipe_count;
+	unsigned int underlay_pipe_index;
 	unsigned int stream_enc_count;
 
 	union supported_stream_engines stream_engines;

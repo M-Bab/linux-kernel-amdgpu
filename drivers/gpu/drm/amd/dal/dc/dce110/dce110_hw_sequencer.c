@@ -255,7 +255,7 @@ static bool dce110_pipe_control_lock(
 }
 
 static void dce110_set_blender_mode(
-	struct dc_context *ctx,
+	struct core_dc *dc,
 	uint8_t controller_id,
 	uint32_t mode)
 {
@@ -265,6 +265,9 @@ static void dce110_set_blender_mode(
 	uint32_t blnd_mode = 0;
 	uint32_t feedthrough = 1;
 	uint32_t multiplied_mode = 0;
+
+	struct dc_context *ctx = dc->ctx;
+	unsigned int underlay_idx = dc->current_context->res_ctx.pool->underlay_pipe_index;
 
 	switch (mode) {
 	case BLENDER_MODE_OTHER_PIPE:
@@ -280,7 +283,7 @@ static void dce110_set_blender_mode(
 		break;
 	case BLENDER_MODE_CURRENT_PIPE:
 	default:
-		if (controller_id == DCE110_UNDERLAY_IDX || controller_id == 0)
+		if (controller_id == underlay_idx || controller_id == 0)
 			feedthrough = 0;
 		break;
 	}
@@ -349,13 +352,15 @@ static void enable_display_pipe_clock_gating(
 }
 
 static bool dce110_enable_display_power_gating(
-	struct dc_context *ctx,
+	struct core_dc *dc,
 	uint8_t controller_id,
 	struct dc_bios *dcb,
 	enum pipe_gating_control power_gating)
 {
 	enum bp_result bp_result = BP_RESULT_OK;
 	enum bp_pipe_control_action cntl;
+	struct dc_context *ctx = dc->ctx;
+	unsigned int underlay_idx = dc->res_pool->underlay_pipe_index;
 
 	if (IS_FPGA_MAXIMUS_DC(ctx->dce_environment))
 		return true;
@@ -367,7 +372,7 @@ static bool dce110_enable_display_power_gating(
 	else
 		cntl = ASIC_PIPE_DISABLE;
 
-	if (controller_id == DCE110_UNDERLAY_IDX)
+	if (controller_id == underlay_idx)
 		controller_id = CONTROLLER_ID_UNDERLAY0 - 1;
 
 	if (power_gating != PIPE_GATING_CONTROL_INIT || controller_id == 0){
@@ -935,7 +940,7 @@ static void disable_vga_and_power_gate_all_controllers(
 		 * powergating. */
 		enable_display_pipe_clock_gating(ctx,
 				true);
-		dc->hwss.enable_display_power_gating(ctx, i, dcb,
+		dc->hwss.enable_display_power_gating(dc, i, dcb,
 				PIPE_GATING_CONTROL_ENABLE);
 		dc->res_pool->transforms[i]->funcs->transform_reset(
 				dc->res_pool->transforms[i]);
@@ -1214,13 +1219,14 @@ static void set_displaymarks(
 	struct validate_context *context)
 {
 	uint8_t i, num_pipes;
+	unsigned int underlay_idx = dc->res_pool->underlay_pipe_index;
 
 	for (i = 0, num_pipes = 0; i < MAX_PIPES; i++) {
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 		uint32_t total_dest_line_time_ns;
 
 		if (pipe_ctx->stream == NULL
-			|| pipe_ctx->pipe_idx == DCE110_UNDERLAY_IDX)
+			|| pipe_ctx->pipe_idx == underlay_idx)
 			continue;
 
 		total_dest_line_time_ns = compute_pstate_blackout_duration(
@@ -1316,7 +1322,7 @@ static void reset_single_pipe_hw_ctx(
 	pipe_ctx->xfm->funcs->transform_reset(pipe_ctx->xfm);
 	resource_unreference_clock_source(&context->res_ctx, pipe_ctx->clock_source);
 	dc->hwss.enable_display_power_gating(
-		pipe_ctx->stream->ctx, pipe_ctx->pipe_idx, dcb,
+		(struct core_dc *)dc, pipe_ctx->pipe_idx, dcb,
 			PIPE_GATING_CONTROL_ENABLE);
 
 	pipe_ctx->stream = NULL;
@@ -1396,7 +1402,7 @@ static enum dc_status apply_ctx_to_hw(
 				context->res_ctx.pool->adapter_srv);
 
 		dc->hwss.enable_display_power_gating(
-				dc->ctx, i, dcb,
+				dc, i, dcb,
 				PIPE_GATING_CONTROL_DISABLE);
 	}
 
@@ -1532,7 +1538,7 @@ static void program_blender_if_needed(const struct core_dc *dc,
 		if (pipe_ctx->bottom_pipe)
 			blender_mode = BLENDER_MODE_BLENDING;
 		dc->hwss.set_blender_mode(
-			dc->ctx, pipe_ctx->pipe_idx, blender_mode);
+			(struct core_dc *)dc, pipe_ctx->pipe_idx, blender_mode);
 	}
 }
 
@@ -1776,10 +1782,10 @@ static void init_hw(struct core_dc *dc)
 		xfm->funcs->transform_reset(xfm);
 
 		dc->hwss.enable_display_power_gating(
-				dc->ctx, i, bp,
+				dc, i, bp,
 				PIPE_GATING_CONTROL_INIT);
 		dc->hwss.enable_display_power_gating(
-				dc->ctx, i, bp,
+				dc, i, bp,
 				PIPE_GATING_CONTROL_DISABLE);
 		xfm->funcs->transform_power_up(xfm);
 		dc->hwss.enable_display_pipe_clock_gating(
@@ -1830,7 +1836,7 @@ static void dce110_power_on_pipe_if_needed(
 
 	if (!old_pipe_ctx->stream && pipe_ctx->stream) {
 		dc->hwss.enable_display_power_gating(
-				dc->ctx,
+				dc,
 				pipe_ctx->pipe_idx,
 				dcb, PIPE_GATING_CONTROL_DISABLE);
 

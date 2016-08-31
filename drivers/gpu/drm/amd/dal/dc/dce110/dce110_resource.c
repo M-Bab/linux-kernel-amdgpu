@@ -624,9 +624,9 @@ enum dc_status dce110_resource_build_pipe_hw_param(struct pipe_ctx *pipe_ctx)
 	return DC_OK;
 }
 
-static bool is_surface_pixel_format_supported(struct pipe_ctx *pipe_ctx)
+static bool is_surface_pixel_format_supported(struct pipe_ctx *pipe_ctx, unsigned int underlay_idx)
 {
-	if (pipe_ctx->pipe_idx != DCE110_UNDERLAY_IDX)
+	if (pipe_ctx->pipe_idx != underlay_idx)
 		return true;
 	if (!pipe_ctx->surface)
 		return false;
@@ -660,7 +660,8 @@ static enum dc_status validate_mapped_resource(
 				if (context->res_ctx.pipe_ctx[k].stream != stream)
 					continue;
 
-				if (!is_surface_pixel_format_supported(pipe_ctx))
+				if (!is_surface_pixel_format_supported(pipe_ctx,
+						context->res_ctx.pool->underlay_pipe_index))
 					return DC_SURFACE_PIXEL_FORMAT_UNSUPPORTED;
 
 				if (!pipe_ctx->tg->funcs->validate_timing(
@@ -765,7 +766,8 @@ enum dc_status dce110_validate_bandwidth(
 
 	bool all_displays_in_sync = true;
 	struct dc_crtc_timing prev_timing;
-	struct pipe_ctx *underlay_pipe_ctx = &context->res_ctx.pipe_ctx[DCE110_UNDERLAY_IDX];
+	unsigned int underlay_idx = context->res_ctx.pool->underlay_pipe_index;
+	struct pipe_ctx *underlay_pipe_ctx = &context->res_ctx.pipe_ctx[underlay_idx];
 	struct bw_calcs_input_single_display *underlay_input = &context->
 		bw_mode_data.displays_data[number_of_displays];
 
@@ -1021,21 +1023,20 @@ static struct pipe_ctx *dce110_acquire_idle_pipe_for_layer(
 		struct resource_context *res_ctx,
 		struct core_stream *stream)
 {
-	struct pipe_ctx *pipe_ctx = &res_ctx->pipe_ctx[DCE110_UNDERLAY_IDX];
+	unsigned int underlay_idx = res_ctx->pool->underlay_pipe_index;
+	struct pipe_ctx *pipe_ctx = &res_ctx->pipe_ctx[underlay_idx];
 
-	if (res_ctx->pipe_ctx[DCE110_UNDERLAY_IDX].stream) {
+	if (res_ctx->pipe_ctx[underlay_idx].stream) {
 		return NULL;
 	}
 
-	pipe_ctx->tg = res_ctx->pool->timing_generators[DCE110_UNDERLAY_IDX];
-	pipe_ctx->mi = res_ctx->pool->mis[DCE110_UNDERLAY_IDX];
-	/*pipe_ctx->ipp = res_ctx->pool->ipps[DCE110_UNDERLAY_IDX];*/
-	pipe_ctx->xfm = res_ctx->pool->transforms[DCE110_UNDERLAY_IDX];
-	pipe_ctx->opp = res_ctx->pool->opps[DCE110_UNDERLAY_IDX];
+	pipe_ctx->tg = res_ctx->pool->timing_generators[underlay_idx];
+	pipe_ctx->mi = res_ctx->pool->mis[underlay_idx];
+	/*pipe_ctx->ipp = res_ctx->pool->ipps[underlay_idx];*/
+	pipe_ctx->xfm = res_ctx->pool->transforms[underlay_idx];
+	pipe_ctx->opp = res_ctx->pool->opps[underlay_idx];
 	pipe_ctx->dis_clk = res_ctx->pool->display_clock;
-	pipe_ctx->pipe_idx = DCE110_UNDERLAY_IDX;
-
-
+	pipe_ctx->pipe_idx = underlay_idx;
 
 	pipe_ctx->stream = stream;
 
@@ -1139,7 +1140,8 @@ static bool construct(
 	struct adapter_service *as,
 	uint8_t num_virtual_links,
 	struct core_dc *dc,
-	struct dce110_resource_pool *pool)
+	struct dce110_resource_pool *pool,
+	struct hw_asic_id asic_id)
 {
 	unsigned int i;
 	struct audio_init_data audio_init_data = { 0 };
@@ -1153,7 +1155,15 @@ static bool construct(
 	/*************************************************
 	 *  Resource + asic cap harcoding                *
 	 *************************************************/
+
 	pool->base.pipe_count = 3;
+	pool->base.underlay_pipe_index = 3;
+
+	if (ASIC_REV_IS_STONEY(asic_id.hw_internal_rev)) {
+		pool->base.pipe_count = 2;
+		pool->base.underlay_pipe_index = 2;
+	}
+
 	pool->base.stream_enc_count = 3;
 	dc->public.caps.max_downscale_ratio = 150;
 	dc->public.caps.i2c_speed_in_khz = 100;
@@ -1391,7 +1401,8 @@ clk_src_create_fail:
 struct resource_pool *dce110_create_resource_pool(
 	struct adapter_service *as,
 	uint8_t num_virtual_links,
-	struct core_dc *dc)
+	struct core_dc *dc,
+	struct hw_asic_id asic_id)
 {
 	struct dce110_resource_pool *pool =
 		dm_alloc(sizeof(struct dce110_resource_pool));
@@ -1399,7 +1410,7 @@ struct resource_pool *dce110_create_resource_pool(
 	if (!pool)
 		return NULL;
 
-	if (construct(as, num_virtual_links, dc, pool))
+	if (construct(as, num_virtual_links, dc, pool, asic_id))
 		return &pool->base;
 
 	BREAK_TO_DEBUGGER();
