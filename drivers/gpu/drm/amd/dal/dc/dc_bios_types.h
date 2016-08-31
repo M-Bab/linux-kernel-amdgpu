@@ -171,6 +171,8 @@ struct dc_vbios_funcs {
 	enum bp_result (*set_dce_clock)(
 		struct dc_bios *bios,
 		struct bp_set_dce_clock_parameters *bp_params);
+	unsigned int (*get_smu_clock_info)(
+		struct dc_bios *bios);
 	enum bp_result (*enable_spread_spectrum_on_ppll)(
 		struct dc_bios *bios,
 		struct bp_spread_spectrum_parameters *bp_params,

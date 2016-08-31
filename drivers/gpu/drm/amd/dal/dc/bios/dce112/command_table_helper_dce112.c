@@ -331,7 +331,9 @@ static uint8_t disp_power_gating_action_to_atom(
 	return atom_pipe_action;
 }
 
-bool dc_clock_type_to_atom(enum bp_dce_clock_type id, uint32_t *atom_clock_type)
+static bool dc_clock_type_to_atom(
+		enum bp_dce_clock_type id,
+		uint32_t *atom_clock_type)
 {
 	bool retCode = true;
 
@@ -354,7 +356,7 @@ bool dc_clock_type_to_atom(enum bp_dce_clock_type id, uint32_t *atom_clock_type)
 	return retCode;
 }
 
-uint8_t transmitter_color_depth_to_atom(enum transmitter_color_depth id)
+static uint8_t transmitter_color_depth_to_atom(enum transmitter_color_depth id)
 {
 	uint8_t atomColorDepth = 0;
 
