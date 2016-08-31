@@ -1320,63 +1320,6 @@ bool dc_commit_surfaces_to_target(
 
 }
 
-bool dc_update_surfaces_for_target(
-		struct dc *dc,
-		const struct dc_surface **new_surfaces,
-		uint8_t new_surface_count,
-		struct dc_target *dc_target)
-
-{
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-	struct dc_bios *dcb = core_dc->ctx->dc_bios;
-
-	int i, j;
-	struct core_target *target = DC_TARGET_TO_CORE(dc_target);
-	struct dc_target_status *target_status = NULL;
-	struct validate_context *context;
-
-	if (core_dc->current_context->target_count == 0)
-		return false;
-
-	context = core_dc->current_context;
-
-	/* Cannot commit surface to a target that is not committed */
-	for (i = 0; i < context->target_count; i++)
-		if (target == context->targets[i])
-			break;
-
-	target_status = &context->target_status[i];
-
-	if (!dcb->funcs->is_accelerated_mode(dcb)
-			|| i == context->target_count) {
-		BREAK_TO_DEBUGGER();
-		return false;
-	}
-
-	if (!resource_attach_surfaces_to_context(
-			new_surfaces,
-			new_surface_count,
-			dc_target,
-			context)) {
-		BREAK_TO_DEBUGGER();
-		return false;
-	}
-
-	for (i = 0; i < new_surface_count; i++)
-		for (j = 0; j < MAX_PIPES; j++) {
-			if (context->res_ctx.pipe_ctx[j].surface !=
-					DC_SURFACE_TO_CORE(new_surfaces[i]))
-				continue;
-
-			resource_build_scaling_params(
-				new_surfaces[i], &context->res_ctx.pipe_ctx[j]);
-		}
-
-	core_dc->hwss.update_plane_surface(core_dc, context, new_surfaces,
-			new_surface_count);
-	return true;
-}
-
 static struct pipe_ctx *find_pipe_ctx_by_surface(struct validate_context *context,
 		const struct core_surface *surface)
 {
@@ -1392,7 +1335,7 @@ static struct pipe_ctx *find_pipe_ctx_by_surface(struct validate_context *contex
 	return pipe_ctx;
 }
 
-void dc_surfaces_update(struct dc *dc, struct dc_surface_update *updates,
+void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *updates,
 		int surface_count, struct dc_target *dc_target)
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
@@ -1449,21 +1392,27 @@ void dc_surfaces_update(struct dc *dc, struct dc_surface_update *updates,
 
 		if (updates[i].plane_info || updates[i].scaling_info) {
 
-			surface->public.address = updates[i].flip_addr->address;
-			surface->public.flip_immediate = updates[i].flip_addr->flip_immediate;
+			if (updates[i].flip_addr) {
+				surface->public.address = updates[i].flip_addr->address;
+				surface->public.flip_immediate = updates[i].flip_addr->flip_immediate;
+			}
 
-			surface->public.color_space = updates[i].plane_info->color_space;
-			surface->public.format = updates[i].plane_info->format;
-			surface->public.plane_size = updates[i].plane_info->plane_size;
-			surface->public.rotation = updates[i].plane_info->rotation;
-			surface->public.stereo_format = updates[i].plane_info->stereo_format;
-			surface->public.tiling_info = updates[i].plane_info->tiling_info;
-			surface->public.visible = updates[i].plane_info->visible;
+			if (updates[i].plane_info) {
+				surface->public.color_space = updates[i].plane_info->color_space;
+				surface->public.format = updates[i].plane_info->format;
+				surface->public.plane_size = updates[i].plane_info->plane_size;
+				surface->public.rotation = updates[i].plane_info->rotation;
+				surface->public.stereo_format = updates[i].plane_info->stereo_format;
+				surface->public.tiling_info = updates[i].plane_info->tiling_info;
+				surface->public.visible = updates[i].plane_info->visible;
+			}
 
-			surface->public.scaling_quality = updates[i].scaling_info->scaling_quality;
-			surface->public.dst_rect = updates[i].scaling_info->dst_rect;
-			surface->public.src_rect = updates[i].scaling_info->src_rect;
-			surface->public.clip_rect = updates[i].scaling_info->clip_rect;
+			if (updates[i].scaling_info) {
+				surface->public.scaling_quality = updates[i].scaling_info->scaling_quality;
+				surface->public.dst_rect = updates[i].scaling_info->dst_rect;
+				surface->public.src_rect = updates[i].scaling_info->src_rect;
+				surface->public.clip_rect = updates[i].scaling_info->clip_rect;
+			}
 
 			resource_build_scaling_params(updates[i].surface, pipe_ctx);
 			if (dc->debug.surface_visual_confirm) {
@@ -1566,7 +1515,7 @@ void dc_flip_surface_addrs(
 		updates[i].flip_addr = &flip_addrs[i];
 		updates[i].surface = surfaces[i];
 	}
-	dc_surfaces_update(dc, updates, count, NULL);
+	dc_update_surfaces_for_target(dc, updates, count, NULL);
 }
 
 enum dc_irq_source dc_interrupt_to_irq_source(

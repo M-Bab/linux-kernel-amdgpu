@@ -283,14 +283,7 @@ bool dc_isr_commit_surfaces_to_target(
 bool dc_post_commit_surfaces_to_target(
 		struct dc *dc);
 
-
-bool dc_update_surfaces_for_target(
-		struct dc *dc,
-		const struct dc_surface **dc_surfaces,
-		uint8_t surface_count,
-		struct dc_target *dc_target);
-
-void dc_surfaces_update(struct dc *dc, struct dc_surface_update *updates,
+void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *updates,
 		int surface_count, struct dc_target *dc_target);
 /*******************************************************************************
  * Target Interfaces
