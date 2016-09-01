@@ -1347,8 +1347,22 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 		int surface_count, struct dc_target *dc_target)
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
-	struct validate_context *context = core_dc->current_context;
+	struct validate_context *context = core_dc->temp_flip_context;
 	int i;
+
+	*context = *core_dc->current_context;
+
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
+		struct pipe_ctx *cur_pipe = &context->res_ctx.pipe_ctx[i];
+
+		if (cur_pipe->top_pipe)
+			cur_pipe->top_pipe =
+				&context->res_ctx.pipe_ctx[cur_pipe->top_pipe->pipe_idx];
+
+		if (cur_pipe->bottom_pipe)
+			cur_pipe->bottom_pipe =
+				&context->res_ctx.pipe_ctx[cur_pipe->bottom_pipe->pipe_idx];
+	}
 
 	if (dc_target) {
 		const struct dc_surface *new_surfaces[MAX_SURFACES] = { 0 };
@@ -1367,36 +1381,11 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 		for (i = 0 ; i < surface_count; i++) {
 			new_surfaces[i] = updates[i].surface;
 		}
-		context = core_dc->temp_flip_context;
-		*context = *core_dc->current_context;
-
-		for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
-			struct pipe_ctx *cur_pipe = &context->res_ctx.pipe_ctx[i];
-
-			if (cur_pipe->top_pipe)
-				cur_pipe->top_pipe =
-					&context->res_ctx.pipe_ctx[cur_pipe->top_pipe->pipe_idx];
-
-			if (cur_pipe->bottom_pipe)
-				cur_pipe->bottom_pipe =
-					&context->res_ctx.pipe_ctx[cur_pipe->bottom_pipe->pipe_idx];
-		}
 
 		if (!resource_attach_surfaces_to_context(
 				new_surfaces, surface_count, dc_target, context)) {
 			BREAK_TO_DEBUGGER();
 			return;
-		}
-
-		for (i = 0; i < surface_count; i++) {
-			struct core_surface *surface = DC_SURFACE_TO_CORE(updates[i].surface);
-			struct pipe_ctx *pipe_ctx = find_pipe_ctx_by_surface(context, surface);
-
-			core_dc->hwss.pipe_control_lock(
-						core_dc->ctx,
-						pipe_ctx->pipe_idx,
-						PIPE_LOCK_CONTROL_SURFACE,
-						true);
 		}
 	}
 
@@ -1408,6 +1397,13 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 			ASSERT(pipe_ctx);
 			return;
 		}
+
+		if (updates[i].flip_addr)
+			core_dc->hwss.pipe_control_lock(
+						core_dc->ctx,
+						pipe_ctx->pipe_idx,
+						PIPE_LOCK_CONTROL_SURFACE,
+						true);
 
 		if (updates[i].plane_info || updates[i].scaling_info) {
 
@@ -1440,7 +1436,6 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 			}
 			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
 
-			core_dc->hwss.apply_ctx_to_surface(core_dc, context);
 
 		} else if (updates[i].flip_addr) {
 			surface->public.address = updates[i].flip_addr->address;
@@ -1453,24 +1448,23 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 			core_dc->hwss.prepare_pipe_for_context(core_dc, pipe_ctx, context);
 	}
 
-	if (dc_target) {
+	core_dc->hwss.apply_ctx_to_surface(core_dc, context);
 
-		for (i = context->res_ctx.pool->pipe_count - 1; i >= 0; i--) {
-			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+	for (i = context->res_ctx.pool->pipe_count - 1; i >= 0; i--) {
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
-			core_dc->hwss.pipe_control_lock(
-								core_dc->ctx,
-								pipe_ctx->pipe_idx,
-								PIPE_LOCK_CONTROL_GRAPHICS |
-								PIPE_LOCK_CONTROL_SCL |
-								PIPE_LOCK_CONTROL_BLENDER |
-								PIPE_LOCK_CONTROL_SURFACE,
-								false);
-		}
-
-		core_dc->temp_flip_context = core_dc->current_context;
-		core_dc->current_context = context;
+		core_dc->hwss.pipe_control_lock(
+					core_dc->ctx,
+					pipe_ctx->pipe_idx,
+					PIPE_LOCK_CONTROL_GRAPHICS |
+					PIPE_LOCK_CONTROL_SCL |
+					PIPE_LOCK_CONTROL_BLENDER |
+					PIPE_LOCK_CONTROL_SURFACE,
+					false);
 	}
+
+	core_dc->temp_flip_context = core_dc->current_context;
+	core_dc->current_context = context;
 }
 
 uint8_t dc_get_current_target_count(const struct dc *dc)
