@@ -1251,10 +1251,12 @@ bool dc_isr_commit_surfaces_to_target(
 					true);
 
 			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
+
+			if (surface_needs_programming)
+				core_dc->hwss.apply_ctx_for_surface(
+						core_dc, pipe_ctx->surface, context);
 		}
 
-	if (surface_needs_programming)
-		core_dc->hwss.apply_ctx_to_surface(core_dc, context);
 
 	/* Go in reverse order so that all pipes are unlocked simultaneously
 	 * when pipe 0 is unlocked
@@ -1434,6 +1436,7 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 				pipe_ctx->scl_data.recout.width -= 2;
 			}
 
+			core_dc->hwss.apply_ctx_for_surface(core_dc, surface, context);
 		}
 		if (updates[i].flip_addr) {
 			surface->public.address = updates[i].flip_addr->address;
@@ -1451,10 +1454,9 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 			core_dc->hwss.prepare_pipe_for_context(core_dc, pipe_ctx, context);
 	}
 
-	core_dc->hwss.apply_ctx_to_surface(core_dc, context);
-
 	for (i = context->res_ctx.pool->pipe_count - 1; i >= 0; i--) {
-		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+		struct core_surface *surface = DC_SURFACE_TO_CORE(updates[i].surface);
+		struct pipe_ctx *pipe_ctx = find_pipe_ctx_by_surface(context, surface);
 
 		core_dc->hwss.pipe_control_lock(
 					core_dc->ctx,

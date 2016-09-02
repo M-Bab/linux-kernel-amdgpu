@@ -1535,8 +1535,7 @@ static void program_blender_if_needed(const struct core_dc *dc,
 }
 
 /**
- * Program the Front End of the Pipe.
- * The Back End was already programmed by Set Mode.
+ * TODO REMOVE, USE UPDATE INSTEAD
  */
 static void set_plane_config(
 	const struct core_dc *dc,
@@ -2056,8 +2055,9 @@ static void dce110_prepare_pipe_for_context(
 	dce110_prepare_pipe_for_surface_commit(dc, pipe_ctx, context);
 }
 
-static void dce110_apply_ctx_to_surface(
+static void dce110_apply_ctx_for_surface(
 		struct core_dc *dc,
+		struct core_surface *surface,
 		struct validate_context *context)
 {
 	int i;
@@ -2065,7 +2065,7 @@ static void dce110_apply_ctx_to_surface(
 	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
-		if (!pipe_ctx->surface)
+		if (pipe_ctx->surface != surface)
 			continue;
 
 		dce110_program_front_end_for_pipe(dc, pipe_ctx, context);
@@ -2075,37 +2075,14 @@ static void dce110_apply_ctx_to_surface(
 
 }
 
-static void update_plane_surface(
-	struct core_dc *dc,
-	struct validate_context *context,
-	const struct dc_surface **new_surfaces,
-	uint8_t new_surface_count)
-{
-	int i, j;
-
-	for (i = 0; i < new_surface_count; i++)
-		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
-			struct pipe_ctx *pipe_ctx =
-						&context->res_ctx.pipe_ctx[j];
-
-			if (pipe_ctx->surface !=
-					DC_SURFACE_TO_CORE(new_surfaces[i]))
-				continue;
-
-			dc->hwss.set_plane_config(
-				dc, pipe_ctx, &context->res_ctx);
-		}
-}
-
 static const struct hw_sequencer_funcs dce110_funcs = {
 	.init_hw = init_hw,
 	.apply_ctx_to_hw = apply_ctx_to_hw,
 	.prepare_pipe_for_context = dce110_prepare_pipe_for_context,
-	.apply_ctx_to_surface = dce110_apply_ctx_to_surface,
+	.apply_ctx_for_surface = dce110_apply_ctx_for_surface,
 	.set_plane_config = set_plane_config,
 	.update_plane_addr = update_plane_addr,
 	.update_pending_status = update_pending_status,
-	.update_plane_surface = update_plane_surface,
 	.set_gamma_correction = set_gamma_ramp,
 	.power_down = power_down,
 	.enable_accelerated_mode = enable_accelerated_mode,

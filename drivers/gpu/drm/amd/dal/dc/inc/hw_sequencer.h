@@ -56,8 +56,10 @@ struct hw_sequencer_funcs {
 			struct pipe_ctx *pipe_ctx,
 			struct validate_context *context);
 
-	void (*apply_ctx_to_surface)(
-			struct core_dc *dc, struct validate_context *context);
+	void (*apply_ctx_for_surface)(
+			struct core_dc *dc,
+			struct core_surface *surface,
+			struct validate_context *context);
 
 	void (*set_plane_config)(
 			const struct core_dc *dc,
@@ -70,12 +72,6 @@ struct hw_sequencer_funcs {
 
 	void (*update_pending_status)(
 			struct pipe_ctx *pipe_ctx);
-
-	void (*update_plane_surface)(
-		struct core_dc *dc,
-		struct validate_context *context,
-		const struct dc_surface **new_surfaces,
-		uint8_t new_surface_count);
 
 	bool (*set_gamma_correction)(
 				struct input_pixel_processor *ipp,
