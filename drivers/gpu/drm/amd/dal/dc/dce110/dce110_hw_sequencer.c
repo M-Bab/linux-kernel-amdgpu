@@ -1517,7 +1517,7 @@ static void set_default_colors(struct pipe_ctx *pipe_ctx)
 					pipe_ctx->opp, &default_adjust);
 }
 
-static void program_blender_if_needed(const struct core_dc *dc,
+static void program_blender(const struct core_dc *dc,
 		struct pipe_ctx *pipe_ctx)
 {
 	enum blender_mode blender_mode = BLENDER_MODE_CURRENT_PIPE;
@@ -1610,7 +1610,7 @@ static void set_plane_config(
 
 	program_scaler(dc, pipe_ctx);
 
-	program_blender_if_needed(dc, pipe_ctx);
+	program_blender(dc, pipe_ctx);
 
 	if (pipe_ctx->bottom_pipe)
 		pipe_ctx->xfm->funcs->transform_set_alpha(pipe_ctx->xfm, true);
@@ -1884,9 +1884,8 @@ static void dce110_set_bandwidth(struct core_dc *dc)
 	dc->hwss.set_display_clock(dc->current_context);
 }
 
-static void dce110_program_front_end_for_pipe(struct core_dc *dc,
-		struct pipe_ctx *pipe_ctx,
-		struct validate_context *context)
+static void dce110_program_front_end_for_pipe(
+		struct core_dc *dc, struct pipe_ctx *pipe_ctx)
 {
 	struct mem_input *mi = pipe_ctx->mi;
 	struct pipe_ctx *old_pipe = NULL;
@@ -1897,15 +1896,6 @@ static void dce110_program_front_end_for_pipe(struct core_dc *dc,
 	unsigned int i;
 
 	memset(&tbl_entry, 0, sizeof(tbl_entry));
-
-	dc->hwss.pipe_control_lock(
-			dc->ctx,
-			pipe_ctx->pipe_idx,
-			PIPE_LOCK_CONTROL_GRAPHICS |
-			PIPE_LOCK_CONTROL_SCL |
-			PIPE_LOCK_CONTROL_BLENDER |
-			PIPE_LOCK_CONTROL_MODE,
-			true);
 
 	if (dc->current_context)
 		old_pipe = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
@@ -2068,8 +2058,8 @@ static void dce110_apply_ctx_for_surface(
 		if (pipe_ctx->surface != surface)
 			continue;
 
-		dce110_program_front_end_for_pipe(dc, pipe_ctx, context);
-		program_blender_if_needed(dc, pipe_ctx);
+		dce110_program_front_end_for_pipe(dc, pipe_ctx);
+		program_blender(dc, pipe_ctx);
 
 	}
 
