@@ -1349,6 +1349,7 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	struct validate_context *context = core_dc->temp_flip_context;
 	int i;
+	bool is_new_surface[MAX_SURFACES] = { false };
 
 	*context = *core_dc->current_context;
 
@@ -1379,7 +1380,11 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 			return;
 
 		for (i = 0 ; i < surface_count; i++) {
+			struct core_surface *surface = DC_SURFACE_TO_CORE(updates[i].surface);
+
 			new_surfaces[i] = updates[i].surface;
+			if (find_pipe_ctx_by_surface(context, surface) == NULL)
+				is_new_surface[i] = true;
 		}
 
 		if (!resource_attach_surfaces_to_context(
@@ -1405,7 +1410,7 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 						PIPE_LOCK_CONTROL_SURFACE,
 						true);
 
-		if (updates[i].plane_info || updates[i].scaling_info) {
+		if (updates[i].plane_info || updates[i].scaling_info || is_new_surface[i]) {
 
 			if (updates[i].flip_addr) {
 				surface->public.address = updates[i].flip_addr->address;
