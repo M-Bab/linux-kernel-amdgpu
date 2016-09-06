@@ -208,6 +208,7 @@ static const struct link_encoder_funcs dce80_lnk_enc_funcs = {
 		dce110_link_encoder_update_mst_stream_allocation_table,
 	.set_dmcu_backlight_level =
 		dce110_link_encoder_set_dmcu_backlight_level,
+	.set_dmcu_abm_level = dce110_link_encoder_set_dmcu_abm_level,
 	.backlight_control = dce110_link_encoder_edp_backlight_control,
 	.power_control = dce110_link_encoder_edp_power_control,
 	.connect_dig_be_to_fe = dce110_link_encoder_connect_dig_be_to_fe,

@@ -69,6 +69,10 @@ static bool backlight_caps_initialized;
 /* AC/DC levels initialized later in separate context */
 static bool  backlight_def_levels_valid;
 
+/* ABM cached properties */
+static unsigned int abm_level;
+static bool abm_user_enable;
+static bool abm_active;
 
 /* Defines default backlight curve F(x) = A(x*x) + Bx + C.
  *
@@ -182,6 +186,9 @@ struct mod_backlight *mod_backlight_create(struct dc *dc)
 
 	if (!check_dc_support(dc))
 		goto fail_construct;
+
+	abm_user_enable = false;
+	abm_active = false;
 
 	return &core_backlight->public;
 
@@ -606,4 +613,122 @@ bool mod_backlight_notify_mode_change(struct mod_backlight *mod_backlight,
 			params.u32All, stream);
 
 }
+
+
+static bool mod_backlight_abm_feature_enable(struct mod_backlight
+		*mod_backlight, bool enable)
+{
+	struct core_backlight *core_backlight =
+					MOD_BACKLIGHT_TO_CORE(mod_backlight);
+	if (abm_user_enable == enable)
+		return true;
+
+	abm_user_enable = enable;
+
+	if (enable) {
+		if (abm_level != 0 && abm_active)
+			core_backlight->dc->stream_funcs.set_abm_level
+					(core_backlight->dc, abm_level);
+	} else {
+		if (abm_level != 0 && abm_active) {
+			abm_level = 0;
+			core_backlight->dc->stream_funcs.set_abm_level
+					(core_backlight->dc, abm_level);
+		}
+	}
+
+	return true;
+}
+
+static bool mod_backlight_abm_activate(struct mod_backlight
+		*mod_backlight, bool activate)
+{
+	struct core_backlight *core_backlight =
+					MOD_BACKLIGHT_TO_CORE(mod_backlight);
+	if (abm_active == activate)
+		return true;
+
+	abm_active = activate;
+
+	if (activate) {
+		if (abm_level != 0 && abm_user_enable)
+			core_backlight->dc->stream_funcs.set_abm_level
+					(core_backlight->dc, abm_level);
+	} else {
+		if (abm_level != 0 && abm_user_enable) {
+			abm_level = 0;
+			core_backlight->dc->stream_funcs.set_abm_level
+					(core_backlight->dc, abm_level);
+		}
+	}
+
+	return true;
+}
+
+static bool mod_backlight_abm_set_level(struct mod_backlight *mod_backlight,
+		unsigned int level)
+{
+	struct core_backlight *core_backlight =
+					MOD_BACKLIGHT_TO_CORE(mod_backlight);
+	if (abm_level == level)
+		return true;
+
+	if (abm_active && abm_user_enable && level == 0)
+		core_backlight->dc->stream_funcs.set_abm_level
+			(core_backlight->dc, 0);
+	else if (abm_active && abm_user_enable && level != 0)
+		core_backlight->dc->stream_funcs.set_abm_level
+				(core_backlight->dc, level);
+
+	abm_level = level;
+
+	return true;
+}
+
+bool mod_backlight_varibright_control(struct mod_backlight *mod_backlight,
+		struct varibright_info *input_varibright_info)
+{
+	switch (input_varibright_info->cmd) {
+	case VariBright_Cmd__SetVBLevel:
+	{
+		/* Set VariBright user level. */
+		mod_backlight_abm_set_level(mod_backlight,
+				input_varibright_info->level);
+	}
+	break;
+
+	case VariBright_Cmd__UserEnable:
+	{
+		/* Set VariBright user enable state. */
+		mod_backlight_abm_feature_enable(mod_backlight,
+				input_varibright_info->enable);
+	}
+	break;
+
+	case VariBright_Cmd__PostDisplayConfigChange:
+	{
+		/* Set VariBright user level. */
+		mod_backlight_abm_set_level(mod_backlight,
+						input_varibright_info->level);
+
+		/* Set VariBright user enable state. */
+		mod_backlight_abm_feature_enable(mod_backlight,
+				input_varibright_info->enable);
+
+		/* Set VariBright activate based on power state. */
+		mod_backlight_abm_activate(mod_backlight,
+				input_varibright_info->activate);
+	}
+	break;
+
+	default:
+	{
+		return false;
+	}
+	break;
+	}
+
+	return true;
+}
+
 

@@ -1371,10 +1371,11 @@ enum dc_status dc_link_validate_mode_timing(
 	return DC_OK;
 }
 
-bool dc_link_set_backlight_level(const struct dc_link *public, uint32_t level,
+
+bool dc_link_set_backlight_level(const struct dc_link *dc_link, uint32_t level,
 		uint32_t frame_ramp, const struct dc_stream *stream)
 {
-	struct core_link *link = DC_LINK_TO_CORE(public);
+	struct core_link *link = DC_LINK_TO_CORE(dc_link);
 	struct dc_context *ctx = link->ctx;
 	struct core_dc *core_dc = DC_TO_CORE(ctx->dc);
 	struct core_stream *core_stream = DC_STREAM_TO_CORE(stream);
@@ -1399,6 +1400,19 @@ bool dc_link_set_backlight_level(const struct dc_link *public, uint32_t level,
 	link->link_enc->funcs->set_dmcu_backlight_level
 						(link->link_enc, level,
 						frame_ramp, controller_id);
+	return true;
+}
+
+bool dc_link_set_abm_level(const struct dc_link *dc_link, uint32_t level)
+{
+	struct core_link *link = DC_LINK_TO_CORE(dc_link);
+	struct dc_context *ctx = link->ctx;
+
+	dal_logger_write(ctx->logger, LOG_MAJOR_BACKLIGHT,
+			LOG_MINOR_BACKLIGHT_INTERFACE,
+			"New abm level: %d (0x%X)\n", level, level);
+
+	link->link_enc->funcs->set_dmcu_abm_level(link->link_enc, level);
 	return true;
 }
 

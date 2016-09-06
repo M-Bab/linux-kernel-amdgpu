@@ -92,6 +92,8 @@
 
 /* Set the ABM Pipe */
 #define MCP_ABM_PIPE_SET 0x66
+/* Set the ABM level */
+#define MCP_ABM_LEVEL_SET 0x65
 /* Set backlight level */
 #define MCP_BL_SET 0x67
 
@@ -120,6 +122,7 @@ static const struct link_encoder_funcs dce110_lnk_enc_funcs = {
 		dce110_link_encoder_update_mst_stream_allocation_table,
 	.set_dmcu_backlight_level =
 			dce110_link_encoder_set_dmcu_backlight_level,
+	.set_dmcu_abm_level = dce110_link_encoder_set_dmcu_abm_level,
 	.backlight_control = dce110_link_encoder_edp_backlight_control,
 	.power_control = dce110_link_encoder_edp_power_control,
 	.connect_dig_be_to_fe = dce110_link_encoder_connect_dig_be_to_fe,
@@ -1863,6 +1866,54 @@ void dce110_link_encoder_set_dmcu_backlight_level(
 	s2 |= (level << ATOM_S2_CURRENT_BL_LEVEL_SHIFT);
 
 	dm_write_reg(ctx, DMCU_REG(BIOS_SCRATCH_2), s2);
+}
+
+void dce110_link_encoder_set_dmcu_abm_level(
+	struct link_encoder *enc,
+	uint32_t level)
+{
+	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
+	struct dc_context *ctx = enc110->base.ctx;
+
+	unsigned int dmcu_max_retry_on_wait_reg_ready = 801;
+	unsigned int dmcu_wait_reg_ready_interval = 100;
+
+	unsigned int regValue;
+	uint32_t masterCmd;
+	uint32_t masterComCntl;
+
+	/* waitDMCUReadyForCmd */
+	do {
+		dm_delay_in_microseconds(ctx, dmcu_wait_reg_ready_interval);
+		regValue = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG));
+		dmcu_max_retry_on_wait_reg_ready--;
+	} while
+	((MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & regValue) !=
+		(MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & 0) &&
+		dmcu_max_retry_on_wait_reg_ready > 0);
+
+	/* setDMCUParam_ABMLevel */
+	masterCmd = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG));
+	set_reg_field_value(
+			masterCmd,
+			MCP_ABM_LEVEL_SET,
+			MASTER_COMM_CMD_REG,
+			MASTER_COMM_CMD_REG_BYTE0);
+	set_reg_field_value(
+			masterCmd,
+			level,
+			MASTER_COMM_CMD_REG,
+			MASTER_COMM_CMD_REG_BYTE2);
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG), masterCmd);
+
+	/* notifyDMCUMsg */
+	masterComCntl = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG));
+	set_reg_field_value(
+			masterComCntl,
+			1,
+			MASTER_COMM_CNTL_REG,
+			MASTER_COMM_INTERRUPT);
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG), masterComCntl);
 }
 
 void dce110_link_encoder_connect_dig_be_to_fe(

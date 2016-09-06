@@ -32,6 +32,27 @@ struct mod_backlight {
 	int dummy;
 };
 
+/* VariBright related commands */
+enum varibright_command {
+	VariBright_Cmd__SetVBLevel = 0,
+	VariBright_Cmd__UserEnable,
+	VariBright_Cmd__PreDisplayConfigChange,
+	VariBright_Cmd__PostDisplayConfigChange,
+	VariBright_Cmd__SuspendABM,
+	VariBright_Cmd__ResumeABM,
+
+	VariBright_Cmd__Unknown,
+};
+
+/* VariBright settings structure */
+struct varibright_info {
+	enum varibright_command cmd;
+
+	unsigned int level;
+	bool enable;
+	bool activate;
+};
+
 struct mod_backlight *mod_backlight_create(struct dc *dc);
 
 void mod_backlight_destroy(struct mod_backlight *mod_backlight);
@@ -71,4 +92,8 @@ bool mod_backlight_set_smooth_brightness(struct mod_backlight *mod_backlight,
 
 bool mod_backlight_notify_mode_change(struct mod_backlight *mod_backlight,
 		const struct dc_stream *stream);
+
+bool mod_backlight_varibright_control(struct mod_backlight *mod_backlight,
+		struct varibright_info *input_varibright_info);
+
 #endif /* MODULES_INC_MOD_BACKLIGHT_H_ */
