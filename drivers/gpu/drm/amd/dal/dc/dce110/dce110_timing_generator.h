@@ -30,6 +30,62 @@
 #include "../include/grph_object_id.h"
 #include "../include/hw_sequencer_types.h"
 
+/* GSL Sync related values */
+
+/* In VSync mode, after 4 units of time, master pipe will generate
+ * flip_ready signal */
+#define VFLIP_READY_DELAY 4
+/* In HSync mode, after 2 units of time, master pipe will generate
+ * flip_ready signal */
+#define HFLIP_READY_DELAY 2
+/* 6 lines delay between forcing flip and checking all pipes ready */
+#define HFLIP_CHECK_DELAY 6
+/* 3 lines before end of frame */
+#define FLIP_READY_BACK_LOOKUP 3
+
+/* Trigger Source Select - ASIC-defendant, actual values for the
+ * register programming */
+enum trigger_source_select {
+	TRIGGER_SOURCE_SELECT_LOGIC_ZERO = 0,
+	TRIGGER_SOURCE_SELECT_CRTC_VSYNCA = 1,
+	TRIGGER_SOURCE_SELECT_CRTC_HSYNCA = 2,
+	TRIGGER_SOURCE_SELECT_CRTC_VSYNCB = 3,
+	TRIGGER_SOURCE_SELECT_CRTC_HSYNCB = 4,
+	TRIGGER_SOURCE_SELECT_GENERICF = 5,
+	TRIGGER_SOURCE_SELECT_GENERICE = 6,
+	TRIGGER_SOURCE_SELECT_VSYNCA = 7,
+	TRIGGER_SOURCE_SELECT_HSYNCA = 8,
+	TRIGGER_SOURCE_SELECT_VSYNCB = 9,
+	TRIGGER_SOURCE_SELECT_HSYNCB = 10,
+	TRIGGER_SOURCE_SELECT_HPD1 = 11,
+	TRIGGER_SOURCE_SELECT_HPD2 = 12,
+	TRIGGER_SOURCE_SELECT_GENERICD = 13,
+	TRIGGER_SOURCE_SELECT_GENERICC = 14,
+	TRIGGER_SOURCE_SELECT_VIDEO_CAPTURE = 15,
+	TRIGGER_SOURCE_SELECT_GSL_GROUP0 = 16,
+	TRIGGER_SOURCE_SELECT_GSL_GROUP1 = 17,
+	TRIGGER_SOURCE_SELECT_GSL_GROUP2 = 18,
+	TRIGGER_SOURCE_SELECT_BLONY = 19,
+	TRIGGER_SOURCE_SELECT_GENERICA = 20,
+	TRIGGER_SOURCE_SELECT_GENERICB = 21,
+	TRIGGER_SOURCE_SELECT_GSL_ALLOW_FLIP = 22,
+	TRIGGER_SOURCE_SELECT_MANUAL_TRIGGER = 23
+};
+
+/* Trigger Source Select - ASIC-dependant, actual values for the
+ * register programming */
+enum trigger_polarity_select {
+	TRIGGER_POLARITY_SELECT_LOGIC_ZERO = 0,
+	TRIGGER_POLARITY_SELECT_CRTC = 1,
+	TRIGGER_POLARITY_SELECT_GENERICA = 2,
+	TRIGGER_POLARITY_SELECT_GENERICB = 3,
+	TRIGGER_POLARITY_SELECT_HSYNCA = 4,
+	TRIGGER_POLARITY_SELECT_HSYNCB = 5,
+	TRIGGER_POLARITY_SELECT_VIDEO_CAPTURE = 6,
+	TRIGGER_POLARITY_SELECT_GENERICC = 7
+};
+
+
 struct dce110_timing_generator_offsets {
 	int32_t crtc;
 	int32_t dcp;
@@ -51,6 +107,11 @@ struct dce110_timing_generator {
 	uint32_t min_h_blank;
 	uint32_t min_h_front_porch;
 	uint32_t min_h_back_porch;
+
+	uint32_t min_h_sync_width;
+	uint32_t min_v_sync_width;
+	uint32_t min_v_blank;
+
 };
 
 #define DCE110TG_FROM_TG(tg)\
@@ -130,9 +191,6 @@ bool dce110_timing_generator_did_triggered_reset_occur(
 	struct timing_generator *tg);
 
 /******** Stuff to move to other virtual HW objects *****************/
-/* TODO: Should we move it to mem_input interface? */
-bool dce110_timing_generator_blank_crtc(struct timing_generator *tg);
-bool dce110_timing_generator_unblank_crtc(struct timing_generator *tg);
 /* Move to enable accelerated mode */
 void dce110_timing_generator_disable_vga(struct timing_generator *tg);
 /* TODO: Should we move it to transform */
