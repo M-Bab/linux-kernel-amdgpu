@@ -1297,6 +1297,12 @@ bool dc_post_commit_surfaces_to_target(struct dc *dc)
 		}
 	}
 
+	if (core_dc->res_pool->funcs->validate_bandwidth(core_dc, core_dc->current_context)
+			!= DC_OK) {
+		BREAK_TO_DEBUGGER();
+		return false;
+	}
+
 	core_dc->hwss.set_bandwidth(core_dc);
 
 	pplib_apply_display_requirements(
