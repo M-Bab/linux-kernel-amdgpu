@@ -1342,7 +1342,10 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	struct validate_context *context = core_dc->temp_flip_context;
 	int i, j;
-	bool is_new_pipe_surface[MAX_SURFACES] = { true };
+	bool is_new_pipe_surface[MAX_SURFACES];
+
+	for (j = 0; j < MAX_SURFACES; j++)
+		is_new_pipe_surface[j] = true;
 
 	*context = *core_dc->current_context;
 
@@ -1468,21 +1471,6 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 						core_dc, pipe_ctx, context);
 		}
 	}
-
-	/* TODO: this is a hack, figure out why we need it on cz, or dont*/
-	/*for (i = 0; i < surface_count; i++) {
-		struct core_surface *surface = DC_SURFACE_TO_CORE(updates[i].surface);
-
-		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
-			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
-
-			if (pipe_ctx->surface != surface)
-				continue;
-
-			core_dc->hwss.apply_ctx_for_surface(
-					core_dc, surface, context);
-		}
-	}*/
 
 	for (i = context->res_ctx.pool->pipe_count - 1; i >= 0; i--) {
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
