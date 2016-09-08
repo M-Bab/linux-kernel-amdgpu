@@ -268,19 +268,13 @@ bool dc_commit_surfaces_to_target(
 		uint8_t surface_count,
 		struct dc_target *dc_target);
 
-bool dc_pre_commit_surfaces_to_target(
+bool dc_pre_update_surfaces_to_target(
 		struct dc *dc,
 		const struct dc_surface *const *new_surfaces,
 		uint8_t new_surface_count,
 		struct dc_target *dc_target);
 
-bool dc_isr_commit_surfaces_to_target(
-		struct dc *dc,
-		const struct dc_surface **new_surfaces,
-		int new_surface_count,
-		struct dc_target *dc_target);
-
-bool dc_post_commit_surfaces_to_target(
+bool dc_post_update_surfaces_to_target(
 		struct dc *dc);
 
 void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *updates,
