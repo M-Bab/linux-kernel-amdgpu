@@ -402,7 +402,10 @@ static bool construct(struct core_dc *dc,
 		 * This should be the only place where we need to parse the asic id
 		 */
 
+
+		/*TODO hook up here real bios as in adapter service*/
 		dc_ctx->dc_bios = init_params->vbios_override;
+
 		dc->res_pool = dc_create_resource_pool(
 				NULL,
 				dc,
