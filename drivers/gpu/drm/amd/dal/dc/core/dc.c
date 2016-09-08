@@ -1179,6 +1179,7 @@ bool dc_isr_commit_surfaces_to_target(
 	struct core_target *target = DC_TARGET_TO_CORE(dc_target);
 	struct dc_target_status *target_status = NULL;
 	bool surface_needs_programming = false;
+	struct validate_context *tmp_ctx;
 
 	if (core_dc->current_context->target_count == 0)
 		return false;
@@ -1246,6 +1247,16 @@ bool dc_isr_commit_surfaces_to_target(
 					&old_pipe_ctx->scl_data,
 					sizeof(pipe_ctx->scl_data)))
 				surface_needs_programming = true;
+		}
+
+	for (i = 0; i < new_surface_count; i++)
+		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
+			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
+			struct pipe_ctx *old_pipe_ctx = &core_dc->current_context->res_ctx.pipe_ctx[j];
+
+			if (pipe_ctx->surface !=
+					DC_SURFACE_TO_CORE(new_surfaces[i]))
+				continue;
 
 			core_dc->hwss.pipe_control_lock(
 					core_dc->ctx,
@@ -1259,7 +1270,6 @@ bool dc_isr_commit_surfaces_to_target(
 				core_dc->hwss.apply_ctx_for_surface(
 						core_dc, pipe_ctx->surface, context);
 		}
-
 
 	/* Go in reverse order so that all pipes are unlocked simultaneously
 	 * when pipe 0 is unlocked
@@ -1346,6 +1356,7 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 	struct validate_context *context = core_dc->temp_flip_context;
 	int i, j;
 	bool is_new_pipe_surface[MAX_SURFACES];
+	struct validate_context *tmp_ctx;
 
 	for (j = 0; j < MAX_SURFACES; j++)
 		is_new_pipe_surface[j] = true;
@@ -1410,13 +1421,6 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 				surface->public.address = updates[i].flip_addr->address;
 				surface->public.flip_immediate =
 						updates[i].flip_addr->flip_immediate;
-
-				core_dc->hwss.pipe_control_lock(
-							core_dc->ctx,
-							pipe_ctx->pipe_idx,
-							PIPE_LOCK_CONTROL_SURFACE,
-							true);
-				core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
 			}
 
 			if (updates[i].plane_info || updates[i].scaling_info
@@ -1455,6 +1459,30 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 					pipe_ctx->scl_data.recout.height -= 2;
 					pipe_ctx->scl_data.recout.width -= 2;
 				}
+			}
+		}
+	}
+
+	for (i = 0; i < surface_count; i++) {
+		struct core_surface *surface = DC_SURFACE_TO_CORE(updates[i].surface);
+
+		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
+			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
+
+			if (pipe_ctx->surface != surface)
+				continue;
+
+			if (updates[i].flip_addr) {
+				core_dc->hwss.pipe_control_lock(
+							core_dc->ctx,
+							pipe_ctx->pipe_idx,
+							PIPE_LOCK_CONTROL_SURFACE,
+							true);
+				core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
+			}
+
+			if (updates[i].plane_info || updates[i].scaling_info
+					|| is_new_pipe_surface[j]) {
 
 				core_dc->hwss.pipe_control_lock(
 						core_dc->ctx,
