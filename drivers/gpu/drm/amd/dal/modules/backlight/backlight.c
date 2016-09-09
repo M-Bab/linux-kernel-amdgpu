@@ -173,6 +173,7 @@ struct mod_backlight *mod_backlight_create(struct dc *dc)
 		goto fail_alloc_state;
 
 	core_backlight->num_sinks = 0;
+	backlight_caps_valid = false;
 
 	if (dc == NULL)
 		goto fail_construct;
@@ -355,6 +356,9 @@ void mod_backlight_initialize_backlight_caps(struct mod_backlight
 		customCurvePresent     = (pExtCaps->numOfDataPoints > 0);
 
 		ASSERT(pExtCaps->numOfDataPoints <= 99);
+	} else {
+		dm_free(pExtCaps);
+		return;
 	}
 
 	if (customMinMaxPresent)
@@ -531,6 +535,9 @@ unsigned int mod_backlight_backlight_level_signal_to_percentage(
 				max = mid - 1;
 			else
 				break;
+
+			if (max == 0)
+				return invalid_backlight;
 		}
 		return mid;
 	}
