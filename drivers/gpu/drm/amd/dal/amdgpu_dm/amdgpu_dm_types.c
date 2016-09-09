@@ -3167,12 +3167,27 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 	return ret;
 }
 
+static bool is_dp_capable_without_timing_msa(
+		struct dc *dc,
+		struct amdgpu_connector *amdgpu_connector)
+{
+	uint8_t dpcd_data;
+	bool capable = false;
+	if (amdgpu_connector->dc_link &&
+	    dc_read_dpcd(dc, amdgpu_connector->dc_link->link_index,
+			 DP_DOWN_STREAM_PORT_COUNT,
+			 &dpcd_data, sizeof(dpcd_data)) )
+		capable = dpcd_data & DP_MSA_TIMING_PAR_IGNORED? true:false;
+
+	return capable;
+}
 void amdgpu_dm_add_sink_to_freesync_module(
 		struct drm_connector *connector,
 		struct edid *edid)
 {
 	int i;
 	uint64_t val_capable;
+	bool edid_check_required;
 	struct detailed_timing *timing;
 	struct detailed_non_pixel *data;
 	struct detailed_data_monitor_range *range;
@@ -3182,15 +3197,25 @@ void amdgpu_dm_add_sink_to_freesync_module(
 
 	struct drm_device *dev = connector->dev;
 	struct amdgpu_device *adev = dev->dev_private;
-
+	edid_check_required = false;
 	if (!amdgpu_connector->dc_sink) {
 		DRM_ERROR("dc_sink NULL, could not add free_sync module.\n");
 		return;
 	}
 	if (!adev->dm.freesync_module)
 		return;
+	/*
+	 * restrict for now freesync only for dp and edp
+	 */
+	if (amdgpu_connector->dc_sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT
+	    || amdgpu_connector->dc_sink->sink_signal == SIGNAL_TYPE_EDP) {
+		edid_check_required = is_dp_capable_without_timing_msa(
+					adev->dm.dc,
+					amdgpu_connector);
+	}
 	val_capable = 0;
-	if (edid->version > 1 || (edid->version == 1 && edid->revision > 1)) {
+	if (edid_check_required == true && (edid->version > 1 ||
+	   (edid->version == 1 && edid->revision > 1))) {
 		for (i = 0; i < 4; i++) {
 
 			timing	= &edid->detailed_timings[i];
