@@ -630,6 +630,22 @@ static bool set_freesync_on_streams(struct core_freesync *core_freesync,
 
 				return true;
 			}
+		} else {
+			/* Disable freesync */
+			v_total_nominal = streams[stream_idx]->
+				timing.v_total;
+			/*
+			 * we have to reset drr always even sink does
+			 * not support freesync because a former stream has
+			 * be programmed
+			 */
+			core_freesync->dc->stream_funcs.
+					adjust_vmin_vmax(
+					core_freesync->dc, streams,
+					num_streams, v_total_nominal,
+					v_total_nominal);
+			/* Reset the cached variables */
+			reset_freesync_state_variables(state);
 		}
 
 	}
