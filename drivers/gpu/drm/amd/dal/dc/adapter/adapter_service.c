@@ -706,12 +706,6 @@ static void adapter_service_destruct(
 	dal_asic_capability_destroy(&as->asic_cap);
 
 	dcb->funcs->destroy_integrated_info(dcb, &as->integrated_info);
-
-	if (as->dcb_internal) {
-		/* We are responsible only for destruction of Internal BIOS.
-		 * The External one will be destroyed by its creator. */
-		dal_bios_parser_destroy(&as->dcb_internal);
-	}
 }
 
 /*
@@ -772,22 +766,7 @@ static bool adapter_service_construct(
 	as->dce_environment = init_data->dce_environment;
 	dce_version = dal_adapter_service_get_dce_version(as);
 
-	if (init_data->vbios_override)
-		as->dcb_override = init_data->vbios_override;
-	else {
-		/* Create BIOS parser */
-		init_data->bp_init_data.ctx = init_data->ctx;
-
-		as->dcb_internal = dal_bios_parser_create(
-				&init_data->bp_init_data, dce_version);
-
-		if (!as->dcb_internal) {
-			ASSERT_CRITICAL(false);
-			goto failed_to_create_bios_parser;
-		}
-	}
-
-	dcb = dal_adapter_service_get_bios_parser(as);
+	dcb = as->ctx->dc_bios;
 
 
 	/* Create GPIO service */
@@ -846,10 +825,6 @@ failed_to_create_i2caux:
 	dal_gpio_service_destroy(&as->gpio_service);
 
 failed_to_create_gpio_service:
-	if (as->dcb_internal)
-		dal_bios_parser_destroy(&as->dcb_internal);
-
-failed_to_create_bios_parser:
 	dal_asic_capability_destroy(&as->asic_cap);
 
 	return false;
@@ -1412,7 +1387,7 @@ bool dal_adapter_service_get_feature_value(struct adapter_service *as,
 struct dc_bios *dal_adapter_service_get_bios_parser(
 	struct adapter_service *as)
 {
-	return as->dcb_override ? as->dcb_override : as->dcb_internal;
+	return as->ctx->dc_bios;
 }
 
 /*

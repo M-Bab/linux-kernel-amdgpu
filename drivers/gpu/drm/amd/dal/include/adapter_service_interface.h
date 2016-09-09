@@ -317,7 +317,6 @@ enum as_drr_support {
 /* Adapter service initialize data structure*/
 struct as_init_data {
 	struct hw_asic_id hw_init_data;
-	struct bp_init_data bp_init_data;
 	struct dc_context *ctx;
 	const struct dal_override_parameters *display_param;
 	struct dc_bios *vbios_override;

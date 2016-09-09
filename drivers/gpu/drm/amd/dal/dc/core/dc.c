@@ -174,10 +174,6 @@ static struct adapter_service *create_as(
 
 	init_data.ctx = dc_ctx;
 
-	/* BIOS parser init data */
-	init_data.bp_init_data.ctx = dc_ctx;
-	init_data.bp_init_data.bios = init->asic_id.atombios_base_address;
-
 	/* HW init data */
 	init_data.hw_init_data.chip_id = init->asic_id.chip_id;
 	init_data.hw_init_data.chip_family = init->asic_id.chip_family;
@@ -327,7 +323,7 @@ static bool construct(struct core_dc *dc,
 		const struct dc_init_data *init_params)
 {
 	struct dal_logger *logger;
-	struct adapter_service *as;
+	struct adapter_service *as = NULL;
 	struct dc_context *dc_ctx = dm_alloc(sizeof(*dc_ctx));
 	enum dce_version dc_version = DCE_VERSION_UNKNOWN;
 
@@ -363,6 +359,25 @@ static bool construct(struct core_dc *dc,
 
 	dc_version = resource_parse_asic_id(init_params->asic_id);
 
+	/* Resource should construct all asic specific resources.
+	 * This should be the only place where we need to parse the asic id
+	 */
+	if (init_params->vbios_override)
+		dc_ctx->dc_bios = init_params->vbios_override;
+	else {
+		/* Create BIOS parser */
+		struct bp_init_data bp_init_data;
+		bp_init_data.ctx = dc_ctx;
+		bp_init_data.bios = init_params->asic_id.atombios_base_address;
+
+		dc_ctx->dc_bios = dal_bios_parser_create(
+				&bp_init_data, dc_version);
+
+		if (!dc_ctx->dc_bios) {
+			ASSERT_CRITICAL(false);
+			goto as_fail;
+		}
+	}
 
 	/* TODO: Refactor DCE code to remove AS and asic caps */
 	if (dc_version < DCE_VERSION_MAX) {
@@ -383,41 +398,19 @@ static bool construct(struct core_dc *dc,
 			goto as_fail;
 		}
 
-		dc_ctx->dc_bios = dal_adapter_service_get_bios_parser(as);
-
-		dc->res_pool = dc_create_resource_pool(
-				as,
-				dc,
-				init_params->num_virtual_links,
-				dc_version,
-				init_params->asic_id);
-		if (!dc->res_pool)
-			goto create_resource_fail;
-
-		if (!create_links(dc, as, init_params->num_virtual_links))
-			goto create_links_fail;
-	} else {
-
-		/* Resource should construct all asic specific resources.
-		 * This should be the only place where we need to parse the asic id
-		 */
-
-
-		/*TODO hook up here real bios as in adapter service*/
-		dc_ctx->dc_bios = init_params->vbios_override;
-
-		dc->res_pool = dc_create_resource_pool(
-				NULL,
-				dc,
-				init_params->num_virtual_links,
-				dc_version,
-				init_params->asic_id);
-		if (!dc->res_pool)
-			goto create_resource_fail;
-
-		if (!create_links(dc, NULL, init_params->num_virtual_links))
-			goto create_links_fail;
 	}
+
+	dc->res_pool = dc_create_resource_pool(
+			as,
+			dc,
+			init_params->num_virtual_links,
+			dc_version,
+			init_params->asic_id);
+	if (!dc->res_pool)
+		goto create_resource_fail;
+
+	if (!create_links(dc, as, init_params->num_virtual_links))
+		goto create_links_fail;
 
 	allocate_dc_stream_funcs(dc);
 
@@ -1394,7 +1387,6 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 	struct validate_context *context = core_dc->temp_flip_context;
 	int i, j;
 	bool is_new_pipe_surface[MAX_SURFACES];
-	struct validate_context *tmp_ctx;
 
 	for (j = 0; j < MAX_SURFACES; j++)
 		is_new_pipe_surface[j] = true;

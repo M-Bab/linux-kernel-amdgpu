@@ -149,10 +149,6 @@ static void bios_parser_destroy(struct dc_bios **dcb)
 	*dcb = NULL;
 }
 
-static void bios_parser_power_up(struct dc_bios *dcb)
-{
-}
-
 static uint8_t get_number_of_objects(struct bios_parser *bp, uint32_t offset)
 {
 	ATOM_OBJECT_TABLE *table;
