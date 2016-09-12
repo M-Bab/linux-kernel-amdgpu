@@ -1100,9 +1100,6 @@ bool dc_pre_update_surfaces_to_target(
 	struct validate_context *temp_context;
 	bool ret = true;
 
-	int current_enabled_surface_count = 0;
-	int new_enabled_surface_count = 0;
-
 	if (core_dc->current_context->target_count == 0)
 		return false;
 
@@ -1146,14 +1143,6 @@ bool dc_pre_update_surfaces_to_target(
 	}
 
 	resource_validate_ctx_copy_construct(core_dc->current_context, context);
-
-	for (i = 0; i < target_status->surface_count; i++)
-		if (target_status->surfaces[i]->visible)
-			current_enabled_surface_count++;
-
-	for (i = 0; i < new_surface_count; i++)
-		if (new_surfaces[i]->visible)
-			new_enabled_surface_count++;
 
 	dal_logger_write(core_dc->ctx->logger,
 				LOG_MAJOR_INTERFACE_TRACE,
@@ -1224,11 +1213,11 @@ bool dc_pre_update_surfaces_to_target(
 					core_dc,
 					&context->res_ctx.pipe_ctx[j],
 					context);
-		}
 
-	if (current_enabled_surface_count > 0 && new_enabled_surface_count == 0)
-		target_disable_memory_requests(dc_target,
-				&core_dc->current_context->res_ctx);
+			if (!new_surfaces[i]->visible)
+				context->res_ctx.pipe_ctx[j].tg->funcs->set_blank(
+						context->res_ctx.pipe_ctx[j].tg, true);
+		}
 
 unexpected_fail:
 	resource_validate_ctx_destruct(context);
@@ -1268,182 +1257,41 @@ bool dc_commit_surfaces_to_target(
 		uint8_t new_surface_count,
 		struct dc_target *dc_target)
 {
-	int i, j;
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-	uint32_t prev_disp_clk = core_dc->current_context->bw_results.dispclk_khz;
-	struct core_target *target = DC_TARGET_TO_CORE(dc_target);
-	struct dc_target_status *target_status = NULL;
-	struct validate_context *context;
-	struct validate_context *temp_context;
+	struct dc_surface_update updates[MAX_SURFACES] = { 0 };
+	struct dc_flip_addrs flip_addr[MAX_SURFACES] = {{ 0 } };
+	struct dc_plane_info plane_info[MAX_SURFACES] = {{ 0 } };
+	struct dc_scaling_info scaling_info[MAX_SURFACES] = {{ 0 } };
+	int i;
 
-	int current_enabled_surface_count = 0;
-	int new_enabled_surface_count = 0;
-
-	if (core_dc->current_context->target_count == 0)
+	if (!dc_pre_update_surfaces_to_target(
+			dc, new_surfaces, new_surface_count, dc_target))
 		return false;
-
-	/* Cannot commit surface to a target that is not commited */
-	for (i = 0; i < core_dc->current_context->target_count; i++)
-		if (target == core_dc->current_context->targets[i])
-			break;
-
-	if (i == core_dc->current_context->target_count)
-		return false;
-
-	target_status = &core_dc->current_context->target_status[i];
-	context = dm_alloc(sizeof(struct validate_context));
-
-	if (!context) {
-		dm_error("%s: failed to create validate ctx\n", __func__);
-		goto val_ctx_fail;
-	}
-
-	resource_validate_ctx_copy_construct(core_dc->current_context, context);
-
-	for (i = 0; i < target_status->surface_count; i++)
-		if (target_status->surfaces[i]->visible)
-			current_enabled_surface_count++;
-
-	for (i = 0; i < new_surface_count; i++)
-		if (new_surfaces[i]->visible)
-			new_enabled_surface_count++;
-
-	dal_logger_write(core_dc->ctx->logger,
-				LOG_MAJOR_INTERFACE_TRACE,
-				LOG_MINOR_COMPONENT_DC,
-				"%s: commit %d surfaces to target 0x%x\n",
-				__func__,
-				new_surface_count,
-				dc_target);
-
-	if (!resource_attach_surfaces_to_context(
-			new_surfaces, new_surface_count, dc_target, context)) {
-		BREAK_TO_DEBUGGER();
-		goto unexpected_fail;
-	}
-
-	for (i = 0; i < new_surface_count; i++)
-		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
-			if (context->res_ctx.pipe_ctx[j].surface !=
-					DC_SURFACE_TO_CORE(new_surfaces[i]))
-				continue;
-
-			resource_build_scaling_params(
-				new_surfaces[i], &context->res_ctx.pipe_ctx[j]);
-
-			if (dc->debug.surface_visual_confirm) {
-				context->res_ctx.pipe_ctx[j].scl_data.recout.height -= 2;
-				context->res_ctx.pipe_ctx[j].scl_data.recout.width -= 2;
-			}
-		}
-
-	if (core_dc->res_pool->funcs->validate_bandwidth(core_dc, context) != DC_OK) {
-		BREAK_TO_DEBUGGER();
-		goto unexpected_fail;
-	}
-
-	if (core_dc->res_pool->funcs->apply_clk_constraints) {
-		temp_context = core_dc->res_pool->funcs->apply_clk_constraints(
-				core_dc,
-				context);
-		if (!temp_context) {
-			dm_error("%s:failed apply clk constraints\n", __func__);
-			BREAK_TO_DEBUGGER();
-			goto unexpected_fail;
-		}
-		resource_validate_ctx_destruct(context);
-		dm_free(context);
-		context = temp_context;
-	}
-
-	if (prev_disp_clk < context->bw_results.dispclk_khz) {
-		pplib_apply_display_requirements(core_dc, context,
-						&context->pp_display_cfg);
-		core_dc->hwss.set_display_clock(context);
-		core_dc->current_context->bw_results.dispclk_khz =
-				context->bw_results.dispclk_khz;
-	}
 
 	for (i = 0; i < new_surface_count; i++) {
-		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
-			struct pipe_ctx *pipe_ctx =
-						&context->res_ctx.pipe_ctx[j];
+		updates[i].surface = new_surfaces[i];
+		updates[i].gamma = (struct dc_gamma *)new_surfaces[i]->gamma_correction;
 
-			if (context->res_ctx.pipe_ctx[j].surface !=
-					DC_SURFACE_TO_CORE(new_surfaces[i]))
-				continue;
+		flip_addr[i].address = new_surfaces[i]->address;
+		flip_addr[i].flip_immediate = new_surfaces[i]->flip_immediate;
+		plane_info[i].color_space = new_surfaces[i]->color_space;
+		plane_info[i].format = new_surfaces[i]->format;
+		plane_info[i].plane_size = new_surfaces[i]->plane_size;
+		plane_info[i].rotation = new_surfaces[i]->rotation;
+		plane_info[i].stereo_format = new_surfaces[i]->stereo_format;
+		plane_info[i].tiling_info = new_surfaces[i]->tiling_info;
+		plane_info[i].visible = new_surfaces[i]->visible;
+		scaling_info[i].scaling_quality = new_surfaces[i]->scaling_quality;
+		scaling_info[i].src_rect = new_surfaces[i]->src_rect;
+		scaling_info[i].dst_rect = new_surfaces[i]->dst_rect;
+		scaling_info[i].clip_rect = new_surfaces[i]->clip_rect;
 
-			core_dc->hwss.prepare_pipe_for_context(
-					core_dc,
-					&context->res_ctx.pipe_ctx[j],
-					context);
-
-			core_dc->hwss.pipe_control_lock(
-					core_dc->ctx,
-					pipe_ctx->pipe_idx,
-					PIPE_LOCK_CONTROL_GRAPHICS |
-					PIPE_LOCK_CONTROL_SCL |
-					PIPE_LOCK_CONTROL_BLENDER |
-					PIPE_LOCK_CONTROL_SURFACE |
-					PIPE_LOCK_CONTROL_MODE,
-					true);
-
-			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
-		}
-		core_dc->hwss.apply_ctx_for_surface(
-			core_dc, DC_SURFACE_TO_CORE(new_surfaces[i]), context);
+		updates[i].flip_addr = &flip_addr[i];
+		updates[i].plane_info = &plane_info[i];
+		updates[i].scaling_info = &scaling_info[i];
 	}
-	/* TODO W/A, get rid of this*/
-	if (!new_surface_count)
-		core_dc->hwss.apply_ctx_for_surface(
-			core_dc, 0, context);
+	dc_update_surfaces_for_target(dc, updates, new_surface_count, dc_target);
 
-	/* Go in reverse order so that all pipes are unlocked simultaneously
-	 * when pipe 0 is unlocked
-	 * Need PIPE_LOCK_CONTROL_MODE to be 1 for this
-	 */
-	for (i = context->res_ctx.pool->pipe_count - 1; i >= 0; i--) {
-		struct pipe_ctx *pipe_ctx =
-					&context->res_ctx.pipe_ctx[i];
-
-		core_dc->hwss.pipe_control_lock(
-				core_dc->ctx,
-				pipe_ctx->pipe_idx,
-				PIPE_LOCK_CONTROL_GRAPHICS |
-				PIPE_LOCK_CONTROL_SCL |
-				PIPE_LOCK_CONTROL_BLENDER |
-				PIPE_LOCK_CONTROL_SURFACE,
-				false);
-	}
-
-	resource_validate_ctx_destruct(core_dc->current_context);
-	dm_free(core_dc->current_context);
-	core_dc->current_context = context;
-
-	if (current_enabled_surface_count > 0 && new_enabled_surface_count == 0)
-		target_disable_memory_requests(dc_target,
-				&context->res_ctx);
-
-	for (i = 0; i < context->res_ctx.pool->pipe_count; i++)
-		if (context->res_ctx.pipe_ctx[i].stream == NULL)
-			core_dc->hwss.power_down_front_end(
-				core_dc, &context->res_ctx.pipe_ctx[i]);
-
-	core_dc->hwss.set_bandwidth(core_dc);
-
-	if (prev_disp_clk >= context->bw_results.dispclk_khz)
-		pplib_apply_display_requirements(
-			core_dc, context,
-			&context->pp_display_cfg);
-
-	return true;
-
-unexpected_fail:
-	resource_validate_ctx_destruct(context);
-	dm_free(context);
-val_ctx_fail:
-
-	return false;
+	return dc_post_update_surfaces_to_target(dc);
 }
 
 void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *updates,
