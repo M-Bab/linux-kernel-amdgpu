@@ -96,7 +96,6 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_DP_SINK_DETECT_POLL_DATA_PIN, false, true},
 	{FEATURE_UNDERFLOW_INTERRUPT, false, true},
 	{FEATURE_ALLOW_WATERMARK_ADJUSTMENT, false, true},
-	{FEATURE_LIGHT_SLEEP, false, true},
 	{FEATURE_DCP_DITHER_FRAME_RANDOM_ENABLE, false, true},
 	{FEATURE_DCP_DITHER_RGB_RANDOM_ENABLE, false, true},
 	{FEATURE_DCP_DITHER_HIGH_PASS_RANDOM_ENABLE, false, true},
@@ -431,7 +430,6 @@ static bool override_default_parameters(
 	}
 
 	switch (feature_entry_table[idx].feature_id) {
-	check_bool_feature(LIGHT_SLEEP);
 	check_bool_feature(MAXIMIZE_STUTTER_MARKS);
 	check_bool_feature(MAXIMIZE_URGENCY_WATERMARKS);
 	check_bool_feature(USE_MAX_DISPLAY_CLK);

@@ -101,8 +101,6 @@ struct audio_funcs {
 		const struct audio_pll_info *pll_info);
 
 	/* options and features supported by Audio */
-	struct audio_feature_support (*get_supported_features)(
-		struct audio *audio);
 
 	/*
 	 *check_audio_bandwidth
@@ -125,13 +123,9 @@ struct audio {
 
 	/*external structures - get service from external*/
 	struct graphics_object_id id;
-	struct adapter_service *adapter_service;
 	/* audio HW context */
 	struct hw_ctx_audio *hw_ctx;
 	struct dc_context *ctx;
-	/* audio supports input and output signals */
-	uint32_t input_signals;
-	uint32_t output_signals;
 };
 
 /* - functions defined by audio.h will be used by audio component only.

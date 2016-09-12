@@ -110,40 +110,11 @@ struct hw_ctx_audio_funcs {
 		const struct hw_ctx_audio *hw_ctx,
 		enum engine_id engine_id);
 
-	/* enable channel splitting mapping */
-	void (*setup_channel_splitting_mapping)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id,
-		enum signal_type signal,
-		const struct audio_channel_associate_info *audio_mapping,
-		bool enable);
-
-	/* get current channel spliting */
-	bool (*get_channel_splitting_mapping)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id,
-		struct audio_channel_associate_info *audio_mapping);
-
-	/* set the payload value for the unsolicited response */
-	void (*set_unsolicited_response_payload)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum audio_payload payload);
-
 	/* initialize HW state */
 	void (*hw_initialize)(
 		const struct hw_ctx_audio *hw_ctx);
 
 	/* check_audio_bandwidth */
-
-	/* Assign GTC group and enable GTC value embedding */
-	void (*enable_gtc_embedding_with_group)(
-		const struct hw_ctx_audio *hw_ctx,
-		uint32_t groupNum,
-		uint32_t audioLatency);
-
-	/* Disable Azalia Clock Gating Feature */
-	void (*disable_az_clock_gating)(
-		const struct hw_ctx_audio *hw_ctx);
 
 	/* ~~~~  protected: ~~~~*/
 

@@ -1433,121 +1433,6 @@ static void mute_azalia_audio(
 	dm_write_reg(hw_ctx->ctx, addr, value);
 }
 
-/* enable channel splitting mapping */
-static void setup_channel_splitting_mapping(
-	const struct hw_ctx_audio *hw_ctx,
-	enum engine_id engine_id,
-	enum signal_type signal,
-	const struct audio_channel_associate_info *audio_mapping,
-	bool enable)
-{
-	uint32_t value = 0;
-
-	if ((audio_mapping == NULL || audio_mapping->u32all == 0) && enable)
-		return;
-
-	value = audio_mapping->u32all;
-
-	if (enable == false)
-		/*0xFFFFFFFF;*/
-		value = MULTI_CHANNEL_SPLIT_NO_ASSO_INFO;
-
-	write_indirect_azalia_reg(
-		hw_ctx,
-		ixAZALIA_F0_CODEC_PIN_ASSOCIATION_INFO,
-		value);
-}
-
-/* get current channel spliting */
-static bool get_channel_splitting_mapping(
-	const struct hw_ctx_audio *hw_ctx,
-	enum engine_id engine_id,
-	struct audio_channel_associate_info *audio_mapping)
-{
-	uint32_t value = 0;
-
-	if (audio_mapping == NULL)
-		return false;
-
-	value = read_indirect_azalia_reg(
-		hw_ctx,
-		ixAZALIA_F0_CODEC_PIN_ASSOCIATION_INFO);
-
-	/*0xFFFFFFFF*/
-	if (get_reg_field_value(value,
-			AZALIA_F0_CODEC_PIN_ASSOCIATION_INFO,
-			ASSOCIATION_INFO) !=
-			MULTI_CHANNEL_SPLIT_NO_ASSO_INFO) {
-		uint32_t multi_channel01_enable = 0;
-		uint32_t multi_channel23_enable = 0;
-		uint32_t multi_channel45_enable = 0;
-		uint32_t multi_channel67_enable = 0;
-		/* get the one we set.*/
-		audio_mapping->u32all = value;
-
-		/* check each enable status*/
-		value = read_indirect_azalia_reg(
-			hw_ctx,
-			ixAZALIA_F0_CODEC_PIN_CONTROL_MULTICHANNEL_ENABLE);
-
-		multi_channel01_enable = get_reg_field_value(value,
-		AZALIA_F0_CODEC_PIN_CONTROL_MULTICHANNEL_ENABLE,
-		MULTICHANNEL01_ENABLE);
-
-		multi_channel23_enable = get_reg_field_value(value,
-		AZALIA_F0_CODEC_PIN_CONTROL_MULTICHANNEL_ENABLE,
-		MULTICHANNEL23_ENABLE);
-
-		multi_channel45_enable = get_reg_field_value(value,
-		AZALIA_F0_CODEC_PIN_CONTROL_MULTICHANNEL_ENABLE,
-		MULTICHANNEL45_ENABLE);
-
-		multi_channel67_enable = get_reg_field_value(value,
-		AZALIA_F0_CODEC_PIN_CONTROL_MULTICHANNEL_ENABLE,
-		MULTICHANNEL67_ENABLE);
-
-		if (multi_channel01_enable == 0 &&
-			multi_channel23_enable == 0 &&
-			multi_channel45_enable == 0 &&
-			multi_channel67_enable == 0)
-			dal_logger_write(hw_ctx->ctx->logger,
-				LOG_MAJOR_HW_TRACE,
-				LOG_MINOR_COMPONENT_AUDIO,
-				"Audio driver did not enable multi-channel\n");
-
-		return true;
-	}
-
-	return false;
-}
-
-/* set the payload value for the unsolicited response */
-static void set_unsolicited_response_payload(
-	const struct hw_ctx_audio *hw_ctx,
-	enum audio_payload payload)
-{
-	/* set the payload value for the unsolicited response
-	 Jack presence is not required to be enabled */
-	uint32_t value = 0;
-
-	value = read_indirect_azalia_reg(
-		hw_ctx,
-		ixAZALIA_F0_CODEC_PIN_CONTROL_UNSOLICITED_RESPONSE_FORCE);
-
-	set_reg_field_value(value, payload,
-		AZALIA_F0_CODEC_PIN_CONTROL_UNSOLICITED_RESPONSE_FORCE,
-		UNSOLICITED_RESPONSE_PAYLOAD);
-
-	set_reg_field_value(value, 1,
-		AZALIA_F0_CODEC_PIN_CONTROL_UNSOLICITED_RESPONSE_FORCE,
-		UNSOLICITED_RESPONSE_FORCE);
-
-	write_indirect_azalia_reg(
-		hw_ctx,
-		ixAZALIA_F0_CODEC_PIN_CONTROL_UNSOLICITED_RESPONSE_FORCE,
-		value);
-}
-
 /* initialize HW state */
 static void hw_initialize(
 	const struct hw_ctx_audio *hw_ctx)
@@ -1660,19 +1545,6 @@ static void disable_gtc_embedding(
 		value);
 }
 
- /* Disable Azalia Clock Gating Feature */
-static void disable_az_clock_gating(
-	const struct hw_ctx_audio *hw_ctx)
-{
-	uint32_t value;
-
-	value = dm_read_reg(hw_ctx->ctx,
-			mmAZALIA_CONTROLLER_CLOCK_GATING);
-	set_reg_field_value(value, 0, AZALIA_CONTROLLER_CLOCK_GATING, ENABLE_CLOCK_GATING);
-	dm_write_reg(hw_ctx->ctx,
-			mmAZALIA_CONTROLLER_CLOCK_GATING, value);
-}
-
 /* search pixel clock value for Azalia HDMI Audio */
 static bool get_azalia_clock_info_hdmi(
 	const struct hw_ctx_audio *hw_ctx,
@@ -1741,18 +1613,10 @@ static const struct hw_ctx_audio_funcs funcs = {
 		disable_dp_audio,
 	.setup_azalia =
 		setup_azalia,
-	.disable_az_clock_gating =
-		disable_az_clock_gating,
 	.unmute_azalia_audio =
 		unmute_azalia_audio,
 	.mute_azalia_audio =
 		mute_azalia_audio,
-	.setup_channel_splitting_mapping =
-		setup_channel_splitting_mapping,
-	.get_channel_splitting_mapping =
-		get_channel_splitting_mapping,
-	.set_unsolicited_response_payload =
-		set_unsolicited_response_payload,
 	.hw_initialize =
 		hw_initialize,
 	.get_azalia_clock_info_hdmi =

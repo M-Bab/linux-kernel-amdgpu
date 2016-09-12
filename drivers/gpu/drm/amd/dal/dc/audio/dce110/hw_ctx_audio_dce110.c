@@ -1729,17 +1729,10 @@ static const struct hw_ctx_audio_funcs funcs = {
 		disable_dp_audio,
 	.setup_azalia =
 		setup_azalia,
-	.disable_az_clock_gating = NULL,
 	.unmute_azalia_audio =
 		unmute_azalia_audio,
 	.mute_azalia_audio =
 		mute_azalia_audio,
-	.setup_channel_splitting_mapping =
-		setup_channel_splitting_mapping,
-	.get_channel_splitting_mapping =
-		get_channel_splitting_mapping,
-	.set_unsolicited_response_payload =
-		set_unsolicited_response_payload,
 	.hw_initialize =
 		hw_initialize,
 	.get_azalia_clock_info_hdmi =

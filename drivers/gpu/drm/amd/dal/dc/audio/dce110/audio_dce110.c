@@ -320,28 +320,6 @@ static void setup_audio_wall_dto(
 		audio->hw_ctx, signal, crtc_info, pll_info);
 }
 
-/**
-* get_supported_features
-*
-* @brief
-*  options and features supported by Audio
-*  returns supported engines, signals.
-*  features are reported for HW audio/Azalia block rather then Audio object
-*  itself the difference for DCE6.x is that MultiStream Audio is now supported
-*
-*/
-static struct audio_feature_support get_supported_features(struct audio *audio)
-{
-	struct audio_feature_support afs = {0};
-
-	afs.ENGINE_DIGA = 1;
-	afs.ENGINE_DIGB = 1;
-	afs.ENGINE_DIGC = 1;
-	afs.MULTISTREAM_AUDIO = 1;
-
-	return afs;
-}
-
 static const struct audio_funcs funcs = {
 	.destroy = destroy,
 	.setup = setup,
@@ -351,7 +329,6 @@ static const struct audio_funcs funcs = {
 	.mute = mute,
 	.initialize = initialize,
 	.setup_audio_wall_dto = setup_audio_wall_dto,
-	.get_supported_features = get_supported_features,
 };
 
 static bool construct(

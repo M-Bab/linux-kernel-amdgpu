@@ -60,26 +60,6 @@ struct audio *dal_audio_create(
 void dal_audio_destroy(
 	struct audio **audio);
 
-/****** graphics object interface ******/
-const struct graphics_object_id dal_audio_get_graphics_object_id(
-	const struct audio *audio);
-
-/* Enumerate Graphics Object supported Input/Output Signal Types */
-uint32_t dal_audio_enumerate_input_signals(
-	struct audio *audio);
-
-uint32_t dal_audio_enumerate_output_signals(
-	struct audio *audio);
-
-/*  Check if signal supported by GraphicsObject  */
-bool dal_audio_is_input_signal_supported(
-	struct audio *audio,
-	enum signal_type signal);
-
-bool dal_audio_is_output_signal_supported(
-	struct audio *audio,
-	enum signal_type signal);
-
 /***** programming interface *****/
 
 /* perform power up sequence (boot up, resume, recovery) */
@@ -132,9 +112,6 @@ enum audio_result dal_audio_mute(
 
 /***** information interface *****/
 
-struct audio_feature_support dal_audio_get_supported_features(
-	struct audio *audio);
-
 /* get audio bandwidth information */
 void dal_audio_check_audio_bandwidth(
 	struct audio *audio,
@@ -142,35 +119,6 @@ void dal_audio_check_audio_bandwidth(
 	uint32_t channel_count,
 	enum signal_type signal,
 	union audio_sample_rates *sample_rates);
-
-/* Enable multi channel split */
-void dal_audio_enable_channel_splitting_mapping(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal,
-	const struct audio_channel_associate_info *audio_mapping,
-	bool enable);
-
-/* get current multi channel split. */
-enum audio_result dal_audio_get_channel_splitting_mapping(
-	struct audio *audio,
-	enum engine_id engine_id,
-	struct audio_channel_associate_info *audio_mapping);
-
-/* set payload value for the unsolicited response */
-void dal_audio_set_unsolicited_response_payload(
-	struct audio *audio,
-	enum audio_payload payload);
-
-/*Assign GTC group and enable GTC value embedding*/
-void dal_audio_enable_gtc_embedding_with_group(
-	struct audio *audio,
-	uint32_t group_num,
-	uint32_t audio_latency);
-
-/* Disable GTC value embedding */
-void dal_audio_disable_gtc_embedding(
-	struct audio *audio);
 
 /* Update audio wall clock source */
 void dal_audio_setup_audio_wall_dto(

@@ -111,37 +111,6 @@ static enum audio_result initialize(
 	return AUDIO_RESULT_OK;
 }
 
-static void enable_channel_splitting_mapping(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal,
-	const struct audio_channel_associate_info *audio_mapping,
-	bool enable)
-{
-	/*DCE specific, must be implemented in derived*/
-	BREAK_TO_DEBUGGER();
-}
-
-/* get current multi channel split. */
-static enum audio_result get_channel_splitting_mapping(
-	struct audio *audio,
-	enum engine_id engine_id,
-	struct audio_channel_associate_info *audio_mapping)
-{
-	/*DCE specific, must be implemented in derived*/
-	BREAK_TO_DEBUGGER();
-	return AUDIO_RESULT_OK;
-}
-
-/* set payload value for the unsolicited response */
-static void set_unsolicited_response_payload(
-	struct audio *audio,
-	enum audio_payload payload)
-{
-	/*DCE specific, must be implemented in derived*/
-	BREAK_TO_DEBUGGER();
-}
-
 /* update audio wall clock source */
 static void setup_audio_wall_dto(
 	struct audio *audio,
@@ -153,19 +122,6 @@ static void setup_audio_wall_dto(
 	BREAK_TO_DEBUGGER();
 }
 
-static struct audio_feature_support get_supported_features(struct audio *audio)
-{
-	/*DCE specific, must be implemented in derived*/
-	struct audio_feature_support features;
-
-	memset(&features, 0, sizeof(features));
-
-	features.ENGINE_DIGA = 1;
-	features.ENGINE_DIGB = 1;
-
-	return features;
-}
-
 static const struct audio_funcs audio_funcs = {
 	.destroy = destroy,
 	.setup = setup,
@@ -175,7 +131,6 @@ static const struct audio_funcs audio_funcs = {
 	.mute = mute,
 	.initialize = initialize,
 	.setup_audio_wall_dto = setup_audio_wall_dto,
-	.get_supported_features = get_supported_features,
 };
 
 /***** SCOPE : declare in audio.h. use within dal-audio. *****/
@@ -184,33 +139,15 @@ bool dal_audio_construct_base(
 	struct audio *audio,
 	const struct audio_init_data *init_data)
 {
-	enum signal_type signals = SIGNAL_TYPE_HDMI_TYPE_A;
-
 	ASSERT(init_data->as != NULL);
 
 	/* base hook functions */
 	audio->funcs = &audio_funcs;
 
-	/*setup pointers to get service from dal service compoenents*/
-	audio->adapter_service = init_data->as;
-
 	audio->ctx = init_data->ctx;
 
 	/* save audio endpoint number to identify object creating */
 	audio->id = init_data->audio_stream_id;
-
-	/* Fill supported signals. !!! be aware that android definition is
-	 * already shift to vector.
-	 */
-	signals |= SIGNAL_TYPE_DISPLAY_PORT;
-	signals |= SIGNAL_TYPE_DISPLAY_PORT_MST;
-	signals |= SIGNAL_TYPE_EDP;
-	signals |= SIGNAL_TYPE_DISPLAY_PORT;
-	signals |= SIGNAL_TYPE_WIRELESS;
-
-	/* Audio supports same set for input and output signals */
-	audio->input_signals = signals;
-	audio->output_signals = signals;
 
 	return true;
 }
@@ -221,34 +158,6 @@ void dal_audio_destruct_base(
 {
 }
 
-/* Enumerate Graphics Object supported Input/Output Signal Types */
-uint32_t dal_audio_enumerate_input_signals(
-	struct audio *audio)
-{
-	return audio->input_signals;
-}
-
-uint32_t dal_audio_enumerate_output_signals(
-	struct audio *audio)
-{
-	return audio->output_signals;
-}
-
-/*  Check if signal supported by GraphicsObject  */
-bool dal_audio_is_input_signal_supported(
-	struct audio *audio,
-	enum signal_type signal)
-{
-	return (signal & audio->output_signals) != 0;
-}
-
-bool dal_audio_is_output_signal_supported(
-	struct audio *audio,
-	enum signal_type signal)
-{
-	return (signal & audio->input_signals) != 0;
-}
-
 /***** SCOPE : declare in dal\include  *****/
 
 /* audio object creator triage. memory allocate and release will be
@@ -257,12 +166,8 @@ bool dal_audio_is_output_signal_supported(
 struct audio *dal_audio_create(
 	const struct audio_init_data *init_data)
 {
-	struct adapter_service *as;
+	struct adapter_service *as = init_data->as;
 
-	if (init_data->as == NULL)
-		return NULL;
-
-	as = init_data->as;
 	switch (dal_adapter_service_get_dce_version(as)) {
 #if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 	case DCE_VERSION_8_0:
@@ -309,12 +214,6 @@ void dal_audio_destroy(
 	*audio = NULL;
 }
 
-const struct graphics_object_id dal_audio_get_graphics_object_id(
-	const struct audio *audio)
-{
-	return audio->id;
-}
-
 /* enable azalia audio endpoint. This function call hw_ctx directly
  *not overwitten at audio level.
  */
@@ -354,16 +253,6 @@ void dal_audio_check_audio_bandwidth(
 /* DP Audio register write access. This function call hw_ctx directly
  * not overwitten at audio level.
  */
-
-/*assign GTC group and enable GTC value embedding*/
-void dal_audio_enable_gtc_embedding_with_group(
-	struct audio *audio,
-	uint32_t group_num,
-	uint32_t audio_latency)
-{
-	audio->hw_ctx->funcs->enable_gtc_embedding_with_group(
-		audio->hw_ctx, group_num, audio_latency);
-}
 
 /* perform power up sequence (boot up, resume, recovery) */
 enum audio_result dal_audio_power_up(
@@ -434,8 +323,3 @@ void dal_audio_setup_audio_wall_dto(
 	audio->funcs->setup_audio_wall_dto(audio, signal, crtc_info, pll_info);
 }
 
-struct audio_feature_support dal_audio_get_supported_features(
-	struct audio *audio)
-{
-	return audio->funcs->get_supported_features(audio);
-}

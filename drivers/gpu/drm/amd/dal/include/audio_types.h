@@ -127,18 +127,6 @@ struct audio_output {
 	struct audio_pll_info pll_info;
 };
 
-struct audio_feature_support {
-	/* supported engines*/
-	uint32_t ENGINE_DIGA:1;
-	uint32_t ENGINE_DIGB:1;
-	uint32_t ENGINE_DIGC:1;
-	uint32_t ENGINE_DIGD:1;
-	uint32_t ENGINE_DIGE:1;
-	uint32_t ENGINE_DIGF:1;
-	uint32_t ENGINE_DIGG:1;
-	uint32_t MULTISTREAM_AUDIO:1;
-};
-
 enum audio_payload {
 	CHANNEL_SPLIT_MAPPINGCHANG = 0x9,
 };

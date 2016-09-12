@@ -275,10 +275,6 @@ static enum audio_result initialize(
 	/* override HW default settings */
 	audio->hw_ctx->funcs->hw_initialize(audio->hw_ctx);
 
-	if (dal_adapter_service_is_feature_supported(audio->adapter_service,
-						     FEATURE_LIGHT_SLEEP))
-		audio->hw_ctx->funcs->disable_az_clock_gating(audio->hw_ctx);
-
 	return AUDIO_RESULT_OK;
 }
 
@@ -303,34 +299,6 @@ static void setup_audio_wall_dto(
 		audio->hw_ctx, signal, crtc_info, pll_info);
 }
 
-/**
-* GetSupportedFeatures
-*
-* @brief
-*  options and features supported by Audio
-*  returns supported engines, signals.
-*  features are reported for HW audio/Azalia block rather then Audio object
-*  itself the difference for DCE6.x is that MultiStream Audio is now supported
-*
-* @param
-*  NONE
-*/
-static struct audio_feature_support get_supported_features(struct audio *audio)
-{
-	struct audio_feature_support afs = {0};
-
-	afs.ENGINE_DIGA = 1;
-	afs.ENGINE_DIGB = 1;
-	afs.ENGINE_DIGC = 1;
-	afs.ENGINE_DIGD = 1;
-	afs.ENGINE_DIGE = 1;
-	afs.ENGINE_DIGF = 1;
-	afs.ENGINE_DIGG = 1;
-	afs.MULTISTREAM_AUDIO = 1;
-
-	return afs;
-}
-
 static const struct audio_funcs funcs = {
 	.destroy = destroy,
 	.setup = setup,
@@ -340,7 +308,6 @@ static const struct audio_funcs funcs = {
 	.mute = mute,
 	.initialize = initialize,
 	.setup_audio_wall_dto = setup_audio_wall_dto,
-	.get_supported_features = get_supported_features,
 };
 
 static bool construct(
