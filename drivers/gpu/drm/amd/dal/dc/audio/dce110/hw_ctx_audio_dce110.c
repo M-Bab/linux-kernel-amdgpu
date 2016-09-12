@@ -1661,71 +1661,6 @@ static void hw_initialize(
 	}
 }
 
-/* Assign GTC group and enable GTC value embedding */
-static void enable_gtc_embedding_with_group(
-	const struct hw_ctx_audio *hw_ctx,
-	uint32_t group_num,
-	uint32_t audio_latency)
-{
-	/*need to replace the static number with variable */
-	if (group_num <= 6) {
-		uint32_t value = read_indirect_azalia_reg(
-			hw_ctx,
-			ixAZALIA_F0_CODEC_CONVERTER_CONTROL_GTC_EMBEDDING);
-
-		set_reg_field_value(
-			value,
-			group_num,
-			AZALIA_F0_CODEC_CONVERTER_CONTROL_GTC_EMBEDDING,
-			PRESENTATION_TIME_EMBEDDING_GROUP);
-
-		set_reg_field_value(
-			value,
-			1,
-			AZALIA_F0_CODEC_CONVERTER_CONTROL_GTC_EMBEDDING,
-			PRESENTATION_TIME_EMBEDDING_ENABLE);
-
-		write_indirect_azalia_reg(
-			hw_ctx,
-			ixAZALIA_F0_CODEC_CONVERTER_CONTROL_GTC_EMBEDDING,
-			value);
-
-		/*update audio latency to LIPSYNC*/
-		set_audio_latency(hw_ctx, audio_latency);
-	} else {
-		dal_logger_write(
-			hw_ctx->ctx->logger,
-			LOG_MAJOR_HW_TRACE,
-			LOG_MINOR_COMPONENT_AUDIO,
-			"GTC group number %d is too big",
-			group_num);
-	}
-}
-
- /* Disable GTC value embedding */
-static void disable_gtc_embedding(
-	const struct hw_ctx_audio *hw_ctx)
-{
-	uint32_t value = 0;
-
-	value = read_indirect_azalia_reg(
-	hw_ctx,
-	ixAZALIA_F0_CODEC_CONVERTER_CONTROL_GTC_EMBEDDING);
-
-	set_reg_field_value(value, 0,
-	AZALIA_F0_CODEC_CONVERTER_CONTROL_GTC_EMBEDDING,
-	PRESENTATION_TIME_EMBEDDING_ENABLE);
-
-	set_reg_field_value(value, 0,
-	AZALIA_F0_CODEC_CONVERTER_CONTROL_GTC_EMBEDDING,
-	PRESENTATION_TIME_EMBEDDING_GROUP);
-
-	write_indirect_azalia_reg(
-		hw_ctx,
-		ixAZALIA_F0_CODEC_CONVERTER_CONTROL_GTC_EMBEDDING,
-		value);
-}
-
 /* search pixel clock value for Azalia HDMI Audio */
 static bool get_azalia_clock_info_hdmi(
 	const struct hw_ctx_audio *hw_ctx,
@@ -1807,10 +1742,6 @@ static const struct hw_ctx_audio_funcs funcs = {
 		set_unsolicited_response_payload,
 	.hw_initialize =
 		hw_initialize,
-	.enable_gtc_embedding_with_group =
-		enable_gtc_embedding_with_group,
-	.disable_gtc_embedding =
-		disable_gtc_embedding,
 	.get_azalia_clock_info_hdmi =
 		get_azalia_clock_info_hdmi,
 	.get_azalia_clock_info_dp =

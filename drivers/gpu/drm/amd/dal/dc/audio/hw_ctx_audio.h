@@ -141,10 +141,6 @@ struct hw_ctx_audio_funcs {
 		uint32_t groupNum,
 		uint32_t audioLatency);
 
-	/* Disable GTC value embedding */
-	void (*disable_gtc_embedding)(
-		const struct hw_ctx_audio *hw_ctx);
-
 	/* Disable Azalia Clock Gating Feature */
 	void (*disable_az_clock_gating)(
 		const struct hw_ctx_audio *hw_ctx);

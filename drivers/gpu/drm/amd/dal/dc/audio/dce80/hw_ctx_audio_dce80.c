@@ -1755,10 +1755,6 @@ static const struct hw_ctx_audio_funcs funcs = {
 		set_unsolicited_response_payload,
 	.hw_initialize =
 		hw_initialize,
-	.enable_gtc_embedding_with_group =
-		enable_gtc_embedding_with_group,
-	.disable_gtc_embedding =
-		disable_gtc_embedding,
 	.get_azalia_clock_info_hdmi =
 		get_azalia_clock_info_hdmi,
 	.get_azalia_clock_info_dp =

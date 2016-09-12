@@ -371,13 +371,6 @@ void dal_audio_enable_gtc_embedding_with_group(
 		audio->hw_ctx, group_num, audio_latency);
 }
 
-/* disable GTC value embedding */
-void dal_audio_disable_gtc_embedding(
-	struct audio *audio)
-{
-	audio->hw_ctx->funcs->disable_gtc_embedding(audio->hw_ctx);
-}
-
 /* perform power up sequence (boot up, resume, recovery) */
 enum audio_result dal_audio_power_up(
 	struct audio *audio)
