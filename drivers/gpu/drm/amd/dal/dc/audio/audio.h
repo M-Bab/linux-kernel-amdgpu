@@ -93,25 +93,6 @@ struct audio_funcs {
 	enum audio_result (*initialize)(
 		struct audio *audio);
 
-	/* enable channel splitting mapping */
-	void (*enable_channel_splitting_mapping)(
-		struct audio *audio,
-		enum engine_id engine_id,
-		enum signal_type signal,
-		const struct audio_channel_associate_info *audio_mapping,
-		bool enable);
-
-	/* get current multi channel split. */
-	enum audio_result (*get_channel_splitting_mapping)(
-		struct audio *audio,
-		enum engine_id engine_id,
-		struct audio_channel_associate_info *audio_mapping);
-
-	/* set payload value for the unsolicited response */
-	void (*set_unsolicited_response_payload)(
-		struct audio *audio,
-		enum audio_payload payload);
-
 	/* Update audio wall clock source */
 	void (*setup_audio_wall_dto)(
 		struct audio *audio,
@@ -127,8 +108,6 @@ struct audio_funcs {
 	 *check_audio_bandwidth
 	 *write_reg
 	 *read_reg
-	 *enable_gtc_embedding_with_group
-	 *disable_gtc_embedding
 	 *register_interrupt
 	 *unregister_interrupt
 	 *process_interrupt

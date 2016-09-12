@@ -303,49 +303,6 @@ static enum audio_result initialize(
 	return AUDIO_RESULT_OK;
 }
 
-/* enable multi channel split */
-static void enable_channel_splitting_mapping(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal,
-	const struct audio_channel_associate_info *audio_mapping,
-	bool enable)
-{
-	audio->hw_ctx->funcs->setup_channel_splitting_mapping(
-		audio->hw_ctx,
-		engine_id,
-		signal,
-		audio_mapping, enable);
-}
-
-/* get current multi channel split. */
-static enum audio_result get_channel_splitting_mapping(
-	struct audio *audio,
-	enum engine_id engine_id,
-	struct audio_channel_associate_info *audio_mapping)
-{
-	if (audio->hw_ctx->funcs->get_channel_splitting_mapping(
-		audio->hw_ctx, engine_id, audio_mapping)) {
-		return AUDIO_RESULT_OK;
-	} else {
-		return AUDIO_RESULT_ERROR;
-	}
-}
-
-/**
-* set_unsolicited_response_payload
-*
-* @brief
-*  Set payload value for the unsolicited response
-*/
-static void set_unsolicited_response_payload(
-	struct audio *audio,
-	enum audio_payload payload)
-{
-	audio->hw_ctx->funcs->set_unsolicited_response_payload(
-			audio->hw_ctx, payload);
-}
-
 /**
 * setup_audio_wall_dto
 *
@@ -393,12 +350,6 @@ static const struct audio_funcs funcs = {
 	.unmute = unmute,
 	.mute = mute,
 	.initialize = initialize,
-	.enable_channel_splitting_mapping =
-		enable_channel_splitting_mapping,
-	.get_channel_splitting_mapping =
-		get_channel_splitting_mapping,
-	.set_unsolicited_response_payload =
-		set_unsolicited_response_payload,
 	.setup_audio_wall_dto = setup_audio_wall_dto,
 	.get_supported_features = get_supported_features,
 };

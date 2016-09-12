@@ -174,12 +174,6 @@ static const struct audio_funcs audio_funcs = {
 	.unmute = unmute,
 	.mute = mute,
 	.initialize = initialize,
-	.enable_channel_splitting_mapping =
-		enable_channel_splitting_mapping,
-	.get_channel_splitting_mapping =
-		get_channel_splitting_mapping,
-	.set_unsolicited_response_payload =
-		set_unsolicited_response_payload,
 	.setup_audio_wall_dto = setup_audio_wall_dto,
 	.get_supported_features = get_supported_features,
 };
@@ -428,36 +422,6 @@ enum audio_result dal_audio_mute(
 	enum signal_type signal)
 {
 	return audio->funcs->mute(audio, engine_id, signal);
-}
-
-/* Enable multi channel split */
-void dal_audio_enable_channel_splitting_mapping(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal,
-	const struct audio_channel_associate_info *audio_mapping,
-	bool enable)
-{
-	audio->funcs->enable_channel_splitting_mapping(
-		audio, engine_id, signal, audio_mapping, enable);
-}
-
-/* get current multi channel split. */
-enum audio_result dal_audio_get_channel_splitting_mapping(
-	struct audio *audio,
-	enum engine_id engine_id,
-	struct audio_channel_associate_info *audio_mapping)
-{
-	return audio->funcs->get_channel_splitting_mapping(
-		audio, engine_id, audio_mapping);
-}
-
-/* set payload value for the unsolicited response */
-void dal_audio_set_unsolicited_response_payload(
-	struct audio *audio,
-	enum audio_payload payload)
-{
-	audio->funcs->set_unsolicited_response_payload(audio, payload);
 }
 
 /* update audio wall clock source */
