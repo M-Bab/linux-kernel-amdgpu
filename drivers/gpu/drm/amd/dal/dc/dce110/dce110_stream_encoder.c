@@ -1071,6 +1071,22 @@ static void dce110_stream_encoder_dp_unblank(
 	dm_write_reg(ctx, addr, value);
 }
 
+#define LINK_REG_UPDATE_N(reg_name, n, ...)	\
+		generic_reg_update_ex(enc110->base.ctx, LINK_REG(reg_name), dm_read_reg(enc110->base.ctx, LINK_REG(reg_name)), n, __VA_ARGS__)
+
+#define LINK_REG_UPDATE(reg_name, field, val)	\
+		LINK_REG_UPDATE_N(reg_name, 1, FD(reg_name##__##field), val)
+
+void dce110_audio_mute_control(
+	struct stream_encoder *enc,
+	bool mute)
+{
+	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
+
+	LINK_REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL, AFMT_AUDIO_SAMPLE_SEND, !mute);
+}
+
+
 static const struct stream_encoder_funcs dce110_str_enc_funcs = {
 	.dp_set_stream_attribute =
 		dce110_stream_encoder_dp_set_stream_attribute,
@@ -1091,7 +1107,9 @@ static const struct stream_encoder_funcs dce110_str_enc_funcs = {
 	.dp_blank =
 		dce110_stream_encoder_dp_blank,
 	.dp_unblank =
-		dce110_stream_encoder_dp_unblank
+		dce110_stream_encoder_dp_unblank,
+
+	.audio_mute_control = dce110_audio_mute_control,
 };
 
 bool dce110_stream_encoder_construct(

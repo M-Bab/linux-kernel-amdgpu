@@ -1310,8 +1310,9 @@ static enum dc_status enable_link(struct pipe_ctx *pipe_ctx)
 				pipe_ctx->stream_enc->id);
 
 		/* un-mute audio */
-		dal_audio_unmute(pipe_ctx->audio, pipe_ctx->stream_enc->id,
-				pipe_ctx->stream->signal);
+		/* TODO: audio should be per stream rather than per link */
+		pipe_ctx->stream_enc->funcs->audio_mute_control(
+			pipe_ctx->stream_enc, false);
 	}
 
 	return status;

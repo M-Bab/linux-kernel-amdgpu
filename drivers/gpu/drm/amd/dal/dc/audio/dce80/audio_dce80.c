@@ -185,66 +185,6 @@ static enum audio_result disable_output(
 }
 
 /**
-* unmute
-*
-* @brief
-*  unmute audio, to be called by dal_audio_unmute
-*
-* @param
-*  engine_id         - engine id
-*/
-static enum audio_result unmute(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	switch (signal) {
-	case SIGNAL_TYPE_HDMI_TYPE_A:
-	case SIGNAL_TYPE_WIRELESS:
-	case SIGNAL_TYPE_DISPLAY_PORT:
-	case SIGNAL_TYPE_DISPLAY_PORT_MST:
-	case SIGNAL_TYPE_EDP:
-		/* unmute Azalia audio */
-		audio->hw_ctx->funcs->unmute_azalia_audio(
-				audio->hw_ctx, engine_id);
-		break;
-	default:
-		return AUDIO_RESULT_ERROR;
-	}
-	return AUDIO_RESULT_OK;
-}
-
-/**
-* mute
-*
-* @brief
-*  mute audio, to be called  by dal_audio_nmute
-*
-* @param
-*  engine_id         - engine id
-*/
-static enum audio_result mute(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	switch (signal) {
-	case SIGNAL_TYPE_HDMI_TYPE_A:
-	case SIGNAL_TYPE_WIRELESS:
-	case SIGNAL_TYPE_DISPLAY_PORT:
-	case SIGNAL_TYPE_DISPLAY_PORT_MST:
-	case SIGNAL_TYPE_EDP:
-		/* mute Azalia audio */
-		audio->hw_ctx->funcs->mute_azalia_audio(
-				audio->hw_ctx, engine_id);
-		break;
-	default:
-		return AUDIO_RESULT_ERROR;
-	}
-	return AUDIO_RESULT_OK;
-}
-
-/**
 * initialize
 *
 * @brief
@@ -304,8 +244,6 @@ static const struct audio_funcs funcs = {
 	.setup = setup,
 	.enable_output = enable_output,
 	.disable_output = disable_output,
-	.unmute = unmute,
-	.mute = mute,
 	.initialize = initialize,
 	.setup_audio_wall_dto = setup_audio_wall_dto,
 };

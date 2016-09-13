@@ -81,26 +81,6 @@ static enum audio_result disable_output(
 	return AUDIO_RESULT_OK;
 }
 
-static enum audio_result unmute(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	/*DCE specific, must be implemented in derived*/
-	BREAK_TO_DEBUGGER();
-	return AUDIO_RESULT_OK;
-}
-
-static enum audio_result mute(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	/*DCE specific, must be implemented in derived*/
-	BREAK_TO_DEBUGGER();
-	return AUDIO_RESULT_OK;
-}
-
 static enum audio_result initialize(
 	struct audio *audio)
 {
@@ -127,8 +107,6 @@ static const struct audio_funcs audio_funcs = {
 	.setup = setup,
 	.enable_output = enable_output,
 	.disable_output = disable_output,
-	.unmute = unmute,
-	.mute = mute,
 	.initialize = initialize,
 	.setup_audio_wall_dto = setup_audio_wall_dto,
 };
@@ -256,24 +234,6 @@ enum audio_result dal_audio_disable_output(
 	enum signal_type signal)
 {
 	return audio->funcs->disable_output(audio, engine_id, signal);
-}
-
-/* unmute audio */
-enum audio_result dal_audio_unmute(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	return audio->funcs->unmute(audio, engine_id, signal);
-}
-
-/* mute audio */
-enum audio_result dal_audio_mute(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	return audio->funcs->mute(audio, engine_id, signal);
 }
 
 /* update audio wall clock source */

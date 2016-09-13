@@ -1463,42 +1463,6 @@ static void setup_azalia(
 	configure_azalia(hw_ctx, signal, crtc_info, audio_info);
 }
 
-/* unmute audio */
-static void unmute_azalia_audio(
-	const struct hw_ctx_audio *hw_ctx,
-	enum engine_id engine_id)
-{
-	const uint32_t addr = mmAFMT_AUDIO_PACKET_CONTROL +
-		engine_offset[engine_id];
-
-	uint32_t value = 0;
-
-	value = dm_read_reg(hw_ctx->ctx, addr);
-
-	set_reg_field_value(value, 1,
-		AFMT_AUDIO_PACKET_CONTROL, AFMT_AUDIO_SAMPLE_SEND);
-
-	dm_write_reg(hw_ctx->ctx, addr, value);
-}
-
-/* mute audio */
-static void mute_azalia_audio(
-	const struct hw_ctx_audio *hw_ctx,
-	enum engine_id engine_id)
-{
-	const uint32_t addr = mmAFMT_AUDIO_PACKET_CONTROL +
-		engine_offset[engine_id];
-
-	uint32_t value = 0;
-
-	value = dm_read_reg(hw_ctx->ctx, addr);
-
-	set_reg_field_value(value, 0,
-		AFMT_AUDIO_PACKET_CONTROL, AFMT_AUDIO_SAMPLE_SEND);
-
-	dm_write_reg(hw_ctx->ctx, addr, value);
-}
-
 /* enable channel splitting mapping */
 static void setup_channel_splitting_mapping(
 	const struct hw_ctx_audio *hw_ctx,
@@ -1729,10 +1693,6 @@ static const struct hw_ctx_audio_funcs funcs = {
 		disable_dp_audio,
 	.setup_azalia =
 		setup_azalia,
-	.unmute_azalia_audio =
-		unmute_azalia_audio,
-	.mute_azalia_audio =
-		mute_azalia_audio,
 	.hw_initialize =
 		hw_initialize,
 	.get_azalia_clock_info_hdmi =

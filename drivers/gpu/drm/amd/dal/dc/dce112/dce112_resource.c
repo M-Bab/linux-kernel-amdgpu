@@ -293,7 +293,8 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 	.HDMI_INFOFRAME_CONTROL0 = mmDIG ## id ## _HDMI_INFOFRAME_CONTROL0,\
 	.HDMI_INFOFRAME_CONTROL1 = mmDIG ## id ## _HDMI_INFOFRAME_CONTROL1,\
 	.HDMI_VBI_PACKET_CONTROL = mmDIG ## id ## _HDMI_VBI_PACKET_CONTROL,\
-	.TMDS_CNTL = mmDIG ## id ## _TMDS_CNTL\
+	.TMDS_CNTL = mmDIG ## id ## _TMDS_CNTL,\
+	.AFMT_AUDIO_PACKET_CONTROL = mmDIG ## id ## _AFMT_AUDIO_PACKET_CONTROL,\
 }
 
 static const struct dce110_stream_enc_registers stream_enc_regs[] = {

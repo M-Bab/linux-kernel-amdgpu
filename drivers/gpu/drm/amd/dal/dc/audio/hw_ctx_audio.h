@@ -100,16 +100,6 @@ struct hw_ctx_audio_funcs {
 		const struct audio_pll_info *pll_info,
 		const struct audio_info *audio_info);
 
-	/* unmute audio */
-	void (*unmute_azalia_audio)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id);
-
-	/* mute audio */
-	void (*mute_azalia_audio)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id);
-
 	/* initialize HW state */
 	void (*hw_initialize)(
 		const struct hw_ctx_audio *hw_ctx);

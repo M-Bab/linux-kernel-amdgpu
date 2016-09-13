@@ -66,6 +66,10 @@ static void virtual_stream_encoder_dp_unblank(
 	struct stream_encoder *enc,
 	const struct encoder_unblank_param *param) {}
 
+static void virtual_audio_mute_control(
+	struct stream_encoder *enc,
+	bool mute) {}
+
 static const struct stream_encoder_funcs virtual_str_enc_funcs = {
 	.dp_set_stream_attribute =
 		virtual_stream_encoder_dp_set_stream_attribute,
@@ -87,6 +91,8 @@ static const struct stream_encoder_funcs virtual_str_enc_funcs = {
 		virtual_stream_encoder_dp_blank,
 	.dp_unblank =
 		virtual_stream_encoder_dp_unblank,
+
+	.audio_mute_control = virtual_audio_mute_control,
 };
 
 bool virtual_stream_encoder_construct(

@@ -584,8 +584,8 @@ static void disable_stream(struct pipe_ctx *pipe_ctx)
 
 	if (pipe_ctx->audio) {
 		/* mute audio */
-		dal_audio_mute(pipe_ctx->audio, pipe_ctx->stream_enc->id,
-				pipe_ctx->stream->signal);
+		pipe_ctx->stream_enc->funcs->audio_mute_control(
+			pipe_ctx->stream_enc, true);
 
 		/* TODO: notify audio driver for if audio modes list changed
 		 * add audio mode list change flag */

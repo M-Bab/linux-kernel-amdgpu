@@ -59,6 +59,9 @@ struct dce110_stream_enc_registers {
 	uint32_t HDMI_INFOFRAME_CONTROL1;
 	uint32_t HDMI_VBI_PACKET_CONTROL;
 	uint32_t TMDS_CNTL;
+
+	/* audio stream registers */
+	uint32_t AFMT_AUDIO_PACKET_CONTROL;
 };
 
 struct dce110_stream_encoder {
@@ -72,5 +75,9 @@ bool dce110_stream_encoder_construct(
 	struct dc_bios *bp,
 	enum engine_id eng_id,
 	const struct dce110_stream_enc_registers *regs);
+
+
+void dce110_audio_mute_control(
+	struct stream_encoder *enc, bool mute);
 
 #endif /* __DC_STREAM_ENCODER_DCE110_H__ */

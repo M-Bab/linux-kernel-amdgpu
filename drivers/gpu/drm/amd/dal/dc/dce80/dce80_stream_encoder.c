@@ -1073,7 +1073,9 @@ static const struct stream_encoder_funcs dce80_str_enc_funcs = {
 	.dp_blank =
 		dce80_stream_encoder_dp_blank,
 	.dp_unblank =
-		dce80_stream_encoder_dp_unblank
+		dce80_stream_encoder_dp_unblank,
+
+	.audio_mute_control = dce110_audio_mute_control,
 };
 
 bool dce80_stream_encoder_construct(

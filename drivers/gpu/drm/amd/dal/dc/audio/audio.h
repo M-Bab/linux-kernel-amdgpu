@@ -76,16 +76,6 @@ struct audio_funcs {
 	 * disable_azalia_audio_jack_presence
 	 */
 
-	enum audio_result (*unmute)(
-		struct audio *audio,
-		enum engine_id engine_id,
-		enum signal_type signal);
-
-	enum audio_result (*mute)(
-		struct audio *audio,
-		enum engine_id engine_id,
-		enum signal_type signal);
-
 	/* SW initialization that cannot be done in constructor. This will
 	 * be done is audio_power_up but is not in audio_interface. It is only
 	 * called by power_up
