@@ -214,26 +214,6 @@ enum tile_mode_values {
 	DC_ADDR_SURF_MICRO_TILING_NON_DISPLAY = 0x1,
 };
 
-enum swizzle_mode_values {
-	SW_LINEAR = 0,
-	SW_256B_S = 1,
-	SW_4KB_S = 5,
-	SW_4KB_D = 6,
-	SW_64KB_S = 9,
-	SW_64KB_D = 10,
-	SW_VAR_S = 13,
-	SW_VAR_D = 14,
-	SW_64KB_S_T = 17,
-	SW_64KB_D_T = 18,
-	SW_4KB_S_X = 21,
-	SW_4KB_D_X = 22,
-	SW_64KB_S_X = 25,
-	SW_64KB_D_X = 26,
-	SW_VAR_S_X = 29,
-	SW_VAR_D_X = 30,
-	SW_MAX
-};
-
 union dc_tiling_info {
 
 	struct {
