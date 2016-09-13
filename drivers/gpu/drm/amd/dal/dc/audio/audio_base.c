@@ -139,8 +139,6 @@ bool dal_audio_construct_base(
 	struct audio *audio,
 	const struct audio_init_data *init_data)
 {
-	ASSERT(init_data->as != NULL);
-
 	/* base hook functions */
 	audio->funcs = &audio_funcs;
 
@@ -156,41 +154,6 @@ bool dal_audio_construct_base(
 void dal_audio_destruct_base(
 	struct audio *audio)
 {
-}
-
-/***** SCOPE : declare in dal\include  *****/
-
-/* audio object creator triage. memory allocate and release will be
- * done within dal_audio_create_dcexx
- */
-struct audio *dal_audio_create(
-	const struct audio_init_data *init_data)
-{
-	struct adapter_service *as = init_data->as;
-
-	switch (dal_adapter_service_get_dce_version(as)) {
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
-	case DCE_VERSION_8_0:
-		return dal_audio_create_dce80(init_data);
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE10_0)
-	case DCE_VERSION_10_0:
-		return dal_audio_create_dce110(init_data);
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
-	case DCE_VERSION_11_0:
-		return dal_audio_create_dce110(init_data);
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
-	case DCE_VERSION_11_2:
-		return dal_audio_create_dce110(init_data);
-#endif
-	default:
-		BREAK_TO_DEBUGGER();
-		return NULL;
-	}
-
-	return NULL;
 }
 
 /* audio object creator triage.

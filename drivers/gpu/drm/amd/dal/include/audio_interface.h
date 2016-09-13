@@ -43,7 +43,6 @@ struct dal_adapter_service;
  * each endpoint
  */
 struct audio_init_data {
-	struct adapter_service *as;
 	struct graphics_object_id audio_stream_id;
 	struct dc_context *ctx;
 };
@@ -54,8 +53,6 @@ enum audio_result {
 };
 
 /****** audio object create, destroy ******/
-struct audio *dal_audio_create(
-	const struct audio_init_data *init_data);
 
 void dal_audio_destroy(
 	struct audio **audio);

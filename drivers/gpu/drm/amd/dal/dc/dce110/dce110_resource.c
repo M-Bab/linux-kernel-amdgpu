@@ -44,6 +44,7 @@
 #include "dce110/dce110_opp.h"
 #include "dce110/dce110_opp_v.h"
 #include "dce110/dce110_clock_source.h"
+#include "audio/dce110/audio_dce110.h"
 
 #include "dce110/dce110_hw_sequencer.h"
 #include "dce/dce_11_0_d.h"
@@ -1288,7 +1289,6 @@ static bool construct(
 	/* TODO: failure? */
 	underlay_create(ctx, &pool->base);
 
-	audio_init_data.as = as;
 	audio_init_data.ctx = ctx;
 	pool->base.audio_count = 0;
 	for (i = 0; i < pool->base.pipe_count; i++) {
@@ -1301,7 +1301,7 @@ static bool construct(
 		}
 
 		audio_init_data.audio_stream_id = obj_id;
-		pool->base.audios[i] = dal_audio_create(&audio_init_data);
+		pool->base.audios[i] = dal_audio_create_dce110(&audio_init_data);
 		if (pool->base.audios[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create DPPs!\n");

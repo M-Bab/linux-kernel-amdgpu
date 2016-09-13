@@ -45,7 +45,10 @@
 #include "dce80/dce80_opp.h"
 #include "dce110/dce110_ipp.h"
 #include "dce110/dce110_clock_source.h"
+#include "audio/dce80/audio_dce80.h"
+
 #include "dce80/dce80_hw_sequencer.h"
+
 #include "dce/dce_8_0_d.h"
 
 /* TODO remove this include */
@@ -867,7 +870,6 @@ static bool construct(
 		}
 	}
 
-	audio_init_data.as = as;
 	audio_init_data.ctx = ctx;
 	pool->base.audio_count = 0;
 	for (i = 0; i < pool->base.pipe_count; i++) {
@@ -880,7 +882,7 @@ static bool construct(
 		}
 
 		audio_init_data.audio_stream_id = obj_id;
-		pool->base.audios[i] = dal_audio_create(&audio_init_data);
+		pool->base.audios[i] = dal_audio_create_dce80(&audio_init_data);
 		if (pool->base.audios[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create DPPs!\n");
