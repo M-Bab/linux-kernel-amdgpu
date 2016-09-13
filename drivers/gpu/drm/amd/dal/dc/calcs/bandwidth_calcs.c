@@ -26,6 +26,7 @@
 #include "dm_services.h"
 #include "bandwidth_calcs.h"
 #include "dc.h"
+#include "core_types.h"
 
 /*******************************************************************************
  * Private Functions
@@ -34,8 +35,7 @@
 static void calculate_bandwidth(
 	const struct bw_calcs_dceip *dceip,
 	const struct bw_calcs_vbios *vbios,
-	const struct bw_calcs_mode_data_internal *mode_data,
-	struct bw_calcs_results *results)
+	struct bw_calcs_data *data)
 
 {
 	const int32_t pixels_per_chunk = 512;
@@ -43,17 +43,32 @@ static void calculate_bandwidth(
 	const int32_t high = 2;
 	const int32_t mid = 1;
 	const int32_t low = 0;
+	const uint32_t s_low = 0;
+	const uint32_t s_mid1 = 1;
+	const uint32_t s_mid2 = 2;
+	const uint32_t s_mid3 = 3;
+	const uint32_t s_mid4 = 4;
+	const uint32_t s_mid5 = 5;
+	const uint32_t s_mid6 = 6;
+	const uint32_t s_high = 7;
+	const uint32_t vertical_front_porch = 450; /*us*/
+	const uint32_t bus_efficiency = 1;
+	const uint32_t dmif_chunk_buff_margin = 1;
+
+	uint32_t max_chunks_fbc_mode;
+	int32_t num_cursor_lines;
 
 	int32_t i, j, k;
 	struct bw_fixed yclk[3];
-	struct bw_fixed sclk[3];
+	struct bw_fixed sclk[8];
 	bool d0_underlay_enable;
 	bool d1_underlay_enable;
+	bool fbc_enabled;
+	bool lpt_enabled;
 	enum bw_defines sclk_message;
 	enum bw_defines yclk_message;
 	enum bw_defines v_filter_init_mode[maximum_number_of_surfaces];
 	enum bw_defines tiling_mode[maximum_number_of_surfaces];
-	enum bw_defines stereo_mode[maximum_number_of_surfaces];
 	enum bw_defines surface_type[maximum_number_of_surfaces];
 	enum bw_defines voltage;
 	enum bw_defines pipe_check;
@@ -63,13 +78,24 @@ static void calculate_bandwidth(
 	enum bw_defines fbc_check;
 	enum bw_defines rotation_check;
 	enum bw_defines mode_check;
+	enum bw_defines nbp_state_change_enable_blank;
+	/*initialize variables*/
+	int32_t number_of_displays_enabled = 0;
+	int32_t number_of_displays_enabled_with_margin = 0;
+	int32_t number_of_aligned_displays_with_no_margin = 0;
 
 	yclk[low] = vbios->low_yclk;
-	yclk[mid] = vbios->high_yclk;
+	yclk[mid] = vbios->mid_yclk;
 	yclk[high] = vbios->high_yclk;
-	sclk[low] = vbios->low_sclk;
-	sclk[mid] = vbios->mid_sclk;
-	sclk[high] = vbios->high_sclk;
+	sclk[s_low] = vbios->low_sclk;
+	sclk[s_mid1] = vbios->mid1_sclk;
+	sclk[s_mid2] = vbios->mid2_sclk;
+	sclk[s_mid3] = vbios->mid3_sclk;
+	sclk[s_mid4] = vbios->mid4_sclk;
+	sclk[s_mid5] = vbios->mid5_sclk;
+	sclk[s_mid6] = vbios->mid6_sclk;
+	sclk[s_high] = vbios->high_sclk;
+	/*''''''''''''''''''*/
 	/* surface assignment:*/
 	/* 0: d0 underlay or underlay luma*/
 	/* 1: d0 underlay chroma*/
@@ -85,419 +111,257 @@ static void calculate_bandwidth(
 	/* maximum_number_of_surfaces-2: d1 display_write_back420 luma*/
 	/* maximum_number_of_surfaces-1: d1 display_write_back420 chroma*/
 	/* underlay luma and chroma surface parameters from spreadsheet*/
-	if (mode_data->d0_underlay_mode == bw_def_none) {
-		d0_underlay_enable = 0;
-	} else {
+
+
+
+
+	if (data->d0_underlay_mode == bw_def_none) { d0_underlay_enable = 0; }
+	else {
 		d0_underlay_enable = 1;
 	}
-	if (mode_data->d1_underlay_mode == bw_def_none) {
-		d1_underlay_enable = 0;
-	} else {
+	if (data->d1_underlay_mode == bw_def_none) { d1_underlay_enable = 0; }
+	else {
 		d1_underlay_enable = 1;
 	}
-	results->number_of_underlay_surfaces = d0_underlay_enable
-		+ d1_underlay_enable;
-	switch (mode_data->underlay_surface_type) {
+	data->number_of_underlay_surfaces = d0_underlay_enable + d1_underlay_enable;
+	switch (data->underlay_surface_type) {
 	case bw_def_420:
 		surface_type[0] = bw_def_underlay420_luma;
 		surface_type[2] = bw_def_underlay420_luma;
-		results->bytes_per_pixel[0] = 1;
-		results->bytes_per_pixel[2] = 1;
+		data->bytes_per_pixel[0] = 1;
+		data->bytes_per_pixel[2] = 1;
 		surface_type[1] = bw_def_underlay420_chroma;
 		surface_type[3] = bw_def_underlay420_chroma;
-		results->bytes_per_pixel[1] = 2;
-		results->bytes_per_pixel[3] = 2;
-		results->lb_size_per_component[0] =
-			dceip->underlay420_luma_lb_size_per_component;
-		results->lb_size_per_component[1] =
-			dceip->underlay420_chroma_lb_size_per_component;
-		results->lb_size_per_component[2] =
-			dceip->underlay420_luma_lb_size_per_component;
-		results->lb_size_per_component[3] =
-			dceip->underlay420_chroma_lb_size_per_component;
+		data->bytes_per_pixel[1] = 2;
+		data->bytes_per_pixel[3] = 2;
+		data->lb_size_per_component[0] = dceip->underlay420_luma_lb_size_per_component;
+		data->lb_size_per_component[1] = dceip->underlay420_chroma_lb_size_per_component;
+		data->lb_size_per_component[2] = dceip->underlay420_luma_lb_size_per_component;
+		data->lb_size_per_component[3] = dceip->underlay420_chroma_lb_size_per_component;
 		break;
 	case bw_def_422:
 		surface_type[0] = bw_def_underlay422;
 		surface_type[2] = bw_def_underlay422;
-		results->bytes_per_pixel[0] = 2;
-		results->bytes_per_pixel[2] = 2;
-		results->lb_size_per_component[0] =
-			dceip->underlay422_lb_size_per_component;
-		results->lb_size_per_component[2] =
-			dceip->underlay422_lb_size_per_component;
+		data->bytes_per_pixel[0] = 2;
+		data->bytes_per_pixel[2] = 2;
+		data->lb_size_per_component[0] = dceip->underlay422_lb_size_per_component;
+		data->lb_size_per_component[2] = dceip->underlay422_lb_size_per_component;
 		break;
 	default:
 		surface_type[0] = bw_def_underlay444;
 		surface_type[2] = bw_def_underlay444;
-		results->bytes_per_pixel[0] = 4;
-		results->bytes_per_pixel[2] = 4;
-		results->lb_size_per_component[0] =
-			dceip->lb_size_per_component444;
-		results->lb_size_per_component[2] =
-			dceip->lb_size_per_component444;
+		data->bytes_per_pixel[0] = 4;
+		data->bytes_per_pixel[2] = 4;
+		data->lb_size_per_component[0] = dceip->lb_size_per_component444;
+		data->lb_size_per_component[2] = dceip->lb_size_per_component444;
 		break;
 	}
 	if (d0_underlay_enable) {
-		switch (mode_data->underlay_surface_type) {
+		switch (data->underlay_surface_type) {
 		case bw_def_420:
-			results->enable[0] = 1;
-			results->enable[1] = 1;
+			data->enable[0] = 1;
+			data->enable[1] = 1;
 			break;
 		default:
-			results->enable[0] = 1;
-			results->enable[1] = 0;
+			data->enable[0] = 1;
+			data->enable[1] = 0;
 			break;
 		}
-	} else {
-		results->enable[0] = 0;
-		results->enable[1] = 0;
+	}
+	else {
+		data->enable[0] = 0;
+		data->enable[1] = 0;
 	}
 	if (d1_underlay_enable) {
-		switch (mode_data->underlay_surface_type) {
+		switch (data->underlay_surface_type) {
 		case bw_def_420:
-			results->enable[2] = 1;
-			results->enable[3] = 1;
+			data->enable[2] = 1;
+			data->enable[3] = 1;
 			break;
 		default:
-			results->enable[2] = 1;
-			results->enable[3] = 0;
+			data->enable[2] = 1;
+			data->enable[3] = 0;
 			break;
 		}
-	} else {
-		results->enable[2] = 0;
-		results->enable[3] = 0;
 	}
-	results->use_alpha[0] = 0;
-	results->use_alpha[1] = 0;
-	results->use_alpha[2] = 0;
-	results->use_alpha[3] = 0;
-	results->scatter_gather_enable_for_pipe[0] =
-		vbios->scatter_gather_enable;
-	results->scatter_gather_enable_for_pipe[1] =
-		vbios->scatter_gather_enable;
-	results->scatter_gather_enable_for_pipe[2] =
-		vbios->scatter_gather_enable;
-	results->scatter_gather_enable_for_pipe[3] =
-		vbios->scatter_gather_enable;
-	results->interlace_mode[0] = mode_data->graphics_interlace_mode;
-	results->interlace_mode[1] = mode_data->graphics_interlace_mode;
-	results->interlace_mode[2] = mode_data->graphics_interlace_mode;
-	results->interlace_mode[3] = mode_data->graphics_interlace_mode;
-	results->h_total[0] = bw_int_to_fixed(mode_data->d0_htotal);
-	results->h_total[1] = bw_int_to_fixed(mode_data->d0_htotal);
-	results->h_total[2] = bw_int_to_fixed(mode_data->d1_htotal);
-	results->h_total[3] = bw_int_to_fixed(mode_data->d1_htotal);
-	results->pixel_rate[0] = mode_data->d0_pixel_rate;
-	results->pixel_rate[1] = mode_data->d0_pixel_rate;
-	results->pixel_rate[2] = mode_data->d1_pixel_rate;
-	results->pixel_rate[3] = mode_data->d1_pixel_rate;
-	results->src_width[0] = bw_int_to_fixed(mode_data->underlay_src_width);
-	results->src_width[1] = bw_int_to_fixed(mode_data->underlay_src_width);
-	results->src_width[2] = bw_int_to_fixed(mode_data->underlay_src_width);
-	results->src_width[3] = bw_int_to_fixed(mode_data->underlay_src_width);
-	results->src_height[0] = bw_int_to_fixed(
-		mode_data->underlay_src_height);
-	results->src_height[1] = bw_int_to_fixed(
-		mode_data->underlay_src_height);
-	results->src_height[2] = bw_int_to_fixed(
-		mode_data->underlay_src_height);
-	results->src_height[3] = bw_int_to_fixed(
-		mode_data->underlay_src_height);
-	results->pitch_in_pixels[0] = bw_int_to_fixed(
-		mode_data->underlay_pitch_in_pixels);
-	results->pitch_in_pixels[1] = bw_int_to_fixed(
-		mode_data->underlay_pitch_in_pixels);
-	results->pitch_in_pixels[2] = bw_int_to_fixed(
-		mode_data->underlay_pitch_in_pixels);
-	results->pitch_in_pixels[3] = bw_int_to_fixed(
-		mode_data->underlay_pitch_in_pixels);
-	results->scale_ratio[0] = mode_data->d0_underlay_scale_ratio;
-	results->scale_ratio[1] = mode_data->d0_underlay_scale_ratio;
-	results->scale_ratio[2] = mode_data->d1_underlay_scale_ratio;
-	results->scale_ratio[3] = mode_data->d1_underlay_scale_ratio;
-	results->h_taps[0] = bw_int_to_fixed(mode_data->underlay_htaps);
-	results->h_taps[1] = bw_int_to_fixed(mode_data->underlay_htaps);
-	results->h_taps[2] = bw_int_to_fixed(mode_data->underlay_htaps);
-	results->h_taps[3] = bw_int_to_fixed(mode_data->underlay_htaps);
-	results->v_taps[0] = bw_int_to_fixed(mode_data->underlay_vtaps);
-	results->v_taps[1] = bw_int_to_fixed(mode_data->underlay_vtaps);
-	results->v_taps[2] = bw_int_to_fixed(mode_data->underlay_vtaps);
-	results->v_taps[3] = bw_int_to_fixed(mode_data->underlay_vtaps);
-	results->rotation_angle[0] = bw_int_to_fixed(
-		mode_data->underlay_rotation_angle);
-	results->rotation_angle[1] = bw_int_to_fixed(
-		mode_data->underlay_rotation_angle);
-	results->rotation_angle[2] = bw_int_to_fixed(
-		mode_data->underlay_rotation_angle);
-	results->rotation_angle[3] = bw_int_to_fixed(
-		mode_data->underlay_rotation_angle);
-	if (mode_data->underlay_tiling_mode == bw_def_linear) {
+	else {
+		data->enable[2] = 0;
+		data->enable[3] = 0;
+	}
+	data->use_alpha[0] = 0;
+	data->use_alpha[1] = 0;
+	data->use_alpha[2] = 0;
+	data->use_alpha[3] = 0;
+	data->scatter_gather_enable_for_pipe[0] = vbios->scatter_gather_enable;
+	data->scatter_gather_enable_for_pipe[1] = vbios->scatter_gather_enable;
+	data->scatter_gather_enable_for_pipe[2] = vbios->scatter_gather_enable;
+	data->scatter_gather_enable_for_pipe[3] = vbios->scatter_gather_enable;
+	/*underlay0 same and graphics display pipe0*/
+	data->interlace_mode[0] = data->interlace_mode[4];
+	data->interlace_mode[1] = data->interlace_mode[4];
+	/*underlay1 same and graphics display pipe1*/
+	data->interlace_mode[2] = data->interlace_mode[5];
+	data->interlace_mode[3] = data->interlace_mode[5];
+	/*underlay0 same and graphics display pipe0*/
+	data->h_total[0] = data->h_total[4];
+	data->v_total[0] = data->v_total[4];
+	data->h_total[1] = data->h_total[4];
+	data->v_total[1] = data->v_total[4];
+	/*underlay1 same and graphics display pipe1*/
+	data->h_total[2] = data->h_total[5];
+	data->v_total[2] = data->v_total[5];
+	data->h_total[3] = data->h_total[5];
+	data->v_total[3] = data->v_total[5];
+	/*underlay0 same and graphics display pipe0*/
+	data->pixel_rate[0] = data->pixel_rate[4];
+	data->pixel_rate[1] = data->pixel_rate[4];
+	/*underlay1 same and graphics display pipe1*/
+	data->pixel_rate[2] = data->pixel_rate[5];
+	data->pixel_rate[3] = data->pixel_rate[5];
+	if ((data->underlay_tiling_mode == bw_def_array_linear_general || data->underlay_tiling_mode == bw_def_array_linear_aligned)) {
 		tiling_mode[0] = bw_def_linear;
 		tiling_mode[1] = bw_def_linear;
 		tiling_mode[2] = bw_def_linear;
 		tiling_mode[3] = bw_def_linear;
-	} else {
+	}
+	else {
 		tiling_mode[0] = bw_def_landscape;
 		tiling_mode[1] = bw_def_landscape;
 		tiling_mode[2] = bw_def_landscape;
 		tiling_mode[3] = bw_def_landscape;
 	}
-	stereo_mode[0] = mode_data->underlay_stereo_mode;
-	stereo_mode[1] = mode_data->underlay_stereo_mode;
-	stereo_mode[2] = mode_data->underlay_stereo_mode;
-	stereo_mode[3] = mode_data->underlay_stereo_mode;
-	results->lb_bpc[0] = mode_data->underlay_lb_bpc;
-	results->lb_bpc[1] = mode_data->underlay_lb_bpc;
-	results->lb_bpc[2] = mode_data->underlay_lb_bpc;
-	results->lb_bpc[3] = mode_data->underlay_lb_bpc;
-	results->compression_rate[0] = bw_int_to_fixed(1);
-	results->compression_rate[1] = bw_int_to_fixed(1);
-	results->compression_rate[2] = bw_int_to_fixed(1);
-	results->compression_rate[3] = bw_int_to_fixed(1);
-	results->access_one_channel_only[0] = 0;
-	results->access_one_channel_only[1] = 0;
-	results->access_one_channel_only[2] = 0;
-	results->access_one_channel_only[3] = 0;
-	results->cursor_width_pixels[0] = bw_int_to_fixed(0);
-	results->cursor_width_pixels[1] = bw_int_to_fixed(0);
-	results->cursor_width_pixels[2] = bw_int_to_fixed(0);
-	results->cursor_width_pixels[3] = bw_int_to_fixed(0);
+	data->lb_bpc[0] = data->underlay_lb_bpc;
+	data->lb_bpc[1] = data->underlay_lb_bpc;
+	data->lb_bpc[2] = data->underlay_lb_bpc;
+	data->lb_bpc[3] = data->underlay_lb_bpc;
+	data->compression_rate[0] = bw_int_to_fixed(1);
+	data->compression_rate[1] = bw_int_to_fixed(1);
+	data->compression_rate[2] = bw_int_to_fixed(1);
+	data->compression_rate[3] = bw_int_to_fixed(1);
+	data->access_one_channel_only[0] = 0;
+	data->access_one_channel_only[1] = 0;
+	data->access_one_channel_only[2] = 0;
+	data->access_one_channel_only[3] = 0;
+	data->cursor_width_pixels[0] = bw_int_to_fixed(0);
+	data->cursor_width_pixels[1] = bw_int_to_fixed(0);
+	data->cursor_width_pixels[2] = bw_int_to_fixed(0);
+	data->cursor_width_pixels[3] = bw_int_to_fixed(0);
 	/* graphics surface parameters from spreadsheet*/
+	fbc_enabled = 0;
+	lpt_enabled = 0;
 	for (i = 4; i <= maximum_number_of_surfaces - 3; i++) {
-		if (i < mode_data->number_of_displays + 4) {
-			if (i == 4
-				&& mode_data->d0_underlay_mode
-					== bw_def_underlay_only) {
-				results->enable[i] = 0;
-				results->use_alpha[i] = 0;
-			} else if (i == 4
-				&& mode_data->d0_underlay_mode
-					== bw_def_blend) {
-				results->enable[i] = 1;
-				results->use_alpha[i] = 1;
-			} else if (i == 4) {
-				results->enable[i] = 1;
-				results->use_alpha[i] = 0;
-			} else if (i == 5
-				&& mode_data->d1_underlay_mode
-					== bw_def_underlay_only) {
-				results->enable[i] = 0;
-				results->use_alpha[i] = 0;
-			} else if (i == 5
-				&& mode_data->d1_underlay_mode
-					== bw_def_blend) {
-				results->enable[i] = 1;
-				results->use_alpha[i] = 1;
-			} else {
-				results->enable[i] = 1;
-				results->use_alpha[i] = 0;
+		if (i < data->number_of_displays + 4) {
+			if (i == 4 && data->d0_underlay_mode == bw_def_underlay_only) {
+				data->enable[i] = 0;
+				data->use_alpha[i] = 0;
 			}
-		} else {
-			results->enable[i] = 0;
-			results->use_alpha[i] = 0;
+			else if (i == 4 && data->d0_underlay_mode == bw_def_blend) {
+				data->enable[i] = 1;
+				data->use_alpha[i] = 1;
+			}
+			else if (i == 4) {
+				data->enable[i] = 1;
+				data->use_alpha[i] = 0;
+			}
+			else if (i == 5 && data->d1_underlay_mode == bw_def_underlay_only) {
+				data->enable[i] = 0;
+				data->use_alpha[i] = 0;
+			}
+			else if (i == 5 && data->d1_underlay_mode == bw_def_blend) {
+				data->enable[i] = 1;
+				data->use_alpha[i] = 1;
+			}
+			else {
+				data->enable[i] = 1;
+				data->use_alpha[i] = 0;
+			}
 		}
-		results->scatter_gather_enable_for_pipe[i] =
-			vbios->scatter_gather_enable;
+		else {
+			data->enable[i] = 0;
+			data->use_alpha[i] = 0;
+		}
+		data->scatter_gather_enable_for_pipe[i] = vbios->scatter_gather_enable;
 		surface_type[i] = bw_def_graphics;
-		results->lb_size_per_component[i] =
-			dceip->lb_size_per_component444;
-		results->bytes_per_pixel[i] =
-			mode_data->graphics_bytes_per_pixel;
-		results->interlace_mode[i] = mode_data->graphics_interlace_mode;
-		results->h_taps[i] = bw_int_to_fixed(mode_data->graphics_htaps);
-		results->v_taps[i] = bw_int_to_fixed(mode_data->graphics_vtaps);
-		results->rotation_angle[i] = bw_int_to_fixed(
-			mode_data->graphics_rotation_angle);
-		if (mode_data->graphics_tiling_mode == bw_def_linear) {
+		data->lb_size_per_component[i] = dceip->lb_size_per_component444;
+		if (data->graphics_tiling_mode == bw_def_array_linear_general || data->graphics_tiling_mode == bw_def_array_linear_aligned) {
 			tiling_mode[i] = bw_def_linear;
-		} else if (mode_data->graphics_rotation_angle == 0
-			|| mode_data->graphics_rotation_angle == 180) {
-			tiling_mode[i] = bw_def_landscape;
-		} else {
-			tiling_mode[i] = bw_def_portrait;
 		}
-		results->lb_bpc[i] = mode_data->graphics_lb_bpc;
-		if (i == 4) {
-			if (mode_data->d0_fbc_enable
-				&& (dceip->argb_compression_support
-					|| mode_data->d0_underlay_mode
-						!= bw_def_blended)) {
-				results->compression_rate[i] = bw_int_to_fixed(
-					vbios->average_compression_rate);
-				results->access_one_channel_only[i] =
-					mode_data->d0_lpt_enable;
-			} else {
-				results->compression_rate[i] = bw_int_to_fixed(
-					1);
-				results->access_one_channel_only[i] = 0;
+		else {
+			tiling_mode[i] = bw_def_tiled;
+		}
+		data->lb_bpc[i] = data->graphics_lb_bpc;
+		if ((data->fbc_en[i] == 1 && (dceip->argb_compression_support || data->d0_underlay_mode != bw_def_blended))) {
+			data->compression_rate[i] = bw_int_to_fixed(vbios->average_compression_rate);
+			data->access_one_channel_only[i] = data->lpt_en[i];
+		}
+		else {
+			data->compression_rate[i] = bw_int_to_fixed(1);
+			data->access_one_channel_only[i] = 0;
+		}
+		if (data->fbc_en[i] == 1) {
+			fbc_enabled = 1;
+			if (data->lpt_en[i] == 1) {
+				lpt_enabled = 1;
 			}
-			results->h_total[i] = bw_int_to_fixed(
-				mode_data->d0_htotal);
-			results->pixel_rate[i] = mode_data->d0_pixel_rate;
-			results->src_width[i] = bw_int_to_fixed(
-				mode_data->d0_graphics_src_width);
-			results->src_height[i] = bw_int_to_fixed(
-				mode_data->d0_graphics_src_height);
-			results->pitch_in_pixels[i] = bw_int_to_fixed(
-				mode_data->d0_graphics_src_width);
-			results->scale_ratio[i] =
-				mode_data->d0_graphics_scale_ratio;
-			stereo_mode[i] = mode_data->d0_graphics_stereo_mode;
-		} else if (i == 5) {
-			results->compression_rate[i] = bw_int_to_fixed(1);
-			results->access_one_channel_only[i] = 0;
-			results->h_total[i] = bw_int_to_fixed(
-				mode_data->d1_htotal);
-			results->pixel_rate[i] = mode_data->d1_pixel_rate;
-			results->src_width[i] = bw_int_to_fixed(
-				mode_data->d1_graphics_src_width);
-			results->src_height[i] = bw_int_to_fixed(
-				mode_data->d1_graphics_src_height);
-			results->pitch_in_pixels[i] = bw_int_to_fixed(
-				mode_data->d1_graphics_src_width);
-			results->scale_ratio[i] =
-				mode_data->d1_graphics_scale_ratio;
-			stereo_mode[i] = mode_data->d1_graphics_stereo_mode;
-		} else if (i == 6) {
-			results->compression_rate[i] = bw_int_to_fixed(1);
-			results->access_one_channel_only[i] = 0;
-			results->h_total[i] = bw_int_to_fixed(
-				mode_data->d2_htotal);
-			results->pixel_rate[i] = mode_data->d2_pixel_rate;
-			results->src_width[i] = bw_int_to_fixed(
-				mode_data->d2_graphics_src_width);
-			results->src_height[i] = bw_int_to_fixed(
-				mode_data->d2_graphics_src_height);
-			results->pitch_in_pixels[i] = bw_int_to_fixed(
-				mode_data->d2_graphics_src_width);
-			results->scale_ratio[i] =
-				mode_data->d2_graphics_scale_ratio;
-			stereo_mode[i] = mode_data->d2_graphics_stereo_mode;
-		} else if (i == 7) {
-			results->compression_rate[i] = bw_int_to_fixed(1);
-			results->access_one_channel_only[i] = 0;
-			results->h_total[i] = bw_int_to_fixed(
-				mode_data->d3_htotal);
-			results->pixel_rate[i] = mode_data->d3_pixel_rate;
-			results->src_width[i] = bw_int_to_fixed(
-				mode_data->d3_graphics_src_width);
-			results->src_height[i] = bw_int_to_fixed(
-				mode_data->d3_graphics_src_height);
-			results->pitch_in_pixels[i] = bw_int_to_fixed(
-				mode_data->d3_graphics_src_width);
-			results->scale_ratio[i] =
-				mode_data->d3_graphics_scale_ratio;
-			stereo_mode[i] = mode_data->d3_graphics_stereo_mode;
-		} else if (i == 8) {
-			results->compression_rate[i] = bw_int_to_fixed(1);
-			results->access_one_channel_only[i] = 0;
-			results->h_total[i] = bw_int_to_fixed(
-				mode_data->d4_htotal);
-			results->pixel_rate[i] = mode_data->d4_pixel_rate;
-			results->src_width[i] = bw_int_to_fixed(
-				mode_data->d4_graphics_src_width);
-			results->src_height[i] = bw_int_to_fixed(
-				mode_data->d4_graphics_src_height);
-			results->pitch_in_pixels[i] = bw_int_to_fixed(
-				mode_data->d4_graphics_src_width);
-			results->scale_ratio[i] =
-				mode_data->d4_graphics_scale_ratio;
-			stereo_mode[i] = mode_data->d4_graphics_stereo_mode;
-		} else {
-			results->compression_rate[i] = bw_int_to_fixed(1);
-			results->access_one_channel_only[i] = 0;
-			results->h_total[i] = bw_int_to_fixed(
-				mode_data->d5_htotal);
-			results->pixel_rate[i] = mode_data->d5_pixel_rate;
-			results->src_width[i] = bw_int_to_fixed(
-				mode_data->d5_graphics_src_width);
-			results->src_height[i] = bw_int_to_fixed(
-				mode_data->d5_graphics_src_height);
-			results->pitch_in_pixels[i] = bw_int_to_fixed(
-				mode_data->d5_graphics_src_width);
-			results->scale_ratio[i] =
-				mode_data->d5_graphics_scale_ratio;
-			stereo_mode[i] = mode_data->d5_graphics_stereo_mode;
 		}
-		results->cursor_width_pixels[i] = bw_int_to_fixed(
-			vbios->cursor_width);
+		data->cursor_width_pixels[i] = bw_int_to_fixed(vbios->cursor_width);
 	}
 	/* display_write_back420*/
-	results->scatter_gather_enable_for_pipe[maximum_number_of_surfaces - 2] =
-		0;
-	results->scatter_gather_enable_for_pipe[maximum_number_of_surfaces - 1] =
-		0;
-	if (mode_data->d1_display_write_back_dwb_enable == 1) {
-		results->enable[maximum_number_of_surfaces - 2] = 1;
-		results->enable[maximum_number_of_surfaces - 1] = 1;
-	} else {
-		results->enable[maximum_number_of_surfaces - 2] = 0;
-		results->enable[maximum_number_of_surfaces - 1] = 0;
+	data->scatter_gather_enable_for_pipe[maximum_number_of_surfaces - 2] = 0;
+	data->scatter_gather_enable_for_pipe[maximum_number_of_surfaces - 1] = 0;
+	if (data->d1_display_write_back_dwb_enable == 1) {
+		data->enable[maximum_number_of_surfaces - 2] = 1;
+		data->enable[maximum_number_of_surfaces - 1] = 1;
 	}
-	surface_type[maximum_number_of_surfaces - 2] =
-		bw_def_display_write_back420_luma;
-	surface_type[maximum_number_of_surfaces - 1] =
-		bw_def_display_write_back420_chroma;
-	results->lb_size_per_component[maximum_number_of_surfaces - 2] =
-		dceip->underlay420_luma_lb_size_per_component;
-	results->lb_size_per_component[maximum_number_of_surfaces - 1] =
-		dceip->underlay420_chroma_lb_size_per_component;
-	results->bytes_per_pixel[maximum_number_of_surfaces - 2] = 1;
-	results->bytes_per_pixel[maximum_number_of_surfaces - 1] = 2;
-	results->interlace_mode[maximum_number_of_surfaces - 2] =
-		mode_data->graphics_interlace_mode;
-	results->interlace_mode[maximum_number_of_surfaces - 1] =
-		mode_data->graphics_interlace_mode;
-	results->h_taps[maximum_number_of_surfaces - 2] = bw_int_to_fixed(1);
-	results->h_taps[maximum_number_of_surfaces - 1] = bw_int_to_fixed(1);
-	results->v_taps[maximum_number_of_surfaces - 2] = bw_int_to_fixed(1);
-	results->v_taps[maximum_number_of_surfaces - 1] = bw_int_to_fixed(1);
-	results->rotation_angle[maximum_number_of_surfaces - 2] =
-		bw_int_to_fixed(0);
-	results->rotation_angle[maximum_number_of_surfaces - 1] =
-		bw_int_to_fixed(0);
+	else {
+		data->enable[maximum_number_of_surfaces - 2] = 0;
+		data->enable[maximum_number_of_surfaces - 1] = 0;
+	}
+	surface_type[maximum_number_of_surfaces - 2] = bw_def_display_write_back420_luma;
+	surface_type[maximum_number_of_surfaces - 1] = bw_def_display_write_back420_chroma;
+	data->lb_size_per_component[maximum_number_of_surfaces - 2] = dceip->underlay420_luma_lb_size_per_component;
+	data->lb_size_per_component[maximum_number_of_surfaces - 1] = dceip->underlay420_chroma_lb_size_per_component;
+	data->bytes_per_pixel[maximum_number_of_surfaces - 2] = 1;
+	data->bytes_per_pixel[maximum_number_of_surfaces - 1] = 2;
+	data->interlace_mode[maximum_number_of_surfaces - 2] = data->interlace_mode[5];
+	data->interlace_mode[maximum_number_of_surfaces - 1] = data->interlace_mode[5];
+	data->h_taps[maximum_number_of_surfaces - 2] = bw_int_to_fixed(1);
+	data->h_taps[maximum_number_of_surfaces - 1] = bw_int_to_fixed(1);
+	data->v_taps[maximum_number_of_surfaces - 2] = bw_int_to_fixed(1);
+	data->v_taps[maximum_number_of_surfaces - 1] = bw_int_to_fixed(1);
+	data->rotation_angle[maximum_number_of_surfaces - 2] = bw_int_to_fixed(0);
+	data->rotation_angle[maximum_number_of_surfaces - 1] = bw_int_to_fixed(0);
 	tiling_mode[maximum_number_of_surfaces - 2] = bw_def_linear;
 	tiling_mode[maximum_number_of_surfaces - 1] = bw_def_linear;
-	results->lb_bpc[maximum_number_of_surfaces - 2] = 8;
-	results->lb_bpc[maximum_number_of_surfaces - 1] = 8;
-	results->compression_rate[maximum_number_of_surfaces - 2] =
-		bw_int_to_fixed(1);
-	results->compression_rate[maximum_number_of_surfaces - 1] =
-		bw_int_to_fixed(1);
-	results->access_one_channel_only[maximum_number_of_surfaces - 2] = 0;
-	results->access_one_channel_only[maximum_number_of_surfaces - 1] = 0;
-	results->h_total[maximum_number_of_surfaces - 2] = bw_int_to_fixed(
-		mode_data->d1_htotal);
-	results->h_total[maximum_number_of_surfaces - 1] = bw_int_to_fixed(
-		mode_data->d1_htotal);
-	results->pixel_rate[maximum_number_of_surfaces - 2] =
-		mode_data->d1_pixel_rate;
-	results->pixel_rate[maximum_number_of_surfaces - 1] =
-		mode_data->d1_pixel_rate;
-	results->src_width[maximum_number_of_surfaces - 2] = bw_int_to_fixed(
-		mode_data->d1_graphics_src_width);
-	results->src_width[maximum_number_of_surfaces - 1] = bw_int_to_fixed(
-		mode_data->d1_graphics_src_width);
-	results->src_height[maximum_number_of_surfaces - 2] = bw_int_to_fixed(
-		mode_data->d1_graphics_src_height);
-	results->src_height[maximum_number_of_surfaces - 1] = bw_int_to_fixed(
-		mode_data->d1_graphics_src_height);
-	results->pitch_in_pixels[maximum_number_of_surfaces - 2] =
-		bw_int_to_fixed(mode_data->d1_graphics_src_width);
-	results->pitch_in_pixels[maximum_number_of_surfaces - 1] =
-		bw_int_to_fixed(mode_data->d1_graphics_src_width);
-	results->scale_ratio[maximum_number_of_surfaces - 2] = bw_int_to_fixed(
-		1);
-	results->scale_ratio[maximum_number_of_surfaces - 1] = bw_int_to_fixed(
-		1);
-	stereo_mode[maximum_number_of_surfaces - 2] = bw_def_mono;
-	stereo_mode[maximum_number_of_surfaces - 1] = bw_def_mono;
-	results->cursor_width_pixels[maximum_number_of_surfaces - 2] =
-		bw_int_to_fixed(0);
-	results->cursor_width_pixels[maximum_number_of_surfaces - 1] =
-		bw_int_to_fixed(0);
-	results->use_alpha[maximum_number_of_surfaces - 2] = 0;
-	results->use_alpha[maximum_number_of_surfaces - 1] = 0;
+	data->lb_bpc[maximum_number_of_surfaces - 2] = 8;
+	data->lb_bpc[maximum_number_of_surfaces - 1] = 8;
+	data->compression_rate[maximum_number_of_surfaces - 2] = bw_int_to_fixed(1);
+	data->compression_rate[maximum_number_of_surfaces - 1] = bw_int_to_fixed(1);
+	data->access_one_channel_only[maximum_number_of_surfaces - 2] = 0;
+	data->access_one_channel_only[maximum_number_of_surfaces - 1] = 0;
+	/*assume display pipe1 has dwb enabled*/
+	data->h_total[maximum_number_of_surfaces - 2] = data->h_total[5];
+	data->h_total[maximum_number_of_surfaces - 1] = data->h_total[5];
+	data->v_total[maximum_number_of_surfaces - 2] = data->v_total[5];
+	data->v_total[maximum_number_of_surfaces - 1] = data->v_total[5];
+	data->pixel_rate[maximum_number_of_surfaces - 2] = data->pixel_rate[5];
+	data->pixel_rate[maximum_number_of_surfaces - 1] = data->pixel_rate[5];
+	data->src_width[maximum_number_of_surfaces - 2] = data->src_width[5];
+	data->src_width[maximum_number_of_surfaces - 1] = data->src_width[5];
+	data->src_height[maximum_number_of_surfaces - 2] = data->src_height[5];
+	data->src_height[maximum_number_of_surfaces - 1] = data->src_height[5];
+	data->pitch_in_pixels[maximum_number_of_surfaces - 2] = data->src_width[5];
+	data->pitch_in_pixels[maximum_number_of_surfaces - 1] = data->src_width[5];
+	data->h_scale_ratio[maximum_number_of_surfaces - 2] = bw_int_to_fixed(1);
+	data->h_scale_ratio[maximum_number_of_surfaces - 1] = bw_int_to_fixed(1);
+	data->v_scale_ratio[maximum_number_of_surfaces - 2] = bw_int_to_fixed(1);
+	data->v_scale_ratio[maximum_number_of_surfaces - 1] = bw_int_to_fixed(1);
+	data->stereo_mode[maximum_number_of_surfaces - 2] = bw_def_mono;
+	data->stereo_mode[maximum_number_of_surfaces - 1] = bw_def_mono;
+	data->cursor_width_pixels[maximum_number_of_surfaces - 2] = bw_int_to_fixed(0);
+	data->cursor_width_pixels[maximum_number_of_surfaces - 1] = bw_int_to_fixed(0);
+	data->use_alpha[maximum_number_of_surfaces - 2] = 0;
+	data->use_alpha[maximum_number_of_surfaces - 1] = 0;
 	/*mode check calculations:*/
 	/* mode within dce ip capabilities*/
 	/* fbc*/
@@ -507,140 +371,77 @@ static void calculate_bandwidth(
 	/*effective scaling source and ratios:*/
 	/*for graphics, non-stereo, non-interlace surfaces when the size of the source and destination are the same, only one tap is used*/
 	/*420 chroma has half the width, height, horizontal and vertical scaling ratios than luma*/
-	/*rotating an underlay surface swaps the width, height, horizontal and vertical scaling ratios*/
+	/*rotating a graphic or underlay surface swaps the width, height, horizontal and vertical scaling ratios*/
 	/*in top-bottom stereo mode there is 2:1 vertical downscaling for each eye*/
 	/*in side-by-side stereo mode there is 2:1 horizontal downscaling for each eye*/
 	/*in interlace mode there is 2:1 vertical downscaling for each field*/
 	/*in panning or bezel adjustment mode the source width has an extra 128 pixels*/
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (bw_equ(results->scale_ratio[i], bw_int_to_fixed(1))
-				&& surface_type[i] == bw_def_graphics
-				&& stereo_mode[i] == bw_def_mono
-				&& results->interlace_mode[i] == 0) {
-				results->h_taps[i] = bw_int_to_fixed(1);
-				results->v_taps[i] = bw_int_to_fixed(1);
+		if (data->enable[i]) {
+			if (bw_equ(data->h_scale_ratio[i], bw_int_to_fixed(1)) && bw_equ(data->v_scale_ratio[i], bw_int_to_fixed(1)) && surface_type[i] == bw_def_graphics && data->stereo_mode[i] == bw_def_mono && data->interlace_mode[i] == 0) {
+				data->h_taps[i] = bw_int_to_fixed(1);
+				data->v_taps[i] = bw_int_to_fixed(1);
 			}
-			if (surface_type[i]
-				== bw_def_display_write_back420_chroma
-				|| surface_type[i]
-					== bw_def_underlay420_chroma) {
-				results->pitch_in_pixels_after_surface_type[i] =
-					bw_div(
-						results->pitch_in_pixels[i],
-						bw_int_to_fixed(2));
-				results->src_width_after_surface_type = bw_div(
-					results->src_width[i],
-					bw_int_to_fixed(2));
-				results->src_height_after_surface_type = bw_div(
-					results->src_height[i],
-					bw_int_to_fixed(2));
-				results->hsr_after_surface_type = bw_div(
-					results->scale_ratio[i],
-					bw_int_to_fixed(2));
-				results->vsr_after_surface_type = bw_div(
-					results->scale_ratio[i],
-					bw_int_to_fixed(2));
-			} else {
-				results->pitch_in_pixels_after_surface_type[i] =
-					results->pitch_in_pixels[i];
-				results->src_width_after_surface_type =
-					results->src_width[i];
-				results->src_height_after_surface_type =
-					results->src_height[i];
-				results->hsr_after_surface_type =
-					results->scale_ratio[i];
-				results->vsr_after_surface_type =
-					results->scale_ratio[i];
+			if (surface_type[i] == bw_def_display_write_back420_chroma || surface_type[i] == bw_def_underlay420_chroma) {
+				data->pitch_in_pixels_after_surface_type[i] = bw_div(data->pitch_in_pixels[i], bw_int_to_fixed(2));
+				data->src_width_after_surface_type = bw_div(data->src_width[i], bw_int_to_fixed(2));
+				data->src_height_after_surface_type = bw_div(data->src_height[i], bw_int_to_fixed(2));
+				data->hsr_after_surface_type = bw_div(data->h_scale_ratio[i], bw_int_to_fixed(2));
+				data->vsr_after_surface_type = bw_div(data->v_scale_ratio[i], bw_int_to_fixed(2));
 			}
-			if ((bw_equ(
-				results->rotation_angle[i],
-				bw_int_to_fixed(90))
-				|| bw_equ(
-					results->rotation_angle[i],
-					bw_int_to_fixed(270)))
-				&& surface_type[i] != bw_def_graphics) {
-				results->src_width_after_rotation =
-					results->src_height_after_surface_type;
-				results->src_height_after_rotation =
-					results->src_width_after_surface_type;
-				results->hsr_after_rotation =
-					results->vsr_after_surface_type;
-				results->vsr_after_rotation =
-					results->hsr_after_surface_type;
-			} else {
-				results->src_width_after_rotation =
-					results->src_width_after_surface_type;
-				results->src_height_after_rotation =
-					results->src_height_after_surface_type;
-				results->hsr_after_rotation =
-					results->hsr_after_surface_type;
-				results->vsr_after_rotation =
-					results->vsr_after_surface_type;
+			else {
+				data->pitch_in_pixels_after_surface_type[i] = data->pitch_in_pixels[i];
+				data->src_width_after_surface_type = data->src_width[i];
+				data->src_height_after_surface_type = data->src_height[i];
+				data->hsr_after_surface_type = data->h_scale_ratio[i];
+				data->vsr_after_surface_type = data->v_scale_ratio[i];
 			}
-			switch (stereo_mode[i]) {
+			if ((bw_equ(data->rotation_angle[i], bw_int_to_fixed(90)) || bw_equ(data->rotation_angle[i], bw_int_to_fixed(270))) && surface_type[i] != bw_def_display_write_back420_luma && surface_type[i] != bw_def_display_write_back420_chroma) {
+				data->src_width_after_rotation = data->src_height_after_surface_type;
+				data->src_height_after_rotation = data->src_width_after_surface_type;
+				data->hsr_after_rotation = data->vsr_after_surface_type;
+				data->vsr_after_rotation = data->hsr_after_surface_type;
+			}
+			else {
+				data->src_width_after_rotation = data->src_width_after_surface_type;
+				data->src_height_after_rotation = data->src_height_after_surface_type;
+				data->hsr_after_rotation = data->hsr_after_surface_type;
+				data->vsr_after_rotation = data->vsr_after_surface_type;
+			}
+			switch (data->stereo_mode[i]) {
 			case bw_def_top_bottom:
-				results->source_width_pixels[i] =
-					results->src_width_after_rotation;
-				results->source_height_pixels = bw_mul(
-					bw_int_to_fixed(2),
-					results->src_height_after_rotation);
-				results->hsr_after_stereo =
-					results->hsr_after_rotation;
-				results->vsr_after_stereo = bw_mul(
-					bw_int_to_fixed(1),
-					results->vsr_after_rotation);
+				data->source_width_pixels[i] = data->src_width_after_rotation;
+				data->source_height_pixels = bw_mul(bw_int_to_fixed(2), data->src_height_after_rotation);
+				data->hsr_after_stereo = data->hsr_after_rotation;
+				data->vsr_after_stereo = bw_mul(bw_int_to_fixed(1), data->vsr_after_rotation);
 				break;
 			case bw_def_side_by_side:
-				results->source_width_pixels[i] = bw_mul(
-					bw_int_to_fixed(2),
-					results->src_width_after_rotation);
-				results->source_height_pixels =
-					results->src_height_after_rotation;
-				results->hsr_after_stereo = bw_mul(
-					bw_int_to_fixed(1),
-					results->hsr_after_rotation);
-				results->vsr_after_stereo =
-					results->vsr_after_rotation;
+				data->source_width_pixels[i] = bw_mul(bw_int_to_fixed(2), data->src_width_after_rotation);
+				data->source_height_pixels = data->src_height_after_rotation;
+				data->hsr_after_stereo = bw_mul(bw_int_to_fixed(1), data->hsr_after_rotation);
+				data->vsr_after_stereo = data->vsr_after_rotation;
 				break;
 			default:
-				results->source_width_pixels[i] =
-					results->src_width_after_rotation;
-				results->source_height_pixels =
-					results->src_height_after_rotation;
-				results->hsr_after_stereo =
-					results->hsr_after_rotation;
-				results->vsr_after_stereo =
-					results->vsr_after_rotation;
+				data->source_width_pixels[i] = data->src_width_after_rotation;
+				data->source_height_pixels = data->src_height_after_rotation;
+				data->hsr_after_stereo = data->hsr_after_rotation;
+				data->vsr_after_stereo = data->vsr_after_rotation;
 				break;
 			}
-			results->hsr[i] = results->hsr_after_stereo;
-			if (results->interlace_mode[i]) {
-				results->vsr[i] = bw_mul(
-					results->vsr_after_stereo,
-					bw_int_to_fixed(2));
-			} else {
-				results->vsr[i] = results->vsr_after_stereo;
+			data->hsr[i] = data->hsr_after_stereo;
+			if (data->interlace_mode[i]) {
+				data->vsr[i] = bw_mul(data->vsr_after_stereo, bw_int_to_fixed(2));
 			}
-			if (mode_data->panning_and_bezel_adjustment
-				!= bw_def_none) {
-				results->source_width_rounded_up_to_chunks[i] =
-					bw_add(
-						bw_floor2(
-							bw_sub(
-								results->source_width_pixels[i],
-								bw_int_to_fixed(
-									1)),
-							bw_int_to_fixed(128)),
-						bw_int_to_fixed(256));
-			} else {
-				results->source_width_rounded_up_to_chunks[i] =
-					bw_ceil2(
-						results->source_width_pixels[i],
-						bw_int_to_fixed(128));
+			else {
+				data->vsr[i] = data->vsr_after_stereo;
 			}
-			results->source_height_rounded_up_to_chunks[i] =
-				results->source_height_pixels;
+			if (data->panning_and_bezel_adjustment != bw_def_none) {
+				data->source_width_rounded_up_to_chunks[i] = bw_add(bw_floor2(bw_sub(data->source_width_pixels[i], bw_int_to_fixed(1)), bw_int_to_fixed(128)), bw_int_to_fixed(256));
+			}
+			else {
+				data->source_width_rounded_up_to_chunks[i] = bw_ceil2(data->source_width_pixels[i], bw_int_to_fixed(128));
+			}
+			data->source_height_rounded_up_to_chunks[i] = data->source_height_pixels;
 		}
 	}
 	/*mode support checks:*/
@@ -654,47 +455,26 @@ static void calculate_bandwidth(
 	/*the size of the line in the line buffer in the case of 8 bit per component is the product of the source width rounded up to multiple of 8 and 30.023438 / 3, rounded up to a multiple of 48*/
 	/*frame buffer compression is not supported with stereo mode, rotation, or non- 888 formats*/
 	/*rotation is not supported with linear of stereo modes*/
-	if (dceip->number_of_graphics_pipes >= mode_data->number_of_displays
-		&& dceip->number_of_underlay_pipes
-			>= results->number_of_underlay_surfaces
-		&& !(dceip->display_write_back_supported == 0
-			&& mode_data->d1_display_write_back_dwb_enable == 1)) {
+	if (dceip->number_of_graphics_pipes >= data->number_of_displays && dceip->number_of_underlay_pipes >= data->number_of_underlay_surfaces && !(dceip->display_write_back_supported == 0 && data->d1_display_write_back_dwb_enable == 1)) {
 		pipe_check = bw_def_ok;
-	} else {
+	}
+	else {
 		pipe_check = bw_def_notok;
 	}
 	hsr_check = bw_def_ok;
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (bw_neq(results->hsr[i], bw_int_to_fixed(1))) {
-				if (bw_mtn(
-					results->hsr[i],
-					bw_int_to_fixed(4))) {
+		if (data->enable[i]) {
+			if (bw_neq(data->hsr[i], bw_int_to_fixed(1))) {
+				if (bw_mtn(data->hsr[i], bw_int_to_fixed(4))) {
 					hsr_check = bw_def_hsr_mtn_4;
-				} else {
-					if (bw_mtn(
-						results->hsr[i],
-						results->h_taps[i])) {
-						hsr_check =
-							bw_def_hsr_mtn_h_taps;
-					} else {
-						if (dceip->pre_downscaler_enabled
-							== 1
-							&& bw_mtn(
-								results->hsr[i],
-								bw_int_to_fixed(
-									1))
-							&& bw_leq(
-								results->hsr[i],
-								bw_ceil2(
-									bw_div(
-										results->h_taps[i],
-										bw_int_to_fixed(
-											4)),
-									bw_int_to_fixed(
-										1)))) {
-							hsr_check =
-								bw_def_ceiling__h_taps_div_4___meq_hsr;
+				}
+				else {
+					if (bw_mtn(data->hsr[i], data->h_taps[i])) {
+						hsr_check = bw_def_hsr_mtn_h_taps;
+					}
+					else {
+						if (dceip->pre_downscaler_enabled == 1 && bw_mtn(data->hsr[i], bw_int_to_fixed(1)) && bw_leq(data->hsr[i], bw_ceil2(bw_div(data->h_taps[i], bw_int_to_fixed(4)), bw_int_to_fixed(1)))) {
+							hsr_check = bw_def_ceiling__h_taps_div_4___meq_hsr;
 						}
 					}
 				}
@@ -703,18 +483,14 @@ static void calculate_bandwidth(
 	}
 	vsr_check = bw_def_ok;
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (bw_neq(results->vsr[i], bw_int_to_fixed(1))) {
-				if (bw_mtn(
-					results->vsr[i],
-					bw_int_to_fixed(4))) {
+		if (data->enable[i]) {
+			if (bw_neq(data->vsr[i], bw_int_to_fixed(1))) {
+				if (bw_mtn(data->vsr[i], bw_int_to_fixed(4))) {
 					vsr_check = bw_def_vsr_mtn_4;
-				} else {
-					if (bw_mtn(
-						results->vsr[i],
-						results->v_taps[i])) {
-						vsr_check =
-							bw_def_vsr_mtn_v_taps;
+				}
+				else {
+					if (bw_mtn(data->vsr[i], data->v_taps[i])) {
+						vsr_check = bw_def_vsr_mtn_v_taps;
 					}
 				}
 			}
@@ -722,114 +498,83 @@ static void calculate_bandwidth(
 	}
 	lb_size_check = bw_def_ok;
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if ((dceip->pre_downscaler_enabled
-				&& bw_mtn(results->hsr[i], bw_int_to_fixed(1)))) {
-				results->source_width_in_lb = bw_div(
-					results->source_width_pixels[i],
-					results->hsr[i]);
-			} else {
-				results->source_width_in_lb =
-					results->source_width_pixels[i];
+		if (data->enable[i]) {
+			if ((dceip->pre_downscaler_enabled && bw_mtn(data->hsr[i], bw_int_to_fixed(1)))) {
+				data->source_width_in_lb = bw_div(data->source_width_pixels[i], data->hsr[i]);
 			}
-			switch (results->lb_bpc[i]) {
+			else {
+				data->source_width_in_lb = data->source_width_pixels[i];
+			}
+			switch (data->lb_bpc[i]) {
 			case 8:
-				results->lb_line_pitch =
-					bw_ceil2(
-						bw_mul(
-							bw_div(
-								bw_frc_to_fixed(
-									2401171875ULL,
-									100000000),
-								bw_int_to_fixed(
-									3)),
-							bw_ceil2(
-								results->source_width_in_lb,
-								bw_int_to_fixed(
-									8))),
-						bw_int_to_fixed(48));
+				data->lb_line_pitch = bw_ceil2(bw_mul(bw_div(bw_frc_to_fixed(2401171875, 100000000), bw_int_to_fixed(3)), bw_ceil2(data->source_width_in_lb, bw_int_to_fixed(8))), bw_int_to_fixed(48));
 				break;
 			case 10:
-				results->lb_line_pitch =
-					bw_ceil2(
-						bw_mul(
-							bw_div(
-								bw_frc_to_fixed(
-									300234375,
-									10000000),
-								bw_int_to_fixed(
-									3)),
-							bw_ceil2(
-								results->source_width_in_lb,
-								bw_int_to_fixed(
-									8))),
-						bw_int_to_fixed(48));
+				data->lb_line_pitch = bw_ceil2(bw_mul(bw_div(bw_frc_to_fixed(300234375, 10000000), bw_int_to_fixed(3)), bw_ceil2(data->source_width_in_lb, bw_int_to_fixed(8))), bw_int_to_fixed(48));
 				break;
 			default:
-				results->lb_line_pitch = bw_ceil2(
-					bw_mul(
-						bw_int_to_fixed(
-							results->lb_bpc[i]),
-						results->source_width_in_lb),
-					bw_int_to_fixed(48));
+				data->lb_line_pitch = bw_ceil2(bw_mul(bw_int_to_fixed(data->lb_bpc[i]), data->source_width_in_lb), bw_int_to_fixed(48));
 				break;
 			}
-			results->lb_partitions[i] = bw_floor2(
-				bw_div(
-					results->lb_size_per_component[i],
-					results->lb_line_pitch),
-				bw_int_to_fixed(1));
+			data->lb_partitions[i] = bw_floor2(bw_div(data->lb_size_per_component[i], data->lb_line_pitch), bw_int_to_fixed(1));
 			/*clamp the partitions to the maxium number supported by the lb*/
-			if ((surface_type[i] != bw_def_graphics
-				|| dceip->graphics_lb_nodownscaling_multi_line_prefetching
-					== 1)) {
-				results->lb_partitions_max[i] = bw_int_to_fixed(
-					10);
-			} else {
-				results->lb_partitions_max[i] = bw_int_to_fixed(
-					7);
+			if ((surface_type[i] != bw_def_graphics || dceip->graphics_lb_nodownscaling_multi_line_prefetching == 1)) {
+				data->lb_partitions_max[i] = bw_int_to_fixed(10);
 			}
-			results->lb_partitions[i] = bw_min2(
-				results->lb_partitions_max[i],
-				results->lb_partitions[i]);
-			if (bw_mtn(
-				bw_add(results->v_taps[i], bw_int_to_fixed(1)),
-				results->lb_partitions[i])) {
+			else {
+				data->lb_partitions_max[i] = bw_int_to_fixed(7);
+			}
+			data->lb_partitions[i] = bw_min2(data->lb_partitions_max[i], data->lb_partitions[i]);
+			if (bw_mtn(bw_add(data->v_taps[i], bw_int_to_fixed(1)), data->lb_partitions[i])) {
 				lb_size_check = bw_def_notok;
 			}
 		}
 	}
-	if (mode_data->d0_fbc_enable
-		&& (mode_data->graphics_rotation_angle == 90
-			|| mode_data->graphics_rotation_angle == 270
-			|| mode_data->d0_graphics_stereo_mode != bw_def_mono
-			|| mode_data->graphics_bytes_per_pixel != 4)) {
-		fbc_check = bw_def_invalid_rotation_or_bpp_or_stereo;
-	} else {
-		fbc_check = bw_def_ok;
+	fbc_check = bw_def_ok;
+	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
+		if (data->enable[i] && data->fbc_en[i] == 1 && (bw_equ(data->rotation_angle[i], bw_int_to_fixed(90)) || bw_equ(data->rotation_angle[i], bw_int_to_fixed(270)) || data->stereo_mode[i] != bw_def_mono || data->bytes_per_pixel[i] != 4)) {
+			fbc_check = bw_def_invalid_rotation_or_bpp_or_stereo;
+		}
 	}
 	rotation_check = bw_def_ok;
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if ((bw_equ(
-				results->rotation_angle[i],
-				bw_int_to_fixed(90))
-				|| bw_equ(
-					results->rotation_angle[i],
-					bw_int_to_fixed(270)))
-				&& (tiling_mode[i] == bw_def_linear
-					|| stereo_mode[i] != bw_def_mono)) {
-				rotation_check =
-					bw_def_invalid_linear_or_stereo_mode;
+		if (data->enable[i]) {
+			if ((bw_equ(data->rotation_angle[i], bw_int_to_fixed(90)) || bw_equ(data->rotation_angle[i], bw_int_to_fixed(270))) && (tiling_mode[i] == bw_def_linear || data->stereo_mode[i] != bw_def_mono)) {
+				rotation_check = bw_def_invalid_linear_or_stereo_mode;
 			}
 		}
 	}
-	if (pipe_check == bw_def_ok && hsr_check == bw_def_ok
-		&& vsr_check == bw_def_ok && lb_size_check == bw_def_ok
-		&& fbc_check == bw_def_ok && rotation_check == bw_def_ok) {
+	if (pipe_check == bw_def_ok && hsr_check == bw_def_ok && vsr_check == bw_def_ok && lb_size_check == bw_def_ok && fbc_check == bw_def_ok && rotation_check == bw_def_ok) {
 		mode_check = bw_def_ok;
-	} else {
+	}
+	else {
 		mode_check = bw_def_notok;
+	}
+	/*number of memory channels for write-back client*/
+	data->number_of_dram_wrchannels = vbios->number_of_dram_channels;
+	data->number_of_dram_channels = vbios->number_of_dram_channels;
+	/*modify number of memory channels if lpt mode is enabled*/
+	/* low power tiling mode register*/
+	/* 0 = use channel 0*/
+	/* 1 = use channel 0 and 1*/
+	/* 2 = use channel 0,1,2,3*/
+	if ((fbc_enabled == 1 && lpt_enabled == 1)) {
+		data->dram_efficiency = bw_int_to_fixed(1);
+		if (dceip->low_power_tiling_mode == 0) {
+			data->number_of_dram_channels = 1;
+		}
+		else if (dceip->low_power_tiling_mode == 1) {
+			data->number_of_dram_channels = 2;
+		}
+		else if (dceip->low_power_tiling_mode == 2) {
+			data->number_of_dram_channels = 4;
+		}
+		else {
+			data->number_of_dram_channels = 1;
+		}
+	}
+	else {
+		data->dram_efficiency = bw_frc_to_fixed(8, 10);
 	}
 	/*memory request size and latency hiding:*/
 	/*request size is normally 64 byte, 2-line interleaved, with full latency hiding*/
@@ -837,377 +582,231 @@ static void calculate_bandwidth(
 	/*for tiled graphics surfaces, or undelay surfaces with width higher than the maximum size for full efficiency, request size is 32 byte in 8 and 16 bpp or if the rotation is orthogonal to the tiling grain. only half is useful of the bytes in the request size in 8 bpp or in 32 bpp if the rotation is orthogonal to the tiling grain.*/
 	/*for undelay surfaces with width lower than the maximum size for full efficiency, requests are 4-line interleaved in 16bpp if the rotation is parallel to the tiling grain, and 8-line interleaved with 4-line latency hiding in 8bpp or if the rotation is orthogonal to the tiling grain.*/
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if ((bw_equ(
-				results->rotation_angle[i],
-				bw_int_to_fixed(90))
-				|| bw_equ(
-					results->rotation_angle[i],
-					bw_int_to_fixed(270)))) {
-				if ((tiling_mode[i] == bw_def_portrait)) {
-					results->orthogonal_rotation[i] = 0;
-				} else {
-					results->orthogonal_rotation[i] = 1;
+		if (data->enable[i]) {
+			if ((bw_equ(data->rotation_angle[i], bw_int_to_fixed(90)) || bw_equ(data->rotation_angle[i], bw_int_to_fixed(270)))) {
+				if ((i < 4)) {
+					/*underlay portrait tiling mode is not supported*/
+					data->orthogonal_rotation[i] = 1;
 				}
-			} else {
-				if ((tiling_mode[i] == bw_def_portrait)) {
-					results->orthogonal_rotation[i] = 1;
-				} else {
-					results->orthogonal_rotation[i] = 0;
+				else {
+					/*graphics portrait tiling mode*/
+					if ((data->graphics_micro_tile_mode == bw_def_rotated_micro_tiling)) {
+						data->orthogonal_rotation[i] = 0;
+					}
+					else {
+						data->orthogonal_rotation[i] = 1;
+					}
 				}
 			}
-			if (bw_equ(
-				results->rotation_angle[i],
-				bw_int_to_fixed(90))
-				|| bw_equ(
-					results->rotation_angle[i],
-					bw_int_to_fixed(270))) {
-				results->underlay_maximum_source_efficient_for_tiling =
-					dceip->underlay_maximum_height_efficient_for_tiling;
-			} else {
-				results->underlay_maximum_source_efficient_for_tiling =
-					dceip->underlay_maximum_width_efficient_for_tiling;
+			else {
+				if ((i < 4)) {
+					/*underlay landscape tiling mode is only supported*/
+					if ((data->underlay_micro_tile_mode == bw_def_display_micro_tiling)) {
+						data->orthogonal_rotation[i] = 0;
+					}
+					else {
+						data->orthogonal_rotation[i] = 1;
+					}
+				}
+				else {
+					/*graphics landscape tiling mode*/
+					if ((data->graphics_micro_tile_mode == bw_def_display_micro_tiling)) {
+						data->orthogonal_rotation[i] = 0;
+					}
+					else {
+						data->orthogonal_rotation[i] = 1;
+					}
+				}
 			}
-			if (bw_equ(
-				dceip->de_tiling_buffer,
-				bw_int_to_fixed(0))) {
-				if (surface_type[i]
-					== bw_def_display_write_back420_luma
-					|| surface_type[i]
-						== bw_def_display_write_back420_chroma) {
-					results->bytes_per_request[i] =
-						bw_int_to_fixed(64);
-					results->useful_bytes_per_request[i] =
-						bw_int_to_fixed(64);
-					results->lines_interleaved_in_mem_access[i] =
-						bw_int_to_fixed(1);
-					results->latency_hiding_lines[i] =
-						bw_int_to_fixed(1);
-				} else if (tiling_mode[i] == bw_def_linear) {
-					results->bytes_per_request[i] =
-						bw_int_to_fixed(64);
-					results->useful_bytes_per_request[i] =
-						bw_int_to_fixed(64);
-					results->lines_interleaved_in_mem_access[i] =
-						bw_int_to_fixed(2);
-					results->latency_hiding_lines[i] =
-						bw_int_to_fixed(2);
-				} else {
-					if (surface_type[i] == bw_def_graphics
-						|| (bw_mtn(
-							results->source_width_rounded_up_to_chunks[i],
-							bw_ceil2(
-								results->underlay_maximum_source_efficient_for_tiling,
-								bw_int_to_fixed(
-									256))))) {
-						switch (results->bytes_per_pixel[i]) {
-						case 8:
-							results->lines_interleaved_in_mem_access[i] =
-								bw_int_to_fixed(
-									2);
-							results->latency_hiding_lines[i] =
-								bw_int_to_fixed(
-									2);
-							if (results->orthogonal_rotation[i]) {
-								results->bytes_per_request[i] =
-									bw_int_to_fixed(
-										32);
-								results->useful_bytes_per_request[i] =
-									bw_int_to_fixed(
-										32);
-							} else {
-								results->bytes_per_request[i] =
-									bw_int_to_fixed(
-										64);
-								results->useful_bytes_per_request[i] =
-									bw_int_to_fixed(
-										64);
-							}
-							break;
+			if (bw_equ(data->rotation_angle[i], bw_int_to_fixed(90)) || bw_equ(data->rotation_angle[i], bw_int_to_fixed(270))) {
+				data->underlay_maximum_source_efficient_for_tiling = dceip->underlay_maximum_height_efficient_for_tiling;
+			}
+			else {
+				data->underlay_maximum_source_efficient_for_tiling = dceip->underlay_maximum_width_efficient_for_tiling;
+			}
+			if (surface_type[i] == bw_def_display_write_back420_luma || surface_type[i] == bw_def_display_write_back420_chroma) {
+				data->bytes_per_request[i] = bw_int_to_fixed(64);
+				data->useful_bytes_per_request[i] = bw_int_to_fixed(64);
+				data->lines_interleaved_in_mem_access[i] = bw_int_to_fixed(1);
+				data->latency_hiding_lines[i] = bw_int_to_fixed(1);
+			}
+			else if (tiling_mode[i] == bw_def_linear) {
+				data->bytes_per_request[i] = bw_int_to_fixed(64);
+				data->useful_bytes_per_request[i] = bw_int_to_fixed(64);
+				data->lines_interleaved_in_mem_access[i] = bw_int_to_fixed(2);
+				data->latency_hiding_lines[i] = bw_int_to_fixed(2);
+			}
+			else {
+				if (surface_type[i] == bw_def_graphics || (bw_mtn(data->source_width_rounded_up_to_chunks[i], bw_ceil2(data->underlay_maximum_source_efficient_for_tiling, bw_int_to_fixed(256))))) {
+					switch (data->bytes_per_pixel[i]) {
+					case 8:
+						data->lines_interleaved_in_mem_access[i] = bw_int_to_fixed(2);
+						data->latency_hiding_lines[i] = bw_int_to_fixed(2);
+						if (data->orthogonal_rotation[i]) {
+							data->bytes_per_request[i] = bw_int_to_fixed(32);
+							data->useful_bytes_per_request[i] = bw_int_to_fixed(32);
+						}
+						else {
+							data->bytes_per_request[i] = bw_int_to_fixed(64);
+							data->useful_bytes_per_request[i] = bw_int_to_fixed(64);
+						}
+						break;
+					case 4:
+						if (data->orthogonal_rotation[i]) {
+							data->lines_interleaved_in_mem_access[i] = bw_int_to_fixed(2);
+							data->latency_hiding_lines[i] = bw_int_to_fixed(2);
+							data->bytes_per_request[i] = bw_int_to_fixed(32);
+							data->useful_bytes_per_request[i] = bw_int_to_fixed(16);
+						}
+						else {
+							data->lines_interleaved_in_mem_access[i] = bw_int_to_fixed(2);
+							data->latency_hiding_lines[i] = bw_int_to_fixed(2);
+							data->bytes_per_request[i] = bw_int_to_fixed(64);
+							data->useful_bytes_per_request[i] = bw_int_to_fixed(64);
+						}
+						break;
+					case 2:
+						data->lines_interleaved_in_mem_access[i] = bw_int_to_fixed(2);
+						data->latency_hiding_lines[i] = bw_int_to_fixed(2);
+						data->bytes_per_request[i] = bw_int_to_fixed(32);
+						data->useful_bytes_per_request[i] = bw_int_to_fixed(32);
+						break;
+					default:
+						data->lines_interleaved_in_mem_access[i] = bw_int_to_fixed(2);
+						data->latency_hiding_lines[i] = bw_int_to_fixed(2);
+						data->bytes_per_request[i] = bw_int_to_fixed(32);
+						data->useful_bytes_per_request[i] = bw_int_to_fixed(16);
+						break;
+					}
+				}
+				else {
+					data->bytes_per_request[i] = bw_int_to_fixed(64);
+					data->useful_bytes_per_request[i] = bw_int_to_fixed(64);
+					if (data->orthogonal_rotation[i]) {
+						data->lines_interleaved_in_mem_access[i] = bw_int_to_fixed(8);
+						data->latency_hiding_lines[i] = bw_int_to_fixed(4);
+					}
+					else {
+						switch (data->bytes_per_pixel[i]) {
 						case 4:
-							if (results->orthogonal_rotation[i]) {
-								results->lines_interleaved_in_mem_access[i] =
-									bw_int_to_fixed(
-										2);
-								results->latency_hiding_lines[i] =
-									bw_int_to_fixed(
-										2);
-								results->bytes_per_request[i] =
-									bw_int_to_fixed(
-										32);
-								results->useful_bytes_per_request[i] =
-									bw_int_to_fixed(
-										16);
-							} else {
-								results->lines_interleaved_in_mem_access[i] =
-									bw_int_to_fixed(
-										2);
-								results->latency_hiding_lines[i] =
-									bw_int_to_fixed(
-										2);
-								results->bytes_per_request[i] =
-									bw_int_to_fixed(
-										64);
-								results->useful_bytes_per_request[i] =
-									bw_int_to_fixed(
-										64);
-							}
+							data->lines_interleaved_in_mem_access[i] = bw_int_to_fixed(2);
+							data->latency_hiding_lines[i] = bw_int_to_fixed(2);
 							break;
 						case 2:
-							results->lines_interleaved_in_mem_access[i] =
-								bw_int_to_fixed(
-									2);
-							results->latency_hiding_lines[i] =
-								bw_int_to_fixed(
-									2);
-							results->bytes_per_request[i] =
-								bw_int_to_fixed(
-									32);
-							results->useful_bytes_per_request[i] =
-								bw_int_to_fixed(
-									32);
+							data->lines_interleaved_in_mem_access[i] = bw_int_to_fixed(4);
+							data->latency_hiding_lines[i] = bw_int_to_fixed(4);
 							break;
 						default:
-							results->lines_interleaved_in_mem_access[i] =
-								bw_int_to_fixed(
-									2);
-							results->latency_hiding_lines[i] =
-								bw_int_to_fixed(
-									2);
-							results->bytes_per_request[i] =
-								bw_int_to_fixed(
-									32);
-							results->useful_bytes_per_request[i] =
-								bw_int_to_fixed(
-									16);
+							data->lines_interleaved_in_mem_access[i] = bw_int_to_fixed(8);
+							data->latency_hiding_lines[i] = bw_int_to_fixed(4);
 							break;
-						}
-					} else {
-						results->bytes_per_request[i] =
-							bw_int_to_fixed(64);
-						results->useful_bytes_per_request[i] =
-							bw_int_to_fixed(64);
-						if (results->orthogonal_rotation[i]) {
-							results->lines_interleaved_in_mem_access[i] =
-								bw_int_to_fixed(
-									8);
-							results->latency_hiding_lines[i] =
-								bw_int_to_fixed(
-									4);
-						} else {
-							switch (results->bytes_per_pixel[i]) {
-							case 4:
-								results->lines_interleaved_in_mem_access[i] =
-									bw_int_to_fixed(
-										2);
-								results->latency_hiding_lines[i] =
-									bw_int_to_fixed(
-										2);
-								break;
-							case 2:
-								results->lines_interleaved_in_mem_access[i] =
-									bw_int_to_fixed(
-										4);
-								results->latency_hiding_lines[i] =
-									bw_int_to_fixed(
-										4);
-								break;
-							default:
-								results->lines_interleaved_in_mem_access[i] =
-									bw_int_to_fixed(
-										8);
-								results->latency_hiding_lines[i] =
-									bw_int_to_fixed(
-										4);
-								break;
-							}
 						}
 					}
 				}
-			} else {
-				results->bytes_per_request[i] = bw_int_to_fixed(
-					256);
-				results->useful_bytes_per_request[i] =
-					bw_int_to_fixed(256);
-				results->lines_interleaved_in_mem_access[i] =
-					bw_int_to_fixed(4);
-				results->latency_hiding_lines[i] =
-					bw_int_to_fixed(4);
 			}
 		}
 	}
 	/*requested peak bandwidth:*/
-	/*the peak request-per-second bandwidth is the product of the maximum source lines in per line out in the beginning and in the middle of the frame, the ratio of the source width to the line time, the ratio of line interleaving in memory to lines of latency hiding, and the ratio of bytes per pixel to useful bytes per request.*/
+	/*the peak request-per-second bandwidth is the product of the maximum source lines in per line out in the beginning*/
+	/*and in the middle of the frame, the ratio of the source width to the line time, the ratio of line interleaving*/
+	/*in memory to lines of latency hiding, and the ratio of bytes per pixel to useful bytes per request.*/
+	/**/
+	/*if the dmif data buffer size holds more than vta_ps worth of source lines, then only vsr is used.*/
 	/*the peak bandwidth is the peak request-per-second bandwidth times the request size.*/
-	/*the line buffer lines in per line out in the beginning of the frame is the vertical filter initialization value rounded up to even and divided by the line times for initialization, which is normally three.*/
-	/*the line buffer lines in per line out in the middle of the frame is at least one, or the vertical scale ratio, rounded up to line pairs if not doing line buffer prefetching.*/
-	/*the non-prefetching rounding up of the vertical scale ratio can also be done up to 1 (for a 0,2 pattern), 4/3 (for a 0,2,2 pattern), 6/4 (for a 0,2,2,2 pattern), or 3 (for a 2,4 pattern).*/
-	/*the scaler vertical filter initialization value is calculated by the hardware as the floor of the average of the vertical scale ratio and the number of vertical taps increased by one.  add one more for possible odd line panning/bezel adjustment mode.*/
+	/**/
+	/*the line buffer lines in per line out in the beginning of the frame is the vertical filter initialization value*/
+	/*rounded up to even and divided by the line times for initialization, which is normally three.*/
+	/*the line buffer lines in per line out in the middle of the frame is at least one, or the vertical scale ratio,*/
+	/*rounded up to line pairs if not doing line buffer prefetching.*/
+	/**/
+	/*the non-prefetching rounding up of the vertical scale ratio can also be done up to 1 (for a 0,2 pattern), 4/3 (for a 0,2,2 pattern),*/
+	/*6/4 (for a 0,2,2,2 pattern), or 3 (for a 2,4 pattern).*/
+	/**/
+	/*the scaler vertical filter initialization value is calculated by the hardware as the floor of the average of the*/
+	/*vertical scale ratio and the number of vertical taps increased by one.  add one more for possible odd line*/
+	/*panning/bezel adjustment mode.*/
+	/**/
 	/*for the bottom interlace field an extra 50% of the vertical scale ratio is considered for this calculation.*/
-	/*in top-bottom stereo mode software has to set the filter initialization value manually and explicitly limit it to 4.  further, there is only one line time for initialization.*/
-	/*line buffer prefetching is done when the number of lines in the line buffer exceeds the number of taps plus the ceiling of the vertical scale ratio.*/
-	/*line buffer prefetching is not done when downscaling in the graphics pipe or for possible odd line panning/bezel adjustment mode.*/
+	/*in top-bottom stereo mode software has to set the filter initialization value manually and explicitly limit it to 4.*/
+	/*furthermore, there is only one line time for initialization.*/
+	/**/
+	/*line buffer prefetching is done when the number of lines in the line buffer exceeds the number of taps plus*/
+	/*the ceiling of the vertical scale ratio.*/
+	/**/
+	/*multi-line buffer prefetching is only done in the graphics pipe when the scaler is disabled or when upscaling and the vsr <= 0.8.'*/
+	/**/
+	/*the horizontal blank and chunk granularity factor is indirectly used indicate the interval of time required to transfer the source pixels.*/
+	/*the denominator of this term represents the total number of destination output pixels required for the input source pixels.*/
+	/*it applies when the lines in per line out is not 2 or 4.  it does not apply when there is a line buffer between the scl and blnd.*/
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			results->v_filter_init[i] =
-				bw_floor2(
-					bw_div(
-						(bw_add(
-							bw_add(
-								bw_add(
-									bw_int_to_fixed(
-										1),
-									results->v_taps[i]),
-								results->vsr[i]),
-							bw_mul(
-								bw_mul(
-									bw_int_to_fixed(
-										results->interlace_mode[i]),
-									bw_frc_to_fixed(
-										5,
-										10)),
-								results->vsr[i]))),
-						bw_int_to_fixed(2)),
-					bw_int_to_fixed(1));
-			if (mode_data->panning_and_bezel_adjustment
-				== bw_def_any_lines) {
-				results->v_filter_init[i] = bw_add(
-					results->v_filter_init[i],
-					bw_int_to_fixed(1));
+		if (data->enable[i]) {
+			data->v_filter_init[i] = bw_floor2(bw_div((bw_add(bw_add(bw_add(bw_int_to_fixed(1), data->v_taps[i]), data->vsr[i]), bw_mul(bw_mul(bw_int_to_fixed(data->interlace_mode[i]), bw_frc_to_fixed(5, 10)), data->vsr[i]))), bw_int_to_fixed(2)), bw_int_to_fixed(1));
+			if (data->panning_and_bezel_adjustment == bw_def_any_lines) {
+				data->v_filter_init[i] = bw_add(data->v_filter_init[i], bw_int_to_fixed(1));
 			}
-			if (stereo_mode[i] == bw_def_top_bottom) {
+			if (data->stereo_mode[i] == bw_def_top_bottom) {
 				v_filter_init_mode[i] = bw_def_manual;
-				results->v_filter_init[i] = bw_min2(
-					results->v_filter_init[i],
-					bw_int_to_fixed(4));
-			} else {
+				data->v_filter_init[i] = bw_min2(data->v_filter_init[i], bw_int_to_fixed(4));
+			}
+			else {
 				v_filter_init_mode[i] = bw_def_auto;
 			}
-			if (stereo_mode[i] == bw_def_top_bottom) {
-				results->num_lines_at_frame_start =
-					bw_int_to_fixed(1);
-			} else {
-				results->num_lines_at_frame_start =
-					bw_int_to_fixed(3);
+			if (data->stereo_mode[i] == bw_def_top_bottom) {
+				data->num_lines_at_frame_start = bw_int_to_fixed(1);
 			}
-			if ((bw_mtn(results->vsr[i], bw_int_to_fixed(1))
-				&& surface_type[i] == bw_def_graphics)
-				|| mode_data->panning_and_bezel_adjustment
-					== bw_def_any_lines) {
-				results->line_buffer_prefetch[i] = 0;
-			} else if ((((dceip->underlay_downscale_prefetch_enabled
-				== 1 && surface_type[i] != bw_def_graphics)
-				|| surface_type[i] == bw_def_graphics)
-				&& (bw_mtn(
-					results->lb_partitions[i],
-					bw_add(
-						results->v_taps[i],
-						bw_ceil2(
-							results->vsr[i],
-							bw_int_to_fixed(1))))))) {
-				results->line_buffer_prefetch[i] = 1;
-			} else {
-				results->line_buffer_prefetch[i] = 0;
+			else {
+				data->num_lines_at_frame_start = bw_int_to_fixed(3);
 			}
-			results->lb_lines_in_per_line_out_in_beginning_of_frame[i] =
-				bw_div(
-					bw_ceil2(
-						results->v_filter_init[i],
-						bw_int_to_fixed(
-							dceip->lines_interleaved_into_lb)),
-					results->num_lines_at_frame_start);
-			if (results->line_buffer_prefetch[i] == 1) {
-				results->lb_lines_in_per_line_out_in_middle_of_frame[i] =
-					bw_max2(
-						bw_int_to_fixed(1),
-						results->vsr[i]);
-			} else if (bw_leq(
-				results->vsr[i],
-				bw_int_to_fixed(1))) {
-				results->lb_lines_in_per_line_out_in_middle_of_frame[i] =
-					bw_int_to_fixed(1);
-			} else if (bw_leq(
-				results->vsr[i],
-				bw_int_to_fixed(4 / 3))) {
-				results->lb_lines_in_per_line_out_in_middle_of_frame[i] =
-					bw_div(
-						bw_int_to_fixed(4),
-						bw_int_to_fixed(3));
-			} else if (bw_leq(
-				results->vsr[i],
-				bw_int_to_fixed(6 / 4))) {
-				results->lb_lines_in_per_line_out_in_middle_of_frame[i] =
-					bw_div(
-						bw_int_to_fixed(6),
-						bw_int_to_fixed(4));
-			} else if (bw_leq(
-				results->vsr[i],
-				bw_int_to_fixed(2))) {
-				results->lb_lines_in_per_line_out_in_middle_of_frame[i] =
-					bw_int_to_fixed(2);
-			} else if (bw_leq(
-				results->vsr[i],
-				bw_int_to_fixed(3))) {
-				results->lb_lines_in_per_line_out_in_middle_of_frame[i] =
-					bw_int_to_fixed(3);
-			} else {
-				results->lb_lines_in_per_line_out_in_middle_of_frame[i] =
-					bw_int_to_fixed(4);
+			if ((bw_mtn(data->vsr[i], bw_int_to_fixed(1)) && surface_type[i] == bw_def_graphics) || data->panning_and_bezel_adjustment == bw_def_any_lines) {
+				data->line_buffer_prefetch[i] = 0;
 			}
-			if (results->line_buffer_prefetch[i] == 1
-				|| bw_equ(
-					results->lb_lines_in_per_line_out_in_middle_of_frame[i],
-					bw_int_to_fixed(2))
-				|| bw_equ(
-					results->lb_lines_in_per_line_out_in_middle_of_frame[i],
-					bw_int_to_fixed(4))) {
-				results->horizontal_blank_and_chunk_granularity_factor[i] =
-					bw_int_to_fixed(1);
-			} else {
-				results->horizontal_blank_and_chunk_granularity_factor[i] =
-					bw_div(
-						results->h_total[i],
-						(bw_div(
-							(bw_add(
-								results->h_total[i],
-								bw_div(
-									(bw_sub(
-										results->source_width_pixels[i],
-										bw_int_to_fixed(
-											dceip->chunk_width))),
-									results->hsr[i]))),
-							bw_int_to_fixed(2))));
+			else if ((((dceip->underlay_downscale_prefetch_enabled == 1 && surface_type[i] != bw_def_graphics) || surface_type[i] == bw_def_graphics) && (bw_mtn(data->lb_partitions[i], bw_add(data->v_taps[i], bw_ceil2(data->vsr[i], bw_int_to_fixed(1))))))) {
+				data->line_buffer_prefetch[i] = 1;
 			}
-			results->request_bandwidth[i] =
-				bw_div(
-					bw_mul(
-						bw_div(
-							bw_mul(
-								bw_div(
-									bw_mul(
-										bw_max2(
-											results->lb_lines_in_per_line_out_in_beginning_of_frame[i],
-											results->lb_lines_in_per_line_out_in_middle_of_frame[i]),
-										results->source_width_rounded_up_to_chunks[i]),
-									(bw_div(
-										results->h_total[i],
-										results->pixel_rate[i]))),
-								bw_int_to_fixed(
-									results->bytes_per_pixel[i])),
-							results->useful_bytes_per_request[i]),
-						results->lines_interleaved_in_mem_access[i]),
-					results->latency_hiding_lines[i]);
-			results->display_bandwidth[i] = bw_mul(
-				results->request_bandwidth[i],
-				results->bytes_per_request[i]);
+			else {
+				data->line_buffer_prefetch[i] = 0;
+			}
+			data->lb_lines_in_per_line_out_in_beginning_of_frame[i] = bw_div(bw_ceil2(data->v_filter_init[i], bw_int_to_fixed(dceip->lines_interleaved_into_lb)), data->num_lines_at_frame_start);
+			if (data->line_buffer_prefetch[i] == 1) {
+				data->lb_lines_in_per_line_out_in_middle_of_frame[i] = bw_max2(bw_int_to_fixed(1), data->vsr[i]);
+			}
+			else if (bw_leq(data->vsr[i], bw_int_to_fixed(1))) {
+				data->lb_lines_in_per_line_out_in_middle_of_frame[i] = bw_int_to_fixed(1);
+			}
+			else if (bw_leq(data->vsr[i], bw_int_to_fixed(4 / 3))) {
+				data->lb_lines_in_per_line_out_in_middle_of_frame[i] = bw_div(bw_int_to_fixed(4), bw_int_to_fixed(3));
+			}
+			else if (bw_leq(data->vsr[i], bw_int_to_fixed(6 / 4))) {
+				data->lb_lines_in_per_line_out_in_middle_of_frame[i] = bw_div(bw_int_to_fixed(6), bw_int_to_fixed(4));
+			}
+			else if (bw_leq(data->vsr[i], bw_int_to_fixed(2))) {
+				data->lb_lines_in_per_line_out_in_middle_of_frame[i] = bw_int_to_fixed(2);
+			}
+			else if (bw_leq(data->vsr[i], bw_int_to_fixed(3))) {
+				data->lb_lines_in_per_line_out_in_middle_of_frame[i] = bw_int_to_fixed(3);
+			}
+			else {
+				data->lb_lines_in_per_line_out_in_middle_of_frame[i] = bw_int_to_fixed(4);
+			}
+			if (data->line_buffer_prefetch[i] == 1 || bw_equ(data->lb_lines_in_per_line_out_in_middle_of_frame[i], bw_int_to_fixed(2)) || bw_equ(data->lb_lines_in_per_line_out_in_middle_of_frame[i], bw_int_to_fixed(4))) {
+				data->horizontal_blank_and_chunk_granularity_factor[i] = bw_int_to_fixed(1);
+			}
+			else {
+				data->horizontal_blank_and_chunk_granularity_factor[i] = bw_div(data->h_total[i], (bw_div((bw_add(data->h_total[i], bw_div((bw_sub(data->source_width_pixels[i], bw_int_to_fixed(dceip->chunk_width))), data->hsr[i]))), bw_int_to_fixed(2))));
+			}
+			data->request_bandwidth[i] = bw_div(bw_mul(bw_div(bw_mul(bw_div(bw_mul(bw_max2(data->lb_lines_in_per_line_out_in_beginning_of_frame[i], data->lb_lines_in_per_line_out_in_middle_of_frame[i]), data->source_width_rounded_up_to_chunks[i]), (bw_div(data->h_total[i], data->pixel_rate[i]))), bw_int_to_fixed(data->bytes_per_pixel[i])), data->useful_bytes_per_request[i]), data->lines_interleaved_in_mem_access[i]), data->latency_hiding_lines[i]);
+			data->display_bandwidth[i] = bw_mul(data->request_bandwidth[i], data->bytes_per_request[i]);
 		}
 	}
 	/*outstanding chunk request limit*/
 	/*if underlay buffer sharing is enabled, the data buffer size for underlay in 422 or 444 is the sum of the luma and chroma data buffer sizes.*/
 	/*underlay buffer sharing mode is only permitted in orthogonal rotation modes.*/
-	/*if there is only one display enabled, the data buffer size for graphics is doubled.*/
+	/**/
+	/*if there is only one display enabled, the dmif data buffer size for the graphics surface is increased by concatenating the adjacent buffers.*/
+	/**/
 	/*the memory chunk size in bytes is 1024 for the writeback, and 256 times the memory line interleaving and the bytes per pixel for graphics*/
 	/*and underlay.*/
+	/**/
 	/*the pipe chunk size uses 2 for line interleaving, except for the write back, in which case it is 1.*/
 	/*graphics and underlay data buffer size is adjusted (limited) using the outstanding chunk request limit if there is more than one*/
 	/*display enabled or if the dmif request buffer is not large enough for the total data buffer size.*/
@@ -1215,201 +814,116 @@ static void calculate_bandwidth(
 	/*the adjusted data buffer size is the product of the display bandwidth and the minimum effective data buffer size in terms of time,*/
 	/*rounded up to the chunk size in bytes, but should not exceed the original data buffer size*/
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
+		if (data->enable[i]) {
+			if ((dceip->dmif_pipe_en_fbc_chunk_tracker + 3 == i && fbc_enabled == 0 && tiling_mode[i] != bw_def_linear)) {
+				data->max_chunks_non_fbc_mode[i] = 128 - dmif_chunk_buff_margin;
+			}
+			else {
+				data->max_chunks_non_fbc_mode[i] = 16 - dmif_chunk_buff_margin;
+			}
+		}
+		if (data->fbc_en[i] == 1) {
+			max_chunks_fbc_mode = 128 - dmif_chunk_buff_margin;
+		}
+	}
+	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
+		if (data->enable[i]) {
 			switch (surface_type[i]) {
 			case bw_def_display_write_back420_luma:
-				results->data_buffer_size[i] =
-					bw_int_to_fixed(
-						dceip->display_write_back420_luma_mcifwr_buffer_size);
+				data->data_buffer_size[i] = bw_int_to_fixed(dceip->display_write_back420_luma_mcifwr_buffer_size);
 				break;
 			case bw_def_display_write_back420_chroma:
-				results->data_buffer_size[i] =
-					bw_int_to_fixed(
-						dceip->display_write_back420_chroma_mcifwr_buffer_size);
+				data->data_buffer_size[i] = bw_int_to_fixed(dceip->display_write_back420_chroma_mcifwr_buffer_size);
 				break;
 			case bw_def_underlay420_luma:
-				results->data_buffer_size[i] = bw_int_to_fixed(
-					dceip->underlay_luma_dmif_size);
+				data->data_buffer_size[i] = bw_int_to_fixed(dceip->underlay_luma_dmif_size);
 				break;
 			case bw_def_underlay420_chroma:
-				results->data_buffer_size[i] =
-					bw_div(
-						bw_int_to_fixed(
-							dceip->underlay_chroma_dmif_size),
-						bw_int_to_fixed(2));
+				data->data_buffer_size[i] = bw_div(bw_int_to_fixed(dceip->underlay_chroma_dmif_size), bw_int_to_fixed(2));
 				break;
-			case bw_def_underlay422:
-			case bw_def_underlay444:
-				if (results->orthogonal_rotation[i] == 0) {
-					results->data_buffer_size[i] =
-						bw_int_to_fixed(
-							dceip->underlay_luma_dmif_size);
-				} else {
-					results->data_buffer_size[i] =
-						bw_add(
-							bw_int_to_fixed(
-								dceip->underlay_luma_dmif_size),
-							bw_int_to_fixed(
-								dceip->underlay_chroma_dmif_size));
+			case bw_def_underlay422:case bw_def_underlay444:
+				if (data->orthogonal_rotation[i] == 0) {
+					data->data_buffer_size[i] = bw_int_to_fixed(dceip->underlay_luma_dmif_size);
+				}
+				else {
+					data->data_buffer_size[i] = bw_add(bw_int_to_fixed(dceip->underlay_luma_dmif_size), bw_int_to_fixed(dceip->underlay_chroma_dmif_size));
 				}
 				break;
 			default:
-				if (mode_data->number_of_displays == 1
-					&& bw_equ(
-						dceip->de_tiling_buffer,
-						bw_int_to_fixed(0))) {
-					if (mode_data->d0_fbc_enable) {
-						results->data_buffer_size[i] =
-							bw_mul(
-								bw_int_to_fixed(
-									dceip->max_dmif_buffer_allocated),
-								bw_int_to_fixed(
-									dceip->graphics_dmif_size));
-					} else {
-						/*the effective dmif buffer size in non-fbc mode is limited by the 16 entry chunk tracker*/
-						results->data_buffer_size[i] =
-							bw_mul(
-								bw_mul(
-									bw_int_to_fixed(
-										max_chunks_non_fbc_mode),
-									bw_int_to_fixed(
-										pixels_per_chunk)),
-								bw_int_to_fixed(
-									results->bytes_per_pixel[i]));
+				if (data->fbc_en[i] == 1) {
+					/*data_buffer_size(i) = max_dmif_buffer_allocated * graphics_dmif_size*/
+					if (data->number_of_displays == 1) {
+						data->data_buffer_size[i] = bw_min2(bw_mul(bw_mul(bw_int_to_fixed(max_chunks_fbc_mode), bw_int_to_fixed(pixels_per_chunk)), bw_int_to_fixed(data->bytes_per_pixel[i])), bw_mul(bw_int_to_fixed(dceip->max_dmif_buffer_allocated), bw_int_to_fixed(dceip->graphics_dmif_size)));
 					}
-				} else {
-					results->data_buffer_size[i] =
-						bw_int_to_fixed(
-							dceip->graphics_dmif_size);
+					else {
+						data->data_buffer_size[i] = bw_min2(bw_mul(bw_mul(bw_int_to_fixed(max_chunks_fbc_mode), bw_int_to_fixed(pixels_per_chunk)), bw_int_to_fixed(data->bytes_per_pixel[i])), bw_int_to_fixed(dceip->graphics_dmif_size));
+					}
+				}
+				else {
+					/*the effective dmif buffer size in non-fbc mode is limited by the 16 entry chunk tracker*/
+					if (data->number_of_displays == 1) {
+						data->data_buffer_size[i] = bw_min2(bw_mul(bw_mul(bw_int_to_fixed(data->max_chunks_non_fbc_mode[i]), bw_int_to_fixed(pixels_per_chunk)), bw_int_to_fixed(data->bytes_per_pixel[i])), bw_mul(bw_int_to_fixed(dceip->max_dmif_buffer_allocated), bw_int_to_fixed(dceip->graphics_dmif_size)));
+					}
+					else {
+						data->data_buffer_size[i] = bw_min2(bw_mul(bw_mul(bw_int_to_fixed(data->max_chunks_non_fbc_mode[i]), bw_int_to_fixed(pixels_per_chunk)), bw_int_to_fixed(data->bytes_per_pixel[i])), bw_int_to_fixed(dceip->graphics_dmif_size));
+					}
 				}
 				break;
 			}
-			if (surface_type[i] == bw_def_display_write_back420_luma
-				|| surface_type[i]
-					== bw_def_display_write_back420_chroma) {
-				results->memory_chunk_size_in_bytes[i] =
-					bw_int_to_fixed(1024);
-				results->pipe_chunk_size_in_bytes[i] =
-					bw_int_to_fixed(1024);
-			} else {
-				results->memory_chunk_size_in_bytes[i] =
-					bw_mul(
-						bw_mul(
-							bw_int_to_fixed(
-								dceip->chunk_width),
-							results->lines_interleaved_in_mem_access[i]),
-						bw_int_to_fixed(
-							results->bytes_per_pixel[i]));
-				results->pipe_chunk_size_in_bytes[i] =
-					bw_mul(
-						bw_mul(
-							bw_int_to_fixed(
-								dceip->chunk_width),
-							bw_int_to_fixed(
-								dceip->lines_interleaved_into_lb)),
-						bw_int_to_fixed(
-							results->bytes_per_pixel[i]));
+			if (surface_type[i] == bw_def_display_write_back420_luma || surface_type[i] == bw_def_display_write_back420_chroma) {
+				data->memory_chunk_size_in_bytes[i] = bw_int_to_fixed(1024);
+				data->pipe_chunk_size_in_bytes[i] = bw_int_to_fixed(1024);
+			}
+			else {
+				data->memory_chunk_size_in_bytes[i] = bw_mul(bw_mul(bw_int_to_fixed(dceip->chunk_width), data->lines_interleaved_in_mem_access[i]), bw_int_to_fixed(data->bytes_per_pixel[i]));
+				data->pipe_chunk_size_in_bytes[i] = bw_mul(bw_mul(bw_int_to_fixed(dceip->chunk_width), bw_int_to_fixed(dceip->lines_interleaved_into_lb)), bw_int_to_fixed(data->bytes_per_pixel[i]));
 			}
 		}
 	}
-	results->min_dmif_size_in_time = bw_int_to_fixed(9999);
-	results->min_mcifwr_size_in_time = bw_int_to_fixed(9999);
+	data->min_dmif_size_in_time = bw_int_to_fixed(9999);
+	data->min_mcifwr_size_in_time = bw_int_to_fixed(9999);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (surface_type[i] != bw_def_display_write_back420_luma
-				&& surface_type[i]
-					!= bw_def_display_write_back420_chroma) {
-				if (bw_ltn(
-					bw_div(
-						bw_div(
-							bw_mul(
-								results->data_buffer_size[i],
-								results->bytes_per_request[i]),
-							results->useful_bytes_per_request[i]),
-						results->display_bandwidth[i]),
-					results->min_dmif_size_in_time)) {
-					results->min_dmif_size_in_time =
-						bw_div(
-							bw_div(
-								bw_mul(
-									results->data_buffer_size[i],
-									results->bytes_per_request[i]),
-								results->useful_bytes_per_request[i]),
-							results->display_bandwidth[i]);
+		if (data->enable[i]) {
+			if (surface_type[i] != bw_def_display_write_back420_luma && surface_type[i] != bw_def_display_write_back420_chroma) {
+				if (bw_ltn(bw_div(bw_div(bw_mul(data->data_buffer_size[i], data->bytes_per_request[i]), data->useful_bytes_per_request[i]), data->display_bandwidth[i]), data->min_dmif_size_in_time)) {
+					data->min_dmif_size_in_time = bw_div(bw_div(bw_mul(data->data_buffer_size[i], data->bytes_per_request[i]), data->useful_bytes_per_request[i]), data->display_bandwidth[i]);
 				}
-			} else {
-				if (bw_ltn(
-					bw_div(
-						bw_div(
-							bw_mul(
-								results->data_buffer_size[i],
-								results->bytes_per_request[i]),
-							results->useful_bytes_per_request[i]),
-						results->display_bandwidth[i]),
-					results->min_mcifwr_size_in_time)) {
-					results->min_mcifwr_size_in_time =
-						bw_div(
-							bw_div(
-								bw_mul(
-									results->data_buffer_size[i],
-									results->bytes_per_request[i]),
-								results->useful_bytes_per_request[i]),
-							results->display_bandwidth[i]);
+			}
+			else {
+				if (bw_ltn(bw_div(bw_div(bw_mul(data->data_buffer_size[i], data->bytes_per_request[i]), data->useful_bytes_per_request[i]), data->display_bandwidth[i]), data->min_mcifwr_size_in_time)) {
+					data->min_mcifwr_size_in_time = bw_div(bw_div(bw_mul(data->data_buffer_size[i], data->bytes_per_request[i]), data->useful_bytes_per_request[i]), data->display_bandwidth[i]);
 				}
 			}
 		}
 	}
-	results->total_requests_for_dmif_size = bw_int_to_fixed(0);
+	data->total_requests_for_dmif_size = bw_int_to_fixed(0);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]
-			&& surface_type[i] != bw_def_display_write_back420_luma
-			&& surface_type[i]
-				!= bw_def_display_write_back420_chroma) {
-			results->total_requests_for_dmif_size = bw_add(
-				results->total_requests_for_dmif_size,
-				bw_div(
-					results->data_buffer_size[i],
-					results->useful_bytes_per_request[i]));
+		if (data->enable[i] && surface_type[i] != bw_def_display_write_back420_luma && surface_type[i] != bw_def_display_write_back420_chroma) {
+			data->total_requests_for_dmif_size = bw_add(data->total_requests_for_dmif_size, bw_div(data->data_buffer_size[i], data->useful_bytes_per_request[i]));
 		}
 	}
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (surface_type[i] != bw_def_display_write_back420_luma
-				&& surface_type[i]
-					!= bw_def_display_write_back420_chroma
-				&& dceip->limit_excessive_outstanding_dmif_requests
-				&& (mode_data->number_of_displays > 1
-					|| bw_mtn(
-						results->total_requests_for_dmif_size,
-						dceip->dmif_request_buffer_size))) {
-				results->adjusted_data_buffer_size[i] =
-					bw_min2(
-						results->data_buffer_size[i],
-						bw_ceil2(
-							bw_mul(
-								results->min_dmif_size_in_time,
-								results->display_bandwidth[i]),
-							results->memory_chunk_size_in_bytes[i]));
-			} else {
-				results->adjusted_data_buffer_size[i] =
-					results->data_buffer_size[i];
+		if (data->enable[i]) {
+			if (surface_type[i] != bw_def_display_write_back420_luma && surface_type[i] != bw_def_display_write_back420_chroma && dceip->limit_excessive_outstanding_dmif_requests && (data->number_of_displays > 1 || bw_mtn(data->total_requests_for_dmif_size, dceip->dmif_request_buffer_size))) {
+				data->adjusted_data_buffer_size[i] = bw_min2(data->data_buffer_size[i], bw_ceil2(bw_mul(data->min_dmif_size_in_time, data->display_bandwidth[i]), data->memory_chunk_size_in_bytes[i]));
+			}
+			else {
+				data->adjusted_data_buffer_size[i] = data->data_buffer_size[i];
 			}
 		}
 	}
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if ((mode_data->number_of_displays == 1
-				&& results->number_of_underlay_surfaces == 0)) {
+		if (data->enable[i]) {
+			if ((data->number_of_displays == 1 && data->number_of_underlay_surfaces == 0)) {
 				/*set maximum chunk limit if only one graphic pipe is enabled*/
-				results->outstanding_chunk_request_limit[i] =
-					bw_int_to_fixed(255);
-			} else {
-				results->outstanding_chunk_request_limit[i] =
-					bw_ceil2(
-						bw_div(
-							results->adjusted_data_buffer_size[i],
-							results->pipe_chunk_size_in_bytes[i]),
-						bw_int_to_fixed(1));
+				data->outstanding_chunk_request_limit[i] = bw_int_to_fixed(127);
+			}
+			else {
+				data->outstanding_chunk_request_limit[i] = bw_ceil2(bw_div(data->adjusted_data_buffer_size[i], data->pipe_chunk_size_in_bytes[i]), bw_int_to_fixed(1));
+				/*clamp maximum chunk limit in the graphic display pipe*/
+				if ((i >= 4)) {
+					data->outstanding_chunk_request_limit[i] = bw_max2(bw_int_to_fixed(127), data->outstanding_chunk_request_limit[i]);
+				}
 			}
 		}
 	}
@@ -1422,179 +936,75 @@ static void calculate_bandwidth(
 	/*the pte requests in the vblank is the product of the number of pte request rows times the number of pte requests in a row*/
 	/*the number of pte requests in a row is the quotient of the source width divided by 256, multiplied by the pte requests per chunk, rounded up to even, multiplied by the scatter-gather row height and divided by the scatter-gather page height*/
 	/*the pte requests per chunk is 256 divided by the scatter-gather page width and the useful pt_es per pte request*/
-	if (mode_data->number_of_displays > 1
-		|| (mode_data->graphics_rotation_angle != 0
-			&& mode_data->graphics_rotation_angle != 180)) {
-		results->peak_pte_request_to_eviction_ratio_limiting =
-			dceip->peak_pte_request_to_eviction_ratio_limiting_multiple_displays_or_single_rotated_display;
-	} else {
-		results->peak_pte_request_to_eviction_ratio_limiting =
-			dceip->peak_pte_request_to_eviction_ratio_limiting_single_display_no_rotation;
+	if (data->number_of_displays > 1 || (bw_neq(data->rotation_angle[4], bw_int_to_fixed(0)) && bw_neq(data->rotation_angle[4], bw_int_to_fixed(180)))) {
+		data->peak_pte_request_to_eviction_ratio_limiting = dceip->peak_pte_request_to_eviction_ratio_limiting_multiple_displays_or_single_rotated_display;
+	}
+	else {
+		data->peak_pte_request_to_eviction_ratio_limiting = dceip->peak_pte_request_to_eviction_ratio_limiting_single_display_no_rotation;
 	}
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]
-			&& results->scatter_gather_enable_for_pipe[i] == 1) {
+		if (data->enable[i] && data->scatter_gather_enable_for_pipe[i] == 1) {
 			if (tiling_mode[i] == bw_def_linear) {
-				results->useful_pte_per_pte_request =
-					bw_int_to_fixed(8);
-				results->scatter_gather_page_width[i] = bw_div(
-					bw_int_to_fixed(4096),
-					bw_int_to_fixed(
-						results->bytes_per_pixel[i]));
-				results->scatter_gather_page_height[i] =
-					bw_int_to_fixed(1);
-				results->scatter_gather_pte_request_rows =
-					bw_int_to_fixed(1);
-				results->scatter_gather_row_height =
-					bw_int_to_fixed(
-						dceip->scatter_gather_lines_of_pte_prefetching_in_linear_mode);
-			} else if (bw_equ(
-				results->rotation_angle[i],
-				bw_int_to_fixed(0))
-				|| bw_equ(
-					results->rotation_angle[i],
-					bw_int_to_fixed(180))) {
-				results->useful_pte_per_pte_request =
-					bw_int_to_fixed(8);
-				switch (results->bytes_per_pixel[i]) {
-				case 4:
-					results->scatter_gather_page_width[i] =
-						bw_int_to_fixed(32);
-					results->scatter_gather_page_height[i] =
-						bw_int_to_fixed(32);
-					break;
-				case 2:
-					results->scatter_gather_page_width[i] =
-						bw_int_to_fixed(64);
-					results->scatter_gather_page_height[i] =
-						bw_int_to_fixed(32);
-					break;
-				default:
-					results->scatter_gather_page_width[i] =
-						bw_int_to_fixed(64);
-					results->scatter_gather_page_height[i] =
-						bw_int_to_fixed(64);
-					break;
-				}
-				results->scatter_gather_pte_request_rows =
-					bw_int_to_fixed(
-						dceip->scatter_gather_pte_request_rows_in_tiling_mode);
-				results->scatter_gather_row_height =
-					results->scatter_gather_page_height[i];
-			} else {
-				results->useful_pte_per_pte_request =
-					bw_int_to_fixed(1);
-				switch (results->bytes_per_pixel[i]) {
-				case 4:
-					results->scatter_gather_page_width[i] =
-						bw_int_to_fixed(32);
-					results->scatter_gather_page_height[i] =
-						bw_int_to_fixed(32);
-					break;
-				case 2:
-					results->scatter_gather_page_width[i] =
-						bw_int_to_fixed(32);
-					results->scatter_gather_page_height[i] =
-						bw_int_to_fixed(64);
-					break;
-				default:
-					results->scatter_gather_page_width[i] =
-						bw_int_to_fixed(64);
-					results->scatter_gather_page_height[i] =
-						bw_int_to_fixed(64);
-					break;
-				}
-				results->scatter_gather_pte_request_rows =
-					bw_int_to_fixed(
-						dceip->scatter_gather_pte_request_rows_in_tiling_mode);
-				results->scatter_gather_row_height =
-					results->scatter_gather_page_height[i];
+				data->useful_pte_per_pte_request = bw_int_to_fixed(8);
+				data->scatter_gather_page_width[i] = bw_div(bw_int_to_fixed(4096), bw_int_to_fixed(data->bytes_per_pixel[i]));
+				data->scatter_gather_page_height[i] = bw_int_to_fixed(1);
+				data->scatter_gather_pte_request_rows = bw_int_to_fixed(1);
+				data->scatter_gather_row_height = bw_int_to_fixed(dceip->scatter_gather_lines_of_pte_prefetching_in_linear_mode);
 			}
-			results->pte_request_per_chunk[i] = bw_div(
-				bw_div(
-					bw_int_to_fixed(dceip->chunk_width),
-					results->scatter_gather_page_width[i]),
-				results->useful_pte_per_pte_request);
-			results->scatter_gather_pte_requests_in_row[i] =
-				bw_div(
-					bw_mul(
-						bw_ceil2(
-							bw_mul(
-								bw_div(
-									results->source_width_rounded_up_to_chunks[i],
-									bw_int_to_fixed(
-										dceip->chunk_width)),
-								results->pte_request_per_chunk[i]),
-							bw_int_to_fixed(1)),
-						results->scatter_gather_row_height),
-					results->scatter_gather_page_height[i]);
-			results->scatter_gather_pte_requests_in_vblank = bw_mul(
-				results->scatter_gather_pte_request_rows,
-				results->scatter_gather_pte_requests_in_row[i]);
-			if (bw_equ(
-				results->peak_pte_request_to_eviction_ratio_limiting,
-				bw_int_to_fixed(0))) {
-				results->scatter_gather_pte_request_limit[i] =
-					results->scatter_gather_pte_requests_in_vblank;
-			} else {
-				results->scatter_gather_pte_request_limit[i] =
-					bw_max2(
-						dceip->minimum_outstanding_pte_request_limit,
-						bw_min2(
-							results->scatter_gather_pte_requests_in_vblank,
-							bw_ceil2(
-								bw_mul(
-									bw_mul(
-										bw_div(
-											bw_ceil2(
-												results->adjusted_data_buffer_size[i],
-												results->memory_chunk_size_in_bytes[i]),
-											results->memory_chunk_size_in_bytes[i]),
-										results->pte_request_per_chunk[i]),
-									results->peak_pte_request_to_eviction_ratio_limiting),
-								bw_int_to_fixed(
-									1))));
+			else if (bw_equ(data->rotation_angle[i], bw_int_to_fixed(0)) || bw_equ(data->rotation_angle[i], bw_int_to_fixed(180))) {
+				data->useful_pte_per_pte_request = bw_int_to_fixed(8);
+				switch (data->bytes_per_pixel[i]) {
+				case 4:
+					data->scatter_gather_page_width[i] = bw_int_to_fixed(32);
+					data->scatter_gather_page_height[i] = bw_int_to_fixed(32);
+					break;
+				case 2:
+					data->scatter_gather_page_width[i] = bw_int_to_fixed(64);
+					data->scatter_gather_page_height[i] = bw_int_to_fixed(32);
+					break;
+				default:
+					data->scatter_gather_page_width[i] = bw_int_to_fixed(64);
+					data->scatter_gather_page_height[i] = bw_int_to_fixed(64);
+					break;
+				}
+				data->scatter_gather_pte_request_rows = bw_int_to_fixed(dceip->scatter_gather_pte_request_rows_in_tiling_mode);
+				data->scatter_gather_row_height = data->scatter_gather_page_height[i];
+			}
+			else {
+				data->useful_pte_per_pte_request = bw_int_to_fixed(1);
+				switch (data->bytes_per_pixel[i]) {
+				case 4:
+					data->scatter_gather_page_width[i] = bw_int_to_fixed(32);
+					data->scatter_gather_page_height[i] = bw_int_to_fixed(32);
+					break;
+				case 2:
+					data->scatter_gather_page_width[i] = bw_int_to_fixed(32);
+					data->scatter_gather_page_height[i] = bw_int_to_fixed(64);
+					break;
+				default:
+					data->scatter_gather_page_width[i] = bw_int_to_fixed(64);
+					data->scatter_gather_page_height[i] = bw_int_to_fixed(64);
+					break;
+				}
+				data->scatter_gather_pte_request_rows = bw_int_to_fixed(dceip->scatter_gather_pte_request_rows_in_tiling_mode);
+				data->scatter_gather_row_height = data->scatter_gather_page_height[i];
+			}
+			data->pte_request_per_chunk[i] = bw_div(bw_div(bw_int_to_fixed(dceip->chunk_width), data->scatter_gather_page_width[i]), data->useful_pte_per_pte_request);
+			data->scatter_gather_pte_requests_in_row[i] = bw_div(bw_mul(bw_ceil2(bw_mul(bw_div(data->source_width_rounded_up_to_chunks[i], bw_int_to_fixed(dceip->chunk_width)), data->pte_request_per_chunk[i]), bw_int_to_fixed(1)), data->scatter_gather_row_height), data->scatter_gather_page_height[i]);
+			data->scatter_gather_pte_requests_in_vblank = bw_mul(data->scatter_gather_pte_request_rows, data->scatter_gather_pte_requests_in_row[i]);
+			if (bw_equ(data->peak_pte_request_to_eviction_ratio_limiting, bw_int_to_fixed(0))) {
+				data->scatter_gather_pte_request_limit[i] = data->scatter_gather_pte_requests_in_vblank;
+			}
+			else {
+				data->scatter_gather_pte_request_limit[i] = bw_max2(dceip->minimum_outstanding_pte_request_limit, bw_min2(data->scatter_gather_pte_requests_in_vblank, bw_ceil2(bw_mul(bw_mul(bw_div(bw_ceil2(data->adjusted_data_buffer_size[i], data->memory_chunk_size_in_bytes[i]), data->memory_chunk_size_in_bytes[i]), data->pte_request_per_chunk[i]), data->peak_pte_request_to_eviction_ratio_limiting), bw_int_to_fixed(1))));
 			}
 		}
 	}
 	/*pitch padding recommended for efficiency in linear mode*/
 	/*in linear mode graphics or underlay with scatter gather, a pitch that is a multiple of the channel interleave (256 bytes) times the channel-bank rotation is not efficient*/
 	/*if that is the case it is recommended to pad the pitch by at least 256 pixels*/
-	results->inefficient_linear_pitch_in_bytes = bw_mul(
-		bw_mul(
-			bw_int_to_fixed(256),
-			bw_int_to_fixed(vbios->number_of_dram_banks)),
-		bw_int_to_fixed(vbios->number_of_dram_channels));
-	switch (mode_data->underlay_surface_type) {
-	case bw_def_420:
-		results->inefficient_underlay_pitch_in_pixels =
-			results->inefficient_linear_pitch_in_bytes;
-		break;
-	case bw_def_422:
-		results->inefficient_underlay_pitch_in_pixels = bw_div(
-			results->inefficient_linear_pitch_in_bytes,
-			bw_int_to_fixed(2));
-		break;
-	default:
-		results->inefficient_underlay_pitch_in_pixels = bw_div(
-			results->inefficient_linear_pitch_in_bytes,
-			bw_int_to_fixed(4));
-		break;
-	}
-	if (mode_data->underlay_tiling_mode == bw_def_linear
-		&& vbios->scatter_gather_enable == 1
-		&& bw_equ(
-			bw_mod(
-				bw_int_to_fixed(
-					mode_data->underlay_pitch_in_pixels),
-				results->inefficient_underlay_pitch_in_pixels),
-			bw_int_to_fixed(0))) {
-		results->minimum_underlay_pitch_padding_recommended_for_efficiency =
-			bw_int_to_fixed(256);
-	} else {
-		results->minimum_underlay_pitch_padding_recommended_for_efficiency =
-			bw_int_to_fixed(0);
-	}
+	data->inefficient_linear_pitch_in_bytes = bw_mul(bw_mul(bw_int_to_fixed(256), bw_int_to_fixed(vbios->number_of_dram_banks)), bw_int_to_fixed(data->number_of_dram_channels));
+
 	/*pixel transfer time*/
 	/*the dmif and mcifwr yclk(pclk) required is the one that allows the transfer of all pipe's data buffer size in memory in the time for data transfer*/
 	/*for dmif, pte and cursor requests have to be included.*/
@@ -1614,411 +1024,191 @@ static void calculate_bandwidth(
 	/*the source pixels for the first output pixel is 512 if the scaler vertical filter initialization value is greater than 2, and it is 4 times the source width if it is greater than 4.*/
 	/*the source pixels for the last output pixel is the source width times the scaler vertical filter initialization value rounded up to even*/
 	/*the source data for these pixels is the number of pixels times the bytes per pixel times the bytes per request divided by the useful bytes per request.*/
-	results->cursor_total_data = bw_int_to_fixed(0);
-	results->cursor_total_request_groups = bw_int_to_fixed(0);
-	results->scatter_gather_total_pte_requests = bw_int_to_fixed(0);
-	results->scatter_gather_total_pte_request_groups = bw_int_to_fixed(0);
+	data->cursor_total_data = bw_int_to_fixed(0);
+	data->cursor_total_request_groups = bw_int_to_fixed(0);
+	data->scatter_gather_total_pte_requests = bw_int_to_fixed(0);
+	data->scatter_gather_total_pte_request_groups = bw_int_to_fixed(0);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			results->cursor_total_data =
-				bw_add(
-					results->cursor_total_data,
-					bw_mul(
-						bw_mul(
-							bw_int_to_fixed(2),
-							results->cursor_width_pixels[i]),
-						bw_int_to_fixed(4)));
-			results->cursor_total_request_groups = bw_add(
-				results->cursor_total_request_groups,
-				bw_ceil2(
-					bw_div(
-						results->cursor_width_pixels[i],
-						dceip->cursor_chunk_width),
-					bw_int_to_fixed(1)));
-			if (results->scatter_gather_enable_for_pipe[i]) {
-				results->scatter_gather_total_pte_requests =
-					bw_add(
-						results->scatter_gather_total_pte_requests,
-						results->scatter_gather_pte_request_limit[i]);
-				results->scatter_gather_total_pte_request_groups =
-					bw_add(
-						results->scatter_gather_total_pte_request_groups,
-						bw_ceil2(
-							bw_div(
-								results->scatter_gather_pte_request_limit[i],
-								bw_ceil2(
-									results->pte_request_per_chunk[i],
-									bw_int_to_fixed(
-										1))),
-							bw_int_to_fixed(1)));
+		if (data->enable[i]) {
+			data->cursor_total_data = bw_add(data->cursor_total_data, bw_mul(bw_mul(bw_int_to_fixed(2), data->cursor_width_pixels[i]), bw_int_to_fixed(4)));
+			if (dceip->large_cursor == 1) {
+				data->cursor_total_request_groups = bw_add(data->cursor_total_request_groups, bw_int_to_fixed((dceip->cursor_max_outstanding_group_num + 1)));
+			}
+			else {
+				data->cursor_total_request_groups = bw_add(data->cursor_total_request_groups, bw_ceil2(bw_div(data->cursor_width_pixels[i], dceip->cursor_chunk_width), bw_int_to_fixed(1)));
+			}
+			if (data->scatter_gather_enable_for_pipe[i]) {
+				data->scatter_gather_total_pte_requests = bw_add(data->scatter_gather_total_pte_requests, data->scatter_gather_pte_request_limit[i]);
+				data->scatter_gather_total_pte_request_groups = bw_add(data->scatter_gather_total_pte_request_groups, bw_ceil2(bw_div(data->scatter_gather_pte_request_limit[i], bw_ceil2(data->pte_request_per_chunk[i], bw_int_to_fixed(1))), bw_int_to_fixed(1)));
 			}
 		}
 	}
-	results->tile_width_in_pixels = bw_int_to_fixed(8);
-	results->dmif_total_number_of_data_request_page_close_open =
-		bw_int_to_fixed(0);
-	results->mcifwr_total_number_of_data_request_page_close_open =
-		bw_int_to_fixed(0);
+	data->tile_width_in_pixels = bw_int_to_fixed(8);
+	data->dmif_total_number_of_data_request_page_close_open = bw_int_to_fixed(0);
+	data->mcifwr_total_number_of_data_request_page_close_open = bw_int_to_fixed(0);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (results->scatter_gather_enable_for_pipe[i] == 1
-				&& tiling_mode[i] != bw_def_linear) {
-				results->bytes_per_page_close_open =
-					bw_mul(
-						results->lines_interleaved_in_mem_access[i],
-						bw_max2(
-							bw_mul(
-								bw_mul(
-									bw_mul(
-										bw_int_to_fixed(
-											results->bytes_per_pixel[i]),
-										results->tile_width_in_pixels),
-									bw_int_to_fixed(
-										vbios->number_of_dram_banks)),
-								bw_int_to_fixed(
-									vbios->number_of_dram_channels)),
-							bw_mul(
-								bw_int_to_fixed(
-									results->bytes_per_pixel[i]),
-								results->scatter_gather_page_width[i])));
-			} else if (results->scatter_gather_enable_for_pipe[i]
-				== 1 && tiling_mode[i] == bw_def_linear
-				&& bw_equ(
-					bw_mod(
-						(bw_mul(
-							results->pitch_in_pixels_after_surface_type[i],
-							bw_int_to_fixed(
-								results->bytes_per_pixel[i]))),
-						results->inefficient_linear_pitch_in_bytes),
-					bw_int_to_fixed(0))) {
-				results->bytes_per_page_close_open =
-					dceip->linear_mode_line_request_alternation_slice;
-			} else {
-				results->bytes_per_page_close_open =
-					results->memory_chunk_size_in_bytes[i];
+		if (data->enable[i]) {
+			if (data->scatter_gather_enable_for_pipe[i] == 1 && tiling_mode[i] != bw_def_linear) {
+				data->bytes_per_page_close_open = bw_mul(data->lines_interleaved_in_mem_access[i], bw_max2(bw_mul(bw_mul(bw_mul(bw_int_to_fixed(data->bytes_per_pixel[i]), data->tile_width_in_pixels), bw_int_to_fixed(vbios->number_of_dram_banks)), bw_int_to_fixed(data->number_of_dram_channels)), bw_mul(bw_int_to_fixed(data->bytes_per_pixel[i]), data->scatter_gather_page_width[i])));
 			}
-			if (surface_type[i] != bw_def_display_write_back420_luma
-				&& surface_type[i]
-					!= bw_def_display_write_back420_chroma) {
-				results->dmif_total_number_of_data_request_page_close_open =
-					bw_add(
-						results->dmif_total_number_of_data_request_page_close_open,
-						bw_div(
-							bw_ceil2(
-								results->adjusted_data_buffer_size[i],
-								results->memory_chunk_size_in_bytes[i]),
-							results->bytes_per_page_close_open));
-			} else {
-				results->mcifwr_total_number_of_data_request_page_close_open =
-					bw_add(
-						results->mcifwr_total_number_of_data_request_page_close_open,
-						bw_div(
-							bw_ceil2(
-								results->adjusted_data_buffer_size[i],
-								results->memory_chunk_size_in_bytes[i]),
-							results->bytes_per_page_close_open));
+			else if (data->scatter_gather_enable_for_pipe[i] == 1 && tiling_mode[i] == bw_def_linear && bw_equ(bw_mod((bw_mul(data->pitch_in_pixels_after_surface_type[i], bw_int_to_fixed(data->bytes_per_pixel[i]))), data->inefficient_linear_pitch_in_bytes), bw_int_to_fixed(0))) {
+				data->bytes_per_page_close_open = dceip->linear_mode_line_request_alternation_slice;
+			}
+			else {
+				data->bytes_per_page_close_open = data->memory_chunk_size_in_bytes[i];
+			}
+			if (surface_type[i] != bw_def_display_write_back420_luma && surface_type[i] != bw_def_display_write_back420_chroma) {
+				data->dmif_total_number_of_data_request_page_close_open = bw_add(data->dmif_total_number_of_data_request_page_close_open, bw_div(bw_ceil2(data->adjusted_data_buffer_size[i], data->memory_chunk_size_in_bytes[i]), data->bytes_per_page_close_open));
+			}
+			else {
+				data->mcifwr_total_number_of_data_request_page_close_open = bw_add(data->mcifwr_total_number_of_data_request_page_close_open, bw_div(bw_ceil2(data->adjusted_data_buffer_size[i], data->memory_chunk_size_in_bytes[i]), data->bytes_per_page_close_open));
 			}
 		}
 	}
-	results->dmif_total_page_close_open_time =
-		bw_div(
-			bw_mul(
-				(bw_add(
-					bw_add(
-						results->dmif_total_number_of_data_request_page_close_open,
-						results->scatter_gather_total_pte_request_groups),
-					results->cursor_total_request_groups)),
-				vbios->trc),
-			bw_int_to_fixed(1000));
-	results->mcifwr_total_page_close_open_time =
-		bw_div(
-			bw_mul(
-				results->mcifwr_total_number_of_data_request_page_close_open,
-				vbios->trc),
-			bw_int_to_fixed(1000));
+	data->dmif_total_page_close_open_time = bw_div(bw_mul((bw_add(bw_add(data->dmif_total_number_of_data_request_page_close_open, data->scatter_gather_total_pte_request_groups), data->cursor_total_request_groups)), vbios->trc), bw_int_to_fixed(1000));
+	data->mcifwr_total_page_close_open_time = bw_div(bw_mul(data->mcifwr_total_number_of_data_request_page_close_open, vbios->trc), bw_int_to_fixed(1000));
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			results->adjusted_data_buffer_size_in_memory[i] =
-				bw_div(
-					bw_mul(
-						results->adjusted_data_buffer_size[i],
-						results->bytes_per_request[i]),
-					results->useful_bytes_per_request[i]);
+		if (data->enable[i]) {
+			data->adjusted_data_buffer_size_in_memory[i] = bw_div(bw_mul(data->adjusted_data_buffer_size[i], data->bytes_per_request[i]), data->useful_bytes_per_request[i]);
 		}
 	}
-	results->total_requests_for_adjusted_dmif_size = bw_int_to_fixed(0);
+	data->total_requests_for_adjusted_dmif_size = bw_int_to_fixed(0);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (surface_type[i] != bw_def_display_write_back420_luma
-				&& surface_type[i]
-					!= bw_def_display_write_back420_chroma) {
-				results->total_requests_for_adjusted_dmif_size =
-					bw_add(
-						results->total_requests_for_adjusted_dmif_size,
-						bw_div(
-							results->adjusted_data_buffer_size[i],
-							results->useful_bytes_per_request[i]));
+		if (data->enable[i]) {
+			if (surface_type[i] != bw_def_display_write_back420_luma && surface_type[i] != bw_def_display_write_back420_chroma) {
+				data->total_requests_for_adjusted_dmif_size = bw_add(data->total_requests_for_adjusted_dmif_size, bw_div(data->adjusted_data_buffer_size[i], data->useful_bytes_per_request[i]));
 			}
 		}
 	}
-	if (dceip->dcfclk_request_generation == 1) {
-		results->total_dmifmc_urgent_trips = bw_int_to_fixed(1);
-	} else {
-		results->total_dmifmc_urgent_trips =
-			bw_ceil2(
-				bw_div(
-					results->total_requests_for_adjusted_dmif_size,
-					(bw_add(
-						dceip->dmif_request_buffer_size,
-						bw_int_to_fixed(
-							vbios->number_of_request_slots_gmc_reserves_for_dmif_per_channel
-								* vbios->number_of_dram_channels)))),
-				bw_int_to_fixed(1));
-	}
-	results->total_dmifmc_urgent_latency = bw_mul(
-		vbios->dmifmc_urgent_latency,
-		results->total_dmifmc_urgent_trips);
-	results->total_display_reads_required_data = bw_int_to_fixed(0);
-	results->total_display_reads_required_dram_access_data =
-		bw_int_to_fixed(0);
-	results->total_display_writes_required_data = bw_int_to_fixed(0);
-	results->total_display_writes_required_dram_access_data =
-		bw_int_to_fixed(0);
+	data->total_dmifmc_urgent_trips = bw_ceil2(bw_div(data->total_requests_for_adjusted_dmif_size, (bw_add(dceip->dmif_request_buffer_size, bw_int_to_fixed(vbios->number_of_request_slots_gmc_reserves_for_dmif_per_channel * data->number_of_dram_channels)))), bw_int_to_fixed(1));
+	data->total_dmifmc_urgent_latency = bw_mul(vbios->dmifmc_urgent_latency, data->total_dmifmc_urgent_trips);
+	data->total_display_reads_required_data = bw_int_to_fixed(0);
+	data->total_display_reads_required_dram_access_data = bw_int_to_fixed(0);
+	data->total_display_writes_required_data = bw_int_to_fixed(0);
+	data->total_display_writes_required_dram_access_data = bw_int_to_fixed(0);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (surface_type[i] != bw_def_display_write_back420_luma
-				&& surface_type[i]
-					!= bw_def_display_write_back420_chroma) {
-				results->display_reads_required_data =
-					results->adjusted_data_buffer_size_in_memory[i];
-				results->display_reads_required_dram_access_data =
-					bw_mul(
-						results->adjusted_data_buffer_size_in_memory[i],
-						bw_ceil2(
-							bw_div(
-								bw_int_to_fixed(
-									vbios->dram_channel_width_in_bits),
-								results->bytes_per_request[i]),
-							bw_int_to_fixed(1)));
-				if (results->access_one_channel_only[i]) {
-					results->display_reads_required_dram_access_data =
-						bw_mul(
-							results->display_reads_required_dram_access_data,
-							bw_int_to_fixed(
-								vbios->number_of_dram_channels));
+		if (data->enable[i]) {
+			if (surface_type[i] != bw_def_display_write_back420_luma && surface_type[i] != bw_def_display_write_back420_chroma) {
+				data->display_reads_required_data = data->adjusted_data_buffer_size_in_memory[i];
+				/*for hbm memories, each channel is split into 2 pseudo-channels that are each 64 bits in width.  each*/
+				/*pseudo-channel may be read independently of one another.*/
+				/*the read burst length (bl) for hbm memories is 4, so each read command will access 32 bytes of data.*/
+				/*the 64 or 32 byte sized data is stored in one pseudo-channel.*/
+				/*it will take 4 memclk cycles or 8 yclk cycles to fetch 64 bytes of data from the hbm memory (2 read commands).*/
+				/*it will take 2 memclk cycles or 4 yclk cycles to fetch 32 bytes of data from the hbm memory (1 read command).*/
+				/*for gddr5/ddr4 memories, there is additional overhead if the size of the request is smaller than 64 bytes.*/
+				/*the read burst length (bl) for gddr5/ddr4 memories is 8, regardless of the size of the data request.*/
+				/*therefore it will require 8 cycles to fetch 64 or 32 bytes of data from the memory.*/
+				/*the memory efficiency will be 50% for the 32 byte sized data.*/
+				if (vbios->memory_type == bw_def_hbm) {
+					data->display_reads_required_dram_access_data = data->adjusted_data_buffer_size_in_memory[i];
 				}
-				results->total_display_reads_required_data =
-					bw_add(
-						results->total_display_reads_required_data,
-						results->display_reads_required_data);
-				results->total_display_reads_required_dram_access_data =
-					bw_add(
-						results->total_display_reads_required_dram_access_data,
-						results->display_reads_required_dram_access_data);
-			} else {
-				results->total_display_writes_required_data =
-					bw_add(
-						results->total_display_writes_required_data,
-						results->adjusted_data_buffer_size_in_memory[i]);
-				results->total_display_writes_required_dram_access_data =
-					bw_add(
-						results->total_display_writes_required_dram_access_data,
-						bw_mul(
-							results->adjusted_data_buffer_size_in_memory[i],
-							bw_ceil2(
-								bw_div(
-									bw_int_to_fixed(
-										vbios->dram_channel_width_in_bits),
-									results->bytes_per_request[i]),
-								bw_int_to_fixed(
-									1))));
+				else {
+					data->display_reads_required_dram_access_data = bw_mul(data->adjusted_data_buffer_size_in_memory[i], bw_ceil2(bw_div(bw_int_to_fixed((8 * vbios->dram_channel_width_in_bits / 8)), data->bytes_per_request[i]), bw_int_to_fixed(1)));
+				}
+				data->total_display_reads_required_data = bw_add(data->total_display_reads_required_data, data->display_reads_required_data);
+				data->total_display_reads_required_dram_access_data = bw_add(data->total_display_reads_required_dram_access_data, data->display_reads_required_dram_access_data);
+			}
+			else {
+				data->total_display_writes_required_data = bw_add(data->total_display_writes_required_data, data->adjusted_data_buffer_size_in_memory[i]);
+				data->total_display_writes_required_dram_access_data = bw_add(data->total_display_writes_required_dram_access_data, bw_mul(data->adjusted_data_buffer_size_in_memory[i], bw_ceil2(bw_div(bw_int_to_fixed(vbios->dram_channel_width_in_bits), data->bytes_per_request[i]), bw_int_to_fixed(1))));
 			}
 		}
 	}
-	results->total_display_reads_required_data = bw_add(
-		bw_add(
-			results->total_display_reads_required_data,
-			results->cursor_total_data),
-		bw_mul(
-			results->scatter_gather_total_pte_requests,
-			bw_int_to_fixed(64)));
-	results->total_display_reads_required_dram_access_data = bw_add(
-		bw_add(
-			results->total_display_reads_required_dram_access_data,
-			results->cursor_total_data),
-		bw_mul(
-			results->scatter_gather_total_pte_requests,
-			bw_int_to_fixed(64)));
+	data->total_display_reads_required_data = bw_add(bw_add(data->total_display_reads_required_data, data->cursor_total_data), bw_mul(data->scatter_gather_total_pte_requests, bw_int_to_fixed(64)));
+	data->total_display_reads_required_dram_access_data = bw_add(bw_add(data->total_display_reads_required_dram_access_data, data->cursor_total_data), bw_mul(data->scatter_gather_total_pte_requests, bw_int_to_fixed(64)));
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (bw_mtn(
-				results->v_filter_init[i],
-				bw_int_to_fixed(4))) {
-				results->src_pixels_for_first_output_pixel[i] =
-					bw_mul(
-						bw_int_to_fixed(4),
-						results->source_width_rounded_up_to_chunks[i]);
-			} else {
-				if (bw_mtn(
-					results->v_filter_init[i],
-					bw_int_to_fixed(2))) {
-					results->src_pixels_for_first_output_pixel[i] =
-						bw_int_to_fixed(512);
-				} else {
-					results->src_pixels_for_first_output_pixel[i] =
-						bw_int_to_fixed(0);
+		if (data->enable[i]) {
+			if (bw_mtn(data->v_filter_init[i], bw_int_to_fixed(4))) {
+				data->src_pixels_for_first_output_pixel[i] = bw_mul(bw_int_to_fixed(4), data->source_width_rounded_up_to_chunks[i]);
+			}
+			else {
+				if (bw_mtn(data->v_filter_init[i], bw_int_to_fixed(2))) {
+					data->src_pixels_for_first_output_pixel[i] = bw_int_to_fixed(512);
+				}
+				else {
+					data->src_pixels_for_first_output_pixel[i] = bw_int_to_fixed(0);
 				}
 			}
-			results->src_data_for_first_output_pixel[i] =
-				bw_div(
-					bw_mul(
-						bw_mul(
-							results->src_pixels_for_first_output_pixel[i],
-							bw_int_to_fixed(
-								results->bytes_per_pixel[i])),
-						results->bytes_per_request[i]),
-					results->useful_bytes_per_request[i]);
-			results->src_pixels_for_last_output_pixel[i] =
-				bw_mul(
-					results->source_width_rounded_up_to_chunks[i],
-					bw_max2(
-						bw_ceil2(
-							results->v_filter_init[i],
-							bw_int_to_fixed(
-								dceip->lines_interleaved_into_lb)),
-						bw_mul(
-							bw_ceil2(
-								results->vsr[i],
-								bw_int_to_fixed(
-									dceip->lines_interleaved_into_lb)),
-							results->horizontal_blank_and_chunk_granularity_factor[i])));
-			results->src_data_for_last_output_pixel[i] =
-				bw_div(
-					bw_mul(
-						bw_mul(
-							bw_mul(
-								results->source_width_rounded_up_to_chunks[i],
-								bw_max2(
-									bw_ceil2(
-										results->v_filter_init[i],
-										bw_int_to_fixed(
-											dceip->lines_interleaved_into_lb)),
-									results->lines_interleaved_in_mem_access[i])),
-							bw_int_to_fixed(
-								results->bytes_per_pixel[i])),
-						results->bytes_per_request[i]),
-					results->useful_bytes_per_request[i]);
-			results->active_time[i] =
-				bw_div(
-					bw_div(
-						results->source_width_rounded_up_to_chunks[i],
-						results->hsr[i]),
-					results->pixel_rate[i]);
+			data->src_data_for_first_output_pixel[i] = bw_div(bw_mul(bw_mul(data->src_pixels_for_first_output_pixel[i], bw_int_to_fixed(data->bytes_per_pixel[i])), data->bytes_per_request[i]), data->useful_bytes_per_request[i]);
+			data->src_pixels_for_last_output_pixel[i] = bw_mul(data->source_width_rounded_up_to_chunks[i], bw_max2(bw_ceil2(data->v_filter_init[i], bw_int_to_fixed(dceip->lines_interleaved_into_lb)), bw_mul(bw_ceil2(data->vsr[i], bw_int_to_fixed(dceip->lines_interleaved_into_lb)), data->horizontal_blank_and_chunk_granularity_factor[i])));
+			data->src_data_for_last_output_pixel[i] = bw_div(bw_mul(bw_mul(bw_mul(data->source_width_rounded_up_to_chunks[i], bw_max2(bw_ceil2(data->v_filter_init[i], bw_int_to_fixed(dceip->lines_interleaved_into_lb)), data->lines_interleaved_in_mem_access[i])), bw_int_to_fixed(data->bytes_per_pixel[i])), data->bytes_per_request[i]), data->useful_bytes_per_request[i]);
+			data->active_time[i] = bw_div(bw_div(data->source_width_rounded_up_to_chunks[i], data->hsr[i]), data->pixel_rate[i]);
 		}
 	}
 	for (i = 0; i <= 2; i++) {
-		for (j = 0; j <= 2; j++) {
-			results->dmif_burst_time[i][j] =
-				bw_max3(
-					results->dmif_total_page_close_open_time,
-					bw_div(
-						results->total_display_reads_required_dram_access_data,
-						(bw_mul(
-							bw_div(
-								bw_mul(
-									yclk[i],
-									bw_int_to_fixed(
-										vbios->dram_channel_width_in_bits)),
-								bw_int_to_fixed(
-									8)),
-							bw_int_to_fixed(
-								vbios->number_of_dram_channels)))),
-					bw_div(
-						results->total_display_reads_required_data,
-						(bw_mul(
-							sclk[j],
-							vbios->data_return_bus_width))));
-			if (mode_data->d1_display_write_back_dwb_enable == 1) {
-				results->mcifwr_burst_time[i][j] =
-					bw_max3(
-						results->mcifwr_total_page_close_open_time,
-						bw_div(
-							results->total_display_writes_required_dram_access_data,
-							(bw_mul(
-								bw_div(
-									bw_mul(
-										yclk[i],
-										bw_int_to_fixed(
-											vbios->dram_channel_width_in_bits)),
-									bw_int_to_fixed(
-										8)),
-								bw_int_to_fixed(
-									vbios->number_of_dram_channels)))),
-						bw_div(
-							results->total_display_writes_required_data,
-							(bw_mul(
-								sclk[j],
-								vbios->data_return_bus_width))));
+		for (j = 0; j <= 7; j++) {
+			data->dmif_burst_time[i][j] = bw_max3(data->dmif_total_page_close_open_time, bw_div(data->total_display_reads_required_dram_access_data, (bw_mul(bw_div(bw_mul(bw_mul(data->dram_efficiency, yclk[i]), bw_int_to_fixed(vbios->dram_channel_width_in_bits)), bw_int_to_fixed(8)), bw_int_to_fixed(data->number_of_dram_channels)))), bw_div(data->total_display_reads_required_data, (bw_mul(bw_mul(sclk[j], vbios->data_return_bus_width), bw_int_to_fixed(bus_efficiency)))));
+			if (data->d1_display_write_back_dwb_enable == 1) {
+				data->mcifwr_burst_time[i][j] = bw_max3(data->mcifwr_total_page_close_open_time, bw_div(data->total_display_writes_required_dram_access_data, (bw_mul(bw_div(bw_mul(bw_mul(data->dram_efficiency, yclk[i]), bw_int_to_fixed(vbios->dram_channel_width_in_bits)), bw_int_to_fixed(8)), bw_int_to_fixed(data->number_of_dram_wrchannels)))), bw_div(data->total_display_writes_required_data, (bw_mul(bw_mul(sclk[j], vbios->data_return_bus_width), bw_int_to_fixed(bus_efficiency)))));
 			}
 		}
 	}
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
 		for (j = 0; j <= 2; j++) {
-			for (k = 0; k <= 2; k++) {
-				if (results->enable[i]) {
-					if (surface_type[i]
-						!= bw_def_display_write_back420_luma
-						&& surface_type[i]
-							!= bw_def_display_write_back420_chroma) {
-						results->line_source_transfer_time[i][j][k] =
-							bw_max2(
-								bw_mul(
-									(bw_add(
-										results->total_dmifmc_urgent_latency,
-										results->dmif_burst_time[j][k])),
-									bw_floor2(
-										bw_div(
-											results->src_data_for_first_output_pixel[i],
-											results->adjusted_data_buffer_size_in_memory[i]),
-										bw_int_to_fixed(
-											1))),
-								bw_sub(
-									bw_mul(
-										(bw_add(
-											results->total_dmifmc_urgent_latency,
-											results->dmif_burst_time[j][k])),
-										bw_floor2(
-											bw_div(
-												results->src_data_for_last_output_pixel[i],
-												results->adjusted_data_buffer_size_in_memory[i]),
-											bw_int_to_fixed(
-												1))),
-									results->active_time[i]));
-					} else {
-						results->line_source_transfer_time[i][j][k] =
-							bw_max2(
-								bw_mul(
-									(bw_add(
-										vbios->mcifwrmc_urgent_latency,
-										results->mcifwr_burst_time[j][k])),
-									bw_floor2(
-										bw_div(
-											results->src_data_for_first_output_pixel[i],
-											results->adjusted_data_buffer_size_in_memory[i]),
-										bw_int_to_fixed(
-											1))),
-								bw_sub(
-									bw_mul(
-										(bw_add(
-											vbios->mcifwrmc_urgent_latency,
-											results->mcifwr_burst_time[j][k])),
-										bw_floor2(
-											bw_div(
-												results->src_data_for_last_output_pixel[i],
-												results->adjusted_data_buffer_size_in_memory[i]),
-											bw_int_to_fixed(
-												1))),
-									results->active_time[i]));
+			for (k = 0; k <= 7; k++) {
+				if (data->enable[i]) {
+					if (surface_type[i] != bw_def_display_write_back420_luma && surface_type[i] != bw_def_display_write_back420_chroma) {
+						/*time to transfer data from the dmif buffer to the lb.  since the mc to dmif transfer time overlaps*/
+						/*with the dmif to lb transfer time, only time to transfer the last chunk  is considered.*/
+						data->dmif_buffer_transfer_time[i] = bw_mul(data->source_width_rounded_up_to_chunks[i], (bw_div(dceip->lb_write_pixels_per_dispclk, (bw_div(vbios->low_voltage_max_dispclk, dceip->display_pipe_throughput_factor)))));
+						data->line_source_transfer_time[i][j][k] = bw_max2(bw_mul((bw_add(data->total_dmifmc_urgent_latency, data->dmif_burst_time[j][k])), bw_floor2(bw_div(data->src_data_for_first_output_pixel[i], data->adjusted_data_buffer_size_in_memory[i]), bw_int_to_fixed(1))), bw_sub(bw_add(bw_mul((bw_add(data->total_dmifmc_urgent_latency, data->dmif_burst_time[j][k])), bw_floor2(bw_div(data->src_data_for_last_output_pixel[i], data->adjusted_data_buffer_size_in_memory[i]), bw_int_to_fixed(1))), data->dmif_buffer_transfer_time[i]), data->active_time[i]));
+						/*during an mclk switch the requests from the dce ip are stored in the gmc/arb.  these requests should be serviced immediately*/
+						/*after the mclk switch sequence and not incur an urgent latency penalty.  it is assumed that the gmc/arb can hold up to 256 requests*/
+						/*per memory channel.  if the dce ip is urgent after the mclk switch sequence, all pending requests and subsequent requests should be*/
+						/*immediately serviced without a gap in the urgent requests.*/
+						/*the latency incurred would be the time to issue the requests and return the data for the first or last output pixel.*/
+						if (surface_type[i] == bw_def_graphics) {
+							switch (data->lb_bpc[i]) {
+							case 6:
+								data->v_scaler_efficiency = dceip->graphics_vscaler_efficiency6_bit_per_component;
+								break;
+							case 8:
+								data->v_scaler_efficiency = dceip->graphics_vscaler_efficiency8_bit_per_component;
+								break;
+							case 10:
+								data->v_scaler_efficiency = dceip->graphics_vscaler_efficiency10_bit_per_component;
+								break;
+							default:
+								data->v_scaler_efficiency = dceip->graphics_vscaler_efficiency12_bit_per_component;
+								break;
+							}
+							if (data->use_alpha[i] == 1) {
+								data->v_scaler_efficiency = bw_min2(data->v_scaler_efficiency, dceip->alpha_vscaler_efficiency);
+							}
+						}
+						else {
+							switch (data->lb_bpc[i]) {
+							case 6:
+								data->v_scaler_efficiency = dceip->underlay_vscaler_efficiency6_bit_per_component;
+								break;
+							case 8:
+								data->v_scaler_efficiency = dceip->underlay_vscaler_efficiency8_bit_per_component;
+								break;
+							case 10:
+								data->v_scaler_efficiency = dceip->underlay_vscaler_efficiency10_bit_per_component;
+								break;
+							default:
+								data->v_scaler_efficiency = bw_int_to_fixed(3);
+								break;
+							}
+						}
+						if (dceip->pre_downscaler_enabled && bw_mtn(data->hsr[i], bw_int_to_fixed(1))) {
+							data->scaler_limits_factor = bw_max2(bw_div(data->v_taps[i], data->v_scaler_efficiency), bw_div(data->source_width_rounded_up_to_chunks[i], data->h_total[i]));
+						}
+						else {
+							data->scaler_limits_factor = bw_max3(bw_int_to_fixed(1), bw_ceil2(bw_div(data->h_taps[i], bw_int_to_fixed(4)), bw_int_to_fixed(1)), bw_mul(data->hsr[i], bw_max2(bw_div(data->v_taps[i], data->v_scaler_efficiency), bw_int_to_fixed(1))));
+						}
+						data->dram_speed_change_line_source_transfer_time[i][j][k] = bw_mul(bw_int_to_fixed(2), bw_max2((bw_add((bw_div(data->src_data_for_first_output_pixel[i], bw_min2(bw_mul(data->bytes_per_request[i], sclk[k]), bw_div(bw_mul(bw_mul(data->bytes_per_request[i], data->pixel_rate[i]), data->scaler_limits_factor), bw_int_to_fixed(2))))), (bw_mul(data->dmif_burst_time[j][k], bw_floor2(bw_div(data->src_data_for_first_output_pixel[i], data->adjusted_data_buffer_size_in_memory[i]), bw_int_to_fixed(1)))))), (bw_add((bw_div(data->src_data_for_last_output_pixel[i], bw_min2(bw_mul(data->bytes_per_request[i], sclk[k]), bw_div(bw_mul(bw_mul(data->bytes_per_request[i], data->pixel_rate[i]), data->scaler_limits_factor), bw_int_to_fixed(2))))), (bw_sub(bw_mul(data->dmif_burst_time[j][k], bw_floor2(bw_div(data->src_data_for_last_output_pixel[i], data->adjusted_data_buffer_size_in_memory[i]), bw_int_to_fixed(1))), data->active_time[i]))))));
+					}
+					else {
+						data->line_source_transfer_time[i][j][k] = bw_max2(bw_mul((bw_add(vbios->mcifwrmc_urgent_latency, data->mcifwr_burst_time[j][k])), bw_floor2(bw_div(data->src_data_for_first_output_pixel[i], data->adjusted_data_buffer_size_in_memory[i]), bw_int_to_fixed(1))), bw_sub(bw_mul((bw_add(vbios->mcifwrmc_urgent_latency, data->mcifwr_burst_time[j][k])), bw_floor2(bw_div(data->src_data_for_last_output_pixel[i], data->adjusted_data_buffer_size_in_memory[i]), bw_int_to_fixed(1))), data->active_time[i]));
+						/*during an mclk switch the requests from the dce ip are stored in the gmc/arb.  these requests should be serviced immediately*/
+						/*after the mclk switch sequence and not incur an urgent latency penalty.  it is assumed that the gmc/arb can hold up to 256 requests*/
+						/*per memory channel.  if the dce ip is urgent after the mclk switch sequence, all pending requests and subsequent requests should be*/
+						/*immediately serviced without a gap in the urgent requests.*/
+						/*the latency incurred would be the time to issue the requests and return the data for the first or last output pixel.*/
+						data->dram_speed_change_line_source_transfer_time[i][j][k] = bw_max2((bw_add((bw_div(data->src_data_for_first_output_pixel[i], bw_min2(bw_mul(data->bytes_per_request[i], sclk[k]), bw_div(bw_mul(data->bytes_per_request[i], vbios->low_voltage_max_dispclk), bw_int_to_fixed(2))))), (bw_mul(data->mcifwr_burst_time[j][k], bw_floor2(bw_div(data->src_data_for_first_output_pixel[i], data->adjusted_data_buffer_size_in_memory[i]), bw_int_to_fixed(1)))))), (bw_add((bw_div(data->src_data_for_last_output_pixel[i], bw_min2(bw_mul(data->bytes_per_request[i], sclk[k]), bw_div(bw_mul(data->bytes_per_request[i], vbios->low_voltage_max_dispclk), bw_int_to_fixed(2))))), (bw_sub(bw_mul(data->mcifwr_burst_time[j][k], bw_floor2(bw_div(data->src_data_for_last_output_pixel[i], data->adjusted_data_buffer_size_in_memory[i]), bw_int_to_fixed(1))), data->active_time[i])))));
 					}
 				}
 			}
@@ -2036,669 +1226,263 @@ static void calculate_bandwidth(
 	/*the minimum latency hiding is the minimum for all pipes of one screen line time, plus one more line time if doing lb prefetch, plus the dmif data buffer size equivalent in time, minus the urgent latency.*/
 	/*the minimum latency hiding is  further limited by the cursor.  the cursor latency hiding is the number of lines of the cursor buffer, minus one if the downscaling is less than two, or minus three if it is more*/
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (bw_equ(
-				dceip->stutter_and_dram_clock_state_change_gated_before_cursor,
-				bw_int_to_fixed(0))
-				&& bw_mtn(
-					results->cursor_width_pixels[i],
-					bw_int_to_fixed(0))) {
-				if (bw_ltn(
-					results->vsr[i],
-					bw_int_to_fixed(2))) {
-					results->cursor_latency_hiding[i] =
-						bw_div(
-							bw_div(
-								bw_mul(
-									(bw_sub(
-										dceip->cursor_dcp_buffer_lines,
-										bw_int_to_fixed(
-											1))),
-									results->h_total[i]),
-								results->vsr[i]),
-							results->pixel_rate[i]);
-				} else {
-					results->cursor_latency_hiding[i] =
-						bw_div(
-							bw_div(
-								bw_mul(
-									(bw_sub(
-										dceip->cursor_dcp_buffer_lines,
-										bw_int_to_fixed(
-											3))),
-									results->h_total[i]),
-								results->vsr[i]),
-							results->pixel_rate[i]);
+		if (data->enable[i]) {
+			if ((bw_equ(dceip->stutter_and_dram_clock_state_change_gated_before_cursor, bw_int_to_fixed(0)) && bw_mtn(data->cursor_width_pixels[i], bw_int_to_fixed(0)))) {
+				if (bw_ltn(data->vsr[i], bw_int_to_fixed(2))) {
+					data->cursor_latency_hiding[i] = bw_div(bw_div(bw_mul((bw_sub(dceip->cursor_dcp_buffer_lines, bw_int_to_fixed(1))), data->h_total[i]), data->vsr[i]), data->pixel_rate[i]);
 				}
-			} else {
-				results->cursor_latency_hiding[i] =
-					bw_int_to_fixed(9999);
+				else {
+					data->cursor_latency_hiding[i] = bw_div(bw_div(bw_mul((bw_sub(dceip->cursor_dcp_buffer_lines, bw_int_to_fixed(3))), data->h_total[i]), data->vsr[i]), data->pixel_rate[i]);
+				}
+			}
+			else {
+				data->cursor_latency_hiding[i] = bw_int_to_fixed(9999);
 			}
 		}
 	}
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (dceip->graphics_lb_nodownscaling_multi_line_prefetching
-				== 1
-				&& (bw_equ(results->vsr[i], bw_int_to_fixed(1))
-					|| (bw_leq(
-						results->vsr[i],
-						bw_frc_to_fixed(8, 10))
-						&& bw_leq(
-							results->v_taps[i],
-							bw_int_to_fixed(2))
-						&& results->lb_bpc[i] == 8))
-				&& surface_type[i] == bw_def_graphics) {
-				results->minimum_latency_hiding[i] =
-					bw_sub(
-						bw_div(
-							bw_mul(
-								bw_div(
-									(bw_add(
-										bw_sub(
-											results->lb_partitions[i],
-											bw_int_to_fixed(
-												1)),
-										bw_div(
-											bw_div(
-												results->data_buffer_size[i],
-												bw_int_to_fixed(
-													results->bytes_per_pixel[i])),
-											results->source_width_pixels[i]))),
-									results->vsr[i]),
-								results->h_total[i]),
-							results->pixel_rate[i]),
-						results->total_dmifmc_urgent_latency);
-			} else {
-				results->minimum_latency_hiding[i] =
-					bw_sub(
-						bw_div(
-							bw_mul(
-								(bw_add(
-									bw_int_to_fixed(
-										1
-											+ results->line_buffer_prefetch[i]),
-									bw_div(
-										bw_div(
-											bw_div(
-												results->data_buffer_size[i],
-												bw_int_to_fixed(
-													results->bytes_per_pixel[i])),
-											results->source_width_pixels[i]),
-										results->vsr[i]))),
-								results->h_total[i]),
-							results->pixel_rate[i]),
-						results->total_dmifmc_urgent_latency);
+		if (data->enable[i]) {
+			if (dceip->graphics_lb_nodownscaling_multi_line_prefetching == 1 && (bw_equ(data->vsr[i], bw_int_to_fixed(1)) || (bw_leq(data->vsr[i], bw_frc_to_fixed(8, 10)) && bw_leq(data->v_taps[i], bw_int_to_fixed(2)) && data->lb_bpc[i] == 8)) && surface_type[i] == bw_def_graphics) {
+				data->minimum_latency_hiding[i] = bw_sub(bw_div(bw_mul((bw_div((bw_add(bw_sub(data->lb_partitions[i], bw_int_to_fixed(1)), bw_div(bw_div(data->data_buffer_size[i], bw_int_to_fixed(data->bytes_per_pixel[i])), data->source_width_pixels[i]))), data->vsr[i])), data->h_total[i]), data->pixel_rate[i]), data->total_dmifmc_urgent_latency);
 			}
-			results->minimum_latency_hiding_with_cursor[i] =
-				bw_min2(
-					results->minimum_latency_hiding[i],
-					results->cursor_latency_hiding[i]);
+			else {
+				data->minimum_latency_hiding[i] = bw_sub(bw_div(bw_mul((bw_div((bw_add(bw_int_to_fixed(1 + data->line_buffer_prefetch[i]), bw_div(bw_div(data->data_buffer_size[i], bw_int_to_fixed(data->bytes_per_pixel[i])), data->source_width_pixels[i]))), data->vsr[i])), data->h_total[i]), data->pixel_rate[i]), data->total_dmifmc_urgent_latency);
+			}
+			data->minimum_latency_hiding_with_cursor[i] = bw_min2(data->minimum_latency_hiding[i], data->cursor_latency_hiding[i]);
 		}
 	}
 	for (i = 0; i <= 2; i++) {
-		for (j = 0; j <= 2; j++) {
-			results->blackout_duration_margin[i][j] =
-				bw_int_to_fixed(9999);
-			results->dispclk_required_for_blackout_duration[i][j] =
-				bw_int_to_fixed(0);
-			results->dispclk_required_for_blackout_recovery[i][j] =
-				bw_int_to_fixed(0);
+		for (j = 0; j <= 7; j++) {
+			data->blackout_duration_margin[i][j] = bw_int_to_fixed(9999);
+			data->dispclk_required_for_blackout_duration[i][j] = bw_int_to_fixed(0);
+			data->dispclk_required_for_blackout_recovery[i][j] = bw_int_to_fixed(0);
 			for (k = 0; k <= maximum_number_of_surfaces - 1; k++) {
-				if (results->enable[k]
-					&& bw_mtn(
-						vbios->blackout_duration,
-						bw_int_to_fixed(0))) {
-					if (surface_type[k]
-						!= bw_def_display_write_back420_luma
-						&& surface_type[k]
-							!= bw_def_display_write_back420_chroma) {
-						results->blackout_duration_margin[i][j] =
-							bw_min2(
-								results->blackout_duration_margin[i][j],
-								bw_sub(
-									bw_sub(
-										bw_sub(
-											results->minimum_latency_hiding_with_cursor[k],
-											vbios->blackout_duration),
-										results->dmif_burst_time[i][j]),
-									results->line_source_transfer_time[k][i][j]));
-						results->dispclk_required_for_blackout_duration[i][j] =
-							bw_max3(
-								results->dispclk_required_for_blackout_duration[i][j],
-								bw_div(
-									bw_div(
-										bw_mul(
-											results->src_pixels_for_first_output_pixel[k],
-											dceip->display_pipe_throughput_factor),
-										dceip->lb_write_pixels_per_dispclk),
-									(bw_sub(
-										bw_sub(
-											results->minimum_latency_hiding_with_cursor[k],
-											vbios->blackout_duration),
-										results->dmif_burst_time[i][j]))),
-								bw_div(
-									bw_div(
-										bw_mul(
-											results->src_pixels_for_last_output_pixel[k],
-											dceip->display_pipe_throughput_factor),
-										dceip->lb_write_pixels_per_dispclk),
-									(bw_add(
-										bw_sub(
-											bw_sub(
-												results->minimum_latency_hiding_with_cursor[k],
-												vbios->blackout_duration),
-											results->dmif_burst_time[i][j]),
-										results->active_time[k]))));
-						if (bw_leq(
-							vbios->maximum_blackout_recovery_time,
-							bw_add(
-								bw_mul(
-									bw_int_to_fixed(
-										2),
-									results->total_dmifmc_urgent_latency),
-								results->dmif_burst_time[i][j]))) {
-							results->dispclk_required_for_blackout_recovery[i][j] =
-								bw_int_to_fixed(
-									9999);
-						} else if (bw_ltn(
-							results->adjusted_data_buffer_size[k],
-							bw_mul(
-								bw_div(
-									bw_mul(
-										results->display_bandwidth[k],
-										results->useful_bytes_per_request[k]),
-									results->bytes_per_request[k]),
-								(bw_add(
-									vbios->blackout_duration,
-									bw_add(
-										bw_mul(
-											bw_int_to_fixed(
-												2),
-											results->total_dmifmc_urgent_latency),
-										results->dmif_burst_time[i][j])))))) {
-							results->dispclk_required_for_blackout_recovery[i][j] =
-								bw_max2(
-									results->dispclk_required_for_blackout_recovery[i][j],
-									bw_div(
-										bw_mul(
-											bw_div(
-												bw_div(
-													(bw_sub(
-														bw_mul(
-															bw_div(
-																bw_mul(
-																	results->display_bandwidth[k],
-																	results->useful_bytes_per_request[k]),
-																results->bytes_per_request[k]),
-															(bw_add(
-																vbios->blackout_duration,
-																vbios->maximum_blackout_recovery_time))),
-														results->adjusted_data_buffer_size[k])),
-													bw_int_to_fixed(
-														results->bytes_per_pixel[k])),
-												(bw_sub(
-													vbios->maximum_blackout_recovery_time,
-													bw_sub(
-														bw_mul(
-															bw_int_to_fixed(
-																2),
-															results->total_dmifmc_urgent_latency),
-														results->dmif_burst_time[i][j])))),
-											results->latency_hiding_lines[k]),
-										results->lines_interleaved_in_mem_access[k]));
+				if (data->enable[k] && bw_mtn(vbios->blackout_duration, bw_int_to_fixed(0))) {
+					if (surface_type[k] != bw_def_display_write_back420_luma && surface_type[k] != bw_def_display_write_back420_chroma) {
+						data->blackout_duration_margin[i][j] = bw_min2(data->blackout_duration_margin[i][j], bw_sub(bw_sub(bw_sub(data->minimum_latency_hiding_with_cursor[k], vbios->blackout_duration), data->dmif_burst_time[i][j]), data->line_source_transfer_time[k][i][j]));
+						data->dispclk_required_for_blackout_duration[i][j] = bw_max3(data->dispclk_required_for_blackout_duration[i][j], bw_div(bw_div(bw_mul(data->src_pixels_for_first_output_pixel[k], dceip->display_pipe_throughput_factor), dceip->lb_write_pixels_per_dispclk), (bw_sub(bw_sub(data->minimum_latency_hiding_with_cursor[k], vbios->blackout_duration), data->dmif_burst_time[i][j]))), bw_div(bw_div(bw_mul(data->src_pixels_for_last_output_pixel[k], dceip->display_pipe_throughput_factor), dceip->lb_write_pixels_per_dispclk), (bw_add(bw_sub(bw_sub(data->minimum_latency_hiding_with_cursor[k], vbios->blackout_duration), data->dmif_burst_time[i][j]), data->active_time[k]))));
+						if (bw_leq(vbios->maximum_blackout_recovery_time, bw_add(bw_mul(bw_int_to_fixed(2), data->total_dmifmc_urgent_latency), data->dmif_burst_time[i][j]))) {
+							data->dispclk_required_for_blackout_recovery[i][j] = bw_int_to_fixed(9999);
 						}
-					} else {
-						results->blackout_duration_margin[i][j] =
-							bw_min2(
-								results->blackout_duration_margin[i][j],
-								bw_sub(
-									bw_sub(
-										bw_sub(
-											bw_sub(
-												results->minimum_latency_hiding_with_cursor[k],
-												vbios->blackout_duration),
-											results->dmif_burst_time[i][j]),
-										results->mcifwr_burst_time[i][j]),
-									results->line_source_transfer_time[k][i][j]));
-						results->dispclk_required_for_blackout_duration[i][j] =
-							bw_max3(
-								results->dispclk_required_for_blackout_duration[i][j],
-								bw_div(
-									bw_div(
-										bw_mul(
-											results->src_pixels_for_first_output_pixel[k],
-											dceip->display_pipe_throughput_factor),
-										dceip->lb_write_pixels_per_dispclk),
-									(bw_sub(
-										bw_sub(
-											bw_sub(
-												results->minimum_latency_hiding_with_cursor[k],
-												vbios->blackout_duration),
-											results->dmif_burst_time[i][j]),
-										results->mcifwr_burst_time[i][j]))),
-								bw_div(
-									bw_div(
-										bw_mul(
-											results->src_pixels_for_last_output_pixel[k],
-											dceip->display_pipe_throughput_factor),
-										dceip->lb_write_pixels_per_dispclk),
-									(bw_add(
-										bw_sub(
-											bw_sub(
-												bw_sub(
-													results->minimum_latency_hiding_with_cursor[k],
-													vbios->blackout_duration),
-												results->dmif_burst_time[i][j]),
-											results->mcifwr_burst_time[i][j]),
-										results->active_time[k]))));
-						if (bw_ltn(
-							vbios->maximum_blackout_recovery_time,
-							bw_add(
-								bw_add(
-									bw_mul(
-										bw_int_to_fixed(
-											2),
-										vbios->mcifwrmc_urgent_latency),
-									results->dmif_burst_time[i][j]),
-								results->mcifwr_burst_time[i][j]))) {
-							results->dispclk_required_for_blackout_recovery[i][j] =
-								bw_int_to_fixed(
-									9999);
-						} else if (bw_ltn(
-							results->adjusted_data_buffer_size[k],
-							bw_mul(
-								bw_div(
-									bw_mul(
-										results->display_bandwidth[k],
-										results->useful_bytes_per_request[k]),
-									results->bytes_per_request[k]),
-								(bw_add(
-									vbios->blackout_duration,
-									bw_add(
-										bw_mul(
-											bw_int_to_fixed(
-												2),
-											results->total_dmifmc_urgent_latency),
-										results->dmif_burst_time[i][j])))))) {
-							results->dispclk_required_for_blackout_recovery[i][j] =
-								bw_max2(
-									results->dispclk_required_for_blackout_recovery[i][j],
-									bw_div(
-										bw_mul(
-											bw_div(
-												bw_div(
-													(bw_sub(
-														bw_mul(
-															bw_div(
-																bw_mul(
-																	results->display_bandwidth[k],
-																	results->useful_bytes_per_request[k]),
-																results->bytes_per_request[k]),
-															(bw_add(
-																vbios->blackout_duration,
-																vbios->maximum_blackout_recovery_time))),
-														results->adjusted_data_buffer_size[k])),
-													bw_int_to_fixed(
-														results->bytes_per_pixel[k])),
-												(bw_sub(
-													vbios->maximum_blackout_recovery_time,
-													(bw_add(
-														bw_mul(
-															bw_int_to_fixed(
-																2),
-															results->total_dmifmc_urgent_latency),
-														results->dmif_burst_time[i][j]))))),
-											results->latency_hiding_lines[k]),
-										results->lines_interleaved_in_mem_access[k]));
+						else if (bw_ltn(data->adjusted_data_buffer_size[k], bw_mul(bw_div(bw_mul(data->display_bandwidth[k], data->useful_bytes_per_request[k]), data->bytes_per_request[k]), (bw_add(vbios->blackout_duration, bw_add(bw_mul(bw_int_to_fixed(2), data->total_dmifmc_urgent_latency), data->dmif_burst_time[i][j])))))) {
+							data->dispclk_required_for_blackout_recovery[i][j] = bw_max2(data->dispclk_required_for_blackout_recovery[i][j], bw_div(bw_mul(bw_div(bw_div((bw_sub(bw_mul(bw_div(bw_mul(data->display_bandwidth[k], data->useful_bytes_per_request[k]), data->bytes_per_request[k]), (bw_add(vbios->blackout_duration, vbios->maximum_blackout_recovery_time))), data->adjusted_data_buffer_size[k])), bw_int_to_fixed(data->bytes_per_pixel[k])), (bw_sub(vbios->maximum_blackout_recovery_time, bw_sub(bw_mul(bw_int_to_fixed(2), data->total_dmifmc_urgent_latency), data->dmif_burst_time[i][j])))), data->latency_hiding_lines[k]), data->lines_interleaved_in_mem_access[k]));
+						}
+					}
+					else {
+						data->blackout_duration_margin[i][j] = bw_min2(data->blackout_duration_margin[i][j], bw_sub(bw_sub(bw_sub(bw_sub(data->minimum_latency_hiding_with_cursor[k], vbios->blackout_duration), data->dmif_burst_time[i][j]), data->mcifwr_burst_time[i][j]), data->line_source_transfer_time[k][i][j]));
+						data->dispclk_required_for_blackout_duration[i][j] = bw_max3(data->dispclk_required_for_blackout_duration[i][j], bw_div(bw_div(bw_mul(data->src_pixels_for_first_output_pixel[k], dceip->display_pipe_throughput_factor), dceip->lb_write_pixels_per_dispclk), (bw_sub(bw_sub(bw_sub(data->minimum_latency_hiding_with_cursor[k], vbios->blackout_duration), data->dmif_burst_time[i][j]), data->mcifwr_burst_time[i][j]))), bw_div(bw_div(bw_mul(data->src_pixels_for_last_output_pixel[k], dceip->display_pipe_throughput_factor), dceip->lb_write_pixels_per_dispclk), (bw_add(bw_sub(bw_sub(bw_sub(data->minimum_latency_hiding_with_cursor[k], vbios->blackout_duration), data->dmif_burst_time[i][j]), data->mcifwr_burst_time[i][j]), data->active_time[k]))));
+						if (bw_ltn(vbios->maximum_blackout_recovery_time, bw_add(bw_add(bw_mul(bw_int_to_fixed(2), vbios->mcifwrmc_urgent_latency), data->dmif_burst_time[i][j]), data->mcifwr_burst_time[i][j]))) {
+							data->dispclk_required_for_blackout_recovery[i][j] = bw_int_to_fixed(9999);
+						}
+						else if (bw_ltn(data->adjusted_data_buffer_size[k], bw_mul(bw_div(bw_mul(data->display_bandwidth[k], data->useful_bytes_per_request[k]), data->bytes_per_request[k]), (bw_add(vbios->blackout_duration, bw_add(bw_mul(bw_int_to_fixed(2), data->total_dmifmc_urgent_latency), data->dmif_burst_time[i][j])))))) {
+							data->dispclk_required_for_blackout_recovery[i][j] = bw_max2(data->dispclk_required_for_blackout_recovery[i][j], bw_div(bw_mul(bw_div(bw_div((bw_sub(bw_mul(bw_div(bw_mul(data->display_bandwidth[k], data->useful_bytes_per_request[k]), data->bytes_per_request[k]), (bw_add(vbios->blackout_duration, vbios->maximum_blackout_recovery_time))), data->adjusted_data_buffer_size[k])), bw_int_to_fixed(data->bytes_per_pixel[k])), (bw_sub(vbios->maximum_blackout_recovery_time, (bw_add(bw_mul(bw_int_to_fixed(2), data->total_dmifmc_urgent_latency), data->dmif_burst_time[i][j]))))), data->latency_hiding_lines[k]), data->lines_interleaved_in_mem_access[k]));
 						}
 					}
 				}
 			}
 		}
 	}
-	if (bw_mtn(
-		results->blackout_duration_margin[high][high],
-		bw_int_to_fixed(0))
-		&& bw_ltn(
-			results->dispclk_required_for_blackout_duration[high][high],
-			vbios->high_voltage_max_dispclk)) {
-		results->cpup_state_change_enable = bw_def_yes;
-		if (bw_ltn(
-			results->dispclk_required_for_blackout_recovery[high][high],
-			vbios->high_voltage_max_dispclk)) {
-			results->cpuc_state_change_enable = bw_def_yes;
-		} else {
-			results->cpuc_state_change_enable = bw_def_no;
+	if (bw_mtn(data->blackout_duration_margin[high][s_high], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[high][s_high], vbios->high_voltage_max_dispclk)) {
+		data->cpup_state_change_enable = bw_def_yes;
+		if (bw_ltn(data->dispclk_required_for_blackout_recovery[high][s_high], vbios->high_voltage_max_dispclk)) {
+			data->cpuc_state_change_enable = bw_def_yes;
 		}
-	} else {
-		results->cpup_state_change_enable = bw_def_no;
-		results->cpuc_state_change_enable = bw_def_no;
+		else {
+			data->cpuc_state_change_enable = bw_def_no;
+		}
+	}
+	else {
+		data->cpup_state_change_enable = bw_def_no;
+		data->cpuc_state_change_enable = bw_def_no;
 	}
 	/*nb p-state change enable*/
-	/*for dram speed/p-state change to be possible for a yclk(pclk) and sclk level there has to be positive margin and the dispclk required has to be below the maximum.*/
-	/*the dram speed/p-state change margin is the minimum for all surfaces of the maximum latency hiding minus the dram speed/p-state change latency, minus the dmif burst time, minus the source line transfer time*/
+	/*for dram speed/p-state change to be possible for a yclk(pclk) and sclk level there has to be positive margin and the dispclk required has to be*/
+	/*below the maximum.*/
+	/*the dram speed/p-state change margin is the minimum for all surfaces of the maximum latency hiding minus the dram speed/p-state change latency,*/
+	/*minus the dmif burst time, minus the source line transfer time*/
 	/*the maximum latency hiding is the minimum latency hiding plus one source line used for de-tiling in the line buffer, plus half the urgent latency*/
 	/*if stutter and dram clock state change are gated before cursor then the cursor latency hiding does not limit stutter or dram clock state change*/
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (mode_data->number_of_displays <= 1
-				|| mode_data->display_synchronization_enabled
-					== bw_def_yes) {
-				results->maximum_latency_hiding[i] =
-					bw_int_to_fixed(450);
-			} else {
-				results->maximum_latency_hiding[i] =
-					bw_add(
-						results->minimum_latency_hiding[i],
-						bw_add(
-							bw_div(
-								bw_mul(
-									bw_div(
-										bw_int_to_fixed(
-											1),
-										results->vsr[i]),
-									results->h_total[i]),
-								results->pixel_rate[i]),
-							bw_mul(
-								bw_frc_to_fixed(
-									5,
-									10),
-								results->total_dmifmc_urgent_latency)));
+		if (data->enable[i]) {
+			if ((dceip->graphics_lb_nodownscaling_multi_line_prefetching == 1)) {
+				data->maximum_latency_hiding[i] = bw_add(data->minimum_latency_hiding[i], bw_mul(bw_frc_to_fixed(8, 10), data->total_dmifmc_urgent_latency));
 			}
-			results->maximum_latency_hiding_with_cursor[i] =
-				bw_min2(
-					results->maximum_latency_hiding[i],
-					results->cursor_latency_hiding[i]);
+			else {
+				/*maximum_latency_hiding(i) = minimum_latency_hiding(i) + 1 / vsr(i) * h_total(i) / pixel_rate(i) + 0.5 * total_dmifmc_urgent_latency*/
+				data->maximum_latency_hiding[i] = bw_add(data->minimum_latency_hiding[i], bw_mul(bw_frc_to_fixed(8, 10), data->total_dmifmc_urgent_latency));
+			}
+			data->maximum_latency_hiding_with_cursor[i] = bw_min2(data->maximum_latency_hiding[i], data->cursor_latency_hiding[i]);
 		}
 	}
+	/*initialize variables*/
+	number_of_displays_enabled = 0;
+	number_of_displays_enabled_with_margin = 0;
+	for (k = 0; k <= maximum_number_of_surfaces - 1; k++) {
+		if (data->enable[k]) {
+			number_of_displays_enabled = number_of_displays_enabled + 1;
+		}
+	}
+	data->display_pstate_change_enable[k] = 0;
 	for (i = 0; i <= 2; i++) {
-		for (j = 0; j <= 2; j++) {
-			results->dram_speed_change_margin[i][j] =
-				bw_int_to_fixed(9999);
-			results->dispclk_required_for_dram_speed_change[i][j] =
-				bw_int_to_fixed(0);
+		for (j = 0; j <= 7; j++) {
+			data->min_dram_speed_change_margin[i][j] = bw_int_to_fixed(9999);
+			data->dram_speed_change_margin = bw_int_to_fixed(9999);
+			data->dispclk_required_for_dram_speed_change[i][j] = bw_int_to_fixed(0);
+			data->num_displays_with_margin[i][j] = 0;
 			for (k = 0; k <= maximum_number_of_surfaces - 1; k++) {
-				if (results->enable[k]) {
-					if (surface_type[k]
-						!= bw_def_display_write_back420_luma
-						&& surface_type[k]
-							!= bw_def_display_write_back420_chroma) {
-						results->dram_speed_change_margin[i][j] =
-							bw_min2(
-								results->dram_speed_change_margin[i][j],
-								bw_sub(
-									bw_sub(
-										bw_sub(
-											results->maximum_latency_hiding_with_cursor[k],
-											vbios->nbp_state_change_latency),
-										results->dmif_burst_time[i][j]),
-									results->line_source_transfer_time[k][i][j]));
-						results->dispclk_required_for_dram_speed_change[i][j] =
-							bw_max3(
-								results->dispclk_required_for_dram_speed_change[i][j],
-								bw_div(
-									bw_div(
-										bw_mul(
-											results->src_pixels_for_first_output_pixel[k],
-											dceip->display_pipe_throughput_factor),
-										dceip->lb_write_pixels_per_dispclk),
-									(bw_sub(
-										bw_sub(
-											results->maximum_latency_hiding_with_cursor[k],
-											vbios->nbp_state_change_latency),
-										results->dmif_burst_time[i][j]))),
-								bw_div(
-									bw_div(
-										bw_mul(
-											results->src_pixels_for_last_output_pixel[k],
-											dceip->display_pipe_throughput_factor),
-										dceip->lb_write_pixels_per_dispclk),
-									(bw_add(
-										bw_sub(
-											bw_sub(
-												results->maximum_latency_hiding_with_cursor[k],
-												vbios->nbp_state_change_latency),
-											results->dmif_burst_time[i][j]),
-										results->active_time[k]))));
-					} else {
-						results->dram_speed_change_margin[i][j] =
-							bw_min2(
-								results->dram_speed_change_margin[i][j],
-								bw_sub(
-									bw_sub(
-										bw_sub(
-											bw_sub(
-												results->maximum_latency_hiding_with_cursor[k],
-												vbios->nbp_state_change_latency),
-											results->dmif_burst_time[i][j]),
-										results->mcifwr_burst_time[i][j]),
-									results->line_source_transfer_time[k][i][j]));
-						results->dispclk_required_for_dram_speed_change[i][j] =
-							bw_max3(
-								results->dispclk_required_for_dram_speed_change[i][j],
-								bw_div(
-									bw_div(
-										bw_mul(
-											results->src_pixels_for_first_output_pixel[k],
-											dceip->display_pipe_throughput_factor),
-										dceip->lb_write_pixels_per_dispclk),
-									(bw_sub(
-										bw_sub(
-											bw_sub(
-												results->maximum_latency_hiding_with_cursor[k],
-												vbios->nbp_state_change_latency),
-											results->dmif_burst_time[i][j]),
-										results->mcifwr_burst_time[i][j]))),
-								bw_div(
-									bw_div(
-										bw_mul(
-											results->src_pixels_for_last_output_pixel[k],
-											dceip->display_pipe_throughput_factor),
-										dceip->lb_write_pixels_per_dispclk),
-									(bw_add(
-										bw_sub(
-											bw_sub(
-												bw_sub(
-													results->maximum_latency_hiding_with_cursor[k],
-													vbios->nbp_state_change_latency),
-												results->dmif_burst_time[i][j]),
-											results->mcifwr_burst_time[i][j]),
-										results->active_time[k]))));
+				if (data->enable[k]) {
+					if (surface_type[k] != bw_def_display_write_back420_luma && surface_type[k] != bw_def_display_write_back420_chroma) {
+						data->dram_speed_change_margin = bw_sub(bw_sub(bw_sub(data->maximum_latency_hiding_with_cursor[k], vbios->nbp_state_change_latency), data->dmif_burst_time[i][j]), data->dram_speed_change_line_source_transfer_time[k][i][j]);
+						if ((bw_mtn(data->dram_speed_change_margin, bw_int_to_fixed(0)) && bw_ltn(data->dram_speed_change_margin, bw_int_to_fixed(9999)))) {
+							/*determine the minimum dram clock change margin for each set of clock frequencies*/
+							data->min_dram_speed_change_margin[i][j] = bw_min2(data->min_dram_speed_change_margin[i][j], data->dram_speed_change_margin);
+							/*compute the maximum clock frequuency required for the dram clock change at each set of clock frequencies*/
+							data->dispclk_required_for_dram_speed_change[i][j] = bw_max3(data->dispclk_required_for_dram_speed_change[i][j], bw_div(bw_div(bw_mul(data->src_pixels_for_first_output_pixel[k], dceip->display_pipe_throughput_factor), dceip->lb_write_pixels_per_dispclk), (bw_sub(bw_sub(bw_sub(data->maximum_latency_hiding_with_cursor[k], vbios->nbp_state_change_latency), data->dmif_burst_time[i][j]), data->dram_speed_change_line_source_transfer_time[k][i][j]))), bw_div(bw_div(bw_mul(data->src_pixels_for_last_output_pixel[k], dceip->display_pipe_throughput_factor), dceip->lb_write_pixels_per_dispclk), (bw_add(bw_sub(bw_sub(bw_sub(data->maximum_latency_hiding_with_cursor[k], vbios->nbp_state_change_latency), data->dmif_burst_time[i][j]), data->dram_speed_change_line_source_transfer_time[k][i][j]), data->active_time[k]))));
+							if ((bw_ltn(data->dispclk_required_for_dram_speed_change[i][j], vbios->high_voltage_max_dispclk))) {
+								data->display_pstate_change_enable[k] = 1;
+								data->num_displays_with_margin[i][j] = data->num_displays_with_margin[i][j] + 1;
+							}
+						}
+					}
+					else {
+						data->dram_speed_change_margin = bw_sub(bw_sub(bw_sub(bw_sub(data->maximum_latency_hiding_with_cursor[k], vbios->nbp_state_change_latency), data->dmif_burst_time[i][j]), data->mcifwr_burst_time[i][j]), data->dram_speed_change_line_source_transfer_time[k][i][j]);
+						if ((bw_mtn(data->dram_speed_change_margin, bw_int_to_fixed(0)) && bw_ltn(data->dram_speed_change_margin, bw_int_to_fixed(9999)))) {
+							/*determine the minimum dram clock change margin for each display pipe*/
+							data->min_dram_speed_change_margin[i][j] = bw_min2(data->min_dram_speed_change_margin[i][j], data->dram_speed_change_margin);
+							/*compute the maximum clock frequuency required for the dram clock change at each set of clock frequencies*/
+							data->dispclk_required_for_dram_speed_change[i][j] = bw_max3(data->dispclk_required_for_dram_speed_change[i][j], bw_div(bw_div(bw_mul(data->src_pixels_for_first_output_pixel[k], dceip->display_pipe_throughput_factor), dceip->lb_write_pixels_per_dispclk), (bw_sub(bw_sub(bw_sub(bw_sub(data->maximum_latency_hiding_with_cursor[k], vbios->nbp_state_change_latency), data->dmif_burst_time[i][j]), data->dram_speed_change_line_source_transfer_time[k][i][j]), data->mcifwr_burst_time[i][j]))), bw_div(bw_div(bw_mul(data->src_pixels_for_last_output_pixel[k], dceip->display_pipe_throughput_factor), dceip->lb_write_pixels_per_dispclk), (bw_add(bw_sub(bw_sub(bw_sub(bw_sub(data->maximum_latency_hiding_with_cursor[k], vbios->nbp_state_change_latency), data->dmif_burst_time[i][j]), data->dram_speed_change_line_source_transfer_time[k][i][j]), data->mcifwr_burst_time[i][j]), data->active_time[k]))));
+							if ((bw_ltn(data->dispclk_required_for_dram_speed_change[i][j], vbios->high_voltage_max_dispclk))) {
+								data->display_pstate_change_enable[k] = 1;
+								data->num_displays_with_margin[i][j] = data->num_displays_with_margin[i][j] + 1;
+							}
+						}
 					}
 				}
 			}
 		}
 	}
-	if (bw_mtn(
-		results->dram_speed_change_margin[high][high],
-		bw_int_to_fixed(0))
-		&& bw_ltn(
-			results->dispclk_required_for_dram_speed_change[high][high],
-			vbios->high_voltage_max_dispclk)) {
-		results->nbp_state_change_enable = bw_def_yes;
-	} else {
-		results->nbp_state_change_enable = bw_def_no;
+	/*determine the number of displays with margin to switch in the v_active region*/
+	for (k = 0; k <= maximum_number_of_surfaces - 1; k++) {
+		if ((data->enable[k] == 1 && data->display_pstate_change_enable[k] == 1)) {
+			number_of_displays_enabled_with_margin = number_of_displays_enabled_with_margin + 1;
+		}
+	}
+	/*determine the number of displays that don't have any dram clock change margin, but*/
+	/*have the same resolution.  these displays can switch in a common vblank region if*/
+	/*their frames are aligned.*/
+	data->min_vblank_dram_speed_change_margin = bw_int_to_fixed(9999);
+	for (k = 0; k <= maximum_number_of_surfaces - 1; k++) {
+		if (data->enable[k]) {
+			if (surface_type[k] != bw_def_display_write_back420_luma && surface_type[k] != bw_def_display_write_back420_chroma) {
+				data->v_blank_dram_speed_change_margin[k] = bw_sub(bw_sub(bw_sub(bw_div(bw_mul((bw_sub(data->v_total[k], bw_sub(bw_div(data->src_height[k], data->v_scale_ratio[k]), bw_int_to_fixed(4)))), data->h_total[k]), data->pixel_rate[k]), vbios->nbp_state_change_latency), data->dmif_burst_time[low][s_low]), data->dram_speed_change_line_source_transfer_time[k][low][s_low]);
+				data->min_vblank_dram_speed_change_margin = bw_min2(data->min_vblank_dram_speed_change_margin, data->v_blank_dram_speed_change_margin[k]);
+			}
+			else {
+				data->v_blank_dram_speed_change_margin[k] = bw_sub(bw_sub(bw_sub(bw_sub(bw_div(bw_mul((bw_sub(data->v_total[k], bw_sub(bw_div(data->src_height[k], data->v_scale_ratio[k]), bw_int_to_fixed(4)))), data->h_total[k]), data->pixel_rate[k]), vbios->nbp_state_change_latency), data->dmif_burst_time[low][s_low]), data->mcifwr_burst_time[low][s_low]), data->dram_speed_change_line_source_transfer_time[k][low][s_low]);
+				data->min_vblank_dram_speed_change_margin = bw_min2(data->min_vblank_dram_speed_change_margin, data->v_blank_dram_speed_change_margin[k]);
+			}
+		}
+	}
+	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
+		data->displays_with_same_mode[i] = bw_int_to_fixed(0);
+		if (data->enable[i] == 1 && data->display_pstate_change_enable[i] == 0 && bw_mtn(data->v_blank_dram_speed_change_margin[i], bw_int_to_fixed(0))) {
+			for (j = 0; j <= maximum_number_of_surfaces - 1; j++) {
+				if ((data->enable[j] == 1 && bw_equ(data->source_width_rounded_up_to_chunks[i], data->source_width_rounded_up_to_chunks[j]) && bw_equ(data->source_height_rounded_up_to_chunks[i], data->source_height_rounded_up_to_chunks[j]) && bw_equ(data->vsr[i], data->vsr[j]) && bw_equ(data->hsr[i], data->hsr[j]) && bw_equ(data->pixel_rate[i], data->pixel_rate[j]))) {
+					data->displays_with_same_mode[i] = bw_add(data->displays_with_same_mode[i], bw_int_to_fixed(1));
+				}
+			}
+		}
+	}
+	/*compute the maximum number of aligned displays with no margin*/
+	number_of_aligned_displays_with_no_margin = 0;
+	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
+		number_of_aligned_displays_with_no_margin = bw_fixed_to_int(bw_max2(bw_int_to_fixed(number_of_aligned_displays_with_no_margin), data->displays_with_same_mode[i]));
+	}
+	/*dram clock change is possible, if all displays have positive margin except for one display or a group of*/
+	/*aligned displays with the same timing.*/
+	/*the display(s) with the negative margin can be switched in the v_blank region while the other*/
+	/*displays are in v_blank or v_active.*/
+	if ((number_of_displays_enabled_with_margin + number_of_aligned_displays_with_no_margin == number_of_displays_enabled && bw_mtn(data->min_dram_speed_change_margin[high][s_high], bw_int_to_fixed(0)) && bw_ltn(data->min_dram_speed_change_margin[high][s_high], bw_int_to_fixed(9999)) && bw_ltn(data->dispclk_required_for_dram_speed_change[high][s_high], vbios->high_voltage_max_dispclk))) {
+		data->nbp_state_change_enable = bw_def_yes;
+	}
+	else {
+		data->nbp_state_change_enable = bw_def_no;
+	}
+	/*dram clock change is possible only in vblank if all displays are aligned and have no margin*/
+	if ((number_of_aligned_displays_with_no_margin == number_of_displays_enabled)) {
+		nbp_state_change_enable_blank = bw_def_yes;
+	}
+	else {
+		nbp_state_change_enable_blank = bw_def_no;
 	}
 	/*required yclk(pclk)*/
 	/*yclk requirement only makes sense if the dmif and mcifwr data total page close-open time is less than the time for data transfer and the total pte requests fit in the scatter-gather saw queque size*/
 	/*if that is the case, the yclk requirement is the maximum of the ones required by dmif and mcifwr, and the high/low yclk(pclk) is chosen accordingly*/
 	/*high yclk(pclk) has to be selected when dram speed/p-state change is not possible.*/
-	results->min_cursor_memory_interface_buffer_size_in_time =
-		bw_int_to_fixed(9999);
+	data->min_cursor_memory_interface_buffer_size_in_time = bw_int_to_fixed(9999);
+	/* number of cursor lines stored in the cursor data return buffer*/
+	num_cursor_lines = 0;
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (bw_mtn(
-				results->cursor_width_pixels[i],
-				bw_int_to_fixed(0))) {
-				results->min_cursor_memory_interface_buffer_size_in_time =
-					bw_min2(
-						results->min_cursor_memory_interface_buffer_size_in_time,
-						bw_div(
-							bw_mul(
-								bw_div(
-									bw_div(
-										dceip->cursor_memory_interface_buffer_pixels,
-										results->cursor_width_pixels[i]),
-									results->vsr[i]),
-								results->h_total[i]),
-							results->pixel_rate[i]));
+		if (data->enable[i]) {
+			if (bw_mtn(data->cursor_width_pixels[i], bw_int_to_fixed(0))) {
+				/*compute number of cursor lines stored in data return buffer*/
+				if (bw_leq(data->cursor_width_pixels[i], bw_int_to_fixed(64)) && dceip->large_cursor == 1) {
+					num_cursor_lines = 4;
+				}
+				else {
+					num_cursor_lines = 2;
+				}
+				data->min_cursor_memory_interface_buffer_size_in_time = bw_min2(data->min_cursor_memory_interface_buffer_size_in_time, bw_div(bw_mul(bw_div(bw_int_to_fixed(num_cursor_lines), data->vsr[i]), data->h_total[i]), data->pixel_rate[i]));
 			}
 		}
 	}
-	results->min_read_buffer_size_in_time = bw_min2(
-		results->min_cursor_memory_interface_buffer_size_in_time,
-		results->min_dmif_size_in_time);
-	results->display_reads_time_for_data_transfer = bw_sub(
-		results->min_read_buffer_size_in_time,
-		results->total_dmifmc_urgent_latency);
-	results->display_writes_time_for_data_transfer = bw_sub(
-		results->min_mcifwr_size_in_time,
-		vbios->mcifwrmc_urgent_latency);
-	results->dmif_required_dram_bandwidth = bw_div(
-		results->total_display_reads_required_dram_access_data,
-		results->display_reads_time_for_data_transfer);
-	results->mcifwr_required_dram_bandwidth = bw_div(
-		results->total_display_writes_required_dram_access_data,
-		results->display_writes_time_for_data_transfer);
-	results->required_dmifmc_urgent_latency_for_page_close_open = bw_div(
-		(bw_sub(
-			results->min_read_buffer_size_in_time,
-			results->dmif_total_page_close_open_time)),
-		results->total_dmifmc_urgent_trips);
-	results->required_mcifmcwr_urgent_latency = bw_sub(
-		results->min_mcifwr_size_in_time,
-		results->mcifwr_total_page_close_open_time);
-	if (bw_mtn(
-		results->scatter_gather_total_pte_requests,
-		dceip->maximum_total_outstanding_pte_requests_allowed_by_saw)) {
-		results->required_dram_bandwidth_gbyte_per_second =
-			bw_int_to_fixed(9999);
-		yclk_message =
-			bw_def_exceeded_allowed_outstanding_pte_req_queue_size;
-		results->y_clk_level = high;
-		results->dram_bandwidth =
-			bw_mul(
-				bw_div(
-					bw_mul(
-						yclk[high],
-						bw_int_to_fixed(
-							vbios->dram_channel_width_in_bits)),
-					bw_int_to_fixed(8)),
-				bw_int_to_fixed(
-					vbios->number_of_dram_channels));
-	} else if (bw_mtn(
-		vbios->dmifmc_urgent_latency,
-		results->required_dmifmc_urgent_latency_for_page_close_open)
-		|| bw_mtn(
-			vbios->mcifwrmc_urgent_latency,
-			results->required_mcifmcwr_urgent_latency)) {
-		results->required_dram_bandwidth_gbyte_per_second =
-			bw_int_to_fixed(9999);
+	/*compute minimum time to read one chunk from the dmif buffer*/
+	if ((number_of_displays_enabled > 2)) {
+		data->chunk_request_delay = 0;
+	}
+	else {
+		data->chunk_request_delay = bw_fixed_to_int(bw_div(bw_int_to_fixed(512), vbios->high_voltage_max_dispclk));
+	}
+	data->min_read_buffer_size_in_time = bw_min2(data->min_cursor_memory_interface_buffer_size_in_time, data->min_dmif_size_in_time);
+	data->display_reads_time_for_data_transfer = bw_sub(bw_sub(data->min_read_buffer_size_in_time, data->total_dmifmc_urgent_latency), bw_int_to_fixed(data->chunk_request_delay));
+	data->display_writes_time_for_data_transfer = bw_sub(data->min_mcifwr_size_in_time, vbios->mcifwrmc_urgent_latency);
+	data->dmif_required_dram_bandwidth = bw_div(data->total_display_reads_required_dram_access_data, data->display_reads_time_for_data_transfer);
+	data->mcifwr_required_dram_bandwidth = bw_div(data->total_display_writes_required_dram_access_data, data->display_writes_time_for_data_transfer);
+	data->required_dmifmc_urgent_latency_for_page_close_open = bw_div((bw_sub(data->min_read_buffer_size_in_time, data->dmif_total_page_close_open_time)), data->total_dmifmc_urgent_trips);
+	data->required_mcifmcwr_urgent_latency = bw_sub(data->min_mcifwr_size_in_time, data->mcifwr_total_page_close_open_time);
+	if (bw_mtn(data->scatter_gather_total_pte_requests, dceip->maximum_total_outstanding_pte_requests_allowed_by_saw)) {
+		data->required_dram_bandwidth_gbyte_per_second = bw_int_to_fixed(9999);
+		yclk_message = bw_def_exceeded_allowed_outstanding_pte_req_queue_size;
+		data->y_clk_level = high;
+		data->dram_bandwidth = bw_mul(bw_div(bw_mul(bw_mul(data->dram_efficiency, yclk[high]), bw_int_to_fixed(vbios->dram_channel_width_in_bits)), bw_int_to_fixed(8)), bw_int_to_fixed(data->number_of_dram_channels));
+	}
+	else if (bw_mtn(vbios->dmifmc_urgent_latency, data->required_dmifmc_urgent_latency_for_page_close_open) || bw_mtn(vbios->mcifwrmc_urgent_latency, data->required_mcifmcwr_urgent_latency)) {
+		data->required_dram_bandwidth_gbyte_per_second = bw_int_to_fixed(9999);
 		yclk_message = bw_def_exceeded_allowed_page_close_open;
-		results->y_clk_level = high;
-		results->dram_bandwidth =
-			bw_mul(
-				bw_div(
-					bw_mul(
-						yclk[high],
-						bw_int_to_fixed(
-							vbios->dram_channel_width_in_bits)),
-					bw_int_to_fixed(8)),
-				bw_int_to_fixed(
-					vbios->number_of_dram_channels));
-	} else {
-		results->required_dram_bandwidth_gbyte_per_second = bw_div(
-			bw_max2(
-				results->dmif_required_dram_bandwidth,
-				results->mcifwr_required_dram_bandwidth),
-			bw_int_to_fixed(1000));
-		if (bw_ltn(
-			bw_mul(
-				results->required_dram_bandwidth_gbyte_per_second,
-				bw_int_to_fixed(1000)),
-			bw_mul(
-				bw_div(
-					bw_mul(
-						yclk[low],
-						bw_int_to_fixed(
-							vbios->dram_channel_width_in_bits)),
-					bw_int_to_fixed(8)),
-				bw_int_to_fixed(
-					vbios->number_of_dram_channels)))
-			&& (results->cpup_state_change_enable == bw_def_no
-				|| (bw_mtn(
-					results->blackout_duration_margin[low][high],
-					bw_int_to_fixed(0))
-					&& bw_ltn(
-						results->dispclk_required_for_blackout_duration[low][high],
-						vbios->high_voltage_max_dispclk)))
-			&& (results->cpuc_state_change_enable == bw_def_no
-				|| (bw_mtn(
-					results->blackout_duration_margin[low][high],
-					bw_int_to_fixed(0))
-					&& bw_ltn(
-						results->dispclk_required_for_blackout_duration[low][high],
-						vbios->high_voltage_max_dispclk)
-					&& bw_ltn(
-						results->dispclk_required_for_blackout_recovery[low][high],
-						vbios->high_voltage_max_dispclk)))
-			&& bw_mtn(
-				results->dram_speed_change_margin[low][high],
-				bw_int_to_fixed(0))
-			&& bw_ltn(
-				results->dispclk_required_for_dram_speed_change[low][high],
-				vbios->high_voltage_max_dispclk)) {
-			yclk_message = bw_def_low;
-			results->y_clk_level = low;
-			results->dram_bandwidth =
-				bw_mul(
-					bw_div(
-						bw_mul(
-							yclk[low],
-							bw_int_to_fixed(
-								vbios->dram_channel_width_in_bits)),
-						bw_int_to_fixed(8)),
-					bw_int_to_fixed(
-						vbios->number_of_dram_channels));
-		} else if (bw_ltn(
-			bw_mul(
-				results->required_dram_bandwidth_gbyte_per_second,
-				bw_int_to_fixed(1000)),
-			bw_mul(
-				bw_div(
-					bw_mul(
-						yclk[high],
-						bw_int_to_fixed(
-							vbios->dram_channel_width_in_bits)),
-					bw_int_to_fixed(8)),
-				bw_int_to_fixed(
-					vbios->number_of_dram_channels)))) {
-			yclk_message = bw_def_high;
-			results->y_clk_level = high;
-			results->dram_bandwidth =
-				bw_mul(
-					bw_div(
-						bw_mul(
-							yclk[high],
-							bw_int_to_fixed(
-								vbios->dram_channel_width_in_bits)),
-						bw_int_to_fixed(8)),
-					bw_int_to_fixed(
-						vbios->number_of_dram_channels));
-		} else {
+		data->y_clk_level = high;
+		data->dram_bandwidth = bw_mul(bw_div(bw_mul(bw_mul(data->dram_efficiency, yclk[high]), bw_int_to_fixed(vbios->dram_channel_width_in_bits)), bw_int_to_fixed(8)), bw_int_to_fixed(data->number_of_dram_channels));
+	}
+	else {
+		data->required_dram_bandwidth_gbyte_per_second = bw_div(bw_max2(data->dmif_required_dram_bandwidth, data->mcifwr_required_dram_bandwidth), bw_int_to_fixed(1000));
+		if (bw_ltn(bw_mul(data->required_dram_bandwidth_gbyte_per_second, bw_int_to_fixed(1000)), bw_mul(bw_div(bw_mul(bw_mul(data->dram_efficiency, yclk[low]), bw_int_to_fixed(vbios->dram_channel_width_in_bits)), bw_int_to_fixed(8)), bw_int_to_fixed(data->number_of_dram_channels))) && (data->cpup_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[low][s_high], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[low][s_high], vbios->high_voltage_max_dispclk))) && (data->cpuc_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[low][s_high], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[low][s_high], vbios->high_voltage_max_dispclk) && bw_ltn(data->dispclk_required_for_blackout_recovery[low][s_high], vbios->high_voltage_max_dispclk))) && (data->nbp_state_change_enable == bw_def_no || (bw_mtn(data->min_dram_speed_change_margin[low][s_high], bw_int_to_fixed(0)) && bw_ltn(data->min_dram_speed_change_margin[low][s_high], bw_int_to_fixed(9999)) && bw_leq(data->dispclk_required_for_dram_speed_change[low][s_high], vbios->high_voltage_max_dispclk) && data->num_displays_with_margin[low][s_high] == number_of_displays_enabled_with_margin))) {
+			yclk_message = bw_fixed_to_int(vbios->low_yclk);
+			data->y_clk_level = low;
+			data->dram_bandwidth = bw_mul(bw_div(bw_mul(bw_mul(data->dram_efficiency, yclk[low]), bw_int_to_fixed(vbios->dram_channel_width_in_bits)), bw_int_to_fixed(8)), bw_int_to_fixed(data->number_of_dram_channels));
+		}
+		else if (bw_ltn(bw_mul(data->required_dram_bandwidth_gbyte_per_second, bw_int_to_fixed(1000)), bw_mul(bw_div(bw_mul(bw_mul(data->dram_efficiency, yclk[mid]), bw_int_to_fixed(vbios->dram_channel_width_in_bits)), bw_int_to_fixed(8)), bw_int_to_fixed(data->number_of_dram_channels))) && (data->cpup_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[mid][s_high], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[mid][s_high], vbios->high_voltage_max_dispclk))) && (data->cpuc_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[mid][s_high], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[mid][s_high], vbios->high_voltage_max_dispclk) && bw_ltn(data->dispclk_required_for_blackout_recovery[mid][s_high], vbios->high_voltage_max_dispclk))) && (data->nbp_state_change_enable == bw_def_no || (bw_mtn(data->min_dram_speed_change_margin[mid][s_high], bw_int_to_fixed(0)) && bw_ltn(data->min_dram_speed_change_margin[mid][s_high], bw_int_to_fixed(9999)) && bw_leq(data->dispclk_required_for_dram_speed_change[mid][s_high], vbios->high_voltage_max_dispclk) && data->num_displays_with_margin[mid][s_high] == number_of_displays_enabled_with_margin))) {
+			yclk_message = bw_fixed_to_int(vbios->mid_yclk);
+			data->y_clk_level = mid;
+			data->dram_bandwidth = bw_mul(bw_div(bw_mul(bw_mul(data->dram_efficiency, yclk[mid]), bw_int_to_fixed(vbios->dram_channel_width_in_bits)), bw_int_to_fixed(8)), bw_int_to_fixed(data->number_of_dram_channels));
+		}
+		else if (bw_ltn(bw_mul(data->required_dram_bandwidth_gbyte_per_second, bw_int_to_fixed(1000)), bw_mul(bw_div(bw_mul(bw_mul(data->dram_efficiency, yclk[high]), bw_int_to_fixed(vbios->dram_channel_width_in_bits)), bw_int_to_fixed(8)), bw_int_to_fixed(data->number_of_dram_channels)))) {
+			yclk_message = bw_fixed_to_int(vbios->high_yclk);
+			data->y_clk_level = high;
+			data->dram_bandwidth = bw_mul(bw_div(bw_mul(bw_mul(data->dram_efficiency, yclk[high]), bw_int_to_fixed(vbios->dram_channel_width_in_bits)), bw_int_to_fixed(8)), bw_int_to_fixed(data->number_of_dram_channels));
+		}
+		else {
 			yclk_message = bw_def_exceeded_allowed_maximum_bw;
-			results->y_clk_level = high;
-			results->dram_bandwidth =
-				bw_mul(
-					bw_div(
-						bw_mul(
-							yclk[high],
-							bw_int_to_fixed(
-								vbios->dram_channel_width_in_bits)),
-						bw_int_to_fixed(8)),
-					bw_int_to_fixed(
-						vbios->number_of_dram_channels));
+			data->y_clk_level = high;
+			data->dram_bandwidth = bw_mul(bw_div(bw_mul(bw_mul(data->dram_efficiency, yclk[high]), bw_int_to_fixed(vbios->dram_channel_width_in_bits)), bw_int_to_fixed(8)), bw_int_to_fixed(data->number_of_dram_channels));
 		}
 	}
 	/*required sclk*/
@@ -2706,96 +1490,64 @@ static void calculate_bandwidth(
 	/*if that is the case, the sclk requirement is the maximum of the ones required by dmif and mcifwr, and the high/mid/low sclk is chosen accordingly, unless that choice results in foresaking dram speed/nb p-state change.*/
 	/*the dmif and mcifwr sclk required is the one that allows the transfer of all pipe's data buffer size through the sclk bus in the time for data transfer*/
 	/*for dmif, pte and cursor requests have to be included.*/
-	results->dmif_required_sclk = bw_div(
-		bw_div(
-			results->total_display_reads_required_data,
-			results->display_reads_time_for_data_transfer),
-		vbios->data_return_bus_width);
-	results->mcifwr_required_sclk = bw_div(
-		bw_div(
-			results->total_display_writes_required_data,
-			results->display_writes_time_for_data_transfer),
-		vbios->data_return_bus_width);
-	if (bw_mtn(
-		results->scatter_gather_total_pte_requests,
-		dceip->maximum_total_outstanding_pte_requests_allowed_by_saw)) {
-		results->required_sclk = bw_int_to_fixed(9999);
-		sclk_message =
-			bw_def_exceeded_allowed_outstanding_pte_req_queue_size;
-		results->sclk_level = high;
-	} else if (bw_mtn(
-		vbios->dmifmc_urgent_latency,
-		results->required_dmifmc_urgent_latency_for_page_close_open)
-		|| bw_mtn(
-			vbios->mcifwrmc_urgent_latency,
-			results->required_mcifmcwr_urgent_latency)) {
-		results->required_sclk = bw_int_to_fixed(9999);
+	data->dmif_required_sclk = bw_div(bw_div(data->total_display_reads_required_data, data->display_reads_time_for_data_transfer), (bw_mul(vbios->data_return_bus_width, bw_int_to_fixed(bus_efficiency))));
+	data->mcifwr_required_sclk = bw_div(bw_div(data->total_display_writes_required_data, data->display_writes_time_for_data_transfer), (bw_mul(vbios->data_return_bus_width, bw_int_to_fixed(bus_efficiency))));
+	if (bw_mtn(data->scatter_gather_total_pte_requests, dceip->maximum_total_outstanding_pte_requests_allowed_by_saw)) {
+		data->required_sclk = bw_int_to_fixed(9999);
+		sclk_message = bw_def_exceeded_allowed_outstanding_pte_req_queue_size;
+		data->sclk_level = s_high;
+	}
+	else if (bw_mtn(vbios->dmifmc_urgent_latency, data->required_dmifmc_urgent_latency_for_page_close_open) || bw_mtn(vbios->mcifwrmc_urgent_latency, data->required_mcifmcwr_urgent_latency)) {
+		data->required_sclk = bw_int_to_fixed(9999);
 		sclk_message = bw_def_exceeded_allowed_page_close_open;
-		results->sclk_level = high;
-	} else {
-		results->required_sclk = bw_max2(
-			results->dmif_required_sclk,
-			results->mcifwr_required_sclk);
-		if (bw_ltn(results->required_sclk, sclk[low])
-			&& (results->cpup_state_change_enable == bw_def_no
-				|| (bw_mtn(
-					results->blackout_duration_margin[results->y_clk_level][low],
-					bw_int_to_fixed(0))
-					&& bw_ltn(
-						results->dispclk_required_for_blackout_duration[results->y_clk_level][low],
-						vbios->high_voltage_max_dispclk)))
-			&& (results->cpuc_state_change_enable == bw_def_no
-				|| (bw_mtn(
-					results->blackout_duration_margin[results->y_clk_level][low],
-					bw_int_to_fixed(0))
-					&& bw_ltn(
-						results->dispclk_required_for_blackout_duration[results->y_clk_level][low],
-						vbios->high_voltage_max_dispclk)
-					&& bw_ltn(
-						results->dispclk_required_for_blackout_recovery[results->y_clk_level][low],
-						vbios->high_voltage_max_dispclk)))
-			&& (results->nbp_state_change_enable == bw_def_no
-				|| (bw_mtn(
-					results->dram_speed_change_margin[results->y_clk_level][low],
-					bw_int_to_fixed(0))
-					&& bw_leq(
-						results->dispclk_required_for_dram_speed_change[results->y_clk_level][low],
-						vbios->high_voltage_max_dispclk)))) {
+		data->sclk_level = s_high;
+	}
+	else {
+		data->required_sclk = bw_max2(data->dmif_required_sclk, data->mcifwr_required_sclk);
+		if (bw_ltn(data->required_sclk, sclk[s_low]) && (data->cpup_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_low], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_low], vbios->high_voltage_max_dispclk))) && (data->cpuc_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_low], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_low], vbios->high_voltage_max_dispclk) && bw_ltn(data->dispclk_required_for_blackout_recovery[data->y_clk_level][s_low], vbios->high_voltage_max_dispclk))) && (data->nbp_state_change_enable == bw_def_no || (bw_mtn(data->min_dram_speed_change_margin[data->y_clk_level][s_low], bw_int_to_fixed(0)) && bw_ltn(data->min_dram_speed_change_margin[data->y_clk_level][s_low], bw_int_to_fixed(9999)) && bw_leq(data->dispclk_required_for_dram_speed_change[data->y_clk_level][s_low], vbios->low_voltage_max_dispclk) && data->num_displays_with_margin[data->y_clk_level][s_low] == number_of_displays_enabled_with_margin))) {
 			sclk_message = bw_def_low;
-			results->sclk_level = low;
-		} else if (bw_ltn(results->required_sclk, sclk[mid])
-			&& (results->cpup_state_change_enable == bw_def_no
-				|| (bw_mtn(
-					results->blackout_duration_margin[results->y_clk_level][mid],
-					bw_int_to_fixed(0))
-					&& bw_ltn(
-						results->dispclk_required_for_blackout_duration[results->y_clk_level][mid],
-						vbios->high_voltage_max_dispclk)))
-			&& (results->cpuc_state_change_enable == bw_def_no
-				|| (bw_mtn(
-					results->blackout_duration_margin[results->y_clk_level][mid],
-					bw_int_to_fixed(0))
-					&& bw_ltn(
-						results->dispclk_required_for_blackout_duration[results->y_clk_level][mid],
-						vbios->high_voltage_max_dispclk)
-					&& bw_ltn(
-						results->dispclk_required_for_blackout_recovery[results->y_clk_level][mid],
-						vbios->high_voltage_max_dispclk)))
-			&& (results->nbp_state_change_enable == bw_def_no
-				|| (bw_mtn(
-					results->dram_speed_change_margin[results->y_clk_level][mid],
-					bw_int_to_fixed(0))
-					&& bw_leq(
-						results->dispclk_required_for_dram_speed_change[results->y_clk_level][mid],
-						vbios->high_voltage_max_dispclk)))) {
+			data->sclk_level = s_low;
+			data->required_sclk = vbios->low_sclk;
+		}
+		else if (bw_ltn(data->required_sclk, sclk[s_mid1]) && (data->cpup_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid1], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid1], vbios->high_voltage_max_dispclk))) && (data->cpuc_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid1], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid1], vbios->high_voltage_max_dispclk) && bw_ltn(data->dispclk_required_for_blackout_recovery[data->y_clk_level][s_mid1], vbios->high_voltage_max_dispclk))) && (data->nbp_state_change_enable == bw_def_no || (bw_mtn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid1], bw_int_to_fixed(0)) && bw_ltn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid1], bw_int_to_fixed(9999)) && bw_leq(data->dispclk_required_for_dram_speed_change[data->y_clk_level][s_mid1], vbios->mid_voltage_max_dispclk) && data->num_displays_with_margin[data->y_clk_level][s_mid1] == number_of_displays_enabled_with_margin))) {
 			sclk_message = bw_def_mid;
-			results->sclk_level = mid;
-		} else if (bw_ltn(results->required_sclk, sclk[high])) {
+			data->sclk_level = s_mid1;
+			data->required_sclk = vbios->mid1_sclk;
+		}
+		else if (bw_ltn(data->required_sclk, sclk[s_mid2]) && (data->cpup_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid2], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid2], vbios->high_voltage_max_dispclk))) && (data->cpuc_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid2], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid2], vbios->high_voltage_max_dispclk) && bw_ltn(data->dispclk_required_for_blackout_recovery[data->y_clk_level][s_mid2], vbios->high_voltage_max_dispclk))) && (data->nbp_state_change_enable == bw_def_no || (bw_mtn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid2], bw_int_to_fixed(0)) && bw_ltn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid2], bw_int_to_fixed(9999)) && bw_leq(data->dispclk_required_for_dram_speed_change[data->y_clk_level][s_mid2], vbios->mid_voltage_max_dispclk) && data->num_displays_with_margin[data->y_clk_level][s_mid2] == number_of_displays_enabled_with_margin))) {
+			sclk_message = bw_def_mid;
+			data->sclk_level = s_mid2;
+			data->required_sclk = vbios->mid2_sclk;
+		}
+		else if (bw_ltn(data->required_sclk, sclk[s_mid3]) && (data->cpup_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid3], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid3], vbios->high_voltage_max_dispclk))) && (data->cpuc_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid3], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid3], vbios->high_voltage_max_dispclk) && bw_ltn(data->dispclk_required_for_blackout_recovery[data->y_clk_level][s_mid3], vbios->high_voltage_max_dispclk))) && (data->nbp_state_change_enable == bw_def_no || (bw_mtn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid3], bw_int_to_fixed(0)) && bw_ltn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid3], bw_int_to_fixed(9999)) && bw_leq(data->dispclk_required_for_dram_speed_change[data->y_clk_level][s_mid3], vbios->mid_voltage_max_dispclk) && data->num_displays_with_margin[data->y_clk_level][s_mid3] == number_of_displays_enabled_with_margin))) {
+			sclk_message = bw_def_mid;
+			data->sclk_level = s_mid3;
+			data->required_sclk = vbios->mid3_sclk;
+		}
+		else if (bw_ltn(data->required_sclk, sclk[s_mid4]) && (data->cpup_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid4], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid4], vbios->high_voltage_max_dispclk))) && (data->cpuc_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid4], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid4], vbios->high_voltage_max_dispclk) && bw_ltn(data->dispclk_required_for_blackout_recovery[data->y_clk_level][s_mid4], vbios->high_voltage_max_dispclk))) && (data->nbp_state_change_enable == bw_def_no || (bw_mtn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid4], bw_int_to_fixed(0)) && bw_ltn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid4], bw_int_to_fixed(9999)) && bw_leq(data->dispclk_required_for_dram_speed_change[data->y_clk_level][s_mid4], vbios->mid_voltage_max_dispclk) && data->num_displays_with_margin[data->y_clk_level][s_mid4] == number_of_displays_enabled_with_margin))) {
+			sclk_message = bw_def_mid;
+			data->sclk_level = s_mid4;
+			data->required_sclk = vbios->mid4_sclk;
+		}
+		else if (bw_ltn(data->required_sclk, sclk[s_mid5]) && (data->cpup_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid5], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid5], vbios->high_voltage_max_dispclk))) && (data->cpuc_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid5], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid5], vbios->high_voltage_max_dispclk) && bw_ltn(data->dispclk_required_for_blackout_recovery[data->y_clk_level][s_mid5], vbios->high_voltage_max_dispclk))) && (data->nbp_state_change_enable == bw_def_no || (bw_mtn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid5], bw_int_to_fixed(0)) && bw_ltn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid5], bw_int_to_fixed(9999)) && bw_leq(data->dispclk_required_for_dram_speed_change[data->y_clk_level][s_mid5], vbios->mid_voltage_max_dispclk) && data->num_displays_with_margin[data->y_clk_level][s_mid5] == number_of_displays_enabled_with_margin))) {
+			sclk_message = bw_def_mid;
+			data->sclk_level = s_mid5;
+			data->required_sclk = vbios->mid5_sclk;
+		}
+		else if (bw_ltn(data->required_sclk, sclk[s_mid6]) && (data->cpup_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid6], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid6], vbios->high_voltage_max_dispclk))) && (data->cpuc_state_change_enable == bw_def_no || (bw_mtn(data->blackout_duration_margin[data->y_clk_level][s_mid6], bw_int_to_fixed(0)) && bw_ltn(data->dispclk_required_for_blackout_duration[data->y_clk_level][s_mid6], vbios->high_voltage_max_dispclk) && bw_ltn(data->dispclk_required_for_blackout_recovery[data->y_clk_level][s_mid6], vbios->high_voltage_max_dispclk))) && (data->nbp_state_change_enable == bw_def_no || (bw_mtn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid6], bw_int_to_fixed(0)) && bw_ltn(data->min_dram_speed_change_margin[data->y_clk_level][s_mid6], bw_int_to_fixed(9999)) && bw_leq(data->dispclk_required_for_dram_speed_change[data->y_clk_level][s_mid6], vbios->high_voltage_max_dispclk) && data->num_displays_with_margin[data->y_clk_level][s_mid6] == number_of_displays_enabled_with_margin))) {
+			sclk_message = bw_def_mid;
+			data->sclk_level = s_mid6;
+			data->required_sclk = vbios->mid6_sclk;
+		}
+		else if (bw_ltn(data->required_sclk, sclk[s_high])) {
 			sclk_message = bw_def_high;
-			results->sclk_level = high;
-		} else {
+			data->sclk_level = s_high;
+			data->required_sclk = vbios->high_sclk;
+		}
+		else {
 			sclk_message = bw_def_exceeded_allowed_maximum_sclk;
-			results->sclk_level = high;
+			data->sclk_level = s_high;
+			/*required_sclk = high_sclk*/
 		}
 	}
 	/*dispclk*/
@@ -2812,220 +1564,102 @@ static void calculate_bandwidth(
 	/*the scaling limits factor is the product of the horizontal scale ratio, and the ratio of the vertical taps divided by the scaler efficiency clamped to at least 1.*/
 	/*the scaling limits factor itself it also clamped to at least 1*/
 	/*if doing downscaling with the pre-downscaler enabled, the horizontal scale ratio should not be considered above (use "1")*/
-	results->downspread_factor = bw_add(
-		bw_int_to_fixed(1),
-		bw_div(vbios->down_spread_percentage, bw_int_to_fixed(100)));
+	data->downspread_factor = bw_add(bw_int_to_fixed(1), bw_div(vbios->down_spread_percentage, bw_int_to_fixed(100)));
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
+		if (data->enable[i]) {
 			if (surface_type[i] == bw_def_graphics) {
-				switch (results->lb_bpc[i]) {
+				switch (data->lb_bpc[i]) {
 				case 6:
-					results->v_scaler_efficiency =
-						dceip->graphics_vscaler_efficiency6_bit_per_component;
+					data->v_scaler_efficiency = dceip->graphics_vscaler_efficiency6_bit_per_component;
 					break;
 				case 8:
-					results->v_scaler_efficiency =
-						dceip->graphics_vscaler_efficiency8_bit_per_component;
+					data->v_scaler_efficiency = dceip->graphics_vscaler_efficiency8_bit_per_component;
 					break;
 				case 10:
-					results->v_scaler_efficiency =
-						dceip->graphics_vscaler_efficiency10_bit_per_component;
+					data->v_scaler_efficiency = dceip->graphics_vscaler_efficiency10_bit_per_component;
 					break;
 				default:
-					results->v_scaler_efficiency =
-						dceip->graphics_vscaler_efficiency12_bit_per_component;
+					data->v_scaler_efficiency = dceip->graphics_vscaler_efficiency12_bit_per_component;
 					break;
 				}
-				if (results->use_alpha[i] == 1) {
-					results->v_scaler_efficiency =
-						bw_min2(
-							results->v_scaler_efficiency,
-							dceip->alpha_vscaler_efficiency);
+				if (data->use_alpha[i] == 1) {
+					data->v_scaler_efficiency = bw_min2(data->v_scaler_efficiency, dceip->alpha_vscaler_efficiency);
 				}
-			} else {
-				switch (results->lb_bpc[i]) {
+			}
+			else {
+				switch (data->lb_bpc[i]) {
 				case 6:
-					results->v_scaler_efficiency =
-						dceip->underlay_vscaler_efficiency6_bit_per_component;
+					data->v_scaler_efficiency = dceip->underlay_vscaler_efficiency6_bit_per_component;
 					break;
 				case 8:
-					results->v_scaler_efficiency =
-						dceip->underlay_vscaler_efficiency8_bit_per_component;
+					data->v_scaler_efficiency = dceip->underlay_vscaler_efficiency8_bit_per_component;
 					break;
 				case 10:
-					results->v_scaler_efficiency =
-						dceip->underlay_vscaler_efficiency10_bit_per_component;
+					data->v_scaler_efficiency = dceip->underlay_vscaler_efficiency10_bit_per_component;
 					break;
 				default:
-					results->v_scaler_efficiency =
-						dceip->underlay_vscaler_efficiency12_bit_per_component;
+					data->v_scaler_efficiency = dceip->underlay_vscaler_efficiency12_bit_per_component;
 					break;
 				}
 			}
-			if (dceip->pre_downscaler_enabled
-				&& bw_mtn(
-					results->hsr[i],
-					bw_int_to_fixed(1))) {
-				results->scaler_limits_factor =
-					bw_max2(
-						bw_div(
-							results->v_taps[i],
-							results->v_scaler_efficiency),
-						bw_div(
-							results->source_width_rounded_up_to_chunks[i],
-							results->h_total[i]));
-			} else {
-				results->scaler_limits_factor =
-					bw_max3(
-						bw_int_to_fixed(1),
-						bw_ceil2(
-							bw_div(
-								results->h_taps[i],
-								bw_int_to_fixed(
-									4)),
-							bw_int_to_fixed(1)),
-						bw_mul(
-							results->hsr[i],
-							bw_max2(
-								bw_div(
-									results->v_taps[i],
-									results->v_scaler_efficiency),
-								bw_int_to_fixed(
-									1))));
+			if (dceip->pre_downscaler_enabled && bw_mtn(data->hsr[i], bw_int_to_fixed(1))) {
+				data->scaler_limits_factor = bw_max2(bw_div(data->v_taps[i], data->v_scaler_efficiency), bw_div(data->source_width_rounded_up_to_chunks[i], data->h_total[i]));
 			}
-			results->display_pipe_pixel_throughput =
-				bw_div(
-					bw_div(
-						bw_mul(
-							bw_max2(
-								results->lb_lines_in_per_line_out_in_beginning_of_frame[i],
-								bw_mul(
-									results->lb_lines_in_per_line_out_in_middle_of_frame[i],
-									results->horizontal_blank_and_chunk_granularity_factor[i])),
-							results->source_width_rounded_up_to_chunks[i]),
-						(bw_div(
-							results->h_total[i],
-							results->pixel_rate[i]))),
-					dceip->lb_write_pixels_per_dispclk);
-			results->dispclk_required_without_ramping[i] =
-				bw_mul(
-					results->downspread_factor,
-					bw_max2(
-						bw_mul(
-							results->pixel_rate[i],
-							results->scaler_limits_factor),
-						bw_mul(
-							dceip->display_pipe_throughput_factor,
-							results->display_pipe_pixel_throughput)));
-			results->dispclk_required_with_ramping[i] =
-				bw_mul(
-					dceip->dispclk_ramping_factor,
-					bw_max2(
-						bw_mul(
-							results->pixel_rate[i],
-							results->scaler_limits_factor),
-						results->display_pipe_pixel_throughput));
+			else {
+				data->scaler_limits_factor = bw_max3(bw_int_to_fixed(1), bw_ceil2(bw_div(data->h_taps[i], bw_int_to_fixed(4)), bw_int_to_fixed(1)), bw_mul(data->hsr[i], bw_max2(bw_div(data->v_taps[i], data->v_scaler_efficiency), bw_int_to_fixed(1))));
+			}
+			data->display_pipe_pixel_throughput = bw_div(bw_div(bw_mul(bw_max2(data->lb_lines_in_per_line_out_in_beginning_of_frame[i], bw_mul(data->lb_lines_in_per_line_out_in_middle_of_frame[i], data->horizontal_blank_and_chunk_granularity_factor[i])), data->source_width_rounded_up_to_chunks[i]), (bw_div(data->h_total[i], data->pixel_rate[i]))), dceip->lb_write_pixels_per_dispclk);
+			data->dispclk_required_without_ramping[i] = bw_mul(data->downspread_factor, bw_max2(bw_mul(data->pixel_rate[i], data->scaler_limits_factor), bw_mul(dceip->display_pipe_throughput_factor, data->display_pipe_pixel_throughput)));
+			data->dispclk_required_with_ramping[i] = bw_mul(dceip->dispclk_ramping_factor, bw_max2(bw_mul(data->pixel_rate[i], data->scaler_limits_factor), data->display_pipe_pixel_throughput));
 		}
 	}
-	results->total_dispclk_required_with_ramping = bw_int_to_fixed(0);
-	results->total_dispclk_required_without_ramping = bw_int_to_fixed(0);
+	data->total_dispclk_required_with_ramping = bw_int_to_fixed(0);
+	data->total_dispclk_required_without_ramping = bw_int_to_fixed(0);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (bw_ltn(
-				results->total_dispclk_required_with_ramping,
-				results->dispclk_required_with_ramping[i])) {
-				results->total_dispclk_required_with_ramping =
-					results->dispclk_required_with_ramping[i];
+		if (data->enable[i]) {
+			if (bw_ltn(data->total_dispclk_required_with_ramping, data->dispclk_required_with_ramping[i])) {
+				data->total_dispclk_required_with_ramping = data->dispclk_required_with_ramping[i];
 			}
-			if (bw_ltn(
-				results->total_dispclk_required_without_ramping,
-				results->dispclk_required_without_ramping[i])) {
-				results->total_dispclk_required_without_ramping =
-					results->dispclk_required_without_ramping[i];
+			if (bw_ltn(data->total_dispclk_required_without_ramping, data->dispclk_required_without_ramping[i])) {
+				data->total_dispclk_required_without_ramping = data->dispclk_required_without_ramping[i];
 			}
 		}
 	}
-	results->total_read_request_bandwidth = bw_int_to_fixed(0);
-	results->total_write_request_bandwidth = bw_int_to_fixed(0);
+	data->total_read_request_bandwidth = bw_int_to_fixed(0);
+	data->total_write_request_bandwidth = bw_int_to_fixed(0);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (surface_type[i] != bw_def_display_write_back420_luma
-				&& surface_type[i]
-					!= bw_def_display_write_back420_chroma) {
-				results->total_read_request_bandwidth = bw_add(
-					results->total_read_request_bandwidth,
-					results->request_bandwidth[i]);
-			} else {
-				results->total_write_request_bandwidth = bw_add(
-					results->total_write_request_bandwidth,
-					results->request_bandwidth[i]);
+		if (data->enable[i]) {
+			if (surface_type[i] != bw_def_display_write_back420_luma && surface_type[i] != bw_def_display_write_back420_chroma) {
+				data->total_read_request_bandwidth = bw_add(data->total_read_request_bandwidth, data->request_bandwidth[i]);
+			}
+			else {
+				data->total_write_request_bandwidth = bw_add(data->total_write_request_bandwidth, data->request_bandwidth[i]);
 			}
 		}
 	}
-	results->dispclk_required_for_total_read_request_bandwidth = bw_div(
-		bw_mul(
-			results->total_read_request_bandwidth,
-			dceip->dispclk_per_request),
-		dceip->request_efficiency);
-	if (dceip->dcfclk_request_generation == 0) {
-		results->total_dispclk_required_with_ramping_with_request_bandwidth =
-			bw_max2(
-				results->total_dispclk_required_with_ramping,
-				results->dispclk_required_for_total_read_request_bandwidth);
-		results->total_dispclk_required_without_ramping_with_request_bandwidth =
-			bw_max2(
-				results->total_dispclk_required_without_ramping,
-				results->dispclk_required_for_total_read_request_bandwidth);
-	} else {
-		results->total_dispclk_required_with_ramping_with_request_bandwidth =
-			results->total_dispclk_required_with_ramping;
-		results->total_dispclk_required_without_ramping_with_request_bandwidth =
-			results->total_dispclk_required_without_ramping;
+	data->dispclk_required_for_total_read_request_bandwidth = bw_div(bw_mul(data->total_read_request_bandwidth, dceip->dispclk_per_request), dceip->request_efficiency);
+	data->total_dispclk_required_with_ramping_with_request_bandwidth = bw_max2(data->total_dispclk_required_with_ramping, data->dispclk_required_for_total_read_request_bandwidth);
+	data->total_dispclk_required_without_ramping_with_request_bandwidth = bw_max2(data->total_dispclk_required_without_ramping, data->dispclk_required_for_total_read_request_bandwidth);
+	if (data->cpuc_state_change_enable == bw_def_yes) {
+		data->total_dispclk_required_with_ramping_with_request_bandwidth = bw_max3(data->total_dispclk_required_with_ramping_with_request_bandwidth, data->dispclk_required_for_blackout_duration[data->y_clk_level][data->sclk_level], data->dispclk_required_for_blackout_recovery[data->y_clk_level][data->sclk_level]);
+		data->total_dispclk_required_without_ramping_with_request_bandwidth = bw_max3(data->total_dispclk_required_without_ramping_with_request_bandwidth, data->dispclk_required_for_blackout_duration[data->y_clk_level][data->sclk_level], data->dispclk_required_for_blackout_recovery[data->y_clk_level][data->sclk_level]);
 	}
-	if (results->cpuc_state_change_enable == bw_def_yes) {
-		results->total_dispclk_required_with_ramping_with_request_bandwidth =
-			bw_max3(
-				results->total_dispclk_required_with_ramping_with_request_bandwidth,
-				results->dispclk_required_for_blackout_duration[results->y_clk_level][results->sclk_level],
-				results->dispclk_required_for_blackout_recovery[results->y_clk_level][results->sclk_level]);
-		results->total_dispclk_required_without_ramping_with_request_bandwidth =
-			bw_max3(
-				results->total_dispclk_required_without_ramping_with_request_bandwidth,
-				results->dispclk_required_for_blackout_duration[results->y_clk_level][results->sclk_level],
-				results->dispclk_required_for_blackout_recovery[results->y_clk_level][results->sclk_level]);
+	if (data->cpup_state_change_enable == bw_def_yes) {
+		data->total_dispclk_required_with_ramping_with_request_bandwidth = bw_max2(data->total_dispclk_required_with_ramping_with_request_bandwidth, data->dispclk_required_for_blackout_duration[data->y_clk_level][data->sclk_level]);
+		data->total_dispclk_required_without_ramping_with_request_bandwidth = bw_max2(data->total_dispclk_required_without_ramping_with_request_bandwidth, data->dispclk_required_for_blackout_duration[data->y_clk_level][data->sclk_level]);
 	}
-	if (results->cpup_state_change_enable == bw_def_yes) {
-		results->total_dispclk_required_with_ramping_with_request_bandwidth =
-			bw_max2(
-				results->total_dispclk_required_with_ramping_with_request_bandwidth,
-				results->dispclk_required_for_blackout_duration[results->y_clk_level][results->sclk_level]);
-		results->total_dispclk_required_without_ramping_with_request_bandwidth =
-			bw_max2(
-				results->total_dispclk_required_without_ramping_with_request_bandwidth,
-				results->dispclk_required_for_blackout_duration[results->y_clk_level][results->sclk_level]);
+	if (data->nbp_state_change_enable == bw_def_yes) {
+		data->total_dispclk_required_with_ramping_with_request_bandwidth = bw_max2(data->total_dispclk_required_with_ramping_with_request_bandwidth, data->dispclk_required_for_dram_speed_change[data->y_clk_level][data->sclk_level]);
+		data->total_dispclk_required_without_ramping_with_request_bandwidth = bw_max2(data->total_dispclk_required_without_ramping_with_request_bandwidth, data->dispclk_required_for_dram_speed_change[data->y_clk_level][data->sclk_level]);
 	}
-	if (results->nbp_state_change_enable == bw_def_yes) {
-		results->total_dispclk_required_with_ramping_with_request_bandwidth =
-			bw_max2(
-				results->total_dispclk_required_with_ramping_with_request_bandwidth,
-				results->dispclk_required_for_dram_speed_change[results->y_clk_level][results->sclk_level]);
-		results->total_dispclk_required_without_ramping_with_request_bandwidth =
-			bw_max2(
-				results->total_dispclk_required_without_ramping_with_request_bandwidth,
-				results->dispclk_required_for_dram_speed_change[results->y_clk_level][results->sclk_level]);
+	if (bw_ltn(data->total_dispclk_required_with_ramping_with_request_bandwidth, vbios->high_voltage_max_dispclk)) {
+		data->dispclk = data->total_dispclk_required_with_ramping_with_request_bandwidth;
 	}
-	if (bw_ltn(
-		results->total_dispclk_required_with_ramping_with_request_bandwidth,
-		vbios->high_voltage_max_dispclk)) {
-		results->dispclk =
-			results->total_dispclk_required_with_ramping_with_request_bandwidth;
-	} else if (bw_ltn(
-		results->total_dispclk_required_without_ramping_with_request_bandwidth,
-		vbios->high_voltage_max_dispclk)) {
-		results->dispclk = vbios->high_voltage_max_dispclk;
-	} else {
-		results->dispclk =
-			results->total_dispclk_required_without_ramping_with_request_bandwidth;
+	else if (bw_ltn(data->total_dispclk_required_without_ramping_with_request_bandwidth, vbios->high_voltage_max_dispclk)) {
+		data->dispclk = vbios->high_voltage_max_dispclk;
+	}
+	else {
+		data->dispclk = data->total_dispclk_required_without_ramping_with_request_bandwidth;
 	}
 	/* required core voltage*/
 	/* the core voltage required is low if sclk, yclk(pclk)and dispclk are within the low limits*/
@@ -3034,176 +1668,50 @@ static void calculate_bandwidth(
 	/* otherwise, or if the mode is not supported, core voltage requirement is not applicable*/
 	if (pipe_check == bw_def_notok) {
 		voltage = bw_def_na;
-	} else if (mode_check == bw_def_notok) {
-		voltage = bw_def_notok;
-	} else if (yclk_message == bw_def_low && sclk_message == bw_def_low
-		&& bw_ltn(results->dispclk, vbios->low_voltage_max_dispclk)) {
-		voltage = bw_def_low;
-	} else if (yclk_message == bw_def_low
-		&& (sclk_message == bw_def_low || sclk_message == bw_def_mid)
-		&& bw_ltn(results->dispclk, vbios->mid_voltage_max_dispclk)) {
-		voltage = bw_def_mid;
-	} else if ((yclk_message == bw_def_low || yclk_message == bw_def_high)
-		&& (sclk_message == bw_def_low || sclk_message == bw_def_mid
-			|| sclk_message == bw_def_high)
-		&& bw_leq(results->dispclk, vbios->high_voltage_max_dispclk)) {
-		if (results->nbp_state_change_enable == bw_def_yes) {
-			voltage = bw_def_high;
-		} else {
-			voltage = bw_def_high_no_nbp_state_change;
-		}
-	} else {
+	}
+	else if (mode_check == bw_def_notok) {
 		voltage = bw_def_notok;
 	}
+	else if (bw_equ(bw_int_to_fixed(yclk_message), vbios->low_yclk) && sclk_message == bw_def_low && bw_ltn(data->dispclk, vbios->low_voltage_max_dispclk)) {
+		voltage = bw_def_0_72;
+	}
+	else if ((bw_equ(bw_int_to_fixed(yclk_message), vbios->low_yclk) || bw_equ(bw_int_to_fixed(yclk_message), vbios->mid_yclk)) && (sclk_message == bw_def_low || sclk_message == bw_def_mid) && bw_ltn(data->dispclk, vbios->mid_voltage_max_dispclk)) {
+		voltage = bw_def_0_8;
+	}
+	else if ((bw_equ(bw_int_to_fixed(yclk_message), vbios->low_yclk) || bw_equ(bw_int_to_fixed(yclk_message), vbios->mid_yclk) || bw_equ(bw_int_to_fixed(yclk_message), vbios->high_yclk)) && (sclk_message == bw_def_low || sclk_message == bw_def_mid || sclk_message == bw_def_high) && bw_leq(data->dispclk, vbios->high_voltage_max_dispclk)) {
+		if ((data->nbp_state_change_enable == bw_def_no && nbp_state_change_enable_blank == bw_def_no)) {
+			voltage = bw_def_high_no_nbp_state_change;
+		}
+		else {
+			voltage = bw_def_0_9;
+		}
+	}
+	else {
+		voltage = bw_def_notok;
+	}
+	if (voltage == bw_def_0_72) {
+		data->max_phyclk = vbios->low_voltage_max_phyclk;
+	}
+	else if (voltage == bw_def_0_8) {
+		data->max_phyclk = vbios->mid_voltage_max_phyclk;
+	}
+	else {
+		data->max_phyclk = vbios->high_voltage_max_phyclk;
+	}
 	/*required blackout recovery time*/
-	results->blackout_recovery_time = bw_int_to_fixed(0);
+	data->blackout_recovery_time = bw_int_to_fixed(0);
 	for (k = 0; k <= maximum_number_of_surfaces - 1; k++) {
-		if (results->enable[k]
-			&& bw_mtn(vbios->blackout_duration, bw_int_to_fixed(0))
-			&& results->cpup_state_change_enable == bw_def_yes) {
-			if (surface_type[k] != bw_def_display_write_back420_luma
-				&& surface_type[k]
-					!= bw_def_display_write_back420_chroma) {
-				results->blackout_recovery_time =
-					bw_max2(
-						results->blackout_recovery_time,
-						bw_add(
-							bw_mul(
-								bw_int_to_fixed(
-									2),
-								results->total_dmifmc_urgent_latency),
-							results->dmif_burst_time[results->y_clk_level][results->sclk_level]));
-				if (bw_ltn(
-					results->adjusted_data_buffer_size[k],
-					bw_mul(
-						bw_div(
-							bw_mul(
-								results->display_bandwidth[k],
-								results->useful_bytes_per_request[k]),
-							results->bytes_per_request[k]),
-						(bw_add(
-							vbios->blackout_duration,
-							bw_add(
-								bw_mul(
-									bw_int_to_fixed(
-										2),
-									results->total_dmifmc_urgent_latency),
-								results->dmif_burst_time[results->y_clk_level][results->sclk_level])))))) {
-					results->blackout_recovery_time =
-						bw_max2(
-							results->blackout_recovery_time,
-							bw_div(
-								(bw_add(
-									bw_mul(
-										bw_div(
-											bw_mul(
-												results->display_bandwidth[k],
-												results->useful_bytes_per_request[k]),
-											results->bytes_per_request[k]),
-										vbios->blackout_duration),
-									bw_sub(
-										bw_div(
-											bw_mul(
-												bw_mul(
-													bw_mul(
-														(bw_add(
-															bw_mul(
-																bw_int_to_fixed(
-																	2),
-																results->total_dmifmc_urgent_latency),
-															results->dmif_burst_time[results->y_clk_level][results->sclk_level])),
-														results->dispclk),
-													bw_int_to_fixed(
-														results->bytes_per_pixel[k])),
-												results->lines_interleaved_in_mem_access[k]),
-											results->latency_hiding_lines[k]),
-										results->adjusted_data_buffer_size[k]))),
-								(bw_sub(
-									bw_div(
-										bw_mul(
-											bw_mul(
-												results->dispclk,
-												bw_int_to_fixed(
-													results->bytes_per_pixel[k])),
-											results->lines_interleaved_in_mem_access[k]),
-										results->latency_hiding_lines[k]),
-									bw_div(
-										bw_mul(
-											results->display_bandwidth[k],
-											results->useful_bytes_per_request[k]),
-										results->bytes_per_request[k])))));
+		if (data->enable[k] && bw_mtn(vbios->blackout_duration, bw_int_to_fixed(0)) && data->cpup_state_change_enable == bw_def_yes) {
+			if (surface_type[k] != bw_def_display_write_back420_luma && surface_type[k] != bw_def_display_write_back420_chroma) {
+				data->blackout_recovery_time = bw_max2(data->blackout_recovery_time, bw_add(bw_mul(bw_int_to_fixed(2), data->total_dmifmc_urgent_latency), data->dmif_burst_time[data->y_clk_level][data->sclk_level]));
+				if (bw_ltn(data->adjusted_data_buffer_size[k], bw_mul(bw_div(bw_mul(data->display_bandwidth[k], data->useful_bytes_per_request[k]), data->bytes_per_request[k]), (bw_add(vbios->blackout_duration, bw_add(bw_mul(bw_int_to_fixed(2), data->total_dmifmc_urgent_latency), data->dmif_burst_time[data->y_clk_level][data->sclk_level])))))) {
+					data->blackout_recovery_time = bw_max2(data->blackout_recovery_time, bw_div((bw_add(bw_mul(bw_div(bw_mul(data->display_bandwidth[k], data->useful_bytes_per_request[k]), data->bytes_per_request[k]), vbios->blackout_duration), bw_sub(bw_div(bw_mul(bw_mul(bw_mul((bw_add(bw_mul(bw_int_to_fixed(2), data->total_dmifmc_urgent_latency), data->dmif_burst_time[data->y_clk_level][data->sclk_level])), data->dispclk), bw_int_to_fixed(data->bytes_per_pixel[k])), data->lines_interleaved_in_mem_access[k]), data->latency_hiding_lines[k]), data->adjusted_data_buffer_size[k]))), (bw_sub(bw_div(bw_mul(bw_mul(data->dispclk, bw_int_to_fixed(data->bytes_per_pixel[k])), data->lines_interleaved_in_mem_access[k]), data->latency_hiding_lines[k]), bw_div(bw_mul(data->display_bandwidth[k], data->useful_bytes_per_request[k]), data->bytes_per_request[k])))));
 				}
-			} else {
-				results->blackout_recovery_time =
-					bw_max2(
-						results->blackout_recovery_time,
-						bw_add(
-							bw_mul(
-								bw_int_to_fixed(
-									2),
-								vbios->mcifwrmc_urgent_latency),
-							results->mcifwr_burst_time[results->y_clk_level][results->sclk_level]));
-				if (bw_ltn(
-					results->adjusted_data_buffer_size[k],
-					bw_mul(
-						bw_div(
-							bw_mul(
-								results->display_bandwidth[k],
-								results->useful_bytes_per_request[k]),
-							results->bytes_per_request[k]),
-						(bw_add(
-							vbios->blackout_duration,
-							bw_add(
-								bw_mul(
-									bw_int_to_fixed(
-										2),
-									vbios->mcifwrmc_urgent_latency),
-								results->mcifwr_burst_time[results->y_clk_level][results->sclk_level])))))) {
-					results->blackout_recovery_time =
-						bw_max2(
-							results->blackout_recovery_time,
-							bw_div(
-								(bw_add(
-									bw_mul(
-										bw_div(
-											bw_mul(
-												results->display_bandwidth[k],
-												results->useful_bytes_per_request[k]),
-											results->bytes_per_request[k]),
-										vbios->blackout_duration),
-									bw_sub(
-										bw_div(
-											bw_mul(
-												bw_mul(
-													bw_mul(
-														(bw_add(
-															bw_add(
-																bw_mul(
-																	bw_int_to_fixed(
-																		2),
-																	vbios->mcifwrmc_urgent_latency),
-																	results->dmif_burst_time[results->y_clk_level][results->sclk_level]),
-															results->mcifwr_burst_time[results->y_clk_level][results->sclk_level])),
-														results->dispclk),
-													bw_int_to_fixed(
-														results->bytes_per_pixel[k])),
-												results->lines_interleaved_in_mem_access[k]),
-											results->latency_hiding_lines[k]),
-										results->adjusted_data_buffer_size[k]))),
-								(bw_sub(
-									bw_div(
-										bw_mul(
-											bw_mul(
-												results->dispclk,
-												bw_int_to_fixed(
-													results->bytes_per_pixel[k])),
-											results->lines_interleaved_in_mem_access[k]),
-										results->latency_hiding_lines[k]),
-									bw_div(
-										bw_mul(
-											results->display_bandwidth[k],
-											results->useful_bytes_per_request[k]),
-										results->bytes_per_request[k])))));
+			}
+			else {
+				data->blackout_recovery_time = bw_max2(data->blackout_recovery_time, bw_add(bw_mul(bw_int_to_fixed(2), vbios->mcifwrmc_urgent_latency), data->mcifwr_burst_time[data->y_clk_level][data->sclk_level]));
+				if (bw_ltn(data->adjusted_data_buffer_size[k], bw_mul(bw_div(bw_mul(data->display_bandwidth[k], data->useful_bytes_per_request[k]), data->bytes_per_request[k]), (bw_add(vbios->blackout_duration, bw_add(bw_mul(bw_int_to_fixed(2), vbios->mcifwrmc_urgent_latency), data->mcifwr_burst_time[data->y_clk_level][data->sclk_level])))))) {
+					data->blackout_recovery_time = bw_max2(data->blackout_recovery_time, bw_div((bw_add(bw_mul(bw_div(bw_mul(data->display_bandwidth[k], data->useful_bytes_per_request[k]), data->bytes_per_request[k]), vbios->blackout_duration), bw_sub(bw_div(bw_mul(bw_mul(bw_mul((bw_add(bw_add(bw_mul(bw_int_to_fixed(2), vbios->mcifwrmc_urgent_latency), data->dmif_burst_time[i][j]), data->mcifwr_burst_time[data->y_clk_level][data->sclk_level])), data->dispclk), bw_int_to_fixed(data->bytes_per_pixel[k])), data->lines_interleaved_in_mem_access[k]), data->latency_hiding_lines[k]), data->adjusted_data_buffer_size[k]))), (bw_sub(bw_div(bw_mul(bw_mul(data->dispclk, bw_int_to_fixed(data->bytes_per_pixel[k])), data->lines_interleaved_in_mem_access[k]), data->latency_hiding_lines[k]), bw_div(bw_mul(data->display_bandwidth[k], data->useful_bytes_per_request[k]), data->bytes_per_request[k])))));
 				}
 			}
 		}
@@ -3215,167 +1723,85 @@ static void calculate_bandwidth(
 	/*in parallel mode (underlay pipe), the data read from the dmifv buffer is variable and based on the pixel depth (8bbp - 16 bytes, 16 bpp - 32 bytes, 32 bpp - 64 bytes)*/
 	/*in orthogonal mode (underlay pipe), the data read from the dmifv buffer is fixed at 16 bytes.*/
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (surface_type[i] == bw_def_display_write_back420_luma
-				|| surface_type[i]
-					== bw_def_display_write_back420_chroma) {
-				results->pixels_per_data_fifo_entry[i] =
-					bw_int_to_fixed(16);
-			} else if (surface_type[i] == bw_def_graphics) {
-				results->pixels_per_data_fifo_entry[i] = bw_div(
-					bw_int_to_fixed(64),
-					bw_int_to_fixed(
-						results->bytes_per_pixel[i]));
-			} else if (results->orthogonal_rotation[i] == 0) {
-				results->pixels_per_data_fifo_entry[i] =
-					bw_int_to_fixed(16);
-			} else {
-				results->pixels_per_data_fifo_entry[i] = bw_div(
-					bw_int_to_fixed(16),
-					bw_int_to_fixed(
-						results->bytes_per_pixel[i]));
+		if (data->enable[i]) {
+			if (surface_type[i] == bw_def_display_write_back420_luma || surface_type[i] == bw_def_display_write_back420_chroma) {
+				data->pixels_per_data_fifo_entry[i] = bw_int_to_fixed(16);
+			}
+			else if (surface_type[i] == bw_def_graphics) {
+				data->pixels_per_data_fifo_entry[i] = bw_div(bw_int_to_fixed(64), bw_int_to_fixed(data->bytes_per_pixel[i]));
+			}
+			else if (data->orthogonal_rotation[i] == 0) {
+				data->pixels_per_data_fifo_entry[i] = bw_int_to_fixed(16);
+			}
+			else {
+				data->pixels_per_data_fifo_entry[i] = bw_div(bw_int_to_fixed(16), bw_int_to_fixed(data->bytes_per_pixel[i]));
 			}
 		}
 	}
-	results->min_pixels_per_data_fifo_entry = bw_int_to_fixed(9999);
+	data->min_pixels_per_data_fifo_entry = bw_int_to_fixed(9999);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (bw_mtn(
-				results->min_pixels_per_data_fifo_entry,
-				results->pixels_per_data_fifo_entry[i])) {
-				results->min_pixels_per_data_fifo_entry =
-					results->pixels_per_data_fifo_entry[i];
+		if (data->enable[i]) {
+			if (bw_mtn(data->min_pixels_per_data_fifo_entry, data->pixels_per_data_fifo_entry[i])) {
+				data->min_pixels_per_data_fifo_entry = data->pixels_per_data_fifo_entry[i];
 			}
 		}
 	}
-	results->sclk_deep_sleep = bw_max2(
-		bw_div(
-			bw_mul(results->dispclk, bw_frc_to_fixed(115, 100)),
-			results->min_pixels_per_data_fifo_entry),
-		results->total_read_request_bandwidth);
+	data->sclk_deep_sleep = bw_max2(bw_div(bw_mul(data->dispclk, bw_frc_to_fixed(115, 100)), data->min_pixels_per_data_fifo_entry), data->total_read_request_bandwidth);
 	/*urgent, stutter and nb-p_state watermark*/
 	/*the urgent watermark is the maximum of the urgent trip time plus the pixel transfer time, the urgent trip times to get data for the first pixel, and the urgent trip times to get data for the last pixel.*/
 	/*the stutter exit watermark is the self refresh exit time plus the maximum of the data burst time plus the pixel transfer time, the data burst times to get data for the first pixel, and the data burst times to get data for the last pixel.  it does not apply to the writeback.*/
 	/*the nb p-state change watermark is the dram speed/p-state change time plus the maximum of the data burst time plus the pixel transfer time, the data burst times to get data for the first pixel, and the data burst times to get data for the last pixel.*/
 	/*the pixel transfer time is the maximum of the time to transfer the source pixels required for the first output pixel, and the time to transfer the pixels for the last output pixel minus the active line time.*/
 	/*blackout_duration is added to the urgent watermark*/
-	results->chunk_request_time = bw_int_to_fixed(0);
-	results->cursor_request_time = bw_int_to_fixed(0);
+	data->chunk_request_time = bw_int_to_fixed(0);
+	data->cursor_request_time = bw_int_to_fixed(0);
 	/*compute total time to request one chunk from each active display pipe*/
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			results->chunk_request_time =
-				bw_add(
-					results->chunk_request_time,
-					(bw_div(
-						(bw_div(
-							bw_int_to_fixed(
-								pixels_per_chunk
-									* results->bytes_per_pixel[i]),
-							results->useful_bytes_per_request[i])),
-						bw_min2(
-							sclk[results->sclk_level],
-							bw_div(
-								results->dispclk,
-								bw_int_to_fixed(
-									2))))));
+		if (data->enable[i]) {
+			data->chunk_request_time = bw_add(data->chunk_request_time, (bw_div((bw_div(bw_int_to_fixed(pixels_per_chunk * data->bytes_per_pixel[i]), data->useful_bytes_per_request[i])), bw_min2(sclk[data->sclk_level], bw_div(data->dispclk, bw_int_to_fixed(2))))));
 		}
 	}
 	/*compute total time to request cursor data*/
-	results->cursor_request_time = (bw_div(
-		results->cursor_total_data,
-		(bw_mul(bw_int_to_fixed(32), sclk[results->sclk_level]))));
+	data->cursor_request_time = (bw_div(data->cursor_total_data, (bw_mul(bw_int_to_fixed(32), sclk[data->sclk_level]))));
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			results->line_source_pixels_transfer_time =
-				bw_max2(
-					bw_div(
-						bw_div(
-							results->src_pixels_for_first_output_pixel[i],
-							dceip->lb_write_pixels_per_dispclk),
-						(bw_div(
-							results->dispclk,
-							dceip->display_pipe_throughput_factor))),
-					bw_sub(
-						bw_div(
-							bw_div(
-								results->src_pixels_for_last_output_pixel[i],
-								dceip->lb_write_pixels_per_dispclk),
-							(bw_div(
-								results->dispclk,
-								dceip->display_pipe_throughput_factor))),
-						results->active_time[i]));
-			if (surface_type[i] != bw_def_display_write_back420_luma
-				&& surface_type[i]
-					!= bw_def_display_write_back420_chroma) {
-				results->urgent_watermark[i] =
-					bw_add(
-						bw_add(
-							bw_add(
-								bw_add(
-									bw_add(
-										results->total_dmifmc_urgent_latency,
-										results->dmif_burst_time[results->y_clk_level][results->sclk_level]),
-									bw_max2(
-										results->line_source_pixels_transfer_time,
-										results->line_source_transfer_time[i][results->y_clk_level][results->sclk_level])),
-								vbios->blackout_duration),
-							results->chunk_request_time),
-						results->cursor_request_time);
-				results->stutter_exit_watermark[i] =
-					bw_add(
-						bw_sub(
-							vbios->stutter_self_refresh_exit_latency,
-							results->total_dmifmc_urgent_latency),
-						results->urgent_watermark[i]);
+		if (data->enable[i]) {
+			data->line_source_pixels_transfer_time = bw_max2(bw_div(bw_div(data->src_pixels_for_first_output_pixel[i], dceip->lb_write_pixels_per_dispclk), (bw_div(data->dispclk, dceip->display_pipe_throughput_factor))), bw_sub(bw_div(bw_div(data->src_pixels_for_last_output_pixel[i], dceip->lb_write_pixels_per_dispclk), (bw_div(data->dispclk, dceip->display_pipe_throughput_factor))), data->active_time[i]));
+			if (surface_type[i] != bw_def_display_write_back420_luma && surface_type[i] != bw_def_display_write_back420_chroma) {
+				data->urgent_watermark[i] = bw_add(bw_add(bw_add(bw_add(bw_add(data->total_dmifmc_urgent_latency, data->dmif_burst_time[data->y_clk_level][data->sclk_level]), bw_max2(data->line_source_pixels_transfer_time, data->line_source_transfer_time[i][data->y_clk_level][data->sclk_level])), vbios->blackout_duration), data->chunk_request_time), data->cursor_request_time);
+				data->stutter_exit_watermark[i] = bw_add(bw_sub(vbios->stutter_self_refresh_exit_latency, data->total_dmifmc_urgent_latency), data->urgent_watermark[i]);
+				data->stutter_entry_watermark[i] = bw_add(bw_sub(bw_add(vbios->stutter_self_refresh_exit_latency, vbios->stutter_self_refresh_entry_latency), data->total_dmifmc_urgent_latency), data->urgent_watermark[i]);
 				/*unconditionally remove black out time from the nb p_state watermark*/
-				results->nbp_state_change_watermark[i] =
-					bw_sub(
-						bw_add(
-							bw_sub(
-								vbios->nbp_state_change_latency,
-								results->total_dmifmc_urgent_latency),
-							results->urgent_watermark[i]),
-						vbios->blackout_duration);
-			} else {
-				results->urgent_watermark[i] =
-					bw_add(
-						bw_add(
-							bw_add(
-								bw_add(
-									bw_add(
-										vbios->mcifwrmc_urgent_latency,
-										results->mcifwr_burst_time[results->y_clk_level][results->sclk_level]),
-									bw_max2(
-										results->line_source_pixels_transfer_time,
-										results->line_source_transfer_time[i][results->y_clk_level][results->sclk_level])),
-								vbios->blackout_duration),
-							results->chunk_request_time),
-						results->cursor_request_time);
-				results->stutter_exit_watermark[i] =
-					bw_int_to_fixed(0);
-				results->nbp_state_change_watermark[i] =
-					bw_add(
-						bw_sub(
-							bw_add(
-								vbios->nbp_state_change_latency,
-								results->dmif_burst_time[results->y_clk_level][results->sclk_level]),
-							vbios->mcifwrmc_urgent_latency),
-						results->urgent_watermark[i]);
+				if ((data->display_pstate_change_enable[i] == 1)) {
+					data->nbp_state_change_watermark[i] = bw_add(bw_add(vbios->nbp_state_change_latency, data->dmif_burst_time[data->y_clk_level][data->sclk_level]), bw_max2(data->line_source_pixels_transfer_time, data->dram_speed_change_line_source_transfer_time[i][data->y_clk_level][data->sclk_level]));
+				}
+				else {
+					/*maximize the watermark to force the switch in the vb_lank region of the frame*/
+					data->nbp_state_change_watermark[i] = bw_int_to_fixed(131000);
+				}
+			}
+			else {
+				data->urgent_watermark[i] = bw_add(bw_add(bw_add(bw_add(bw_add(vbios->mcifwrmc_urgent_latency, data->mcifwr_burst_time[data->y_clk_level][data->sclk_level]), bw_max2(data->line_source_pixels_transfer_time, data->line_source_transfer_time[i][data->y_clk_level][data->sclk_level])), vbios->blackout_duration), data->chunk_request_time), data->cursor_request_time);
+				data->stutter_exit_watermark[i] = bw_int_to_fixed(0);
+				data->stutter_entry_watermark[i] = bw_int_to_fixed(0);
+				if ((data->display_pstate_change_enable[i] == 1)) {
+					data->nbp_state_change_watermark[i] = bw_add(bw_add(vbios->nbp_state_change_latency, data->mcifwr_burst_time[data->y_clk_level][data->sclk_level]), bw_max2(data->line_source_pixels_transfer_time, data->dram_speed_change_line_source_transfer_time[i][data->y_clk_level][data->sclk_level]));
+				}
+				else {
+					/*maximize the watermark to force the switch in the vb_lank region of the frame*/
+					data->nbp_state_change_watermark[i] = bw_int_to_fixed(131000);
+				}
 			}
 		}
 	}
 	/*stutter mode enable*/
-	/*in the multi-display case the stutter exit watermark cannot exceed the cursor dcp buffer size*/
-	results->stutter_mode_enable = results->cpuc_state_change_enable;
-	if (mode_data->number_of_displays > 1) {
+	/*in the multi-display case the stutter exit or entry watermark cannot exceed the minimum latency hiding capabilities of the*/
+	/*display pipe.*/
+	data->stutter_mode_enable = data->cpuc_state_change_enable;
+	if (data->number_of_displays > 1) {
 		for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-			if (results->enable[i]) {
-				if (bw_mtn(
-					results->stutter_exit_watermark[i],
-					results->cursor_latency_hiding[i])) {
-					results->stutter_mode_enable =
-						bw_def_no;
+			if (data->enable[i]) {
+				if ((bw_mtn(data->stutter_exit_watermark[i], data->minimum_latency_hiding[i]) || bw_mtn(data->stutter_entry_watermark[i], data->minimum_latency_hiding[i]))) {
+					data->stutter_mode_enable = bw_def_no;
 				}
 			}
 		}
@@ -3395,64 +1821,28 @@ static void calculate_bandwidth(
 	/* nb p-state change margin (us)*/
 	/*dmif and mcifwr dram access efficiency*/
 	/*is the ratio between the ideal dram access time (which is the data buffer size in memory divided by the dram bandwidth), and the actual time which is the total page close-open time.  but it cannot exceed the dram efficiency provided by the memory subsystem*/
-	results->dmifdram_access_efficiency =
-		bw_min2(
-			bw_div(
-				bw_div(
-					results->total_display_reads_required_dram_access_data,
-					results->dram_bandwidth),
-				results->dmif_total_page_close_open_time),
-			bw_int_to_fixed(1));
-	if (bw_mtn(
-		results->total_display_writes_required_dram_access_data,
-		bw_int_to_fixed(0))) {
-		results->mcifwrdram_access_efficiency =
-			bw_min2(
-				bw_div(
-					bw_div(
-						results->total_display_writes_required_dram_access_data,
-						results->dram_bandwidth),
-					results->mcifwr_total_page_close_open_time),
-				bw_int_to_fixed(1));
-	} else {
-		results->mcifwrdram_access_efficiency = bw_int_to_fixed(0);
+	data->dmifdram_access_efficiency = bw_min2(bw_div(bw_div(data->total_display_reads_required_dram_access_data, data->dram_bandwidth), data->dmif_total_page_close_open_time), bw_int_to_fixed(1));
+	if (bw_mtn(data->total_display_writes_required_dram_access_data, bw_int_to_fixed(0))) {
+		data->mcifwrdram_access_efficiency = bw_min2(bw_div(bw_div(data->total_display_writes_required_dram_access_data, data->dram_bandwidth), data->mcifwr_total_page_close_open_time), bw_int_to_fixed(1));
+	}
+	else {
+		data->mcifwrdram_access_efficiency = bw_int_to_fixed(0);
 	}
 	/*average bandwidth*/
 	/*the average bandwidth with no compression is the vertical active time is the source width times the bytes per pixel divided by the line time, multiplied by the vertical scale ratio and the ratio of bytes per request divided by the useful bytes per request.*/
 	/*the average bandwidth with compression is the same, divided by the compression ratio*/
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			results->average_bandwidth_no_compression[i] =
-				bw_div(
-					bw_mul(
-						bw_mul(
-							bw_div(
-								bw_mul(
-									results->source_width_rounded_up_to_chunks[i],
-									bw_int_to_fixed(
-										results->bytes_per_pixel[i])),
-								(bw_div(
-									results->h_total[i],
-									results->pixel_rate[i]))),
-							results->vsr[i]),
-						results->bytes_per_request[i]),
-					results->useful_bytes_per_request[i]);
-			results->average_bandwidth[i] = bw_div(
-				results->average_bandwidth_no_compression[i],
-				results->compression_rate[i]);
+		if (data->enable[i]) {
+			data->average_bandwidth_no_compression[i] = bw_div(bw_mul(bw_mul(bw_div(bw_mul(data->source_width_rounded_up_to_chunks[i], bw_int_to_fixed(data->bytes_per_pixel[i])), (bw_div(data->h_total[i], data->pixel_rate[i]))), data->vsr[i]), data->bytes_per_request[i]), data->useful_bytes_per_request[i]);
+			data->average_bandwidth[i] = bw_div(data->average_bandwidth_no_compression[i], data->compression_rate[i]);
 		}
 	}
-	results->total_average_bandwidth_no_compression = bw_int_to_fixed(0);
-	results->total_average_bandwidth = bw_int_to_fixed(0);
+	data->total_average_bandwidth_no_compression = bw_int_to_fixed(0);
+	data->total_average_bandwidth = bw_int_to_fixed(0);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			results->total_average_bandwidth_no_compression =
-				bw_add(
-					results->total_average_bandwidth_no_compression,
-					results->average_bandwidth_no_compression[i]);
-			results->total_average_bandwidth = bw_add(
-				results->total_average_bandwidth,
-				results->average_bandwidth[i]);
+		if (data->enable[i]) {
+			data->total_average_bandwidth_no_compression = bw_add(data->total_average_bandwidth_no_compression, data->average_bandwidth_no_compression[i]);
+			data->total_average_bandwidth = bw_add(data->total_average_bandwidth, data->average_bandwidth[i]);
 		}
 	}
 	/*stutter efficiency*/
@@ -3461,152 +1851,102 @@ static void calculate_bandwidth(
 	/*the frame-average time in self-refresh is the stutter cycle minus the self refresh exit latency and the burst time*/
 	/*the stutter cycle is the dmif buffer size reduced by the excess of the stutter exit watermark over the lb size in time.*/
 	/*the burst time is the data needed during the stutter cycle divided by the available bandwidth*/
+	/*compute the time read all the data from the dmif buffer to the lb (dram refresh period)*/
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			results->stutter_cycle_duration[i] =
-				bw_sub(
-					bw_mul(
-						bw_div(
-							bw_div(
-								bw_mul(
-									bw_div(
-										bw_div(
-											results->adjusted_data_buffer_size[i],
-											bw_int_to_fixed(
-												results->bytes_per_pixel[i])),
-										results->source_width_rounded_up_to_chunks[i]),
-									results->h_total[i]),
-								results->vsr[i]),
-							results->pixel_rate[i]),
-						results->compression_rate[i]),
-					bw_max2(
-						bw_int_to_fixed(0),
-						bw_sub(
-							results->stutter_exit_watermark[i],
-							bw_div(
-								bw_mul(
-									bw_int_to_fixed(
-										(2
-											+ results->line_buffer_prefetch[i])),
-									results->h_total[i]),
-								results->pixel_rate[i]))));
+		if (data->enable[i]) {
+			data->stutter_refresh_duration[i] = bw_sub(bw_mul(bw_div(bw_div(bw_mul(bw_div(bw_div(data->adjusted_data_buffer_size[i], bw_int_to_fixed(data->bytes_per_pixel[i])), data->source_width_rounded_up_to_chunks[i]), data->h_total[i]), data->vsr[i]), data->pixel_rate[i]), data->compression_rate[i]), bw_max2(bw_int_to_fixed(0), bw_sub(data->stutter_exit_watermark[i], bw_div(bw_mul((bw_sub(data->lb_partitions[i], bw_int_to_fixed(1))), data->h_total[i]), data->pixel_rate[i]))));
+			data->stutter_dmif_buffer_size[i] = bw_div(bw_mul(bw_mul(bw_div(bw_mul(bw_mul(data->stutter_refresh_duration[i], bw_int_to_fixed(data->bytes_per_pixel[i])), data->source_width_rounded_up_to_chunks[i]), data->h_total[i]), data->vsr[i]), data->pixel_rate[i]), data->compression_rate[i]);
 		}
 	}
-	results->total_stutter_cycle_duration = bw_int_to_fixed(9999);
+	data->min_stutter_refresh_duration = bw_int_to_fixed(9999);
+	data->total_stutter_dmif_buffer_size = 0;
+	data->total_bytes_requested = 0;
+	data->min_stutter_dmif_buffer_size = 9999;
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			if (bw_mtn(
-				results->total_stutter_cycle_duration,
-				results->stutter_cycle_duration[i])) {
-				results->total_stutter_cycle_duration =
-					results->stutter_cycle_duration[i];
+		if (data->enable[i]) {
+			if (bw_mtn(data->min_stutter_refresh_duration, data->stutter_refresh_duration[i])) {
+				data->min_stutter_refresh_duration = data->stutter_refresh_duration[i];
+				data->total_bytes_requested = bw_fixed_to_int(bw_add(bw_int_to_fixed(data->total_bytes_requested), (bw_mul(bw_mul(data->source_height_rounded_up_to_chunks[i], data->source_width_rounded_up_to_chunks[i]), bw_int_to_fixed(data->bytes_per_pixel[i])))));
+				data->min_stutter_dmif_buffer_size = bw_fixed_to_int(data->stutter_dmif_buffer_size[i]);
 			}
+			data->total_stutter_dmif_buffer_size = bw_fixed_to_int(bw_add(data->stutter_dmif_buffer_size[i], bw_int_to_fixed(data->total_stutter_dmif_buffer_size)));
 		}
 	}
-	results->stutter_burst_time = bw_div(
-		bw_mul(
-			results->total_stutter_cycle_duration,
-			results->total_average_bandwidth),
-		bw_min2(
-			(bw_mul(
-				results->dram_bandwidth,
-				results->dmifdram_access_efficiency)),
-			bw_mul(
-				sclk[results->sclk_level],
-				vbios->data_return_bus_width)));
-	results->time_in_self_refresh = bw_sub(
-		bw_sub(
-			results->total_stutter_cycle_duration,
-			vbios->stutter_self_refresh_exit_latency),
-		results->stutter_burst_time);
-	if (mode_data->d1_display_write_back_dwb_enable == 1) {
-		results->stutter_efficiency = bw_int_to_fixed(0);
-	} else if (bw_ltn(results->time_in_self_refresh, bw_int_to_fixed(0))) {
-		results->stutter_efficiency = bw_int_to_fixed(0);
-	} else {
-		results->stutter_efficiency = bw_mul(
-			bw_div(
-				results->time_in_self_refresh,
-				results->total_stutter_cycle_duration),
-			bw_int_to_fixed(100));
+	data->stutter_burst_time = bw_div(bw_int_to_fixed(data->total_stutter_dmif_buffer_size), bw_min2(bw_mul(data->dram_bandwidth, data->dmifdram_access_efficiency), bw_mul(sclk[data->sclk_level], bw_int_to_fixed(32))));
+	data->num_stutter_bursts = data->total_bytes_requested / data->min_stutter_dmif_buffer_size;
+	data->total_stutter_cycle_duration = bw_add(bw_add(data->min_stutter_refresh_duration, vbios->stutter_self_refresh_exit_latency), data->stutter_burst_time);
+	data->time_in_self_refresh = data->min_stutter_refresh_duration;
+	if (data->d1_display_write_back_dwb_enable == 1) {
+		data->stutter_efficiency = bw_int_to_fixed(0);
+	}
+	else if (bw_ltn(data->time_in_self_refresh, bw_int_to_fixed(0))) {
+		data->stutter_efficiency = bw_int_to_fixed(0);
+	}
+	else {
+		/*compute stutter efficiency assuming 60 hz refresh rate*/
+		data->stutter_efficiency = bw_max2(bw_int_to_fixed(0), bw_mul((bw_sub(bw_int_to_fixed(1), (bw_div(bw_mul((bw_add(vbios->stutter_self_refresh_exit_latency, data->stutter_burst_time)), bw_int_to_fixed(data->num_stutter_bursts)), bw_frc_to_fixed(166666667, 10000))))), bw_int_to_fixed(100)));
 	}
 	/*immediate flip time*/
 	/*if scatter gather is enabled, the immediate flip takes a number of urgent memory trips equivalent to the pte requests in a row divided by the pte request limit.*/
 	/*otherwise, it may take just one urgenr memory trip*/
-	results->worst_number_of_trips_to_memory = bw_int_to_fixed(1);
+	data->worst_number_of_trips_to_memory = bw_int_to_fixed(1);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]
-			&& results->scatter_gather_enable_for_pipe[i] == 1) {
-			results->number_of_trips_to_memory_for_getting_apte_row[i] =
-				bw_ceil2(
-					bw_div(
-						results->scatter_gather_pte_requests_in_row[i],
-						results->scatter_gather_pte_request_limit[i]),
-					bw_int_to_fixed(1));
-			if (bw_ltn(
-				results->worst_number_of_trips_to_memory,
-				results->number_of_trips_to_memory_for_getting_apte_row[i])) {
-				results->worst_number_of_trips_to_memory =
-					results->number_of_trips_to_memory_for_getting_apte_row[i];
+		if (data->enable[i] && data->scatter_gather_enable_for_pipe[i] == 1) {
+			data->number_of_trips_to_memory_for_getting_apte_row[i] = bw_ceil2(bw_div(data->scatter_gather_pte_requests_in_row[i], data->scatter_gather_pte_request_limit[i]), bw_int_to_fixed(1));
+			if (bw_ltn(data->worst_number_of_trips_to_memory, data->number_of_trips_to_memory_for_getting_apte_row[i])) {
+				data->worst_number_of_trips_to_memory = data->number_of_trips_to_memory_for_getting_apte_row[i];
 			}
 		}
 	}
-	results->immediate_flip_time = bw_mul(
-		results->worst_number_of_trips_to_memory,
-		results->total_dmifmc_urgent_latency);
+	data->immediate_flip_time = bw_mul(data->worst_number_of_trips_to_memory, data->total_dmifmc_urgent_latency);
 	/*worst latency for other clients*/
 	/*it is the urgent latency plus the urgent burst time*/
-	results->latency_for_non_dmif_clients =
-		bw_add(
-			results->total_dmifmc_urgent_latency,
-			results->dmif_burst_time[results->y_clk_level][results->sclk_level]);
-	if (mode_data->d1_display_write_back_dwb_enable == 1) {
-		results->latency_for_non_mcifwr_clients = bw_add(
-			vbios->mcifwrmc_urgent_latency,
-			dceip->mcifwr_all_surfaces_burst_time);
-	} else {
-		results->latency_for_non_mcifwr_clients = bw_int_to_fixed(0);
+	data->latency_for_non_dmif_clients = bw_add(data->total_dmifmc_urgent_latency, data->dmif_burst_time[data->y_clk_level][data->sclk_level]);
+	if (data->d1_display_write_back_dwb_enable == 1) {
+		data->latency_for_non_mcifwr_clients = bw_add(vbios->mcifwrmc_urgent_latency, dceip->mcifwr_all_surfaces_burst_time);
+	}
+	else {
+		data->latency_for_non_mcifwr_clients = bw_int_to_fixed(0);
 	}
 	/*dmif mc urgent latency suppported in high sclk and yclk*/
-	results->dmifmc_urgent_latency_supported_in_high_sclk_and_yclk = bw_div(
-		(bw_sub(
-			results->min_read_buffer_size_in_time,
-			results->dmif_burst_time[high][high])),
-		results->total_dmifmc_urgent_trips);
+	data->dmifmc_urgent_latency_supported_in_high_sclk_and_yclk = bw_div((bw_sub(data->min_read_buffer_size_in_time, data->dmif_burst_time[high][s_high])), data->total_dmifmc_urgent_trips);
 	/*dram speed/p-state change margin*/
 	/*in the multi-display case the nb p-state change watermark cannot exceed the average lb size plus the dmif size or the cursor dcp buffer size*/
-	results->nbp_state_dram_speed_change_margin = bw_int_to_fixed(9999);
+	data->v_blank_nbp_state_dram_speed_change_latency_supported = bw_int_to_fixed(99999);
+	data->nbp_state_dram_speed_change_latency_supported = bw_int_to_fixed(99999);
 	for (i = 0; i <= maximum_number_of_surfaces - 1; i++) {
-		if (results->enable[i]) {
-			results->nbp_state_dram_speed_change_margin =
-				bw_min2(
-					results->nbp_state_dram_speed_change_margin,
-					bw_sub(
-						results->maximum_latency_hiding_with_cursor[i],
-						results->nbp_state_change_watermark[i]));
+		if (data->enable[i]) {
+			data->nbp_state_dram_speed_change_latency_supported = bw_min2(data->nbp_state_dram_speed_change_latency_supported, bw_add(bw_sub(data->maximum_latency_hiding_with_cursor[i], data->nbp_state_change_watermark[i]), vbios->nbp_state_change_latency));
+			data->v_blank_nbp_state_dram_speed_change_latency_supported = bw_min2(data->v_blank_nbp_state_dram_speed_change_latency_supported, bw_add(bw_sub(bw_div(bw_mul((bw_sub(data->v_total[i], bw_sub(bw_div(data->src_height[i], data->v_scale_ratio[i]), bw_int_to_fixed(4)))), data->h_total[i]), data->pixel_rate[i]), data->nbp_state_change_watermark[i]), vbios->nbp_state_change_latency));
 		}
 	}
 	/*sclk required vs urgent latency*/
 	for (i = 1; i <= 5; i++) {
-		results->display_reads_time_for_data_transfer_and_urgent_latency =
-			bw_sub(
-				results->min_read_buffer_size_in_time,
-				bw_mul(
-					results->total_dmifmc_urgent_trips,
-					bw_int_to_fixed(i)));
-		if (pipe_check == bw_def_ok
-			&& (bw_mtn(
-				results->display_reads_time_for_data_transfer_and_urgent_latency,
-				results->dmif_total_page_close_open_time))) {
-			results->dmif_required_sclk_for_urgent_latency[i] =
-				bw_div(
-					bw_div(
-						results->total_display_reads_required_data,
-						results->display_reads_time_for_data_transfer_and_urgent_latency),
-					vbios->data_return_bus_width);
-		} else {
-			results->dmif_required_sclk_for_urgent_latency[i] =
-				bw_int_to_fixed(bw_def_na);
+		data->display_reads_time_for_data_transfer_and_urgent_latency = bw_sub(data->min_read_buffer_size_in_time, bw_mul(data->total_dmifmc_urgent_trips, bw_int_to_fixed(i)));
+		if (pipe_check == bw_def_ok && (bw_mtn(data->display_reads_time_for_data_transfer_and_urgent_latency, data->dmif_total_page_close_open_time))) {
+			data->dmif_required_sclk_for_urgent_latency[i] = bw_div(bw_div(data->total_display_reads_required_data, data->display_reads_time_for_data_transfer_and_urgent_latency), (bw_mul(vbios->data_return_bus_width, bw_int_to_fixed(bus_efficiency))));
+		}
+		else {
+			data->dmif_required_sclk_for_urgent_latency[i] = bw_int_to_fixed(bw_def_na);
+		}
+	}
+	/*output link bit per pixel supported*/
+	for (k = 0; k <= maximum_number_of_surfaces - 1; k++) {
+		data->output_bpphdmi[k] = bw_def_na;
+		data->output_bppdp4_lane_hbr[k] = bw_def_na;
+		data->output_bppdp4_lane_hbr2[k] = bw_def_na;
+		data->output_bppdp4_lane_hbr3[k] = bw_def_na;
+		if (data->enable[k]) {
+			data->output_bpphdmi[k] = bw_fixed_to_int(bw_mul(bw_div(bw_min2(bw_int_to_fixed(600), data->max_phyclk), data->pixel_rate[k]), bw_int_to_fixed(24)));
+			if (bw_meq(data->max_phyclk, bw_int_to_fixed(270))) {
+				data->output_bppdp4_lane_hbr[k] = bw_fixed_to_int(bw_mul(bw_div(bw_mul(bw_int_to_fixed(270), bw_int_to_fixed(4)), data->pixel_rate[k]), bw_int_to_fixed(8)));
+			}
+			if (bw_meq(data->max_phyclk, bw_int_to_fixed(540))) {
+				data->output_bppdp4_lane_hbr2[k] = bw_fixed_to_int(bw_mul(bw_div(bw_mul(bw_int_to_fixed(540), bw_int_to_fixed(4)), data->pixel_rate[k]), bw_int_to_fixed(8)));
+			}
+			if (bw_meq(data->max_phyclk, bw_int_to_fixed(810))) {
+				data->output_bppdp4_lane_hbr3[k] = bw_fixed_to_int(bw_mul(bw_div(bw_mul(bw_int_to_fixed(810), bw_int_to_fixed(4)), data->pixel_rate[k]), bw_int_to_fixed(8)));
+			}
 		}
 	}
 }
@@ -3623,42 +1963,50 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 
 	switch (version) {
 	case BW_CALCS_VERSION_CARRIZO:
-		vbios.number_of_dram_channels = 2;
+		vbios.memory_type = bw_def_gddr5;
 		vbios.dram_channel_width_in_bits = 64;
+		vbios.number_of_dram_channels = 2;
 		vbios.number_of_dram_banks = 8;
 		vbios.high_yclk = bw_int_to_fixed(1600);
 		vbios.mid_yclk = bw_int_to_fixed(1600);
 		vbios.low_yclk = bw_frc_to_fixed(66666, 100);
 		vbios.low_sclk = bw_int_to_fixed(200);
-		vbios.mid_sclk = bw_int_to_fixed(300);
+		vbios.mid1_sclk = bw_int_to_fixed(300);
+		vbios.mid2_sclk = bw_int_to_fixed(300);
+		vbios.mid3_sclk = bw_int_to_fixed(300);
+		vbios.mid4_sclk = bw_int_to_fixed(300);
+		vbios.mid5_sclk = bw_int_to_fixed(300);
+		vbios.mid6_sclk = bw_int_to_fixed(300);
 		vbios.high_sclk = bw_frc_to_fixed(62609, 100);
 		vbios.low_voltage_max_dispclk = bw_int_to_fixed(352);
 		vbios.mid_voltage_max_dispclk = bw_int_to_fixed(467);
 		vbios.high_voltage_max_dispclk = bw_int_to_fixed(643);
+		vbios.low_voltage_max_phyclk = bw_int_to_fixed(540);
+		vbios.mid_voltage_max_phyclk = bw_int_to_fixed(810);
+		vbios.high_voltage_max_phyclk = bw_int_to_fixed(810);
 		vbios.data_return_bus_width = bw_int_to_fixed(32);
 		vbios.trc = bw_int_to_fixed(50);
 		vbios.dmifmc_urgent_latency = bw_int_to_fixed(4);
-		vbios.stutter_self_refresh_exit_latency = bw_frc_to_fixed(
-			153,
-			10);
+		vbios.stutter_self_refresh_exit_latency = bw_frc_to_fixed(153, 10);
 		vbios.nbp_state_change_latency = bw_frc_to_fixed(19649, 1000);
 		vbios.mcifwrmc_urgent_latency = bw_int_to_fixed(10);
 		vbios.scatter_gather_enable = true;
 		vbios.down_spread_percentage = bw_frc_to_fixed(5, 10);
 		vbios.cursor_width = 32;
 		vbios.average_compression_rate = 4;
-		vbios.number_of_request_slots_gmc_reserves_for_dmif_per_channel =
-			256;
+		vbios.number_of_request_slots_gmc_reserves_for_dmif_per_channel = 256;
 		vbios.blackout_duration = bw_int_to_fixed(18); /* us */
 		vbios.maximum_blackout_recovery_time = bw_int_to_fixed(20);
 
+		dceip.large_cursor = false;
 		dceip.dmif_request_buffer_size = bw_int_to_fixed(768);
-		dceip.de_tiling_buffer = bw_int_to_fixed(0);
-		dceip.dcfclk_request_generation = 0;
+		dceip.dmif_pipe_en_fbc_chunk_tracker = false;
+		dceip.cursor_max_outstanding_group_num = 1;
 		dceip.lines_interleaved_into_lb = 2;
 		dceip.chunk_width = 256;
 		dceip.number_of_graphics_pipes = 3;
 		dceip.number_of_underlay_pipes = 1;
+		dceip.low_power_tiling_mode = 0;
 		dceip.display_write_back_supported = false;
 		dceip.argb_compression_support = false;
 		dceip.underlay_vscaler_efficiency6_bit_per_component =
@@ -3697,8 +2045,6 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 			82176);
 		dceip.cursor_chunk_width = bw_int_to_fixed(64);
 		dceip.cursor_dcp_buffer_lines = bw_int_to_fixed(4);
-		dceip.cursor_memory_interface_buffer_pixels = bw_int_to_fixed(
-			64);
 		dceip.underlay_maximum_width_efficient_for_tiling =
 			bw_int_to_fixed(1920);
 		dceip.underlay_maximum_height_efficient_for_tiling =
@@ -3720,26 +2066,33 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		dceip.display_write_back420_chroma_mcifwr_buffer_size = 8192;
 		dceip.request_efficiency = bw_frc_to_fixed(8, 10);
 		dceip.dispclk_per_request = bw_int_to_fixed(2);
-		dceip.dispclk_ramping_factor = bw_frc_to_fixed(11, 10);
-		dceip.display_pipe_throughput_factor = bw_frc_to_fixed(
-			105,
-			100);
+		dceip.dispclk_ramping_factor = bw_frc_to_fixed(105, 100);
+		dceip.display_pipe_throughput_factor = bw_frc_to_fixed(105, 100);
 		dceip.scatter_gather_pte_request_rows_in_tiling_mode = 2;
 		dceip.mcifwr_all_surfaces_burst_time = bw_int_to_fixed(0); /* todo: this is a bug*/
 		break;
 	case BW_CALCS_VERSION_ELLESMERE:
-		vbios.number_of_dram_channels = 8;
+		vbios.memory_type = bw_def_gddr5;
 		vbios.dram_channel_width_in_bits = 32;
+		vbios.number_of_dram_channels = 8;
 		vbios.number_of_dram_banks = 8;
 		vbios.high_yclk = bw_int_to_fixed(6000);
 		vbios.mid_yclk = bw_int_to_fixed(3200);
 		vbios.low_yclk = bw_int_to_fixed(1000);
 		vbios.low_sclk = bw_int_to_fixed(300);
-		vbios.mid_sclk = bw_int_to_fixed(974);
+		vbios.mid1_sclk = bw_int_to_fixed(400);
+		vbios.mid2_sclk = bw_int_to_fixed(500);
+		vbios.mid3_sclk = bw_int_to_fixed(600);
+		vbios.mid4_sclk = bw_int_to_fixed(700);
+		vbios.mid5_sclk = bw_int_to_fixed(800);
+		vbios.mid6_sclk = bw_int_to_fixed(974);
 		vbios.high_sclk = bw_int_to_fixed(1154);
 		vbios.low_voltage_max_dispclk = bw_int_to_fixed(459);
 		vbios.mid_voltage_max_dispclk = bw_int_to_fixed(654);
-		vbios.high_voltage_max_dispclk = bw_int_to_fixed(1132);
+		vbios.high_voltage_max_dispclk = bw_int_to_fixed(1108);
+		vbios.low_voltage_max_phyclk = bw_int_to_fixed(540);
+		vbios.mid_voltage_max_phyclk = bw_int_to_fixed(810);
+		vbios.high_voltage_max_phyclk = bw_int_to_fixed(810);
 		vbios.data_return_bus_width = bw_int_to_fixed(32);
 		vbios.trc = bw_int_to_fixed(48);
 		vbios.dmifmc_urgent_latency = bw_int_to_fixed(3);
@@ -3750,18 +2103,19 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		vbios.down_spread_percentage = bw_frc_to_fixed(5, 10);
 		vbios.cursor_width = 32;
 		vbios.average_compression_rate = 4;
-		vbios.number_of_request_slots_gmc_reserves_for_dmif_per_channel =
-			256;
+		vbios.number_of_request_slots_gmc_reserves_for_dmif_per_channel = 256;
 		vbios.blackout_duration = bw_int_to_fixed(0); /* us */
 		vbios.maximum_blackout_recovery_time = bw_int_to_fixed(0);
 
+		dceip.large_cursor = false;
 		dceip.dmif_request_buffer_size = bw_int_to_fixed(768);
-		dceip.de_tiling_buffer = bw_int_to_fixed(0);
-		dceip.dcfclk_request_generation = 0;
+		dceip.dmif_pipe_en_fbc_chunk_tracker = false;
+		dceip.cursor_max_outstanding_group_num = 1;
 		dceip.lines_interleaved_into_lb = 2;
 		dceip.chunk_width = 256;
 		dceip.number_of_graphics_pipes = 6;
 		dceip.number_of_underlay_pipes = 0;
+		dceip.low_power_tiling_mode = 0;
 		dceip.display_write_back_supported = false;
 		dceip.argb_compression_support = false;
 		dceip.underlay_vscaler_efficiency6_bit_per_component =
@@ -3800,8 +2154,6 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 			82176);
 		dceip.cursor_chunk_width = bw_int_to_fixed(64);
 		dceip.cursor_dcp_buffer_lines = bw_int_to_fixed(4);
-		dceip.cursor_memory_interface_buffer_pixels = bw_int_to_fixed(
-			64);
 		dceip.underlay_maximum_width_efficient_for_tiling =
 			bw_int_to_fixed(1920);
 		dceip.underlay_maximum_height_efficient_for_tiling =
@@ -3823,26 +2175,33 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		dceip.display_write_back420_chroma_mcifwr_buffer_size = 8192;
 		dceip.request_efficiency = bw_frc_to_fixed(8, 10);
 		dceip.dispclk_per_request = bw_int_to_fixed(2);
-		dceip.dispclk_ramping_factor = bw_frc_to_fixed(11, 10);
-		dceip.display_pipe_throughput_factor = bw_frc_to_fixed(
-			105,
-			100);
+		dceip.dispclk_ramping_factor = bw_frc_to_fixed(105, 100);
+		dceip.display_pipe_throughput_factor = bw_frc_to_fixed(105, 100);
 		dceip.scatter_gather_pte_request_rows_in_tiling_mode = 2;
 		dceip.mcifwr_all_surfaces_burst_time = bw_int_to_fixed(0);
 		break;
 	case BW_CALCS_VERSION_BAFFIN:
-		vbios.number_of_dram_channels = 4;
+		vbios.memory_type = bw_def_gddr5;
 		vbios.dram_channel_width_in_bits = 32;
+		vbios.number_of_dram_channels = 4;
 		vbios.number_of_dram_banks = 8;
 		vbios.high_yclk = bw_int_to_fixed(6000);
 		vbios.mid_yclk = bw_int_to_fixed(3200);
 		vbios.low_yclk = bw_int_to_fixed(1000);
 		vbios.low_sclk = bw_int_to_fixed(300);
-		vbios.mid_sclk = bw_int_to_fixed(974);
+		vbios.mid1_sclk = bw_int_to_fixed(400);
+		vbios.mid2_sclk = bw_int_to_fixed(500);
+		vbios.mid3_sclk = bw_int_to_fixed(600);
+		vbios.mid4_sclk = bw_int_to_fixed(700);
+		vbios.mid5_sclk = bw_int_to_fixed(800);
+		vbios.mid6_sclk = bw_int_to_fixed(974);
 		vbios.high_sclk = bw_int_to_fixed(1154);
 		vbios.low_voltage_max_dispclk = bw_int_to_fixed(459);
 		vbios.mid_voltage_max_dispclk = bw_int_to_fixed(654);
-		vbios.high_voltage_max_dispclk = bw_int_to_fixed(1132);
+		vbios.high_voltage_max_dispclk = bw_int_to_fixed(1108);
+		vbios.low_voltage_max_phyclk = bw_int_to_fixed(540);
+		vbios.mid_voltage_max_phyclk = bw_int_to_fixed(810);
+		vbios.high_voltage_max_phyclk = bw_int_to_fixed(810);
 		vbios.data_return_bus_width = bw_int_to_fixed(32);
 		vbios.trc = bw_int_to_fixed(48);
 		vbios.dmifmc_urgent_latency = bw_int_to_fixed(3);
@@ -3853,18 +2212,19 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		vbios.down_spread_percentage = bw_frc_to_fixed(5, 10);
 		vbios.cursor_width = 32;
 		vbios.average_compression_rate = 4;
-		vbios.number_of_request_slots_gmc_reserves_for_dmif_per_channel =
-			256;
+		vbios.number_of_request_slots_gmc_reserves_for_dmif_per_channel = 256;
 		vbios.blackout_duration = bw_int_to_fixed(0); /* us */
 		vbios.maximum_blackout_recovery_time = bw_int_to_fixed(0);
 
+		dceip.large_cursor = false;
 		dceip.dmif_request_buffer_size = bw_int_to_fixed(768);
-		dceip.de_tiling_buffer = bw_int_to_fixed(0);
-		dceip.dcfclk_request_generation = 0;
+		dceip.dmif_pipe_en_fbc_chunk_tracker = false;
+		dceip.cursor_max_outstanding_group_num = 1;
 		dceip.lines_interleaved_into_lb = 2;
 		dceip.chunk_width = 256;
 		dceip.number_of_graphics_pipes = 5;
 		dceip.number_of_underlay_pipes = 0;
+		dceip.low_power_tiling_mode = 0;
 		dceip.display_write_back_supported = false;
 		dceip.argb_compression_support = false;
 		dceip.underlay_vscaler_efficiency6_bit_per_component =
@@ -3903,8 +2263,6 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 			82176);
 		dceip.cursor_chunk_width = bw_int_to_fixed(64);
 		dceip.cursor_dcp_buffer_lines = bw_int_to_fixed(4);
-		dceip.cursor_memory_interface_buffer_pixels = bw_int_to_fixed(
-			64);
 		dceip.underlay_maximum_width_efficient_for_tiling =
 			bw_int_to_fixed(1920);
 		dceip.underlay_maximum_height_efficient_for_tiling =
@@ -3926,10 +2284,8 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		dceip.display_write_back420_chroma_mcifwr_buffer_size = 8192;
 		dceip.request_efficiency = bw_frc_to_fixed(8, 10);
 		dceip.dispclk_per_request = bw_int_to_fixed(2);
-		dceip.dispclk_ramping_factor = bw_frc_to_fixed(11, 10);
-		dceip.display_pipe_throughput_factor = bw_frc_to_fixed(
-			105,
-			100);
+		dceip.dispclk_ramping_factor = bw_frc_to_fixed(105, 100);
+		dceip.display_pipe_throughput_factor = bw_frc_to_fixed(105, 100);
 		dceip.scatter_gather_pte_request_rows_in_tiling_mode = 2;
 		dceip.mcifwr_all_surfaces_burst_time = bw_int_to_fixed(0);
 		break;
@@ -3963,6 +2319,205 @@ static bool is_display_configuration_supported(
 	return true;
 }
 
+static void populate_initial_data(
+	const struct pipe_ctx pipe[], int pipe_count, struct bw_calcs_data *data)
+{
+	int i, j;
+	int num_displays = 0;
+
+	data->underlay_surface_type = bw_def_420;
+	data->panning_and_bezel_adjustment = bw_def_none;
+	data->graphics_lb_bpc = 10;
+	data->underlay_lb_bpc = 8;
+	data->underlay_tiling_mode = bw_def_tiled;
+	data->graphics_tiling_mode = bw_def_tiled;
+	data->underlay_micro_tile_mode = bw_def_display_micro_tiling;
+	data->graphics_micro_tile_mode = bw_def_display_micro_tiling;
+
+	/* Pipes with underlay first */
+	for (i = 0; i < pipe_count; i++) {
+		if (!pipe[i].stream || !pipe[i].bottom_pipe)
+			continue;
+
+		ASSERT(pipe[i].surface);
+
+		if (num_displays == 0) {
+			if (!pipe[i].surface->public.visible)
+				data->d0_underlay_mode = bw_def_underlay_only;
+			else
+				data->d0_underlay_mode = bw_def_blend;
+		} else {
+			if (!pipe[i].surface->public.visible)
+				data->d1_underlay_mode = bw_def_underlay_only;
+			else
+				data->d1_underlay_mode = bw_def_blend;
+		}
+
+		data->fbc_en[num_displays + 4] = false;
+		data->lpt_en[num_displays + 4] = false;
+		data->h_total[num_displays + 4] = bw_int_to_fixed(pipe[i].stream->public.timing.h_total);
+		data->v_total[num_displays + 4] = bw_int_to_fixed(pipe[i].stream->public.timing.v_total);
+		data->pixel_rate[num_displays + 4] = bw_frc_to_fixed(pipe[i].stream->public.timing.pix_clk_khz, 1000);
+		data->src_width[num_displays + 4] = bw_int_to_fixed(pipe[i].scl_data.viewport.width);
+		data->pitch_in_pixels[num_displays + 4] = bw_int_to_fixed(pipe[i].surface->public.plane_size.grph.surface_pitch);
+		data->src_height[num_displays + 4] = bw_int_to_fixed(pipe[i].scl_data.viewport.height);
+		data->h_taps[num_displays + 4] = bw_int_to_fixed(pipe[i].scl_data.taps.h_taps);
+		data->v_taps[num_displays + 4] = bw_int_to_fixed(pipe[i].scl_data.taps.v_taps);
+		data->h_scale_ratio[num_displays + 4] = fixed31_32_to_bw_fixed(pipe[i].scl_data.ratios.horz.value);
+		data->v_scale_ratio[num_displays + 4] = fixed31_32_to_bw_fixed(pipe[i].scl_data.ratios.vert.value);
+		switch (pipe[i].surface->public.rotation) {
+		case ROTATION_ANGLE_0:
+			data->rotation_angle[num_displays + 4] = bw_int_to_fixed(0);
+			break;
+		case ROTATION_ANGLE_90:
+			data->rotation_angle[num_displays + 4] = bw_int_to_fixed(90);
+			break;
+		case ROTATION_ANGLE_180:
+			data->rotation_angle[num_displays + 4] = bw_int_to_fixed(180);
+			break;
+		case ROTATION_ANGLE_270:
+			data->rotation_angle[num_displays + 4] = bw_int_to_fixed(270);
+			break;
+		default:
+			break;
+		}
+		switch (pipe[i].surface->public.format) {
+		case SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr:
+		case SURFACE_PIXEL_FORMAT_GRPH_ARGB1555:
+		case SURFACE_PIXEL_FORMAT_GRPH_RGB565:
+			data->bytes_per_pixel[num_displays + 4] = 2;
+			break;
+		case SURFACE_PIXEL_FORMAT_GRPH_ARGB8888:
+		case SURFACE_PIXEL_FORMAT_GRPH_BGRA8888:
+		case SURFACE_PIXEL_FORMAT_GRPH_ARGB2101010:
+		case SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010:
+		case SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010_XR_BIAS:
+			data->bytes_per_pixel[num_displays + 4] = 4;
+			break;
+		case SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616:
+		case SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F:
+			data->bytes_per_pixel[num_displays + 4] = 8;
+			break;
+		default:
+			data->bytes_per_pixel[num_displays + 4] = 4;
+			break;
+		}
+		data->interlace_mode[num_displays + 4] = false;
+		data->stereo_mode[num_displays + 4] = bw_def_mono;
+
+
+		for (j = 0; j < 2; j++) {
+			data->fbc_en[num_displays * 2 + j] = false;
+			data->lpt_en[num_displays * 2 + j] = false;
+
+			data->src_height[num_displays * 2 + j] = bw_int_to_fixed(pipe[i].bottom_pipe->scl_data.viewport.height);
+			data->src_width[num_displays * 2 + j] = bw_int_to_fixed(pipe[i].bottom_pipe->scl_data.viewport.width);
+			data->pitch_in_pixels[num_displays * 2 + j] = bw_int_to_fixed(
+					pipe[i].bottom_pipe->surface->public.plane_size.grph.surface_pitch);
+			data->h_taps[num_displays * 2 + j] = bw_int_to_fixed(pipe[i].bottom_pipe->scl_data.taps.h_taps);
+			data->v_taps[num_displays * 2 + j] = bw_int_to_fixed(pipe[i].bottom_pipe->scl_data.taps.v_taps);
+			data->h_scale_ratio[num_displays * 2 + j] = fixed31_32_to_bw_fixed(
+					pipe[i].bottom_pipe->scl_data.ratios.horz.value);
+			data->v_scale_ratio[num_displays * 2 + j] = fixed31_32_to_bw_fixed(
+					pipe[i].bottom_pipe->scl_data.ratios.vert.value);
+			switch (pipe[i].bottom_pipe->surface->public.rotation) {
+			case ROTATION_ANGLE_0:
+				data->rotation_angle[num_displays * 2 + j] = bw_int_to_fixed(0);
+				break;
+			case ROTATION_ANGLE_90:
+				data->rotation_angle[num_displays * 2 + j] = bw_int_to_fixed(90);
+				break;
+			case ROTATION_ANGLE_180:
+				data->rotation_angle[num_displays * 2 + j] = bw_int_to_fixed(180);
+				break;
+			case ROTATION_ANGLE_270:
+				data->rotation_angle[num_displays * 2 + j] = bw_int_to_fixed(270);
+				break;
+			default:
+				break;
+			}
+			data->stereo_mode[num_displays * 2 + j] = bw_def_mono;
+		}
+
+		num_displays++;
+	}
+
+	/* Pipes without underlay after */
+	for (i = 0; i < pipe_count; i++) {
+		if (!pipe[i].stream || pipe[i].bottom_pipe)
+			continue;
+
+
+		data->fbc_en[num_displays + 4] = false;
+		data->lpt_en[num_displays + 4] = false;
+		data->h_total[num_displays + 4] = bw_int_to_fixed(pipe[i].stream->public.timing.h_total);
+		data->v_total[num_displays + 4] = bw_int_to_fixed(pipe[i].stream->public.timing.v_total);
+		data->pixel_rate[num_displays + 4] = bw_frc_to_fixed(pipe[i].stream->public.timing.pix_clk_khz, 1000);
+		if (pipe[i].surface) {
+			data->src_width[num_displays + 4] = bw_int_to_fixed(pipe[i].scl_data.viewport.width);
+			data->pitch_in_pixels[num_displays + 4] = bw_int_to_fixed(pipe[i].surface->public.plane_size.grph.surface_pitch);
+			data->src_height[num_displays + 4] = bw_int_to_fixed(pipe[i].scl_data.viewport.height);
+			data->h_taps[num_displays + 4] = bw_int_to_fixed(pipe[i].scl_data.taps.h_taps);
+			data->v_taps[num_displays + 4] = bw_int_to_fixed(pipe[i].scl_data.taps.v_taps);
+			data->h_scale_ratio[num_displays + 4] = fixed31_32_to_bw_fixed(pipe[i].scl_data.ratios.horz.value);
+			data->v_scale_ratio[num_displays + 4] = fixed31_32_to_bw_fixed(pipe[i].scl_data.ratios.vert.value);
+			switch (pipe[i].surface->public.rotation) {
+			case ROTATION_ANGLE_0:
+				data->rotation_angle[num_displays + 4] = bw_int_to_fixed(0);
+				break;
+			case ROTATION_ANGLE_90:
+				data->rotation_angle[num_displays + 4] = bw_int_to_fixed(90);
+				break;
+			case ROTATION_ANGLE_180:
+				data->rotation_angle[num_displays + 4] = bw_int_to_fixed(180);
+				break;
+			case ROTATION_ANGLE_270:
+				data->rotation_angle[num_displays + 4] = bw_int_to_fixed(270);
+				break;
+			default:
+				break;
+			}
+			switch (pipe[i].surface->public.format) {
+			case SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr:
+			case SURFACE_PIXEL_FORMAT_GRPH_ARGB1555:
+			case SURFACE_PIXEL_FORMAT_GRPH_RGB565:
+				data->bytes_per_pixel[num_displays + 4] = 2;
+				break;
+			case SURFACE_PIXEL_FORMAT_GRPH_ARGB8888:
+			case SURFACE_PIXEL_FORMAT_GRPH_BGRA8888:
+			case SURFACE_PIXEL_FORMAT_GRPH_ARGB2101010:
+			case SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010:
+			case SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010_XR_BIAS:
+				data->bytes_per_pixel[num_displays + 4] = 4;
+				break;
+			case SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616:
+			case SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F:
+				data->bytes_per_pixel[num_displays + 4] = 8;
+				break;
+			default:
+				data->bytes_per_pixel[num_displays + 4] = 4;
+				break;
+			}
+		} else {
+			data->src_width[num_displays + 4] = bw_int_to_fixed(pipe[i].stream->public.timing.h_addressable);
+			data->pitch_in_pixels[num_displays + 4] = data->src_width[num_displays + 4];
+			data->src_height[num_displays + 4] = bw_int_to_fixed(pipe[i].stream->public.timing.v_addressable);
+			data->h_taps[num_displays + 4] = bw_int_to_fixed(1);
+			data->v_taps[num_displays + 4] = bw_int_to_fixed(1);
+			data->h_scale_ratio[num_displays + 4] = bw_int_to_fixed(1);
+			data->v_scale_ratio[num_displays + 4] = bw_int_to_fixed(1);
+			data->rotation_angle[num_displays + 4] = bw_int_to_fixed(0);
+			data->bytes_per_pixel[num_displays + 4] = 4;
+		}
+
+		data->interlace_mode[num_displays + 4] = false;
+		data->stereo_mode[num_displays + 4] = bw_def_mono;
+		num_displays++;
+	}
+
+	data->number_of_displays = num_displays;
+}
+
 /**
  * Return:
  *	true -	Display(s) configuration supported.
@@ -3970,190 +2525,57 @@ static bool is_display_configuration_supported(
  *	false - Display(s) configuration not supported (not enough bandwidth).
  */
 
-bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
+bool bw_calcs(struct dc_context *ctx,
+	const struct bw_calcs_dceip *dceip,
 	const struct bw_calcs_vbios *vbios,
-	const struct bw_calcs_mode_data *mode_data,
+	const struct pipe_ctx pipe[],
+	int pipe_count,
 	struct bw_calcs_output *calcs_output)
 {
-	struct bw_calcs_results *bw_results_internal = dm_alloc(sizeof(struct bw_calcs_results));
-	struct bw_calcs_mode_data_internal *bw_data_internal =
-		dm_alloc(sizeof(struct bw_calcs_mode_data_internal));
+	struct bw_calcs_data *data = dm_alloc(sizeof(struct bw_calcs_data));
 
-	switch (mode_data->number_of_displays) {
-	case (6):
-		bw_data_internal->d5_htotal =
-			mode_data->displays_data[5].h_total;
-		bw_data_internal->d5_pixel_rate =
-			mode_data->displays_data[5].pixel_rate;
-		bw_data_internal->d5_graphics_src_width =
-			mode_data->displays_data[5].graphics_src_width;
-		bw_data_internal->d5_graphics_src_height =
-			mode_data->displays_data[5].graphics_src_height;
-		bw_data_internal->d5_graphics_scale_ratio =
-			mode_data->displays_data[5].graphics_scale_ratio;
-		bw_data_internal->d5_graphics_stereo_mode =
-			mode_data->displays_data[5].graphics_stereo_mode;
-		/* fall through */
-	case (5):
-		bw_data_internal->d4_htotal =
-			mode_data->displays_data[4].h_total;
-		bw_data_internal->d4_pixel_rate =
-			mode_data->displays_data[4].pixel_rate;
-		bw_data_internal->d4_graphics_src_width =
-			mode_data->displays_data[4].graphics_src_width;
-		bw_data_internal->d4_graphics_src_height =
-			mode_data->displays_data[4].graphics_src_height;
-		bw_data_internal->d4_graphics_scale_ratio =
-			mode_data->displays_data[4].graphics_scale_ratio;
-		bw_data_internal->d4_graphics_stereo_mode =
-			mode_data->displays_data[4].graphics_stereo_mode;
-		/* fall through */
-	case (4):
-		bw_data_internal->d3_htotal =
-			mode_data->displays_data[3].h_total;
-		bw_data_internal->d3_pixel_rate =
-			mode_data->displays_data[3].pixel_rate;
-		bw_data_internal->d3_graphics_src_width =
-			mode_data->displays_data[3].graphics_src_width;
-		bw_data_internal->d3_graphics_src_height =
-			mode_data->displays_data[3].graphics_src_height;
-		bw_data_internal->d3_graphics_scale_ratio =
-			mode_data->displays_data[3].graphics_scale_ratio;
-		bw_data_internal->d3_graphics_stereo_mode =
-			mode_data->displays_data[3].graphics_stereo_mode;
-		/* fall through */
-	case (3):
-		bw_data_internal->d2_htotal =
-			mode_data->displays_data[2].h_total;
-		bw_data_internal->d2_pixel_rate =
-			mode_data->displays_data[2].pixel_rate;
-		bw_data_internal->d2_graphics_src_width =
-			mode_data->displays_data[2].graphics_src_width;
-		bw_data_internal->d2_graphics_src_height =
-			mode_data->displays_data[2].graphics_src_height;
-		bw_data_internal->d2_graphics_scale_ratio =
-			mode_data->displays_data[2].graphics_scale_ratio;
-		bw_data_internal->d2_graphics_stereo_mode =
-			mode_data->displays_data[2].graphics_stereo_mode;
-		/* fall through */
-	case (2):
-		bw_data_internal->d1_display_write_back_dwb_enable = false;
-		bw_data_internal->d1_underlay_mode = bw_def_none;
-		bw_data_internal->d1_underlay_scale_ratio = bw_int_to_fixed(0);
-		bw_data_internal->d1_htotal =
-			mode_data->displays_data[1].h_total;
-		bw_data_internal->d1_pixel_rate =
-			mode_data->displays_data[1].pixel_rate;
-		bw_data_internal->d1_graphics_src_width =
-			mode_data->displays_data[1].graphics_src_width;
-		bw_data_internal->d1_graphics_src_height =
-			mode_data->displays_data[1].graphics_src_height;
-		bw_data_internal->d1_graphics_scale_ratio =
-			mode_data->displays_data[1].graphics_scale_ratio;
-		bw_data_internal->d1_graphics_stereo_mode =
-			mode_data->displays_data[1].graphics_stereo_mode;
-		/* fall through */
-	case (1):
-		bw_data_internal->d0_fbc_enable =
-			mode_data->displays_data[0].fbc_enable;
-		bw_data_internal->d0_lpt_enable =
-			mode_data->displays_data[0].lpt_enable;
-		bw_data_internal->d0_htotal =
-			mode_data->displays_data[0].h_total;
-		bw_data_internal->d0_pixel_rate =
-			mode_data->displays_data[0].pixel_rate;
-		bw_data_internal->d0_graphics_src_width =
-			mode_data->displays_data[0].graphics_src_width;
-		bw_data_internal->d0_graphics_src_height =
-			mode_data->displays_data[0].graphics_src_height;
-		bw_data_internal->d0_graphics_scale_ratio =
-			mode_data->displays_data[0].graphics_scale_ratio;
-		bw_data_internal->d0_graphics_stereo_mode =
-			mode_data->displays_data[0].graphics_stereo_mode;
-		bw_data_internal->d0_underlay_mode =
-				mode_data->displays_data[0].underlay_mode;
-		/* fall through */
-	default:
-		/* data for all displays */
-		bw_data_internal->number_of_displays =
-			mode_data->number_of_displays;
-		bw_data_internal->graphics_rotation_angle =
-			mode_data->displays_data[0].graphics_rotation_angle;
-		bw_data_internal->underlay_rotation_angle =
-			mode_data->displays_data[0].underlay_rotation_angle;
-		bw_data_internal->underlay_surface_type =
-			mode_data->displays_data[0].underlay_surface_type;
-		bw_data_internal->panning_and_bezel_adjustment =
-			mode_data->displays_data[0].panning_and_bezel_adjustment;
-		bw_data_internal->graphics_tiling_mode =
-			mode_data->displays_data[0].graphics_tiling_mode;
-		bw_data_internal->graphics_interlace_mode =
-			mode_data->displays_data[0].graphics_interlace_mode;
-		bw_data_internal->graphics_bytes_per_pixel =
-			mode_data->displays_data[0].graphics_bytes_per_pixel;
-		bw_data_internal->graphics_htaps =
-			mode_data->displays_data[0].graphics_h_taps;
-		bw_data_internal->graphics_vtaps =
-			mode_data->displays_data[0].graphics_v_taps;
-		bw_data_internal->graphics_lb_bpc =
-			mode_data->displays_data[0].graphics_lb_bpc;
-		bw_data_internal->underlay_lb_bpc =
-			mode_data->displays_data[0].underlay_lb_bpc;
-		bw_data_internal->underlay_tiling_mode =
-			mode_data->displays_data[0].underlay_tiling_mode;
-		bw_data_internal->d0_underlay_scale_ratio =
-			mode_data->displays_data[0].underlay_scale_ratio;
-		bw_data_internal->underlay_htaps =
-			mode_data->displays_data[0].underlay_h_taps;
-		bw_data_internal->underlay_vtaps =
-			mode_data->displays_data[0].underlay_v_taps;
-		bw_data_internal->underlay_src_width =
-			mode_data->displays_data[0].underlay_src_width;
-		bw_data_internal->underlay_src_height =
-			mode_data->displays_data[0].underlay_src_height;
-		bw_data_internal->underlay_pitch_in_pixels =
-			mode_data->displays_data[0].underlay_pitch_in_pixels;
-		bw_data_internal->underlay_stereo_mode =
-			mode_data->displays_data[0].underlay_stereo_mode;
-		bw_data_internal->display_synchronization_enabled =
-			mode_data->display_synchronization_enabled;
-	}
+	populate_initial_data(pipe, pipe_count, data);
 
-	if (bw_data_internal->number_of_displays != 0) {
+	/*TODO: this should be taken out calcs output and assigned during timing sync for pplib use*/
+	calcs_output->all_displays_in_sync = false;
+
+	if (data->number_of_displays != 0) {
 		uint8_t yclk_lvl, sclk_lvl;
 		struct bw_fixed high_sclk = vbios->high_sclk;
-		struct bw_fixed mid_sclk = vbios->mid_sclk;
+		struct bw_fixed mid1_sclk = vbios->mid1_sclk;
+		struct bw_fixed mid2_sclk = vbios->mid2_sclk;
+		struct bw_fixed mid3_sclk = vbios->mid3_sclk;
+		struct bw_fixed mid4_sclk = vbios->mid4_sclk;
+		struct bw_fixed mid5_sclk = vbios->mid5_sclk;
+		struct bw_fixed mid6_sclk = vbios->mid6_sclk;
 		struct bw_fixed low_sclk = vbios->low_sclk;
 		struct bw_fixed high_yclk = vbios->high_yclk;
 		struct bw_fixed mid_yclk = vbios->mid_yclk;
 		struct bw_fixed low_yclk = vbios->low_yclk;
 
-		calculate_bandwidth(dceip, vbios, bw_data_internal,
-							bw_results_internal);
+		calculate_bandwidth(dceip, vbios, data);
 
-		yclk_lvl = bw_results_internal->y_clk_level;
-		sclk_lvl = bw_results_internal->sclk_level;
+		yclk_lvl = data->y_clk_level;
+		sclk_lvl = data->sclk_level;
 
-		calcs_output->all_displays_in_sync =
-			mode_data->display_synchronization_enabled;
 		calcs_output->nbp_state_change_enable =
-			bw_results_internal->nbp_state_change_enable;
+			data->nbp_state_change_enable;
 		calcs_output->cpuc_state_change_enable =
-				bw_results_internal->cpuc_state_change_enable;
+				data->cpuc_state_change_enable;
 		calcs_output->cpup_state_change_enable =
-				bw_results_internal->cpup_state_change_enable;
+				data->cpup_state_change_enable;
 		calcs_output->stutter_mode_enable =
-				bw_results_internal->stutter_mode_enable;
+				data->stutter_mode_enable;
 		calcs_output->dispclk_khz =
-			bw_fixed_to_int(bw_mul(bw_results_internal->dispclk,
+			bw_fixed_to_int(bw_mul(data->dispclk,
 					bw_int_to_fixed(1000)));
 		calcs_output->blackout_recovery_time_us =
-			bw_fixed_to_int(bw_results_internal->blackout_recovery_time);
+			bw_fixed_to_int(data->blackout_recovery_time);
 		calcs_output->required_sclk =
-			bw_fixed_to_int(bw_mul(bw_results_internal->required_sclk,
+			bw_fixed_to_int(bw_mul(data->required_sclk,
 					bw_int_to_fixed(1000)));
 		calcs_output->required_sclk_deep_sleep =
-			bw_fixed_to_int(bw_mul(bw_results_internal->sclk_deep_sleep,
+			bw_fixed_to_int(bw_mul(data->sclk_deep_sleep,
 					bw_int_to_fixed(1000)));
 		if (yclk_lvl == 0)
 			calcs_output->required_yclk = bw_fixed_to_int(
@@ -4168,382 +2590,387 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		/* units: nanosecond, 16bit storage. */
 
 		calcs_output->nbp_state_change_wm_ns[0].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[4], bw_int_to_fixed(1000)));
 		calcs_output->nbp_state_change_wm_ns[1].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->nbp_state_change_wm_ns[2].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[6], bw_int_to_fixed(1000)));
 
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->nbp_state_change_wm_ns[3].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->nbp_state_change_wm_ns[4].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 							nbp_state_change_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->nbp_state_change_wm_ns[3].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->nbp_state_change_wm_ns[4].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->nbp_state_change_wm_ns[5].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[9], bw_int_to_fixed(1000)));
 
 
 
 		calcs_output->stutter_exit_wm_ns[0].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[4], bw_int_to_fixed(1000)));
 		calcs_output->stutter_exit_wm_ns[1].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->stutter_exit_wm_ns[2].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[6], bw_int_to_fixed(1000)));
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->stutter_exit_wm_ns[3].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->stutter_exit_wm_ns[4].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->stutter_exit_wm_ns[3].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->stutter_exit_wm_ns[4].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->stutter_exit_wm_ns[5].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[9], bw_int_to_fixed(1000)));
 
 
 
 		calcs_output->urgent_wm_ns[0].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[4], bw_int_to_fixed(1000)));
 		calcs_output->urgent_wm_ns[1].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->urgent_wm_ns[2].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[6], bw_int_to_fixed(1000)));
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->urgent_wm_ns[3].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->urgent_wm_ns[4].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->urgent_wm_ns[3].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->urgent_wm_ns[4].a_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->urgent_wm_ns[5].a_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[9], bw_int_to_fixed(1000)));
 
 		/*TODO check correctness*/
-		((struct bw_calcs_vbios *)vbios)->low_sclk = mid_sclk;
-		calculate_bandwidth(dceip, vbios, bw_data_internal,
-							bw_results_internal);
-
-
+		((struct bw_calcs_vbios *)vbios)->low_sclk = mid1_sclk;
+		calculate_bandwidth(dceip, vbios, data);
 
 		calcs_output->nbp_state_change_wm_ns[0].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[4],bw_int_to_fixed(1000)));
 		calcs_output->nbp_state_change_wm_ns[1].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->nbp_state_change_wm_ns[2].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[6], bw_int_to_fixed(1000)));
 
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->nbp_state_change_wm_ns[3].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->nbp_state_change_wm_ns[4].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->nbp_state_change_wm_ns[3].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->nbp_state_change_wm_ns[4].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->nbp_state_change_wm_ns[5].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[9], bw_int_to_fixed(1000)));
 
 
 
 		calcs_output->stutter_exit_wm_ns[0].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[4], bw_int_to_fixed(1000)));
 		calcs_output->stutter_exit_wm_ns[1].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->stutter_exit_wm_ns[2].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[6], bw_int_to_fixed(1000)));
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->stutter_exit_wm_ns[3].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->stutter_exit_wm_ns[4].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->stutter_exit_wm_ns[3].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->stutter_exit_wm_ns[4].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->stutter_exit_wm_ns[5].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[9], bw_int_to_fixed(1000)));
 
 
 
 		calcs_output->urgent_wm_ns[0].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[4], bw_int_to_fixed(1000)));
 		calcs_output->urgent_wm_ns[1].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->urgent_wm_ns[2].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[6], bw_int_to_fixed(1000)));
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->urgent_wm_ns[3].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->urgent_wm_ns[4].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->urgent_wm_ns[3].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->urgent_wm_ns[4].b_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->urgent_wm_ns[5].b_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[9], bw_int_to_fixed(1000)));
 
 		/*TODO check correctness*/
 		((struct bw_calcs_vbios *)vbios)->low_sclk = low_sclk;
 		((struct bw_calcs_vbios *)vbios)->low_yclk = mid_yclk;
-		calculate_bandwidth(dceip, vbios, bw_data_internal,
-							bw_results_internal);
+		calculate_bandwidth(dceip, vbios, data);
 
 
 
 		calcs_output->nbp_state_change_wm_ns[0].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[4], bw_int_to_fixed(1000)));
 		calcs_output->nbp_state_change_wm_ns[1].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->nbp_state_change_wm_ns[2].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[6], bw_int_to_fixed(1000)));
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->nbp_state_change_wm_ns[3].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->nbp_state_change_wm_ns[4].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->nbp_state_change_wm_ns[3].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->nbp_state_change_wm_ns[4].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->nbp_state_change_wm_ns[5].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[9], bw_int_to_fixed(1000)));
 
 
 		calcs_output->stutter_exit_wm_ns[0].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[4], bw_int_to_fixed(1000)));
 		calcs_output->stutter_exit_wm_ns[1].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->stutter_exit_wm_ns[2].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[6], bw_int_to_fixed(1000)));
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->stutter_exit_wm_ns[3].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->stutter_exit_wm_ns[4].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->stutter_exit_wm_ns[3].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->stutter_exit_wm_ns[4].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->stutter_exit_wm_ns[5].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[9], bw_int_to_fixed(1000)));
 
 
 
 		calcs_output->urgent_wm_ns[0].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[4], bw_int_to_fixed(1000)));
 		calcs_output->urgent_wm_ns[1].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->urgent_wm_ns[2].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[6], bw_int_to_fixed(1000)));
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->urgent_wm_ns[3].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->urgent_wm_ns[4].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->urgent_wm_ns[3].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->urgent_wm_ns[4].c_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->urgent_wm_ns[5].c_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[9], bw_int_to_fixed(1000)));
 
 		((struct bw_calcs_vbios *)vbios)->low_yclk = high_yclk;
 		((struct bw_calcs_vbios *)vbios)->mid_yclk = high_yclk;
 		((struct bw_calcs_vbios *)vbios)->low_sclk = high_sclk;
-		((struct bw_calcs_vbios *)vbios)->mid_sclk = high_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid1_sclk = high_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid2_sclk = high_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid3_sclk = high_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid4_sclk = high_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid5_sclk = high_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid6_sclk = high_sclk;
 
-		calculate_bandwidth(dceip, vbios, bw_data_internal,
-							bw_results_internal);
+		calculate_bandwidth(dceip, vbios, data);
 
 		calcs_output->nbp_state_change_wm_ns[0].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[4], bw_int_to_fixed(1000)));
 		calcs_output->nbp_state_change_wm_ns[1].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->nbp_state_change_wm_ns[2].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[6], bw_int_to_fixed(1000)));
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->nbp_state_change_wm_ns[3].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->nbp_state_change_wm_ns[4].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->nbp_state_change_wm_ns[3].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->nbp_state_change_wm_ns[4].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					nbp_state_change_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->nbp_state_change_wm_ns[5].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				nbp_state_change_watermark[9], bw_int_to_fixed(1000)));
 
 		calcs_output->stutter_exit_wm_ns[0].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[4], bw_int_to_fixed(1000)));
 		calcs_output->stutter_exit_wm_ns[1].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->stutter_exit_wm_ns[2].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[6], bw_int_to_fixed(1000)));
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->stutter_exit_wm_ns[3].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->stutter_exit_wm_ns[4].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->stutter_exit_wm_ns[3].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->stutter_exit_wm_ns[4].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					stutter_exit_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->stutter_exit_wm_ns[5].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				stutter_exit_watermark[9], bw_int_to_fixed(1000)));
 
 
 		calcs_output->urgent_wm_ns[0].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[4], bw_int_to_fixed(1000)));
 		calcs_output->urgent_wm_ns[1].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[5], bw_int_to_fixed(1000)));
 		calcs_output->urgent_wm_ns[2].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[6], bw_int_to_fixed(1000)));
 		if (ctx->dc->caps.max_slave_planes) {
 			calcs_output->urgent_wm_ns[3].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[0], bw_int_to_fixed(1000)));
 			calcs_output->urgent_wm_ns[4].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[1], bw_int_to_fixed(1000)));
 		} else {
 			calcs_output->urgent_wm_ns[3].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[7], bw_int_to_fixed(1000)));
 			calcs_output->urgent_wm_ns[4].d_mark =
-				bw_fixed_to_int(bw_mul(bw_results_internal->
+				bw_fixed_to_int(bw_mul(data->
 					urgent_watermark[8], bw_int_to_fixed(1000)));
 		}
 		calcs_output->urgent_wm_ns[5].d_mark =
-			bw_fixed_to_int(bw_mul(bw_results_internal->
+			bw_fixed_to_int(bw_mul(data->
 				urgent_watermark[9], bw_int_to_fixed(1000)));
 
 		((struct bw_calcs_vbios *)vbios)->low_yclk = low_yclk;
 		((struct bw_calcs_vbios *)vbios)->mid_yclk = mid_yclk;
 		((struct bw_calcs_vbios *)vbios)->low_sclk = low_sclk;
-		((struct bw_calcs_vbios *)vbios)->mid_sclk = mid_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid1_sclk = mid1_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid2_sclk = mid2_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid3_sclk = mid3_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid4_sclk = mid4_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid5_sclk = mid5_sclk;
+		((struct bw_calcs_vbios *)vbios)->mid6_sclk = mid6_sclk;
 	} else {
 		calcs_output->nbp_state_change_enable = true;
 		calcs_output->cpuc_state_change_enable = true;
@@ -4553,8 +2980,7 @@ bool bw_calcs(struct dc_context *ctx, const struct bw_calcs_dceip *dceip,
 		calcs_output->required_sclk = 0;
 	}
 
-	dm_free(bw_data_internal);
-	dm_free(bw_results_internal);
+	dm_free(data);
 
 	return is_display_configuration_supported(vbios, calcs_output);
 }

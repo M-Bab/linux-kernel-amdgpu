@@ -307,7 +307,6 @@ struct validate_context {
 
 	struct resource_context res_ctx;
 
-	struct bw_calcs_mode_data bw_mode_data;
 	/* The output from BW and WM calculations. */
 	struct bw_calcs_output bw_results;
 	/* Note: this is a big structure, do *not* put on stack! */

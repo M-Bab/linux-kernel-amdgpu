@@ -814,6 +814,7 @@ static bool construct(
 
 	pool->base.adapter_srv = as;
 	pool->base.funcs = &dce100_res_pool_funcs;
+	pool->base.underlay_pipe_index = -1;
 
 	pool->base.stream_engines.engine.ENGINE_ID_DIGA = 1;
 	pool->base.stream_engines.engine.ENGINE_ID_DIGB = 1;
@@ -884,6 +885,7 @@ static bool construct(
 	/*************************************************
 	*  Resource + asic cap harcoding                *
 	*************************************************/
+	pool->base.underlay_pipe_index = -1;
 	pool->base.pipe_count = dal_adapter_service_get_func_controllers_num(as);
 	pool->base.stream_enc_count = dal_adapter_service_get_stream_engines_num(as);
 	pool->base.scaler_filter = dal_scaler_filter_create(ctx);

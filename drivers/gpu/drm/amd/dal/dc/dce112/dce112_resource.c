@@ -727,96 +727,7 @@ enum dc_status dce112_validate_bandwidth(
 	const struct core_dc *dc,
 	struct validate_context *context)
 {
-	uint8_t i;
 	enum dc_status result = DC_ERROR_UNEXPECTED;
-	uint8_t number_of_displays = 0;
-	uint8_t max_htaps = 1;
-	uint8_t max_vtaps = 1;
-	bool all_displays_in_sync = true;
-	struct dc_crtc_timing prev_timing;
-
-	memset(&context->bw_mode_data, 0, sizeof(context->bw_mode_data));
-
-	for (i = 0; i < MAX_PIPES; i++) {
-		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
-		struct bw_calcs_input_single_display *disp = &context->
-			bw_mode_data.displays_data[number_of_displays];
-
-		if (pipe_ctx->stream == NULL)
-			continue;
-
-		if (pipe_ctx->scl_data.ratios.vert.value == 0) {
-			disp->graphics_scale_ratio = bw_int_to_fixed(1);
-			disp->graphics_h_taps = 2;
-			disp->graphics_v_taps = 2;
-
-			/* TODO: remove when bw formula accepts taps per
-			 * display
-			 */
-			if (max_vtaps < 2)
-				max_vtaps = 2;
-			if (max_htaps < 2)
-				max_htaps = 2;
-
-		} else {
-			disp->graphics_scale_ratio =
-				fixed31_32_to_bw_fixed(
-					pipe_ctx->scl_data.ratios.vert.value);
-			disp->graphics_h_taps = pipe_ctx->scl_data.taps.h_taps;
-			disp->graphics_v_taps = pipe_ctx->scl_data.taps.v_taps;
-
-			/* TODO: remove when bw formula accepts taps per
-			 * display
-			 */
-			if (max_vtaps < pipe_ctx->scl_data.taps.v_taps)
-				max_vtaps = pipe_ctx->scl_data.taps.v_taps;
-			if (max_htaps < pipe_ctx->scl_data.taps.h_taps)
-				max_htaps = pipe_ctx->scl_data.taps.h_taps;
-		}
-
-		disp->graphics_src_width =
-			pipe_ctx->stream->public.timing.h_addressable;
-		disp->graphics_src_height =
-			pipe_ctx->stream->public.timing.v_addressable;
-		disp->h_total = pipe_ctx->stream->public.timing.h_total;
-		disp->pixel_rate = bw_frc_to_fixed(
-			pipe_ctx->stream->public.timing.pix_clk_khz, 1000);
-
-		/*TODO: get from surface*/
-		disp->graphics_bytes_per_pixel = 4;
-		disp->graphics_tiling_mode = bw_def_tiled;
-
-		/* DCE11 defaults*/
-		disp->graphics_lb_bpc = 10;
-		disp->graphics_interlace_mode = false;
-		disp->fbc_enable = false;
-		disp->lpt_enable = false;
-		disp->graphics_stereo_mode = bw_def_mono;
-		disp->underlay_mode = bw_def_none;
-
-		/*All displays will be synchronized if timings are all
-		 * the same
-		 */
-		if (number_of_displays != 0 && all_displays_in_sync)
-			if (memcmp(&prev_timing,
-				&pipe_ctx->stream->public.timing,
-				sizeof(struct dc_crtc_timing)) != 0)
-				all_displays_in_sync = false;
-		if (number_of_displays == 0)
-			prev_timing = pipe_ctx->stream->public.timing;
-
-		number_of_displays++;
-	}
-
-	/* TODO: remove when bw formula accepts taps per
-	 * display
-	 */
-	context->bw_mode_data.displays_data[0].graphics_v_taps = max_vtaps;
-	context->bw_mode_data.displays_data[0].graphics_h_taps = max_htaps;
-
-	context->bw_mode_data.number_of_displays = number_of_displays;
-	context->bw_mode_data.display_synchronization_enabled =
-							all_displays_in_sync;
 
 	dal_logger_write(
 		dc->ctx->logger,
@@ -829,7 +740,8 @@ enum dc_status dce112_validate_bandwidth(
 			dc->ctx,
 			&dc->bw_dceip,
 			&dc->bw_vbios,
-			&context->bw_mode_data,
+			context->res_ctx.pipe_ctx,
+			context->res_ctx.pool->pipe_count,
 			&context->bw_results))
 		result =  DC_FAIL_BANDWIDTH_VALIDATE;
 	else
@@ -850,10 +762,10 @@ enum dc_status dce112_validate_bandwidth(
 			&log_entry,
 			LOG_MAJOR_BWM,
 			LOG_MINOR_BWM_REQUIRED_BANDWIDTH_CALCS);
-		dal_logger_append(&log_entry, "%s: finish, numDisplays: %d\n"
+		dal_logger_append(&log_entry, "%s: finish,\n"
 			"nbpMark_b: %d nbpMark_a: %d urgentMark_b: %d urgentMark_a: %d\n"
 			"stutMark_b: %d stutMark_a: %d\n",
-			__func__, number_of_displays,
+			__func__,
 			context->bw_results.nbp_state_change_wm_ns[0].b_mark,
 			context->bw_results.nbp_state_change_wm_ns[0].a_mark,
 			context->bw_results.urgent_wm_ns[0].b_mark,
@@ -1077,22 +989,19 @@ static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 	/* convert all the clock fro kHz to fix point mHz */
 	dc->bw_vbios.high_sclk = bw_frc_to_fixed(
 			clks.clocks_in_khz[clks.num_levels-1], 1000);
-	dc->bw_vbios.mid_sclk  = bw_frc_to_fixed(
-			clks.clocks_in_khz[clks.num_levels>>1], 1000);
+	dc->bw_vbios.mid1_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels/8], 1000);
+	dc->bw_vbios.mid2_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels*2/8], 1000);
+	dc->bw_vbios.mid3_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels*3/8], 1000);
+	dc->bw_vbios.mid4_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels*4/8], 1000);
+	dc->bw_vbios.mid5_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels*5/8], 1000);
+	dc->bw_vbios.mid6_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels*6/8], 1000);
 	dc->bw_vbios.low_sclk  = bw_frc_to_fixed(
-			clks.clocks_in_khz[0], 1000);
-
-	/*do display clock*/
-	dm_pp_get_clock_levels_by_type(
-			dc->ctx,
-			DM_PP_CLOCK_TYPE_DISPLAY_CLK,
-			&clks);
-
-	dc->bw_vbios.high_voltage_max_dispclk = bw_frc_to_fixed(
-			clks.clocks_in_khz[clks.num_levels-1], 1000);
-	dc->bw_vbios.mid_voltage_max_dispclk  = bw_frc_to_fixed(
-			clks.clocks_in_khz[clks.num_levels>>1], 1000);
-	dc->bw_vbios.low_voltage_max_dispclk  = bw_frc_to_fixed(
 			clks.clocks_in_khz[0], 1000);
 
 	/*do memory clock*/
@@ -1127,6 +1036,7 @@ static bool construct(
 	/*************************************************
 	 *  Resource + asic cap harcoding                *
 	 *************************************************/
+	pool->base.underlay_pipe_index = -1;
 	pool->base.pipe_count =
 		dal_adapter_service_get_func_controllers_num(adapter_serv);
 	pool->base.stream_enc_count = dal_adapter_service_get_stream_engines_num(adapter_serv);

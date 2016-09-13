@@ -1230,8 +1230,7 @@ static void set_displaymarks(
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 		uint32_t total_dest_line_time_ns;
 
-		if (pipe_ctx->stream == NULL
-			|| pipe_ctx->pipe_idx == underlay_idx)
+		if (pipe_ctx->stream == NULL)
 			continue;
 
 		total_dest_line_time_ns = compute_pstate_blackout_duration(
@@ -1242,13 +1241,23 @@ static void set_displaymarks(
 			context->bw_results.stutter_exit_wm_ns[num_pipes],
 			context->bw_results.urgent_wm_ns[num_pipes],
 			total_dest_line_time_ns);
+		if (i == underlay_idx) {
+			num_pipes++;
+			pipe_ctx->mi->funcs->mem_input_program_chroma_display_marks(
+				pipe_ctx->mi,
+				context->bw_results.nbp_state_change_wm_ns[num_pipes],
+				context->bw_results.stutter_exit_wm_ns[num_pipes],
+				context->bw_results.urgent_wm_ns[num_pipes],
+				total_dest_line_time_ns);
+		}
 		num_pipes++;
 	}
 }
 
 static void set_safe_displaymarks(struct resource_context *res_ctx)
 {
-	uint8_t i;
+	int i;
+	int underlay_idx = res_ctx->pool->underlay_pipe_index;
 	struct bw_watermarks max_marks = {
 		MAX_WATERMARK, MAX_WATERMARK, MAX_WATERMARK, MAX_WATERMARK };
 	struct bw_watermarks nbp_marks = {
@@ -1259,6 +1268,13 @@ static void set_safe_displaymarks(struct resource_context *res_ctx)
 			continue;
 
 		res_ctx->pipe_ctx[i].mi->funcs->mem_input_program_display_marks(
+				res_ctx->pipe_ctx[i].mi,
+				nbp_marks,
+				max_marks,
+				max_marks,
+				MAX_WATERMARK);
+		if (i == underlay_idx)
+			res_ctx->pipe_ctx[i].mi->funcs->mem_input_program_chroma_display_marks(
 				res_ctx->pipe_ctx[i].mi,
 				nbp_marks,
 				max_marks,

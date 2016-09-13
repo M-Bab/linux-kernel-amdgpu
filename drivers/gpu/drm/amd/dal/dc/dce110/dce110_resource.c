@@ -730,134 +730,11 @@ static enum dc_status validate_mapped_resource(
 	return DC_OK;
 }
 
-static void bw_calcs_input_single_display(
-		struct bw_calcs_input_single_display *disp,
-		struct pipe_ctx *pipe_ctx,
-		int *max_htaps,
-		int *max_vtaps)
-{
-	if (pipe_ctx->scl_data.ratios.vert.value == 0) {
-		disp->graphics_scale_ratio = bw_int_to_fixed(1);
-		disp->graphics_h_taps = 2;
-		disp->graphics_v_taps = 2;
-
-		/* TODO: remove when bw formula accepts taps per
-		 * display
-		 */
-		if (*max_vtaps < 2)
-			*max_vtaps = 2;
-		if (*max_htaps < 2)
-			*max_htaps = 2;
-
-	} else {
-		disp->graphics_scale_ratio =
-			fixed31_32_to_bw_fixed(
-				pipe_ctx->scl_data.ratios.vert.value);
-		disp->graphics_h_taps = pipe_ctx->scl_data.taps.h_taps;
-		disp->graphics_v_taps = pipe_ctx->scl_data.taps.v_taps;
-
-		/* TODO: remove when bw formula accepts taps per
-		 * display
-		 */
-		if (*max_vtaps < pipe_ctx->scl_data.taps.v_taps)
-			*max_vtaps = pipe_ctx->scl_data.taps.v_taps;
-		if (*max_htaps < pipe_ctx->scl_data.taps.h_taps)
-			*max_htaps = pipe_ctx->scl_data.taps.h_taps;
-	}
-
-	disp->graphics_src_width =
-		pipe_ctx->stream->public.timing.h_addressable;
-	disp->graphics_src_height =
-		pipe_ctx->stream->public.timing.v_addressable;
-	disp->h_total = pipe_ctx->stream->public.timing.h_total;
-	disp->pixel_rate = bw_frc_to_fixed(
-		pipe_ctx->stream->public.timing.pix_clk_khz, 1000);
-
-	/*TODO: get from surface*/
-	disp->graphics_bytes_per_pixel = 4;
-	disp->graphics_tiling_mode = bw_def_tiled;
-
-	/* DCE11 defaults*/
-	disp->graphics_lb_bpc = 10;
-	disp->graphics_interlace_mode = false;
-	disp->fbc_enable = false;
-	disp->lpt_enable = false;
-	disp->graphics_stereo_mode = bw_def_mono;
-	disp->underlay_mode = bw_def_none;
-}
-
 enum dc_status dce110_validate_bandwidth(
 	const struct core_dc *dc,
 	struct validate_context *context)
 {
-	int i;
 	enum dc_status result = DC_ERROR_UNEXPECTED;
-	int number_of_displays = 0;
-	int max_htaps = 1;
-	int max_vtaps = 1;
-
-	bool all_displays_in_sync = true;
-	struct dc_crtc_timing prev_timing;
-	unsigned int underlay_idx = context->res_ctx.pool->underlay_pipe_index;
-	struct pipe_ctx *underlay_pipe_ctx = &context->res_ctx.pipe_ctx[underlay_idx];
-	struct bw_calcs_input_single_display *underlay_input = &context->
-		bw_mode_data.displays_data[number_of_displays];
-
-	memset(&context->bw_mode_data, 0, sizeof(context->bw_mode_data));
-
-	/* Due to organization of bw_calcs, the underlay pipe must be at the beginning of the array*/
-
-	if (underlay_pipe_ctx->stream) {
-		ASSERT (underlay_pipe_ctx->top_pipe);
-		bw_calcs_input_single_display(underlay_input, underlay_pipe_ctx->top_pipe, &max_htaps, &max_vtaps);
-		prev_timing = underlay_pipe_ctx->stream->public.timing;
-		underlay_input->underlay_mode = bw_def_yes;
-		underlay_input->underlay_h_taps = underlay_pipe_ctx->scl_data.taps.h_taps;
-		underlay_input->underlay_v_taps = underlay_pipe_ctx->scl_data.taps.v_taps;
-		underlay_input->underlay_scale_ratio = fixed31_32_to_bw_fixed(
-				underlay_pipe_ctx->scl_data.ratios.vert.value);
-		underlay_input->underlay_pitch_in_pixels = underlay_pipe_ctx->surface->public.plane_size.video.luma_pitch;
-		underlay_input->underlay_lb_bpc = 10;
-		underlay_input->underlay_src_width = underlay_pipe_ctx->surface->public.src_rect.width;
-		underlay_input->underlay_src_height = underlay_pipe_ctx->surface->public.src_rect.height;
-		underlay_input->underlay_tiling_mode = bw_def_tiled;
-		underlay_input->underlay_surface_type = bw_def_420;
-
-		number_of_displays++;
-	}
-
-	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
-		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
-		struct bw_calcs_input_single_display *disp = &context->
-			bw_mode_data.displays_data[number_of_displays];
-
-		if (pipe_ctx->stream == NULL || pipe_ctx->bottom_pipe || pipe_ctx->top_pipe)
-			continue;
-
-		bw_calcs_input_single_display(disp, pipe_ctx,  &max_htaps, &max_vtaps);
-		/*All displays will be synchronized if timings are all
-		 * the same
-		 */
-		if (number_of_displays != 0 && all_displays_in_sync)
-			if (memcmp(&prev_timing,
-				&pipe_ctx->stream->public.timing,
-				sizeof(struct dc_crtc_timing)) != 0)
-				all_displays_in_sync = false;
-		if (number_of_displays == 0)
-			prev_timing = pipe_ctx->stream->public.timing;
-
-		number_of_displays++;
-	}
-
-	/* TODO: remove when bw formula accepts taps per
-	 * display
-	 */
-	context->bw_mode_data.displays_data[0].graphics_v_taps = max_vtaps;
-	context->bw_mode_data.displays_data[0].graphics_h_taps = max_htaps;
-
-	context->bw_mode_data.number_of_displays = number_of_displays;
-	context->bw_mode_data.display_synchronization_enabled =
-							all_displays_in_sync;
 
 	dal_logger_write(
 		dc->ctx->logger,
@@ -870,7 +747,8 @@ enum dc_status dce110_validate_bandwidth(
 			dc->ctx,
 			&dc->bw_dceip,
 			&dc->bw_vbios,
-			&context->bw_mode_data,
+			context->res_ctx.pipe_ctx,
+			context->res_ctx.pool->pipe_count,
 			&context->bw_results))
 		result =  DC_FAIL_BANDWIDTH_VALIDATE;
 	else
@@ -891,10 +769,10 @@ enum dc_status dce110_validate_bandwidth(
 			&log_entry,
 			LOG_MAJOR_BWM,
 			LOG_MINOR_BWM_REQUIRED_BANDWIDTH_CALCS);
-		dal_logger_append(&log_entry, "%s: finish, numDisplays: %d\n"
+		dal_logger_append(&log_entry, "%s: finish,\n"
 			"nbpMark_b: %d nbpMark_a: %d urgentMark_b: %d urgentMark_a: %d\n"
 			"stutMark_b: %d stutMark_a: %d\n",
-			__func__, number_of_displays,
+			__func__,
 			context->bw_results.nbp_state_change_wm_ns[0].b_mark,
 			context->bw_results.nbp_state_change_wm_ns[0].a_mark,
 			context->bw_results.urgent_wm_ns[0].b_mark,
@@ -1135,8 +1013,18 @@ static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 	/* convert all the clock fro kHz to fix point mHz */
 	dc->bw_vbios.high_sclk = bw_frc_to_fixed(
 			clks.clocks_in_khz[clks.num_levels-1], 1000);
-	dc->bw_vbios.mid_sclk  = bw_frc_to_fixed(
-			clks.clocks_in_khz[clks.num_levels>>1], 1000);
+	dc->bw_vbios.mid1_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels/8], 1000);
+	dc->bw_vbios.mid2_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels*2/8], 1000);
+	dc->bw_vbios.mid3_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels*3/8], 1000);
+	dc->bw_vbios.mid4_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels*4/8], 1000);
+	dc->bw_vbios.mid5_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels*5/8], 1000);
+	dc->bw_vbios.mid6_sclk  = bw_frc_to_fixed(
+			clks.clocks_in_khz[clks.num_levels*6/8], 1000);
 	dc->bw_vbios.low_sclk  = bw_frc_to_fixed(
 			clks.clocks_in_khz[0], 1000);
 	dc->sclk_lvls = clks;

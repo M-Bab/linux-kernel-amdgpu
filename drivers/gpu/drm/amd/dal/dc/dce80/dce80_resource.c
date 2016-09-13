@@ -743,6 +743,7 @@ static bool construct(
 	/*************************************************
 	 *  Resource + asic cap harcoding                *
 	 *************************************************/
+	pool->base.underlay_pipe_index = -1;
 	pool->base.pipe_count = dal_adapter_service_get_func_controllers_num(as);
 	pool->base.stream_enc_count = dal_adapter_service_get_stream_engines_num(as);
 	dc->public.caps.max_downscale_ratio = 200;

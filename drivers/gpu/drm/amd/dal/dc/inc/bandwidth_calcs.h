@@ -25,20 +25,24 @@
 
 /**
  * Bandwidth and Watermark calculations interface.
- * (Refer to "DCE11_mode_support.xlsm" from Perforce.)
+ * (Refer to "DCEx_mode_support.xlsm" from Perforce.)
  */
 #ifndef __BANDWIDTH_CALCS_H__
 #define __BANDWIDTH_CALCS_H__
 
 #include "bw_fixed.h"
+
+struct pipe_ctx;
+
 /*******************************************************************************
  * There are three types of input into Calculations:
  * 1. per-DCE static values - these are "hardcoded" properties of the DCEIP
  * 2. board-level values - these are generally coming from VBIOS parser
  * 3. mode/configuration values - depending Mode, Scaling number of Displays etc.
  ******************************************************************************/
+
 enum bw_defines {
-	/*Common*/
+	//Common
 	bw_def_no = 0,
 	bw_def_none = 0,
 	bw_def_yes = 1,
@@ -47,7 +51,7 @@ enum bw_defines {
 	bw_def_mid = 1,
 	bw_def_low = 0,
 
-	/*Internal*/
+	//Internal
 	bw_defs_start = 255,
 	bw_def_underlay422,
 	bw_def_underlay420_luma,
@@ -70,40 +74,55 @@ enum bw_defines {
 	bw_def_exceeded_allowed_page_close_open,
 	bw_def_exceeded_allowed_outstanding_pte_req_queue_size,
 	bw_def_exceeded_allowed_maximum_bw,
-	bw_def_high_no_nbp_state_change,
 	bw_def_landscape,
 
-	/*Panning and bezel*/
+	//Panning and bezel
 	bw_def_any_lines,
 
-	/*Underlay mode*/
+	//Underlay mode
 	bw_def_underlay_only,
 	bw_def_blended,
 	bw_def_blend,
 
-	/*Stereo mode*/
+	//Stereo mode
 	bw_def_mono,
 	bw_def_side_by_side,
 	bw_def_top_bottom,
 
-	/*Underlay surface type*/
+	//Underlay surface type
 	bw_def_420,
 	bw_def_422,
 	bw_def_444,
 
-	/*Tiling mode*/
+	//Tiling mode
 	bw_def_linear,
 	bw_def_tiled,
+	bw_def_array_linear_general,
+	bw_def_array_linear_aligned,
+	bw_def_rotated_micro_tiling,
+	bw_def_display_micro_tiling,
+
+	//Memory type
+	bw_def_gddr5,
+	bw_def_hbm,
+
+	//Voltage
+	bw_def_high_no_nbp_state_change,
+	bw_def_0_72,
+	bw_def_0_8,
+	bw_def_0_9,
 
 	bw_def_notok = -1,
 	bw_def_na = -1
 };
 
 struct bw_calcs_dceip {
+	bool large_cursor;
+	uint32_t cursor_max_outstanding_group_num;
+	bool dmif_pipe_en_fbc_chunk_tracker;
 	struct bw_fixed dmif_request_buffer_size;
-	struct bw_fixed de_tiling_buffer;
-	bool dcfclk_request_generation;
 	uint32_t lines_interleaved_into_lb;
+	bool low_power_tiling_mode;
 	uint32_t chunk_width;
 	uint32_t number_of_graphics_pipes;
 	uint32_t number_of_underlay_pipes;
@@ -133,7 +152,6 @@ struct bw_calcs_dceip {
 	struct bw_fixed underlay422_lb_size_per_component;
 	struct bw_fixed cursor_chunk_width;
 	struct bw_fixed cursor_dcp_buffer_lines;
-	struct bw_fixed cursor_memory_interface_buffer_pixels;
 	struct bw_fixed underlay_maximum_width_efficient_for_tiling;
 	struct bw_fixed underlay_maximum_height_efficient_for_tiling;
 	struct bw_fixed peak_pte_request_to_eviction_ratio_limiting_multiple_displays_or_single_rotated_display;
@@ -150,26 +168,36 @@ struct bw_calcs_dceip {
 	struct bw_fixed dispclk_ramping_factor;
 	struct bw_fixed display_pipe_throughput_factor;
 	uint32_t scatter_gather_pte_request_rows_in_tiling_mode;
-	struct bw_fixed mcifwr_all_surfaces_burst_time; /* 0 todo: this is a bug*/
+	struct bw_fixed mcifwr_all_surfaces_burst_time;
 };
 
 struct bw_calcs_vbios {
+	enum bw_defines memory_type;
 	uint32_t dram_channel_width_in_bits;
 	uint32_t number_of_dram_channels;
 	uint32_t number_of_dram_banks;
-	struct bw_fixed high_yclk; /*MHz*/
-	struct bw_fixed mid_yclk; /*MHz*/
-	struct bw_fixed low_yclk; /*MHz*/
-	struct bw_fixed low_sclk; /*MHz*/
-	struct bw_fixed mid_sclk; /*MHz*/
-	struct bw_fixed high_sclk; /*MHz*/
-	struct bw_fixed low_voltage_max_dispclk; /*MHz*/
-	struct bw_fixed mid_voltage_max_dispclk; /*MHz*/
-	struct bw_fixed high_voltage_max_dispclk; /*MHz*/
+	struct bw_fixed low_yclk; /*m_hz*/
+	struct bw_fixed mid_yclk; /*m_hz*/
+	struct bw_fixed high_yclk; /*m_hz*/
+	struct bw_fixed low_sclk; /*m_hz*/
+	struct bw_fixed mid1_sclk; /*m_hz*/
+	struct bw_fixed mid2_sclk; /*m_hz*/
+	struct bw_fixed mid3_sclk; /*m_hz*/
+	struct bw_fixed mid4_sclk; /*m_hz*/
+	struct bw_fixed mid5_sclk; /*m_hz*/
+	struct bw_fixed mid6_sclk; /*m_hz*/
+	struct bw_fixed high_sclk; /*m_hz*/
+	struct bw_fixed low_voltage_max_dispclk; /*m_hz*/
+	struct bw_fixed mid_voltage_max_dispclk; /*m_hz*/
+	struct bw_fixed high_voltage_max_dispclk; /*m_hz*/
+	struct bw_fixed low_voltage_max_phyclk;
+	struct bw_fixed mid_voltage_max_phyclk;
+	struct bw_fixed high_voltage_max_phyclk;
 	struct bw_fixed data_return_bus_width;
 	struct bw_fixed trc;
 	struct bw_fixed dmifmc_urgent_latency;
 	struct bw_fixed stutter_self_refresh_exit_latency;
+	struct bw_fixed stutter_self_refresh_entry_latency;
 	struct bw_fixed nbp_state_change_latency;
 	struct bw_fixed mcifwrmc_urgent_latency;
 	bool scatter_gather_enable;
@@ -181,121 +209,25 @@ struct bw_calcs_vbios {
 	struct bw_fixed maximum_blackout_recovery_time;
 };
 
-struct bw_calcs_mode_data_internal {
-	/* data for all displays */
-	uint32_t number_of_displays;
-	uint32_t graphics_rotation_angle;
-	uint32_t underlay_rotation_angle;
-	enum bw_defines display_synchronization_enabled;
-	enum bw_defines underlay_surface_type;
-	enum bw_defines panning_and_bezel_adjustment;
-	enum bw_defines graphics_tiling_mode;
-	bool graphics_interlace_mode;
-	uint32_t graphics_bytes_per_pixel;
-	uint32_t graphics_htaps;
-	uint32_t graphics_vtaps;
-	uint32_t graphics_lb_bpc;
-	uint32_t underlay_lb_bpc;
-	enum bw_defines underlay_tiling_mode;
-	uint32_t underlay_htaps;
-	uint32_t underlay_vtaps;
-	uint32_t underlay_src_width;
-	uint32_t underlay_src_height;
-	uint32_t underlay_pitch_in_pixels;
-	enum bw_defines underlay_stereo_mode;
-	bool d0_fbc_enable;
-	bool d0_lpt_enable;
-	uint32_t d0_htotal;
-	struct bw_fixed d0_pixel_rate;
-	uint32_t d0_graphics_src_width;
-	uint32_t d0_graphics_src_height;
-	struct bw_fixed d0_graphics_scale_ratio;
-	enum bw_defines d0_graphics_stereo_mode;
-	enum bw_defines d0_underlay_mode;
-	struct bw_fixed d0_underlay_scale_ratio;
-	uint32_t d1_htotal;
-	struct bw_fixed d1_pixel_rate;
-	uint32_t d1_graphics_src_width;
-	uint32_t d1_graphics_src_height;
-	struct bw_fixed d1_graphics_scale_ratio;
-	enum bw_defines d1_graphics_stereo_mode;
-	bool d1_display_write_back_dwb_enable;
-	enum bw_defines d1_underlay_mode;
-	struct bw_fixed d1_underlay_scale_ratio;
-	uint32_t d2_htotal;
-	struct bw_fixed d2_pixel_rate;
-	uint32_t d2_graphics_src_width;
-	uint32_t d2_graphics_src_height;
-	struct bw_fixed d2_graphics_scale_ratio;
-	enum bw_defines d2_graphics_stereo_mode;
-	uint32_t d3_htotal;
-	struct bw_fixed d3_pixel_rate;
-	uint32_t d3_graphics_src_width;
-	uint32_t d3_graphics_src_height;
-	struct bw_fixed d3_graphics_scale_ratio;
-	enum bw_defines d3_graphics_stereo_mode;
-	uint32_t d4_htotal;
-	struct bw_fixed d4_pixel_rate;
-	uint32_t d4_graphics_src_width;
-	uint32_t d4_graphics_src_height;
-	struct bw_fixed d4_graphics_scale_ratio;
-	enum bw_defines d4_graphics_stereo_mode;
-	uint32_t d5_htotal;
-	struct bw_fixed d5_pixel_rate;
-	uint32_t d5_graphics_src_width;
-	uint32_t d5_graphics_src_height;
-	struct bw_fixed d5_graphics_scale_ratio;
-	enum bw_defines d5_graphics_stereo_mode;
-};
-
-struct bw_calcs_input_single_display {
-	uint32_t graphics_rotation_angle;
-	uint32_t underlay_rotation_angle;
-	enum bw_defines underlay_surface_type;
-	enum bw_defines panning_and_bezel_adjustment;
-	uint32_t graphics_bytes_per_pixel;
-	bool graphics_interlace_mode;
-	enum bw_defines graphics_tiling_mode;
-	uint32_t graphics_h_taps;
-	uint32_t graphics_v_taps;
-	uint32_t graphics_lb_bpc;
-	uint32_t underlay_lb_bpc;
-	enum bw_defines underlay_tiling_mode;
-	struct bw_fixed underlay_scale_ratio;
-	uint32_t underlay_h_taps;
-	uint32_t underlay_v_taps;
-	uint32_t underlay_src_width;
-	uint32_t underlay_src_height;
-	uint32_t underlay_pitch_in_pixels;
-	enum bw_defines underlay_stereo_mode;
-	bool fbc_enable;
-	bool lpt_enable;
-	uint32_t h_total;
-	struct bw_fixed pixel_rate;
-	uint32_t graphics_src_width;
-	uint32_t graphics_src_height;
-	struct bw_fixed graphics_scale_ratio;
-	enum bw_defines graphics_stereo_mode;
-	enum bw_defines underlay_mode;
-};
-
-#define BW_CALCS_MAX_NUM_DISPLAYS 6
-
-struct bw_calcs_mode_data {
-	/* data for all displays */
-	uint8_t number_of_displays;
-	bool display_synchronization_enabled;
-
-	struct bw_calcs_input_single_display
-				displays_data[BW_CALCS_MAX_NUM_DISPLAYS];
-};
-
 /*******************************************************************************
- * Output data structure(s).
+ * Temporary data structure(s).
  ******************************************************************************/
 #define maximum_number_of_surfaces 12
 /*Units : MHz, us */
-struct bw_calcs_results {
+
+struct bw_calcs_data {
+	/* data for all displays */
+	uint32_t number_of_displays;
+	enum bw_defines underlay_surface_type;
+	enum bw_defines panning_and_bezel_adjustment;
+	enum bw_defines graphics_tiling_mode;
+	uint32_t graphics_lb_bpc;
+	uint32_t underlay_lb_bpc;
+	enum bw_defines underlay_tiling_mode;
+	enum bw_defines d0_underlay_mode;
+	bool d1_display_write_back_dwb_enable;
+	enum bw_defines d1_underlay_mode;
+
 	bool cpup_state_change_enable;
 	bool cpuc_state_change_enable;
 	bool nbp_state_change_enable;
@@ -303,6 +235,13 @@ struct bw_calcs_results {
 	uint32_t y_clk_level;
 	uint32_t sclk_level;
 	uint32_t number_of_underlay_surfaces;
+	uint32_t number_of_dram_wrchannels;
+	uint32_t chunk_request_delay;
+	uint32_t number_of_dram_channels;
+	enum bw_defines underlay_micro_tile_mode;
+	enum bw_defines graphics_micro_tile_mode;
+	struct bw_fixed max_phyclk;
+	struct bw_fixed dram_efficiency;
 	struct bw_fixed src_width_after_surface_type;
 	struct bw_fixed src_height_after_surface_type;
 	struct bw_fixed hsr_after_surface_type;
@@ -327,8 +266,6 @@ struct bw_calcs_results {
 	struct bw_fixed scatter_gather_row_height;
 	struct bw_fixed scatter_gather_pte_requests_in_vblank;
 	struct bw_fixed inefficient_linear_pitch_in_bytes;
-	struct bw_fixed inefficient_underlay_pitch_in_pixels;
-	struct bw_fixed minimum_underlay_pitch_padding_recommended_for_efficiency;
 	struct bw_fixed cursor_total_data;
 	struct bw_fixed cursor_total_request_groups;
 	struct bw_fixed scatter_gather_total_pte_requests;
@@ -394,6 +331,17 @@ struct bw_calcs_results {
 	struct bw_fixed dmifmc_urgent_latency_supported_in_high_sclk_and_yclk;
 	struct bw_fixed nbp_state_dram_speed_change_margin;
 	struct bw_fixed display_reads_time_for_data_transfer_and_urgent_latency;
+	struct bw_fixed dram_speed_change_margin;
+	struct bw_fixed min_vblank_dram_speed_change_margin;
+	struct bw_fixed min_stutter_refresh_duration;
+	uint32_t total_stutter_dmif_buffer_size;
+	uint32_t total_bytes_requested;
+	uint32_t min_stutter_dmif_buffer_size;
+	uint32_t num_stutter_bursts;
+	struct bw_fixed v_blank_nbp_state_dram_speed_change_latency_supported;
+	struct bw_fixed nbp_state_dram_speed_change_latency_supported;
+	bool fbc_en[maximum_number_of_surfaces];
+	bool lpt_en[maximum_number_of_surfaces];
 	bool displays_match_flag[maximum_number_of_surfaces];
 	bool use_alpha[maximum_number_of_surfaces];
 	bool orthogonal_rotation[maximum_number_of_surfaces];
@@ -402,10 +350,23 @@ struct bw_calcs_results {
 	bool scatter_gather_enable_for_pipe[maximum_number_of_surfaces];
 	bool interlace_mode[maximum_number_of_surfaces];
 	bool display_pstate_change_enable[maximum_number_of_surfaces];
+	bool line_buffer_prefetch[maximum_number_of_surfaces];
+	uint32_t bytes_per_pixel[maximum_number_of_surfaces];
+	uint32_t max_chunks_non_fbc_mode[maximum_number_of_surfaces];
+	uint32_t lb_bpc[maximum_number_of_surfaces];
+	uint32_t output_bpphdmi[maximum_number_of_surfaces];
+	uint32_t output_bppdp4_lane_hbr[maximum_number_of_surfaces];
+	uint32_t output_bppdp4_lane_hbr2[maximum_number_of_surfaces];
+	uint32_t output_bppdp4_lane_hbr3[maximum_number_of_surfaces];
+	enum bw_defines stereo_mode[maximum_number_of_surfaces];
 	struct bw_fixed dmif_buffer_transfer_time[maximum_number_of_surfaces];
 	struct bw_fixed displays_with_same_mode[maximum_number_of_surfaces];
-	uint32_t bytes_per_pixel[maximum_number_of_surfaces];
+	struct bw_fixed stutter_dmif_buffer_size[maximum_number_of_surfaces];
+	struct bw_fixed stutter_refresh_duration[maximum_number_of_surfaces];
+	struct bw_fixed stutter_exit_watermark[maximum_number_of_surfaces];
+	struct bw_fixed stutter_entry_watermark[maximum_number_of_surfaces];
 	struct bw_fixed h_total[maximum_number_of_surfaces];
+	struct bw_fixed v_total[maximum_number_of_surfaces];
 	struct bw_fixed pixel_rate[maximum_number_of_surfaces];
 	struct bw_fixed src_width[maximum_number_of_surfaces];
 	struct bw_fixed pitch_in_pixels[maximum_number_of_surfaces];
@@ -414,8 +375,9 @@ struct bw_calcs_results {
 	struct bw_fixed scale_ratio[maximum_number_of_surfaces];
 	struct bw_fixed h_taps[maximum_number_of_surfaces];
 	struct bw_fixed v_taps[maximum_number_of_surfaces];
+	struct bw_fixed h_scale_ratio[maximum_number_of_surfaces];
+	struct bw_fixed v_scale_ratio[maximum_number_of_surfaces];
 	struct bw_fixed rotation_angle[maximum_number_of_surfaces];
-	uint32_t lb_bpc[maximum_number_of_surfaces];
 	struct bw_fixed compression_rate[maximum_number_of_surfaces];
 	struct bw_fixed hsr[maximum_number_of_surfaces];
 	struct bw_fixed vsr[maximum_number_of_surfaces];
@@ -435,7 +397,6 @@ struct bw_calcs_results {
 	struct bw_fixed data_buffer_size[maximum_number_of_surfaces];
 	struct bw_fixed outstanding_chunk_request_limit[maximum_number_of_surfaces];
 	struct bw_fixed urgent_watermark[maximum_number_of_surfaces];
-	struct bw_fixed stutter_exit_watermark[maximum_number_of_surfaces];
 	struct bw_fixed nbp_state_change_watermark[maximum_number_of_surfaces];
 	struct bw_fixed v_filter_init[maximum_number_of_surfaces];
 	struct bw_fixed stutter_cycle_duration[maximum_number_of_surfaces];
@@ -456,7 +417,6 @@ struct bw_calcs_results {
 	struct bw_fixed lb_lines_in_per_line_out_in_beginning_of_frame[maximum_number_of_surfaces];
 	struct bw_fixed lb_lines_in_per_line_out_in_middle_of_frame[maximum_number_of_surfaces];
 	struct bw_fixed cursor_width_pixels[maximum_number_of_surfaces];
-	bool line_buffer_prefetch[maximum_number_of_surfaces];
 	struct bw_fixed minimum_latency_hiding[maximum_number_of_surfaces];
 	struct bw_fixed maximum_latency_hiding[maximum_number_of_surfaces];
 	struct bw_fixed minimum_latency_hiding_with_cursor[maximum_number_of_surfaces];
@@ -468,19 +428,23 @@ struct bw_calcs_results {
 	struct bw_fixed active_time[maximum_number_of_surfaces];
 	struct bw_fixed horizontal_blank_and_chunk_granularity_factor[maximum_number_of_surfaces];
 	struct bw_fixed cursor_latency_hiding[maximum_number_of_surfaces];
-	struct bw_fixed dmif_burst_time[3][3];
-	struct bw_fixed mcifwr_burst_time[3][3];
-	struct bw_fixed line_source_transfer_time[maximum_number_of_surfaces][3][3];
-	struct bw_fixed dram_speed_change_line_source_transfer_time[maximum_number_of_surfaces][3][3];
-	struct bw_fixed min_dram_speed_change_margin[3][3];
-	struct bw_fixed dram_speed_change_margin[3][3];
-	struct bw_fixed dispclk_required_for_dram_speed_change[3][3];
-	struct bw_fixed blackout_duration_margin[3][3];
-	struct bw_fixed dispclk_required_for_blackout_duration[3][3];
-	struct bw_fixed dispclk_required_for_blackout_recovery[3][3];
+	struct bw_fixed v_blank_dram_speed_change_margin[maximum_number_of_surfaces];
+	uint32_t num_displays_with_margin[3][8];
+	struct bw_fixed dmif_burst_time[3][8];
+	struct bw_fixed mcifwr_burst_time[3][8];
+	struct bw_fixed line_source_transfer_time[maximum_number_of_surfaces][3][8];
+	struct bw_fixed dram_speed_change_line_source_transfer_time[maximum_number_of_surfaces][3][8];
+	struct bw_fixed min_dram_speed_change_margin[3][8];
+	struct bw_fixed dispclk_required_for_dram_speed_change[3][8];
+	struct bw_fixed blackout_duration_margin[3][8];
+	struct bw_fixed dispclk_required_for_blackout_duration[3][8];
+	struct bw_fixed dispclk_required_for_blackout_recovery[3][8];
 	struct bw_fixed dmif_required_sclk_for_urgent_latency[6];
 };
 
+/*******************************************************************************
+ * Output data structures.
+ ******************************************************************************/
 struct bw_watermarks {
 	uint32_t a_mark;
 	uint32_t b_mark;
@@ -529,7 +493,8 @@ bool bw_calcs(
 	struct dc_context *ctx,
 	const struct bw_calcs_dceip *dceip,
 	const struct bw_calcs_vbios *vbios,
-	const struct bw_calcs_mode_data *mode_data,
+	const struct pipe_ctx *pipe,
+	int pipe_count,
 	struct bw_calcs_output *calcs_output);
 
 #endif /* __BANDWIDTH_CALCS_H__ */

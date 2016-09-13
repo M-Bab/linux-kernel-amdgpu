@@ -1421,7 +1421,6 @@ bool dc_link_set_abm_level(const struct dc_link *dc_link, uint32_t level)
 bool dc_link_set_psr_enable(const struct dc_link *dc_link, bool enable)
 {
 	struct core_link *link = DC_LINK_TO_CORE(dc_link);
-	struct dc_context *ctx = link->ctx;
 
 	if (dc_link != NULL && dc_link->psr_caps.psr_version > 0)
 		link->link_enc->funcs->set_dmcu_psr_enable(link->link_enc,
