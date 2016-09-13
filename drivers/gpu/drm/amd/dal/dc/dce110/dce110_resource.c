@@ -776,6 +776,7 @@ enum dc_status dce110_validate_bandwidth(
 	/* Due to organization of bw_calcs, the underlay pipe must be at the beginning of the array*/
 
 	if (underlay_pipe_ctx->stream) {
+		ASSERT (underlay_pipe_ctx->top_pipe);
 		bw_calcs_input_single_display(underlay_input, underlay_pipe_ctx->top_pipe, &max_htaps, &max_vtaps);
 		prev_timing = underlay_pipe_ctx->stream->public.timing;
 		underlay_input->underlay_mode = bw_def_yes;
@@ -1157,14 +1158,15 @@ static bool construct(
 	 *************************************************/
 
 	pool->base.pipe_count = 3;
+	pool->base.stream_enc_count = 3;
 	pool->base.underlay_pipe_index = 3;
 
 	if (ASIC_REV_IS_STONEY(asic_id.hw_internal_rev)) {
 		pool->base.pipe_count = 2;
+		pool->base.stream_enc_count = 2;
 		pool->base.underlay_pipe_index = 2;
 	}
 
-	pool->base.stream_enc_count = 3;
 	dc->public.caps.max_downscale_ratio = 150;
 	dc->public.caps.i2c_speed_in_khz = 100;
 
