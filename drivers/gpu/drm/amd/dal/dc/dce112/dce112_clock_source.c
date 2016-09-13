@@ -47,7 +47,7 @@
  * \return
  *     Calculation error in units of 0.01%
  */
-static uint32_t dce112_get_pix_clk_dividers(
+uint32_t dce112_get_pix_clk_dividers(
 		struct clock_source *cs,
 		struct pixel_clk_params *pix_clk_params,
 		struct pll_settings *pll_settings)
@@ -216,7 +216,7 @@ static bool dce112_program_pix_clk(
 	return true;
 }
 
-static bool dce112_clock_source_power_down(
+bool dce112_clock_source_power_down(
 		struct clock_source *clk_src)
 {
 	struct dce112_clk_src *dce112_clk_src = TO_DCE112_CLK_SRC(clk_src);

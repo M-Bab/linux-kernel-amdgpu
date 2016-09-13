@@ -40,3 +40,4 @@ AMD_DAL_GPU_DCE112 = $(addprefix $(AMDDALPATH)/dc/gpu/dce112/,$(GPU_DCE112))
 
 AMD_DAL_FILES += $(AMD_DAL_GPU_DCE110) $(AMD_DAL_GPU_DCE112)
 endif
+

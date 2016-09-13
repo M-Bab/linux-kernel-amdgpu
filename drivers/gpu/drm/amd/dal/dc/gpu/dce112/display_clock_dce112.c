@@ -44,29 +44,13 @@ static struct state_dependent_clocks max_clks_by_state[] = {
 /*ClocksStateInvalid - should not be used*/
 { .display_clk_khz = 0, .pixel_clk_khz = 0 },
 /*ClocksStateUltraLow - currently by HW design team not supposed to be used*/
-{ .display_clk_khz = 352000, .pixel_clk_khz = 330000 },
+{ .display_clk_khz = 389189, .pixel_clk_khz = 346672 },
 /*ClocksStateLow*/
-{ .display_clk_khz = 352000, .pixel_clk_khz = 330000 },
+{ .display_clk_khz = 459000, .pixel_clk_khz = 400000 },
 /*ClocksStateNominal*/
-{ .display_clk_khz = 467000, .pixel_clk_khz = 400000 },
+{ .display_clk_khz = 667000, .pixel_clk_khz = 600000 },
 /*ClocksStatePerformance*/
-{ .display_clk_khz = 643000, .pixel_clk_khz = 400000 } };
-
-/* Starting point for each divider range.*/
-enum divider_range_start {
-	DIVIDER_RANGE_01_START = 200, /* 2.00*/
-	DIVIDER_RANGE_02_START = 1600, /* 16.00*/
-	DIVIDER_RANGE_03_START = 3200, /* 32.00*/
-	DIVIDER_RANGE_SCALE_FACTOR = 100 /* Results are scaled up by 100.*/
-};
-
-/* Array identifiers and count for the divider ranges.*/
-enum divider_range_count {
-	DIVIDER_RANGE_01 = 0,
-	DIVIDER_RANGE_02,
-	DIVIDER_RANGE_03,
-	DIVIDER_RANGE_MAX /* == 3*/
-};
+{ .display_clk_khz = 1132000, .pixel_clk_khz = 600000 } };
 
 /* Ranges for divider identifiers (Divider ID or DID)
  mmDENTIST_DISPCLK_CNTL.DENTIST_DISPCLK_WDIVIDER*/
@@ -103,7 +87,7 @@ static struct divider_range divider_ranges[DIVIDER_RANGE_MAX];
  * struct display_clock *base - [out] cach the state in this structure
  * enum clocks_state max_clocks_state - [in] state to be stored
  */
-static void store_max_clocks_state(
+void dispclk_dce112_store_max_clocks_state(
 	struct display_clock *base,
 	enum clocks_state max_clocks_state)
 {
@@ -125,12 +109,13 @@ static void store_max_clocks_state(
 	}
 }
 
-static enum clocks_state get_min_clocks_state(struct display_clock *base)
+enum clocks_state dispclk_dce112_get_min_clocks_state(
+	struct display_clock *base)
 {
 	return base->cur_min_clks_state;
 }
 
-static bool set_min_clocks_state(
+bool dispclk_dce112_set_min_clocks_state(
 	struct display_clock *base,
 	enum clocks_state clocks_state)
 {
@@ -224,7 +209,7 @@ static uint32_t get_dp_ref_clk_frequency(struct display_clock *dc)
 	return dp_ref_clk_khz;
 }
 
-static void destroy(struct display_clock **base)
+void dispclk_dce112_destroy(struct display_clock **base)
 {
 	struct display_clock_dce112 *dc112;
 
@@ -235,7 +220,7 @@ static void destroy(struct display_clock **base)
 	*base = NULL;
 }
 
-static uint32_t get_validation_clock(struct display_clock *dc)
+uint32_t dispclk_dce112_get_validation_clock(struct display_clock *dc)
 {
 	uint32_t clk = 0;
 	struct display_clock_dce112 *disp_clk = DCLCK112_FROM_BASE(dc);
@@ -244,18 +229,18 @@ static uint32_t get_validation_clock(struct display_clock *dc)
 	case CLOCKS_STATE_ULTRA_LOW:
 		/*Currently not supported, it has 0 in table entry*/
 	case CLOCKS_STATE_LOW:
-		clk = max_clks_by_state[CLOCKS_STATE_LOW].
-						display_clk_khz;
+		clk = (disp_clk->max_clks_by_state + CLOCKS_STATE_LOW)->
+			display_clk_khz;
 		break;
 
 	case CLOCKS_STATE_NOMINAL:
-		clk = max_clks_by_state[CLOCKS_STATE_NOMINAL].
-						display_clk_khz;
+		clk = (disp_clk->max_clks_by_state + CLOCKS_STATE_NOMINAL)->
+			display_clk_khz;
 		break;
 
 	case CLOCKS_STATE_PERFORMANCE:
-		clk = max_clks_by_state[CLOCKS_STATE_PERFORMANCE].
-						display_clk_khz;
+		clk = (disp_clk->max_clks_by_state + CLOCKS_STATE_PERFORMANCE)->
+			display_clk_khz;
 		break;
 
 	case CLOCKS_STATE_INVALID:
@@ -267,8 +252,8 @@ static uint32_t get_validation_clock(struct display_clock *dc)
 				"Invalid clock state");
 		/* just return the display engine clock for
 		 * lowest supported state*/
-		clk = max_clks_by_state[CLOCKS_STATE_LOW].
-						display_clk_khz;
+		clk = (disp_clk->max_clks_by_state + CLOCKS_STATE_LOW)->
+				display_clk_khz;
 		break;
 	}
 	return clk;
@@ -420,7 +405,7 @@ static uint32_t calc_single_display_min_clks(
 	uint32_t disp_clk_khz;
 	uint32_t alt_disp_clk_khz;
 	struct display_clock_dce112 *disp_clk_110 = DCLCK112_FROM_BASE(base);
-	uint32_t max_clk_khz = get_validation_clock(base);
+	uint32_t max_clk_khz = dispclk_dce112_get_validation_clock(base);
 	bool panning_allowed = false; /* TODO: receive this value from AS */
 
 	if (params == NULL) {
@@ -595,14 +580,14 @@ static uint32_t calc_single_display_min_clks(
 	return disp_clk_khz;
 }
 
-static uint32_t calculate_min_clock(
+uint32_t dispclk_dce112_calculate_min_clock(
 	struct display_clock *base,
 	uint32_t path_num,
 	struct min_clock_params *params)
 {
 	uint32_t i;
 	uint32_t validation_clk_khz =
-			get_validation_clock(base);
+			dispclk_dce112_get_validation_clock(base);
 	uint32_t min_clk_khz = validation_clk_khz;
 	uint32_t max_clk_khz = 0;
 	struct display_clock_dce112 *dc = DCLCK112_FROM_BASE(base);
@@ -634,7 +619,7 @@ static uint32_t calculate_min_clock(
 		min_clk_khz = base->min_display_clk_threshold_khz;
 
 	if (dc->use_max_disp_clk)
-		min_clk_khz = get_validation_clock(base);
+		min_clk_khz = dispclk_dce112_get_validation_clock(base);
 
 	return min_clk_khz;
 }
@@ -687,7 +672,8 @@ static bool display_clock_integrated_info_construct(
 		/*Do not allow bad VBIOS/SBIOS to override with invalid values,
 		 * check for > 100MHz*/
 		if (info.disp_clk_voltage[i].max_supported_clk >= 100000) {
-			max_clks_by_state[clk_state].display_clk_khz =
+			(disp_clk->max_clks_by_state + clk_state)->
+					display_clk_khz =
 				info.disp_clk_voltage[i].max_supported_clk;
 		}
 	}
@@ -702,7 +688,7 @@ static bool display_clock_integrated_info_construct(
 
 static uint32_t get_clock(struct display_clock *dc)
 {
-	uint32_t disp_clock = get_validation_clock(dc);
+	uint32_t disp_clock = dispclk_dce112_get_validation_clock(dc);
 	uint32_t target_div = INVALID_DIVIDER;
 	uint32_t addr = mmDENTIST_DISPCLK_CNTL;
 	uint32_t value = 0;
@@ -729,9 +715,9 @@ static uint32_t get_clock(struct display_clock *dc)
 	return disp_clock;
 }
 
-static enum clocks_state get_required_clocks_state(
-		struct display_clock *dc,
-		struct state_dependent_clocks *req_clocks)
+enum clocks_state dispclk_dce112_get_required_clocks_state(
+	struct display_clock *dc,
+	struct state_dependent_clocks *req_clocks)
 {
 	int32_t i;
 	struct display_clock_dce112 *disp_clk = DCLCK112_FROM_BASE(dc);
@@ -753,15 +739,17 @@ static enum clocks_state get_required_clocks_state(
 	 */
 	for (i = disp_clk->max_clks_state; i >= CLOCKS_STATE_ULTRA_LOW; --i) {
 		if ((req_clocks->display_clk_khz <=
-			max_clks_by_state[i].display_clk_khz) &&
+				(disp_clk->max_clks_by_state + i)->
+					display_clk_khz) &&
 			(req_clocks->pixel_clk_khz <=
-				max_clks_by_state[i].pixel_clk_khz))
+					(disp_clk->max_clks_by_state + i)->
+					pixel_clk_khz))
 			low_req_clk = i;
 	}
 	return low_req_clk;
 }
 
-static void set_clock(
+void dispclk_dce112_set_clock(
 	struct display_clock *base,
 	uint32_t requested_clk_khz)
 {
@@ -793,12 +781,13 @@ static void set_clock(
 	dce_clk_params.target_clock_frequency = 0;
 	dce_clk_params.clock_type = DCECLOCK_TYPE_DPREFCLK;
 	dce_clk_params.flags.USE_GENLOCK_AS_SOURCE_FOR_DPREFCLK =
-			(dce_clk_params.pll_id == CLOCK_SOURCE_COMBO_DISPLAY_PLL0);
+			(dce_clk_params.pll_id ==
+					CLOCK_SOURCE_COMBO_DISPLAY_PLL0);
 
 	bp->funcs->set_dce_clock(bp, &dce_clk_params);
 }
 
-static void set_clock_state(
+void dispclk_dce112_set_clock_state(
 	struct display_clock *dc,
 	struct display_clock_state clk_state)
 {
@@ -807,7 +796,7 @@ static void set_clock_state(
 	disp_clk->clock_state = clk_state;
 }
 
-static struct display_clock_state get_clock_state(
+struct display_clock_state dispclk_dce112_get_clock_state(
 	struct display_clock *dc)
 {
 	struct display_clock_dce112 *disp_clk = DCLCK112_FROM_BASE(dc);
@@ -815,30 +804,31 @@ static struct display_clock_state get_clock_state(
 	return disp_clk->clock_state;
 }
 
-static uint32_t get_dfs_bypass_threshold(struct display_clock *dc)
+uint32_t dispclk_dce112_get_dfs_bypass_threshold(
+	struct display_clock *dc)
 {
 	return dce112_DFS_BYPASS_THRESHOLD_KHZ;
 }
 
 static const struct display_clock_funcs funcs = {
-	.destroy = destroy,
-	.calculate_min_clock = calculate_min_clock,
+	.destroy = dispclk_dce112_destroy,
+	.calculate_min_clock = dispclk_dce112_calculate_min_clock,
 	.get_clock = get_clock,
-	.get_clock_state = get_clock_state,
-	.get_dfs_bypass_threshold = get_dfs_bypass_threshold,
+	.get_clock_state = dispclk_dce112_get_clock_state,
+	.get_dfs_bypass_threshold = dispclk_dce112_get_dfs_bypass_threshold,
 	.get_dp_ref_clk_frequency = get_dp_ref_clk_frequency,
-	.get_min_clocks_state = get_min_clocks_state,
-	.get_required_clocks_state = get_required_clocks_state,
-	.get_validation_clock = get_validation_clock,
-	.set_clock = set_clock,
-	.set_clock_state = set_clock_state,
+	.get_min_clocks_state = dispclk_dce112_get_min_clocks_state,
+	.get_required_clocks_state = dispclk_dce112_get_required_clocks_state,
+	.get_validation_clock = dispclk_dce112_get_validation_clock,
+	.set_clock = dispclk_dce112_set_clock,
+	.set_clock_state = dispclk_dce112_set_clock_state,
 	.set_dp_ref_clock_source = NULL,
-	.set_min_clocks_state = set_min_clocks_state,
-	.store_max_clocks_state = store_max_clocks_state,
+	.set_min_clocks_state = dispclk_dce112_set_min_clocks_state,
+	.store_max_clocks_state = dispclk_dce112_store_max_clocks_state,
 	.validate = NULL,
 };
 
-static bool dal_display_clock_dce112_construct(
+bool dal_display_clock_dce112_construct(
 	struct display_clock_dce112 *dc112,
 	struct dc_context *ctx,
 	struct adapter_service *as)
@@ -941,6 +931,7 @@ static bool dal_display_clock_dce112_construct(
 	}
 
 	dc112->use_max_disp_clk = true;
+	dc112->max_clks_by_state = max_clks_by_state;
 
 	return true;
 }

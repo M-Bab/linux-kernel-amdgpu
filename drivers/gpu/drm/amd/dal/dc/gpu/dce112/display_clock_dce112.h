@@ -46,9 +46,69 @@ struct display_clock_dce112 {
 	 * This is basically "Crystal Frequency In KHz" (XTALIN) frequency */
 	uint32_t dfs_bypass_disp_clk;
 	struct display_clock_state clock_state;
+	struct state_dependent_clocks *max_clks_by_state;
 };
 
 #define DCLCK112_FROM_BASE(dc_base) \
 	container_of(dc_base, struct display_clock_dce112, disp_clk_base)
+
+/* Array identifiers and count for the divider ranges.*/
+enum divider_range_count {
+	DIVIDER_RANGE_01 = 0,
+	DIVIDER_RANGE_02,
+	DIVIDER_RANGE_03,
+	DIVIDER_RANGE_MAX /* == 3*/
+};
+
+/* Starting point for each divider range.*/
+enum divider_range_start {
+	DIVIDER_RANGE_01_START = 200, /* 2.00*/
+	DIVIDER_RANGE_02_START = 1600, /* 16.00*/
+	DIVIDER_RANGE_03_START = 3200, /* 32.00*/
+	DIVIDER_RANGE_SCALE_FACTOR = 100 /* Results are scaled up by 100.*/
+};
+
+bool dal_display_clock_dce112_construct(
+	struct display_clock_dce112 *dc112,
+	struct dc_context *ctx,
+	struct adapter_service *as);
+
+void dispclk_dce112_destroy(struct display_clock **base);
+
+uint32_t dispclk_dce112_calculate_min_clock(
+	struct display_clock *base,
+	uint32_t path_num,
+	struct min_clock_params *params);
+
+struct display_clock_state dispclk_dce112_get_clock_state(
+	struct display_clock *dc);
+
+uint32_t dispclk_dce112_get_dfs_bypass_threshold(
+	struct display_clock *dc);
+
+enum clocks_state dispclk_dce112_get_min_clocks_state(
+	struct display_clock *base);
+
+enum clocks_state dispclk_dce112_get_required_clocks_state(
+	struct display_clock *dc,
+	struct state_dependent_clocks *req_clocks);
+
+uint32_t dispclk_dce112_get_validation_clock(struct display_clock *dc);
+
+void dispclk_dce112_set_clock(
+	struct display_clock *base,
+	uint32_t requested_clk_khz);
+
+void dispclk_dce112_set_clock_state(
+	struct display_clock *dc,
+	struct display_clock_state clk_state);
+
+bool dispclk_dce112_set_min_clocks_state(
+	struct display_clock *base,
+	enum clocks_state clocks_state);
+
+void dispclk_dce112_store_max_clocks_state(
+	struct display_clock *base,
+	enum clocks_state max_clocks_state);
 
 #endif /* __DAL_DISPLAY_CLOCK_DCE112_H__ */

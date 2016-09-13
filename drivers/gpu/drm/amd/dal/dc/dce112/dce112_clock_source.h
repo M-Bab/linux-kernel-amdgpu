@@ -49,4 +49,11 @@ bool dce112_clk_src_construct(
 	enum clock_source_id,
 	const struct dce112_clk_src_reg_offsets *reg_offsets);
 
+bool dce112_clock_source_power_down(struct clock_source *clk_src);
+
+uint32_t dce112_get_pix_clk_dividers(
+	struct clock_source *cs,
+	struct pixel_clk_params *pix_clk_params,
+	struct pll_settings *pll_settings);
+
 #endif
