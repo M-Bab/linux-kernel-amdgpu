@@ -543,7 +543,7 @@ unsigned int mod_backlight_backlight_level_signal_to_percentage(
 			else
 				break;
 
-			if (max == 0)
+			if (max == 0 || max == 1)
 				return invalid_backlight;
 		}
 		return mid;
