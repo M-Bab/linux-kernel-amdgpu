@@ -51,26 +51,6 @@ static void destroy(
 	BREAK_TO_DEBUGGER();
 }
 
-static enum audio_result setup(
-	struct audio *audio,
-	struct audio_output *output,
-	struct audio_info *info)
-{
-	/*DCE specific, must be implemented in derived*/
-	BREAK_TO_DEBUGGER();
-	return AUDIO_RESULT_OK;
-}
-
-static enum audio_result disable_output(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	/*DCE specific, must be implemented in derived*/
-	BREAK_TO_DEBUGGER();
-	return AUDIO_RESULT_OK;
-}
-
 static enum audio_result initialize(
 	struct audio *audio)
 {
@@ -94,8 +74,6 @@ static void setup_audio_wall_dto(
 
 static const struct audio_funcs audio_funcs = {
 	.destroy = destroy,
-	.setup = setup,
-	.disable_output = disable_output,
 	.initialize = initialize,
 	.setup_audio_wall_dto = setup_audio_wall_dto,
 };
@@ -113,6 +91,7 @@ bool dal_audio_construct_base(
 
 	/* save audio endpoint number to identify object creating */
 	audio->id = init_data->audio_stream_id;
+	audio->inst = init_data->inst;
 
 	return true;
 }
@@ -144,42 +123,6 @@ void dal_audio_destroy(
 	*audio = NULL;
 }
 
-/* enable azalia audio endpoint. This function call hw_ctx directly
- *not overwitten at audio level.
- */
-enum audio_result dal_audio_enable_azalia_audio_jack_presence(
-	struct audio *audio,
-	enum engine_id engine_id)
-{
-	audio->hw_ctx->funcs->enable_azalia_audio(audio->hw_ctx, engine_id);
-	return AUDIO_RESULT_OK;
-}
-
-/* disable azalia audio endpoint. This function call hw_ctx directly
- *not overwitten at audio level.
- */
-enum audio_result dal_audio_disable_azalia_audio_jack_presence(
-	struct audio *audio,
-	enum engine_id engine_id)
-{
-	audio->hw_ctx->funcs->disable_azalia_audio(audio->hw_ctx, engine_id);
-	return AUDIO_RESULT_OK;
-}
-
-/* get audio bandwidth information. This function call hw_ctx directly
- *not overwitten at audio level.
- */
-void dal_audio_check_audio_bandwidth(
-	struct audio *audio,
-	const struct audio_crtc_info *info,
-	uint32_t channel_count,
-	enum signal_type signal,
-	union audio_sample_rates *sample_rates)
-{
-	dal_hw_ctx_audio_check_audio_bandwidth(
-		audio->hw_ctx, info, channel_count, signal, sample_rates);
-}
-
 /* DP Audio register write access. This function call hw_ctx directly
  * not overwitten at audio level.
  */
@@ -189,31 +132,6 @@ enum audio_result dal_audio_power_up(
 	struct audio *audio)
 {
 	return audio->funcs->initialize(audio);
-}
-
-/* perform power down (shut down, stand by) */
-enum audio_result dal_audio_power_down(
-	struct audio *audio)
-{
-	return AUDIO_RESULT_OK;
-}
-
-/* setup audio */
-enum audio_result dal_audio_setup(
-	struct audio *audio,
-	struct audio_output *output,
-	struct audio_info *info)
-{
-	return audio->funcs->setup(audio, output, info);
-}
-
-/* disable audio */
-enum audio_result dal_audio_disable_output(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	return audio->funcs->disable_output(audio, engine_id, signal);
 }
 
 /* update audio wall clock source */

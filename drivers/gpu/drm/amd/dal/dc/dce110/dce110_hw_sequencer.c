@@ -44,6 +44,7 @@
 #include "stream_encoder.h"
 #include "link_encoder.h"
 #include "clock_source.h"
+#include "audio/audio.h"
 #include "gamma_calcs.h"
 
 /* include DCE11 register header files */
@@ -581,9 +582,15 @@ static void disable_stream(struct pipe_ctx *pipe_ctx)
 			pipe_ctx->stream_enc);
 
 	if (pipe_ctx->audio) {
-		/* mute audio */
-		pipe_ctx->stream_enc->funcs->audio_mute_control(
-			pipe_ctx->stream_enc, true);
+		pipe_ctx->stream_enc->funcs->audio_mute_control(pipe_ctx->stream_enc, true);
+
+		if (dc_is_dp_signal(pipe_ctx->stream->signal))
+			pipe_ctx->stream_enc->funcs->dp_audio_disable(pipe_ctx->stream_enc);
+		else
+			pipe_ctx->stream_enc->funcs->hdmi_audio_disable(pipe_ctx->stream_enc);
+
+		pipe_ctx->audio->funcs->az_disable(pipe_ctx->audio);
+		pipe_ctx->audio = NULL;
 
 		/* TODO: notify audio driver for if audio modes list changed
 		 * add audio mode list change flag */
@@ -1301,16 +1308,6 @@ static void reset_single_pipe_hw_ctx(
 
 	dcb = dal_adapter_service_get_bios_parser(
 			context->res_ctx.pool->adapter_srv);
-	if (pipe_ctx->audio) {
-		dal_audio_disable_output(pipe_ctx->audio,
-				pipe_ctx->stream_enc->id,
-				pipe_ctx->stream->signal);
-
-		/* todo: core_link_disable_stream rely
-		 * audio pointer to mute audio. we never mute correctly
-		 */
-		pipe_ctx->audio = NULL;
-	}
 
 	core_link_disable_stream(pipe_ctx);
 	if (!pipe_ctx->tg->funcs->set_blank(pipe_ctx->tg, true)) {
@@ -1460,13 +1457,25 @@ static enum dc_status apply_ctx_to_hw(
 			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
 			build_audio_output(pipe_ctx, &audio_output);
-			if (AUDIO_RESULT_OK != dal_audio_setup(
+
+			if (dc_is_dp_signal(pipe_ctx->stream->signal))
+				pipe_ctx->stream_enc->funcs->dp_audio_setup(
+						pipe_ctx->stream_enc,
+						pipe_ctx->audio->inst,
+						&pipe_ctx->stream->public.audio_info);
+			else
+				pipe_ctx->stream_enc->funcs->hdmi_audio_setup(
+						pipe_ctx->stream_enc,
+						pipe_ctx->audio->inst,
+						&pipe_ctx->stream->public.audio_info,
+						&audio_output.crtc_info);
+
+			pipe_ctx->audio->funcs->az_configure(
 					pipe_ctx->audio,
-					&audio_output,
-					&pipe_ctx->stream->public.audio_info)) {
-				BREAK_TO_DEBUGGER();
-				return DC_ERROR_UNEXPECTED;
-			}
+					pipe_ctx->stream->signal,
+					&audio_output.crtc_info,
+					&pipe_ctx->stream->public.audio_info);
+
 			if (!programmed_audio_dto) {
 				dal_audio_setup_audio_wall_dto(
 					pipe_ctx->audio,

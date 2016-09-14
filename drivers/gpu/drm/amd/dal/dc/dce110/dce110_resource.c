@@ -222,39 +222,8 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 
 #define stream_enc_regs(id)\
 [id] = {\
+	SE_COMMON_REG_LIST(id)\
 	.AFMT_CNTL = mmDIG ## id ## _AFMT_CNTL,\
-	.AFMT_AVI_INFO0 = mmDIG ## id ## _AFMT_AVI_INFO0,\
-	.AFMT_AVI_INFO1 = mmDIG ## id ## _AFMT_AVI_INFO1,\
-	.AFMT_AVI_INFO2 = mmDIG ## id ## _AFMT_AVI_INFO2,\
-	.AFMT_AVI_INFO3 = mmDIG ## id ## _AFMT_AVI_INFO3,\
-	.AFMT_GENERIC_0 = mmDIG ## id ## _AFMT_GENERIC_0,\
-	.AFMT_GENERIC_7 = mmDIG ## id ## _AFMT_GENERIC_7,\
-	.AFMT_GENERIC_HDR = mmDIG ## id ## _AFMT_GENERIC_HDR,\
-	.AFMT_INFOFRAME_CONTROL0 = mmDIG ## id ## _AFMT_INFOFRAME_CONTROL0,\
-	.AFMT_VBI_PACKET_CONTROL = mmDIG ## id ## _AFMT_VBI_PACKET_CONTROL,\
-	.AFMT_AUDIO_PACKET_CONTROL = mmDIG ## id ## _AFMT_AUDIO_PACKET_CONTROL,\
-	.AFMT_AUDIO_PACKET_CONTROL2 = mmDIG ## id ## _AFMT_AUDIO_PACKET_CONTROL2,\
-	.AFMT_60958_0 = mmDIG ## id ## _AFMT_60958_0,\
-	.DIG_FE_CNTL = mmDIG ## id ## _DIG_FE_CNTL,\
-	.DP_MSE_RATE_CNTL = mmDP ## id ## _DP_MSE_RATE_CNTL,\
-	.DP_MSE_RATE_UPDATE = mmDP ## id ## _DP_MSE_RATE_UPDATE,\
-	.DP_PIXEL_FORMAT = mmDP ## id ## _DP_PIXEL_FORMAT,\
-	.DP_SEC_CNTL = mmDP ## id ## _DP_SEC_CNTL,\
-	.DP_STEER_FIFO = mmDP ## id ## _DP_STEER_FIFO,\
-	.DP_VID_M = mmDP ## id ## _DP_VID_M,\
-	.DP_VID_N = mmDP ## id ## _DP_VID_N,\
-	.DP_VID_STREAM_CNTL = mmDP ## id ## _DP_VID_STREAM_CNTL,\
-	.DP_VID_TIMING = mmDP ## id ## _DP_VID_TIMING,\
-	.DP_SEC_AUD_N = mmDP ## id ## _DP_SEC_AUD_N,\
-	.DP_SEC_TIMESTAMP = mmDP ## id ## _DP_SEC_TIMESTAMP,\
-	.HDMI_CONTROL = mmDIG ## id ## _HDMI_CONTROL,\
-	.HDMI_GC = mmDIG ## id ## _HDMI_GC,\
-	.HDMI_GENERIC_PACKET_CONTROL0 = mmDIG ## id ## _HDMI_GENERIC_PACKET_CONTROL0,\
-	.HDMI_GENERIC_PACKET_CONTROL1 = mmDIG ## id ## _HDMI_GENERIC_PACKET_CONTROL1,\
-	.HDMI_INFOFRAME_CONTROL0 = mmDIG ## id ## _HDMI_INFOFRAME_CONTROL0,\
-	.HDMI_INFOFRAME_CONTROL1 = mmDIG ## id ## _HDMI_INFOFRAME_CONTROL1,\
-	.HDMI_VBI_PACKET_CONTROL = mmDIG ## id ## _HDMI_VBI_PACKET_CONTROL,\
-	.TMDS_CNTL = mmDIG ## id ## _TMDS_CNTL,\
 }
 
 static const struct dce110_stream_enc_registers stream_enc_regs[] = {
@@ -265,6 +234,21 @@ static const struct dce110_stream_enc_registers stream_enc_regs[] = {
 		stream_enc_regs(4),
 		stream_enc_regs(5),
 		stream_enc_regs(6)
+};
+
+#define audio_regs(id)\
+[id] = {\
+	AUD_COMMON_REG_LIST(id)\
+}
+
+static const struct dce110_audio_registers audio_regs[] = {
+	audio_regs(0),
+	audio_regs(1),
+	audio_regs(2),
+	audio_regs(3),
+	audio_regs(4),
+	audio_regs(5),
+	audio_regs(6),
 };
 
 /* AG TBD Needs to be reduced back to 3 pipes once dce10 hw sequencer implemented. */
@@ -1307,6 +1291,9 @@ static bool construct(
 		}
 
 		audio_init_data.audio_stream_id = obj_id;
+		audio_init_data.inst = i;
+		audio_init_data.reg = &audio_regs[i];
+
 		pool->base.audios[i] = dal_audio_create_dce110(&audio_init_data);
 		if (pool->base.audios[i] == NULL) {
 			BREAK_TO_DEBUGGER();

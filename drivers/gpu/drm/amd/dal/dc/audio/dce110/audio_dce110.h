@@ -29,12 +29,36 @@
 #include "audio/hw_ctx_audio.h"
 #include "audio/dce110/hw_ctx_audio_dce110.h"
 
+#define AUD_REG(reg_name, block_prefix, id)\
+	.reg_name = block_prefix ## id ## _ ## reg_name\
+
+#define AUD_COMMON_REG_LIST(id)\
+	SE_REG(AZALIA_F0_CODEC_ENDPOINT_INDEX, mmAZF0ENDPOINT, id),\
+	SE_REG(AZALIA_F0_CODEC_ENDPOINT_DATA, mmAZF0ENDPOINT, id),\
+	.AZALIA_F0_CODEC_FUNCTION_PARAMETER_STREAM_FORMATS = mmAZALIA_F0_CODEC_FUNCTION_PARAMETER_STREAM_FORMATS,
+
+struct dce110_audio_registers {
+	uint32_t AZALIA_F0_CODEC_ENDPOINT_INDEX;
+	uint32_t AZALIA_F0_CODEC_ENDPOINT_DATA;
+
+	uint32_t AZALIA_F0_CODEC_FUNCTION_PARAMETER_STREAM_FORMATS;
+};
+
 struct audio_dce110 {
 	struct audio base;
+	const struct dce110_audio_registers *regs;
 	/* dce-specific members are following */
 	/* none */
 };
 
 struct audio *dal_audio_create_dce110(const struct audio_init_data *init_data);
+
+void dce110_aud_az_enable(struct audio *audio);
+void dce110_aud_az_disable(struct audio *audio);
+
+void dce110_aud_az_configure(struct audio *audio,
+	enum signal_type signal,
+	const struct audio_crtc_info *crtc_info,
+	const struct audio_info *audio_info);
 
 #endif   /*__DAL_AUDIO_DCE_110_H__*/

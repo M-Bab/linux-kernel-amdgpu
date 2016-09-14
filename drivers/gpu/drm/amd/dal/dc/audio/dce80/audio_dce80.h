@@ -29,12 +29,6 @@
 #include "audio/hw_ctx_audio.h"
 #include "audio/dce80/hw_ctx_audio_dce80.h"
 
-struct audio_dce80 {
-	struct audio base;
-	/* dce-specific members are following */
-	/* none */
-};
-
 struct audio *dal_audio_create_dce80(const struct audio_init_data *init_data);
 
 #endif   /* __DAL_AUDIO_80__  */

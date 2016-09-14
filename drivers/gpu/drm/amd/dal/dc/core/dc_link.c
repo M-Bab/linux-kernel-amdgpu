@@ -35,6 +35,7 @@
 #include "dc_link_ddc.h"
 #include "link_hwss.h"
 #include "stream_encoder.h"
+#include "audio/audio.h"
 #include "link_encoder.h"
 #include "hw_sequencer.h"
 #include "fixed31_32.h"
@@ -1306,8 +1307,7 @@ static enum dc_status enable_link(struct pipe_ctx *pipe_ctx)
 
 	if (pipe_ctx->audio && status == DC_OK) {
 		/* notify audio driver for audio modes of monitor */
-		dal_audio_enable_azalia_audio_jack_presence(pipe_ctx->audio,
-				pipe_ctx->stream_enc->id);
+		pipe_ctx->audio->funcs->az_enable(pipe_ctx->audio);
 
 		/* un-mute audio */
 		/* TODO: audio should be per stream rather than per link */

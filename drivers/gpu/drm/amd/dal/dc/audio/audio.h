@@ -39,6 +39,17 @@
 struct audio;
 
 struct audio_funcs {
+	void (*az_enable)(
+			struct audio *audio);
+
+	void (*az_disable)(
+			struct audio *audio);
+
+	void (*az_configure)(struct audio *audio,
+		enum signal_type signal,
+		const struct audio_crtc_info *crtc_info,
+		const struct audio_info *audio_info);
+
 	/*
 	 *get_object_id
 	 *get_object_type
@@ -55,17 +66,6 @@ struct audio_funcs {
 	 *power_down
 	 *release_hw_base
 	 */
-
-	/* setup audio */
-	enum audio_result (*setup)(
-		struct audio *audio,
-		struct audio_output *output,
-		struct audio_info *info);
-
-	enum audio_result (*disable_output)(
-		struct audio *audio,
-		enum engine_id engine_id,
-		enum signal_type signal);
 
 	/*enable_azalia_audio_jack_presence
 	 * disable_azalia_audio_jack_presence
@@ -104,13 +104,13 @@ struct audio_funcs {
 struct audio {
 	/* hook functions. they will be overwritten by specific ASIC */
 	const struct audio_funcs *funcs;
-	/* TODO: static struct audio_funcs funcs;*/
 
 	/*external structures - get service from external*/
 	struct graphics_object_id id;
 	/* audio HW context */
 	struct hw_ctx_audio *hw_ctx;
 	struct dc_context *ctx;
+	unsigned int inst;
 };
 
 /* - functions defined by audio.h will be used by audio component only.

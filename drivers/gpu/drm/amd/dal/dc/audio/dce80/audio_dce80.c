@@ -28,10 +28,11 @@
 #include "include/logger_interface.h"
 
 #include "audio_dce80.h"
+#include "../dce110/audio_dce110.h"
 
 /***** static functions  *****/
 
-static void destruct(struct audio_dce80 *audio)
+static void destruct(struct audio_dce110 *audio)
 {
 	/*release memory allocated for hw_ctx -- allocated is initiated
 	 *by audio_dce80 power_up
@@ -46,103 +47,15 @@ static void destruct(struct audio_dce80 *audio)
 
 static void destroy(struct audio **ptr)
 {
-	struct audio_dce80 *audio = NULL;
+	struct audio_dce110 *audio = NULL;
 
-	audio = container_of(*ptr, struct audio_dce80, base);
+	audio = container_of(*ptr, struct audio_dce110, base);
 
 	destruct(audio);
 
-	/* release memory allocated for audio_dce80*/
+	/* release memory allocated for audio_dce110*/
 	dm_free(audio);
 	*ptr = NULL;
-}
-
-/* The inital call of hook function comes from audio object level.
- *The passing object handle "struct audio *audio" point to base object
- *already.There is not need to get base object from audio_dce80.
- */
-
-/**
-* Setup
-*
-* @brief
-*  setup Audio HW block, to be called by dal_audio_setup
-*
-* @param
-*  engine_id         - HDMI engine id
-*  pTiming          - CRTC timing
-*  actualPixelClock - actual programmed pixel clock
-*/
-static enum audio_result setup(
-	struct audio *audio,
-	struct audio_output *output,
-	struct audio_info *info)
-{
-	switch (output->signal) {
-	case SIGNAL_TYPE_HDMI_TYPE_A:
-	case SIGNAL_TYPE_WIRELESS:
-		/* setup HDMI audio engine */
-		audio->hw_ctx->funcs->setup_hdmi_audio(
-			audio->hw_ctx, output->engine_id, &output->crtc_info);
-		break;
-	case SIGNAL_TYPE_DISPLAY_PORT:
-	case SIGNAL_TYPE_DISPLAY_PORT_MST:
-	case SIGNAL_TYPE_EDP:
-		/* setup DP audio engine will be done at enable output */
-		break;
-	default:
-		return AUDIO_RESULT_ERROR;
-	}
-
-	/* setup Azalia block */
-	audio->hw_ctx->funcs->setup_azalia(
-		audio->hw_ctx,
-		output->engine_id,
-		output->signal,
-		&output->crtc_info,
-		&output->pll_info,
-		info);
-
-	return AUDIO_RESULT_OK;
-}
-
-/**
-* disable_output
-*
-* @brief
-*  disable Audio HW block, to be called by dal_audio_disable_output
-*
-* @param
-*  engine_id         - HDMI engine id
-*/
-static enum audio_result disable_output(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	switch (signal) {
-	case SIGNAL_TYPE_HDMI_TYPE_A:
-	case SIGNAL_TYPE_WIRELESS:
-		/* disable HDMI audio */
-		audio->hw_ctx->
-			funcs->disable_azalia_audio(
-					audio->hw_ctx, engine_id);
-		break;
-	case SIGNAL_TYPE_DISPLAY_PORT:
-	case SIGNAL_TYPE_DISPLAY_PORT_MST:
-	case SIGNAL_TYPE_EDP: {
-			/* disable DP audio */
-			audio->hw_ctx->funcs->disable_dp_audio(
-				audio->hw_ctx, engine_id);
-			audio->hw_ctx->funcs->disable_azalia_audio(
-				audio->hw_ctx, engine_id);
-		}
-		break;
-	default:
-		return AUDIO_RESULT_ERROR;
-	}
-
-	return AUDIO_RESULT_OK;
 }
 
 /**
@@ -202,14 +115,15 @@ static void setup_audio_wall_dto(
 
 static const struct audio_funcs funcs = {
 	.destroy = destroy,
-	.setup = setup,
-	.disable_output = disable_output,
 	.initialize = initialize,
 	.setup_audio_wall_dto = setup_audio_wall_dto,
+	.az_enable = dce110_aud_az_enable,
+	.az_disable = dce110_aud_az_disable,
+	.az_configure = dce110_aud_az_configure,
 };
 
 static bool construct(
-	struct audio_dce80 *audio,
+	struct audio_dce110 *audio,
 	const struct audio_init_data *init_data)
 {
 	struct audio *base = &audio->base;
@@ -228,13 +142,15 @@ static bool construct(
 struct audio *dal_audio_create_dce80(
 	const struct audio_init_data *init_data)
 {
-	/*allocate memory for audio_dce80 */
-	struct audio_dce80 *audio = dm_alloc(sizeof(struct audio_dce80));
+	/*allocate memory for audio_dce110 */
+	struct audio_dce110 *audio = dm_alloc(sizeof(struct audio_dce110));
 
 	if (audio == NULL)
 		return NULL;
 
-	/*pointer to base_audio_block of audio_dce80 ==> audio base object */
+	audio->regs = init_data->reg;
+
+	/*pointer to base_audio_block of audio_dce110 ==> audio base object */
 	if (construct(audio, init_data))
 		return &audio->base;
 

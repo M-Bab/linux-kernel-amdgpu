@@ -54,38 +54,6 @@ struct hw_ctx_audio_funcs {
 
 	/* MM register access  read_register  write_register */
 
-	/***** from dal2 hwcontextaudio_hal.hpp *****/
-
-	/* setup HDMI audio */
-	void (*setup_hdmi_audio)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id,
-		const struct audio_crtc_info *crtc_info);
-
-	/* enable Azalia audio */
-	void (*enable_azalia_audio)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id);
-
-	/* disable Azalia audio */
-	void (*disable_azalia_audio)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id);
-
-	/* disable DP audio */
-	void (*disable_dp_audio)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id);
-
-	/* setup Azalia HW block */
-	void (*setup_azalia)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id,
-		enum signal_type signal,
-		const struct audio_crtc_info *crtc_info,
-		const struct audio_pll_info *pll_info,
-		const struct audio_info *audio_info);
-
 	/* initialize HW state */
 	void (*hw_initialize)(
 		const struct hw_ctx_audio *hw_ctx);
@@ -112,11 +80,6 @@ struct hw_ctx_audio_funcs {
 		uint32_t requested_pixel_clock_in_khz,
 		const struct audio_pll_info *pll_info,
 		struct azalia_clock_info *azalia_clock_info);
-
-	void (*enable_afmt_clock)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id,
-		bool enable);
 
 	/* @@@@   private:  @@@@  */
 
@@ -149,70 +112,6 @@ struct hw_ctx_audio {
 bool dal_audio_construct_hw_ctx_audio(
 	struct hw_ctx_audio *hw_ctx);
 
-/*
- *creator of audio HW context will be implemented by specific ASIC object only.
- *Top base or interface object does not have implementation of creator.
- */
-
-/* --- functions called by audio hw context itself --- */
-
-/* MM register access */
-/*read_register  - dal_read_reg */
-/*write_register - dal_write_reg*/
-
-/*check whether specified sample rates can fit into a given timing */
-void dal_hw_ctx_audio_check_audio_bandwidth(
-	const struct hw_ctx_audio *hw_ctx,
-	const struct audio_crtc_info *crtc_info,
-	uint32_t channel_count,
-	enum signal_type signal,
-	union audio_sample_rates *sample_rates);
-
-/*For HDMI, calculate if specified sample rates can fit into a given timing */
-void dal_audio_hw_ctx_check_audio_bandwidth_hdmi(
-	const struct hw_ctx_audio *hw_ctx,
-	const struct audio_crtc_info *crtc_info,
-	uint32_t channel_count,
-	union audio_sample_rates *sample_rates);
-
-/*For DPSST, calculate if specified sample rates can fit into a given timing */
-void dal_audio_hw_ctx_check_audio_bandwidth_dpsst(
-	const struct hw_ctx_audio *hw_ctx,
-	const struct audio_crtc_info *crtc_info,
-	uint32_t channel_count,
-	union audio_sample_rates *sample_rates);
-
-/*For DPMST, calculate if specified sample rates can fit into a given timing */
-void dal_audio_hw_ctx_check_audio_bandwidth_dpmst(
-	const struct hw_ctx_audio *hw_ctx,
-	const struct audio_crtc_info *crtc_info,
-	uint32_t channel_count,
-	union audio_sample_rates *sample_rates);
-
-/* calculate max number of Audio packets per line */
-uint32_t dal_audio_hw_ctx_calc_max_audio_packets_per_line(
-	const struct hw_ctx_audio *hw_ctx,
-	const struct audio_crtc_info *crtc_info);
-
-/* translate speakers to channels */
-union audio_cea_channels dal_audio_hw_ctx_speakers_to_channels(
-	const struct hw_ctx_audio *hw_ctx,
-	struct audio_speaker_flags speaker_flags);
-
-/* check whether specified audio format supported */
-bool dal_audio_hw_ctx_is_audio_format_supported(
-	const struct hw_ctx_audio *hw_ctx,
-	const struct audio_info *audio_info,
-	enum audio_format_code audio_format_code,
-	uint32_t *format_index);
-
-/* search pixel clock value for HDMI */
-bool dal_audio_hw_ctx_get_audio_clock_info(
-	const struct hw_ctx_audio *hw_ctx,
-	enum dc_color_depth color_depth,
-	uint32_t crtc_pixel_clock_in_khz,
-	uint32_t actual_pixel_clock_in_khz,
-	struct audio_clock_info *audio_clock_info);
 
 #endif  /* __DAL_HW_CTX_AUDIO_H__ */
 

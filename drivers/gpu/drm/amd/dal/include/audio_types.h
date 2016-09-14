@@ -33,19 +33,18 @@
 #define MAX_HW_AUDIO_INFO_DISPLAY_NAME_SIZE_IN_CHARS 18
 #define MULTI_CHANNEL_SPLIT_NO_ASSO_INFO 0xFFFFFFFF
 
-struct audio_clock_info {
-	/* pixel clock frequency*/
-	uint32_t pixel_clock_in_10khz;
-	/* N - 32KHz audio */
-	uint32_t n_32khz;
-	/* CTS - 32KHz audio*/
-	uint32_t cts_32khz;
-	uint32_t n_44khz;
-	uint32_t cts_44khz;
-	uint32_t n_48khz;
-	uint32_t cts_48khz;
-};
 
+struct audio_crtc_info {
+	uint32_t h_total;
+	uint32_t h_active;
+	uint32_t v_active;
+	uint32_t pixel_repetition;
+	uint32_t requested_pixel_clock; /* in KHz */
+	uint32_t calculated_pixel_clock; /* in KHz */
+	uint32_t refresh_rate;
+	enum dc_color_depth color_depth;
+	bool interlaced;
+};
 struct azalia_clock_info {
 	uint32_t pixel_clock_in_10khz;
 	uint32_t audio_dto_phase;
@@ -61,32 +60,6 @@ enum audio_dto_source {
 	DTO_SOURCE_ID3,
 	DTO_SOURCE_ID4,
 	DTO_SOURCE_ID5
-};
-
-union audio_cea_channels {
-	uint8_t all;
-	struct audio_cea_channels_bits {
-		uint32_t FL:1;
-		uint32_t FR:1;
-		uint32_t LFE:1;
-		uint32_t FC:1;
-		uint32_t RL_RC:1;
-		uint32_t RR:1;
-		uint32_t RC_RLC_FLC:1;
-		uint32_t RRC_FRC:1;
-	} channels;
-};
-
-struct audio_crtc_info {
-	uint32_t h_total;
-	uint32_t h_active;
-	uint32_t v_active;
-	uint32_t pixel_repetition;
-	uint32_t requested_pixel_clock; /* in KHz */
-	uint32_t calculated_pixel_clock; /* in KHz */
-	uint32_t refresh_rate;
-	enum dc_color_depth color_depth;
-	bool interlaced;
 };
 
 /* PLL information required for AZALIA DTO calculation */

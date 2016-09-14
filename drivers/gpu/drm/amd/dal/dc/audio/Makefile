@@ -3,7 +3,7 @@
 # It provides the control and status of HW adapter resources,
 # that are global for the ASIC and sharable between pipes.
 
-AUDIO = audio_base.o hw_ctx_audio.o
+AUDIO = audio_base.o
 
 AMD_DAL_AUDIO = $(addprefix $(AMDDALPATH)/dc/audio/,$(AUDIO))
 

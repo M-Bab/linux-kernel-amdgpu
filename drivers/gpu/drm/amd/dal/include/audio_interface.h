@@ -45,6 +45,9 @@ struct dal_adapter_service;
 struct audio_init_data {
 	struct graphics_object_id audio_stream_id;
 	struct dc_context *ctx;
+
+	unsigned int inst;
+	const struct dce110_audio_registers *reg;
 };
 
 enum audio_result {
@@ -63,53 +66,7 @@ void dal_audio_destroy(
 enum audio_result dal_audio_power_up(
 	struct audio *audio);
 
-/* perform power down (shut down, stand by) */
-enum audio_result dal_audio_power_down(
-	struct audio *audio);
-
-/* setup audio */
-enum audio_result dal_audio_setup(
-	struct audio *audio,
-	struct audio_output *output,
-	struct audio_info *info);
-
-/* disable audio */
-enum audio_result dal_audio_disable_output(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal);
-
-/* enable azalia audio endpoint */
-enum audio_result dal_audio_enable_azalia_audio_jack_presence(
-	struct audio *audio,
-	enum engine_id engine_id);
-
-/* disable azalia audio endpoint */
-enum audio_result dal_audio_disable_azalia_audio_jack_presence(
-	struct audio *audio,
-	enum engine_id engine_id);
-
-/* unmute audio */
-enum audio_result dal_audio_unmute(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal);
-
-/* mute audio */
-enum audio_result dal_audio_mute(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal);
-
 /***** information interface *****/
-
-/* get audio bandwidth information */
-void dal_audio_check_audio_bandwidth(
-	struct audio *audio,
-	const struct audio_crtc_info *info,
-	uint32_t channel_count,
-	enum signal_type signal,
-	union audio_sample_rates *sample_rates);
 
 /* Update audio wall clock source */
 void dal_audio_setup_audio_wall_dto(

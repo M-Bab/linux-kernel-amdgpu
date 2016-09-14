@@ -1103,6 +1103,395 @@ static void dce110_stream_encoder_dp_unblank(
 #define DP_SEC_AUD_N__DP_SEC_AUD_N__DEFAULT 0x8000
 #define DP_SEC_TIMESTAMP__DP_SEC_TIMESTAMP_MODE__AUTO_CALC 1
 
+#include "include/audio_types.h"
+
+/**
+* speakersToChannels
+*
+* @brief
+*  translate speakers to channels
+*
+*  FL  - Front Left
+*  FR  - Front Right
+*  RL  - Rear Left
+*  RR  - Rear Right
+*  RC  - Rear Center
+*  FC  - Front Center
+*  FLC - Front Left Center
+*  FRC - Front Right Center
+*  RLC - Rear Left Center
+*  RRC - Rear Right Center
+*  LFE - Low Freq Effect
+*
+*               FC
+*          FLC      FRC
+*    FL                    FR
+*
+*                    LFE
+*              ()
+*
+*
+*    RL                    RR
+*          RLC      RRC
+*               RC
+*
+*             ch  8   7   6   5   4   3   2   1
+* 0b00000011      -   -   -   -   -   -   FR  FL
+* 0b00000111      -   -   -   -   -   LFE FR  FL
+* 0b00001011      -   -   -   -   FC  -   FR  FL
+* 0b00001111      -   -   -   -   FC  LFE FR  FL
+* 0b00010011      -   -   -   RC  -   -   FR  FL
+* 0b00010111      -   -   -   RC  -   LFE FR  FL
+* 0b00011011      -   -   -   RC  FC  -   FR  FL
+* 0b00011111      -   -   -   RC  FC  LFE FR  FL
+* 0b00110011      -   -   RR  RL  -   -   FR  FL
+* 0b00110111      -   -   RR  RL  -   LFE FR  FL
+* 0b00111011      -   -   RR  RL  FC  -   FR  FL
+* 0b00111111      -   -   RR  RL  FC  LFE FR  FL
+* 0b01110011      -   RC  RR  RL  -   -   FR  FL
+* 0b01110111      -   RC  RR  RL  -   LFE FR  FL
+* 0b01111011      -   RC  RR  RL  FC  -   FR  FL
+* 0b01111111      -   RC  RR  RL  FC  LFE FR  FL
+* 0b11110011      RRC RLC RR  RL  -   -   FR  FL
+* 0b11110111      RRC RLC RR  RL  -   LFE FR  FL
+* 0b11111011      RRC RLC RR  RL  FC  -   FR  FL
+* 0b11111111      RRC RLC RR  RL  FC  LFE FR  FL
+* 0b11000011      FRC FLC -   -   -   -   FR  FL
+* 0b11000111      FRC FLC -   -   -   LFE FR  FL
+* 0b11001011      FRC FLC -   -   FC  -   FR  FL
+* 0b11001111      FRC FLC -   -   FC  LFE FR  FL
+* 0b11010011      FRC FLC -   RC  -   -   FR  FL
+* 0b11010111      FRC FLC -   RC  -   LFE FR  FL
+* 0b11011011      FRC FLC -   RC  FC  -   FR  FL
+* 0b11011111      FRC FLC -   RC  FC  LFE FR  FL
+* 0b11110011      FRC FLC RR  RL  -   -   FR  FL
+* 0b11110111      FRC FLC RR  RL  -   LFE FR  FL
+* 0b11111011      FRC FLC RR  RL  FC  -   FR  FL
+* 0b11111111      FRC FLC RR  RL  FC  LFE FR  FL
+*
+* @param
+*  speakers - speaker information as it comes from CEA audio block
+*/
+/* translate speakers to channels */
+
+union audio_cea_channels {
+	uint8_t all;
+	struct audio_cea_channels_bits {
+		uint32_t FL:1;
+		uint32_t FR:1;
+		uint32_t LFE:1;
+		uint32_t FC:1;
+		uint32_t RL_RC:1;
+		uint32_t RR:1;
+		uint32_t RC_RLC_FLC:1;
+		uint32_t RRC_FRC:1;
+	} channels;
+};
+
+struct audio_clock_info {
+	/* pixel clock frequency*/
+	uint32_t pixel_clock_in_10khz;
+	/* N - 32KHz audio */
+	uint32_t n_32khz;
+	/* CTS - 32KHz audio*/
+	uint32_t cts_32khz;
+	uint32_t n_44khz;
+	uint32_t cts_44khz;
+	uint32_t n_48khz;
+	uint32_t cts_48khz;
+};
+
+/* 25.2MHz/1.001*/
+/* 25.2MHz/1.001*/
+/* 25.2MHz*/
+/* 27MHz */
+/* 27MHz*1.001*/
+/* 27MHz*1.001*/
+/* 54MHz*/
+/* 54MHz*1.001*/
+/* 74.25MHz/1.001*/
+/* 74.25MHz*/
+/* 148.5MHz/1.001*/
+/* 148.5MHz*/
+
+static const struct audio_clock_info audio_clock_info_table[12] = {
+	{2517, 4576, 28125, 7007, 31250, 6864, 28125},
+	{2518, 4576, 28125, 7007, 31250, 6864, 28125},
+	{2520, 4096, 25200, 6272, 28000, 6144, 25200},
+	{2700, 4096, 27000, 6272, 30000, 6144, 27000},
+	{2702, 4096, 27027, 6272, 30030, 6144, 27027},
+	{2703, 4096, 27027, 6272, 30030, 6144, 27027},
+	{5400, 4096, 54000, 6272, 60000, 6144, 54000},
+	{5405, 4096, 54054, 6272, 60060, 6144, 54054},
+	{7417, 11648, 210937, 17836, 234375, 11648, 140625},
+	{7425, 4096, 74250, 6272, 82500, 6144, 74250},
+	{14835, 11648, 421875, 8918, 234375, 5824, 140625},
+	{14850, 4096, 148500, 6272, 165000, 6144, 148500}
+};
+
+static const struct audio_clock_info audio_clock_info_table_36bpc[12] = {
+	{2517, 9152, 84375, 7007, 48875, 9152, 56250},
+	{2518, 9152, 84375, 7007, 48875, 9152, 56250},
+	{2520, 4096, 37800, 6272, 42000, 6144, 37800},
+	{2700, 4096, 40500, 6272, 45000, 6144, 40500},
+	{2702, 8192, 81081, 6272, 45045, 8192, 54054},
+	{2703, 8192, 81081, 6272, 45045, 8192, 54054},
+	{5400, 4096, 81000, 6272, 90000, 6144, 81000},
+	{5405, 4096, 81081, 6272, 90090, 6144, 81081},
+	{7417, 11648, 316406, 17836, 351562, 11648, 210937},
+	{7425, 4096, 111375, 6272, 123750, 6144, 111375},
+	{14835, 11648, 632812, 17836, 703125, 11648, 421875},
+	{14850, 4096, 222750, 6272, 247500, 6144, 222750}
+};
+
+static const struct audio_clock_info audio_clock_info_table_48bpc[12] = {
+	{2517, 4576, 56250, 7007, 62500, 6864, 56250},
+	{2518, 4576, 56250, 7007, 62500, 6864, 56250},
+	{2520, 4096, 50400, 6272, 56000, 6144, 50400},
+	{2700, 4096, 54000, 6272, 60000, 6144, 54000},
+	{2702, 4096, 54054, 6267, 60060, 8192, 54054},
+	{2703, 4096, 54054, 6272, 60060, 8192, 54054},
+	{5400, 4096, 108000, 6272, 120000, 6144, 108000},
+	{5405, 4096, 108108, 6272, 120120, 6144, 108108},
+	{7417, 11648, 421875, 17836, 468750, 11648, 281250},
+	{7425, 4096, 148500, 6272, 165000, 6144, 148500},
+	{14835, 11648, 843750, 8918, 468750, 11648, 281250},
+	{14850, 4096, 297000, 6272, 330000, 6144, 297000}
+};
+
+union audio_cea_channels speakers_to_channels(
+	struct audio_speaker_flags speaker_flags)
+{
+	union audio_cea_channels cea_channels = {0};
+
+	/* these are one to one */
+	cea_channels.channels.FL = speaker_flags.FL_FR;
+	cea_channels.channels.FR = speaker_flags.FL_FR;
+	cea_channels.channels.LFE = speaker_flags.LFE;
+	cea_channels.channels.FC = speaker_flags.FC;
+
+	/* if Rear Left and Right exist move RC speaker to channel 7
+	 * otherwise to channel 5
+	 */
+	if (speaker_flags.RL_RR) {
+		cea_channels.channels.RL_RC = speaker_flags.RL_RR;
+		cea_channels.channels.RR = speaker_flags.RL_RR;
+		cea_channels.channels.RC_RLC_FLC = speaker_flags.RC;
+	} else {
+		cea_channels.channels.RL_RC = speaker_flags.RC;
+	}
+
+	/* FRONT Left Right Center and REAR Left Right Center are exclusive */
+	if (speaker_flags.FLC_FRC) {
+		cea_channels.channels.RC_RLC_FLC = speaker_flags.FLC_FRC;
+		cea_channels.channels.RRC_FRC = speaker_flags.FLC_FRC;
+	} else {
+		cea_channels.channels.RC_RLC_FLC = speaker_flags.RLC_RRC;
+		cea_channels.channels.RRC_FRC = speaker_flags.RLC_RRC;
+	}
+
+	return cea_channels;
+}
+
+uint32_t calc_max_audio_packets_per_line(
+	const struct audio_crtc_info *crtc_info)
+{
+	uint32_t max_packets_per_line;
+
+	max_packets_per_line =
+		crtc_info->h_total - crtc_info->h_active;
+
+	if (crtc_info->pixel_repetition)
+		max_packets_per_line *= crtc_info->pixel_repetition;
+
+	/* for other hdmi features */
+	max_packets_per_line -= 58;
+	/* for Control Period */
+	max_packets_per_line -= 16;
+	/* Number of Audio Packets per Line */
+	max_packets_per_line /= 32;
+
+	return max_packets_per_line;
+}
+
+bool get_audio_clock_info(
+	enum dc_color_depth color_depth,
+	uint32_t crtc_pixel_clock_in_khz,
+	uint32_t actual_pixel_clock_in_khz,
+	struct audio_clock_info *audio_clock_info)
+{
+	const struct audio_clock_info *clock_info;
+	uint32_t index;
+	uint32_t crtc_pixel_clock_in_10khz = crtc_pixel_clock_in_khz / 10;
+	uint32_t audio_array_size;
+
+	if (audio_clock_info == NULL)
+		return false; /* should not happen */
+
+	switch (color_depth) {
+	case COLOR_DEPTH_161616:
+		clock_info = audio_clock_info_table_48bpc;
+		audio_array_size = ARRAY_SIZE(
+				audio_clock_info_table_48bpc);
+		break;
+	case COLOR_DEPTH_121212:
+		clock_info = audio_clock_info_table_36bpc;
+		audio_array_size = ARRAY_SIZE(
+				audio_clock_info_table_36bpc);
+		break;
+	default:
+		clock_info = audio_clock_info_table;
+		audio_array_size = ARRAY_SIZE(
+				audio_clock_info_table);
+		break;
+	}
+
+	if (clock_info != NULL) {
+		/* search for exact pixel clock in table */
+		for (index = 0; index < audio_array_size; index++) {
+			if (clock_info[index].pixel_clock_in_10khz >
+				crtc_pixel_clock_in_10khz)
+				break;  /* not match */
+			else if (clock_info[index].pixel_clock_in_10khz ==
+					crtc_pixel_clock_in_10khz) {
+				/* match found */
+				if (audio_clock_info != NULL) {
+					*audio_clock_info = clock_info[index];
+					return true;
+				}
+			}
+		}
+	}
+
+	/* not found */
+	if (actual_pixel_clock_in_khz == 0)
+		actual_pixel_clock_in_khz = crtc_pixel_clock_in_khz;
+
+	/* See HDMI spec  the table entry under
+	 *  pixel clock of "Other". */
+	audio_clock_info->pixel_clock_in_10khz =
+			actual_pixel_clock_in_khz / 10;
+	audio_clock_info->cts_32khz = actual_pixel_clock_in_khz;
+	audio_clock_info->cts_44khz = actual_pixel_clock_in_khz;
+	audio_clock_info->cts_48khz = actual_pixel_clock_in_khz;
+
+	audio_clock_info->n_32khz = 4096;
+	audio_clock_info->n_44khz = 6272;
+	audio_clock_info->n_48khz = 6144;
+
+	return true;
+}
+
+static void dce110_se_audio_setup(
+	struct stream_encoder *enc,
+	unsigned int az_inst,
+	struct audio_info *audio_info)
+{
+	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
+
+	uint32_t speakers = 0;
+	uint32_t channels = 0;
+
+	ASSERT(audio_info);
+	if (audio_info == NULL)
+		/* This should not happen.it does so we don't get BSOD*/
+		return;
+
+	speakers = audio_info->flags.info.ALLSPEAKERS;
+	channels = speakers_to_channels(audio_info->flags.speaker_flags).all;
+
+	/* setup the audio stream source select (audio -> dig mapping) */
+	LINK_REG_SET(AFMT_AUDIO_SRC_CONTROL, AFMT_AUDIO_SRC_SELECT, az_inst);
+
+	/* Channel allocation */
+	LINK_REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL2, AFMT_AUDIO_CHANNEL_ENABLE, channels);
+}
+
+static void dce110_se_setup_hdmi_audio(
+	struct stream_encoder *enc,
+	const struct audio_crtc_info *crtc_info)
+{
+	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
+
+	struct audio_clock_info audio_clock_info = {0};
+	uint32_t max_packets_per_line;
+	uint32_t addr = 0;
+	uint32_t value = 0;
+
+	/* For now still do calculation, although this field is ignored when
+	above HDMI_PACKET_GEN_VERSION set to 1 */
+	max_packets_per_line = calc_max_audio_packets_per_line(crtc_info);
+
+	/* HDMI_AUDIO_PACKET_CONTROL */
+	LINK_REG_UPDATE_N(HDMI_AUDIO_PACKET_CONTROL, 2,
+			FD(HDMI_AUDIO_PACKET_CONTROL__HDMI_AUDIO_PACKETS_PER_LINE), max_packets_per_line,
+			FD(HDMI_AUDIO_PACKET_CONTROL__HDMI_AUDIO_DELAY_EN), 1);
+
+	/* AFMT_AUDIO_PACKET_CONTROL */
+	LINK_REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL, AFMT_60958_CS_UPDATE, 1);
+
+	/* AFMT_AUDIO_PACKET_CONTROL2 */
+	LINK_REG_UPDATE_N(AFMT_AUDIO_PACKET_CONTROL2, 2,
+			FD(AFMT_AUDIO_PACKET_CONTROL2__AFMT_AUDIO_LAYOUT_OVRD), 0,
+			FD(AFMT_AUDIO_PACKET_CONTROL2__AFMT_60958_OSF_OVRD), 0);
+
+	/* HDMI_ACR_PACKET_CONTROL */
+	LINK_REG_UPDATE_N(HDMI_ACR_PACKET_CONTROL, 3,
+			FD(HDMI_ACR_PACKET_CONTROL__HDMI_ACR_AUTO_SEND), 1,
+			FD(HDMI_ACR_PACKET_CONTROL__HDMI_ACR_SOURCE), 0,
+			FD(HDMI_ACR_PACKET_CONTROL__HDMI_ACR_AUDIO_PRIORITY), 0);
+
+	/* Program audio clock sample/regeneration parameters */
+	if (get_audio_clock_info(
+		crtc_info->color_depth,
+		crtc_info->requested_pixel_clock,
+		crtc_info->calculated_pixel_clock,
+		&audio_clock_info)) {
+
+		/* HDMI_ACR_32_0__HDMI_ACR_CTS_32_MASK */
+		LINK_REG_UPDATE(HDMI_ACR_32_0, HDMI_ACR_CTS_32, audio_clock_info.cts_32khz);
+
+		/* HDMI_ACR_32_1__HDMI_ACR_N_32_MASK */
+		LINK_REG_UPDATE(HDMI_ACR_32_1, HDMI_ACR_N_32, audio_clock_info.n_32khz);
+
+		/* HDMI_ACR_44_0__HDMI_ACR_CTS_44_MASK */
+		LINK_REG_UPDATE(HDMI_ACR_44_0, HDMI_ACR_CTS_44, audio_clock_info.cts_44khz);
+
+		/* HDMI_ACR_44_1__HDMI_ACR_N_44_MASK */
+		LINK_REG_UPDATE(HDMI_ACR_44_1, HDMI_ACR_N_44, audio_clock_info.n_44khz);
+
+		/* HDMI_ACR_48_0__HDMI_ACR_CTS_48_MASK */
+		LINK_REG_UPDATE(HDMI_ACR_48_0, HDMI_ACR_CTS_48, audio_clock_info.cts_48khz);
+
+		/* HDMI_ACR_48_1__HDMI_ACR_N_48_MASK */
+		LINK_REG_UPDATE(HDMI_ACR_48_1, HDMI_ACR_N_48, audio_clock_info.n_48khz);
+
+		/* Video driver cannot know in advance which sample rate will
+		be used by HD Audio driver
+		HDMI_ACR_PACKET_CONTROL__HDMI_ACR_N_MULTIPLE field is
+		programmed below in interruppt callback */
+	} /* if */
+
+	/* AFMT_60958_0__AFMT_60958_CS_CHANNEL_NUMBER_L_MASK &
+	AFMT_60958_0__AFMT_60958_CS_CLOCK_ACCURACY_MASK */
+	LINK_REG_UPDATE_N(AFMT_60958_0, 2,
+			FD(AFMT_60958_0__AFMT_60958_CS_CHANNEL_NUMBER_L), 1,
+			FD(AFMT_60958_0__AFMT_60958_CS_CLOCK_ACCURACY), 0);
+
+	/* AFMT_60958_1 AFMT_60958_CS_CHALNNEL_NUMBER_R */
+	LINK_REG_UPDATE(AFMT_60958_1, AFMT_60958_CS_CHANNEL_NUMBER_R, 2);
+
+	/*AFMT_60958_2 now keep this settings until
+	 *  Programming guide comes out*/
+	LINK_REG_UPDATE_N(AFMT_60958_2, 6,
+			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_2), 3,
+			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_3), 4,
+			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_4), 5,
+			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_5), 6,
+			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_6), 7,
+			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_7), 8);
+}
+
 static void dce110_se_setup_dp_audio(
 	struct stream_encoder *enc)
 {
@@ -1214,6 +1603,14 @@ void dce110_se_audio_mute_control(
 	LINK_REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL, AFMT_AUDIO_SAMPLE_SEND, !mute);
 }
 
+void dce110_se_dp_audio_setup(
+	struct stream_encoder *enc,
+	unsigned int az_inst,
+	struct audio_info *info)
+{
+	dce110_se_audio_setup(enc, az_inst, info);
+}
+
 void dce110_se_dp_audio_enable(
 	struct stream_encoder *enc)
 {
@@ -1229,6 +1626,22 @@ void dce110_se_dp_audio_disable(
 	dce110_se_enable_audio_clock(enc, false);
 }
 
+void dce110_se_hdmi_audio_setup(
+	struct stream_encoder *enc,
+	unsigned int az_inst,
+	struct audio_info *info,
+	struct audio_crtc_info *audio_crtc_info)
+{
+	dce110_se_enable_audio_clock(enc, true);
+	dce110_se_setup_hdmi_audio(enc, audio_crtc_info);
+	dce110_se_audio_setup(enc, az_inst, info);
+}
+
+void dce110_se_hdmi_audio_disable(
+	struct stream_encoder *enc)
+{
+	dce110_se_enable_audio_clock(enc, false);
+}
 
 static const struct stream_encoder_funcs dce110_str_enc_funcs = {
 	.dp_set_stream_attribute =
@@ -1253,8 +1666,13 @@ static const struct stream_encoder_funcs dce110_str_enc_funcs = {
 		dce110_stream_encoder_dp_unblank,
 
 	.audio_mute_control = dce110_se_audio_mute_control,
+
+	.dp_audio_setup = dce110_se_dp_audio_setup,
 	.dp_audio_enable = dce110_se_dp_audio_enable,
 	.dp_audio_disable = dce110_se_dp_audio_disable,
+
+	.hdmi_audio_setup = dce110_se_hdmi_audio_setup,
+	.hdmi_audio_disable = dce110_se_hdmi_audio_disable,
 };
 
 bool dce110_stream_encoder_construct(

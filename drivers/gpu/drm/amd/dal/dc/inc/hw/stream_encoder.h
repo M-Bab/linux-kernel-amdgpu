@@ -55,38 +55,65 @@ struct stream_encoder_funcs {
 	void (*dp_set_stream_attribute)(
 		struct stream_encoder *enc,
 		struct dc_crtc_timing *crtc_timing);
+
 	void (*hdmi_set_stream_attribute)(
 		struct stream_encoder *enc,
 		struct dc_crtc_timing *crtc_timing,
 		int actual_pix_clk_khz,
 		bool enable_audio);
+
 	void (*dvi_set_stream_attribute)(
 		struct stream_encoder *enc,
 		struct dc_crtc_timing *crtc_timing,
 		bool is_dual_link);
+
 	void (*set_mst_bandwidth)(
 		struct stream_encoder *enc,
 		struct fixed31_32 avg_time_slots_per_mtp);
+
 	void (*update_hdmi_info_packets)(
 		struct stream_encoder *enc,
 		const struct encoder_info_frame *info_frame);
+
 	void (*stop_hdmi_info_packets)(
 		struct stream_encoder *enc);
+
 	void (*update_dp_info_packets)(
 		struct stream_encoder *enc,
 		const struct encoder_info_frame *info_frame);
+
 	void (*stop_dp_info_packets)(
 		struct stream_encoder *enc);
+
 	void (*dp_blank)(
 		struct stream_encoder *enc);
+
 	void (*dp_unblank)(
 		struct stream_encoder *enc,
 		const struct encoder_unblank_param *param);
 
 	void (*audio_mute_control)(
 		struct stream_encoder *enc, bool mute);
-	void (*dp_audio_enable) (struct stream_encoder *enc);
-	void (*dp_audio_disable) (struct stream_encoder *enc);
+
+	void (*dp_audio_setup)(
+		struct stream_encoder *enc,
+		unsigned int az_inst,
+		struct audio_info *info);
+
+	void (*dp_audio_enable) (
+			struct stream_encoder *enc);
+
+	void (*dp_audio_disable) (
+			struct stream_encoder *enc);
+
+	void (*hdmi_audio_setup)(
+		struct stream_encoder *enc,
+		unsigned int az_inst,
+		struct audio_info *info,
+		struct audio_crtc_info *audio_crtc_info);
+
+	void (*hdmi_audio_disable) (
+			struct stream_encoder *enc);
 };
 
 #endif /* STREAM_ENCODER_H_ */
