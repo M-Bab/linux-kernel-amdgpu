@@ -283,6 +283,7 @@ int amdgpu_ucode_init_bo(struct amdgpu_device *adev)
 			fw_offset += ALIGN(le32_to_cpu(header->ucode_size_bytes), PAGE_SIZE);
 		}
 	}
+	return 0;
 
 failed_kmap:
 	amdgpu_bo_unpin(*bo);
@@ -291,8 +292,7 @@ failed_pin:
 failed_reserve:
 	amdgpu_bo_unref(bo);
 failed:
-	if (err)
-		adev->firmware.smu_load = false;
+	adev->firmware.smu_load = false;
 
 	return err;
 }
