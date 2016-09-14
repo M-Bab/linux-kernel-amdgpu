@@ -1738,6 +1738,36 @@ static void dp_wa_power_up_0010FA(struct core_link *link, uint8_t *dpcd_data,
 		link->wa_flags.dp_keep_receiver_powered = false;
 }
 
+static void retrieve_psr_link_cap(struct core_link *link,
+		enum edp_revision edp_revision)
+{
+	if (edp_revision >= EDP_REVISION_13) {
+		core_link_read_dpcd(link,
+				DPCD_ADDRESS_PSR_SUPPORT_VER,
+				(uint8_t *)(&link->public.psr_caps),
+				sizeof(link->public.psr_caps));
+		if (link->public.psr_caps.psr_version != 0) {
+			unsigned char psr_capability = 0;
+
+			core_link_read_dpcd(link,
+					DPCD_ADDRESS_PSR_CAPABILITY,
+						&psr_capability,
+						sizeof(psr_capability));
+			/* Bit 0 determines whether fast link training is
+			 * required on PSR exit. If set to 0, link training
+			 * is required. If set to 1, sink must lock within
+			 * five Idle Patterns after Main Link is turned on.
+			 */
+			link->public.psr_caps.psr_exit_link_training_required
+						= !(psr_capability & 0x1);
+
+			psr_capability = (psr_capability >> 1) & 0x7;
+			link->public.psr_caps.psr_rfb_setup_time =
+					55 * (6 - psr_capability);
+		}
+	}
+}
+
 static void retrieve_link_cap(struct core_link *link)
 {
 	uint8_t dpcd_data[DPCD_ADDRESS_TRAINING_AUX_RD_INTERVAL - DPCD_ADDRESS_DPCD_REV + 1];
@@ -1827,6 +1857,7 @@ static void retrieve_link_cap(struct core_link *link)
 	CONN_DATA_DETECT(link, dpcd_data, sizeof(dpcd_data), "Rx Caps: ");
 
 	/* TODO: Confirm if need retrieve_psr_link_cap */
+	retrieve_psr_link_cap(link, link->edp_revision);
 }
 
 void detect_dp_sink_caps(struct core_link *link)

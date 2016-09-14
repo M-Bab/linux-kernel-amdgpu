@@ -484,6 +484,26 @@ void dce110_timing_generator_set_drr(
 	dm_write_reg(tg->ctx, addr, static_screen_cntl);
 }
 
+void dce110_timing_generator_set_static_screen_control(
+	struct timing_generator *tg,
+	uint32_t value)
+{
+	struct dce110_timing_generator *tg110 = DCE110TG_FROM_TG(tg);
+	uint32_t static_screen_cntl = 0;
+	uint32_t addr = 0;
+
+	addr = CRTC_REG(mmCRTC_STATIC_SCREEN_CONTROL);
+	static_screen_cntl = dm_read_reg(tg->ctx, addr);
+
+	set_reg_field_value(static_screen_cntl,
+				value,
+				CRTC_STATIC_SCREEN_CONTROL,
+				CRTC_STATIC_SCREEN_EVENT_MASK);
+
+
+	dm_write_reg(tg->ctx, addr, static_screen_cntl);
+}
+
 /*
  * get_vblank_counter
  *
@@ -1552,7 +1572,9 @@ static const struct timing_generator_funcs dce110_tg_funcs = {
 		.enable_advanced_request =
 				dce110_timing_generator_enable_advanced_request,
 		.set_drr =
-				dce110_timing_generator_set_drr
+				dce110_timing_generator_set_drr,
+		.set_static_screen_control =
+			dce110_timing_generator_set_static_screen_control
 
 };
 

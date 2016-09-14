@@ -97,6 +97,14 @@
 /* Set backlight level */
 #define MCP_BL_SET 0x67
 
+/* PSR related commands */
+#define PSR_ENABLE 0x20
+#define PSR_EXIT 0x21
+#define PSR_SET 0x23
+
+/*TODO: Used for psr wakeup for set backlight level*/
+static unsigned int psr_crtc_offset;
+
 enum {
 	DP_MST_UPDATE_MAX_RETRY = 50
 };
@@ -123,6 +131,8 @@ static const struct link_encoder_funcs dce110_lnk_enc_funcs = {
 	.set_dmcu_backlight_level =
 			dce110_link_encoder_set_dmcu_backlight_level,
 	.set_dmcu_abm_level = dce110_link_encoder_set_dmcu_abm_level,
+	.set_dmcu_psr_enable = dce110_link_encoder_set_dmcu_psr_enable,
+	.setup_dmcu_psr = dce110_link_encoder_setup_dmcu_psr,
 	.backlight_control = dce110_link_encoder_edp_backlight_control,
 	.power_control = dce110_link_encoder_edp_power_control,
 	.connect_dig_be_to_fe = dce110_link_encoder_connect_dig_be_to_fe,
@@ -1823,8 +1833,8 @@ void dce110_link_encoder_set_dmcu_backlight_level(
 		regValue = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG));
 		dmcu_max_retry_on_wait_reg_ready--;
 	} while
-	((MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & regValue) !=
-		(MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & 0) &&
+	/* expected value is 0, loop while not 0*/
+	((MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & regValue) &&
 		dmcu_max_retry_on_wait_reg_ready > 0);
 
 	/* setDMCUParam_BL */
@@ -1888,8 +1898,8 @@ void dce110_link_encoder_set_dmcu_abm_level(
 		regValue = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG));
 		dmcu_max_retry_on_wait_reg_ready--;
 	} while
-	((MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & regValue) !=
-		(MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & 0) &&
+	/* expected value is 0, loop while not 0*/
+	((MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & regValue) &&
 		dmcu_max_retry_on_wait_reg_ready > 0);
 
 	/* setDMCUParam_ABMLevel */
@@ -1904,6 +1914,348 @@ void dce110_link_encoder_set_dmcu_abm_level(
 			level,
 			MASTER_COMM_CMD_REG,
 			MASTER_COMM_CMD_REG_BYTE2);
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG), masterCmd);
+
+	/* notifyDMCUMsg */
+	masterComCntl = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG));
+	set_reg_field_value(
+			masterComCntl,
+			1,
+			MASTER_COMM_CNTL_REG,
+			MASTER_COMM_INTERRUPT);
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG), masterComCntl);
+}
+
+static void get_dmcu_psr_state(struct link_encoder *enc, uint32_t *psr_state)
+{
+	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
+	struct dc_context *ctx = enc110->base.ctx;
+
+	uint32_t ramAccessCntrl;
+	uint32_t powerStatus;
+
+	uint32_t count = 0;
+	uint32_t psrStateOffset = 0xf0;
+
+	/* Enable write access to IRAM */
+	ramAccessCntrl = dm_read_reg(ctx, DMCU_REG(DMCU_RAM_ACCESS_CTRL));
+	set_reg_field_value(
+				ramAccessCntrl,
+				1,
+				DMCU_RAM_ACCESS_CTRL,
+				IRAM_HOST_ACCESS_EN);
+	dm_write_reg(ctx, DMCU_REG(DMCU_RAM_ACCESS_CTRL), ramAccessCntrl);
+
+	do {
+		dm_delay_in_microseconds(ctx, 2);
+		powerStatus = dm_read_reg(ctx, DMCU_REG(DCI_MEM_PWR_STATUS));
+	} while
+		(get_reg_field_value(powerStatus, DCI_MEM_PWR_STATUS,
+				DMCU_IRAM_MEM_PWR_STATE) != 0 && count++ < 10);
+
+	/* Write address to IRAM_RD_ADDR in DMCU_IRAM_RD_CTRL */
+	dm_write_reg(ctx, DMCU_REG(DMCU_IRAM_RD_CTRL), psrStateOffset);
+
+	/* Read data from IRAM_RD_DATA in DMCU_IRAM_RD_DATA*/
+	*psr_state = dm_read_reg(ctx, DMCU_REG(DMCU_IRAM_RD_DATA));
+
+	/* Disable write access to IRAM after finished using IRAM
+	 * in order to allow dynamic sleep state
+	 */
+	set_reg_field_value(
+				ramAccessCntrl,
+				0,
+				DMCU_RAM_ACCESS_CTRL,
+				IRAM_HOST_ACCESS_EN);
+	dm_write_reg(ctx, DMCU_REG(DMCU_RAM_ACCESS_CTRL), ramAccessCntrl);
+}
+
+void dce110_link_encoder_set_dmcu_psr_enable(struct link_encoder *enc,
+								bool enable)
+{
+	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
+	struct dc_context *ctx = enc110->base.ctx;
+
+	unsigned int dmcu_max_retry_on_wait_reg_ready = 801;
+	unsigned int dmcu_wait_reg_ready_interval = 100;
+
+	unsigned int regValue;
+	uint32_t masterCmd;
+	uint32_t masterComCntl;
+
+	unsigned int retryCount;
+	uint32_t psr_state = 0;
+
+	/* waitDMCUReadyForCmd */
+	do {
+		dm_delay_in_microseconds(ctx, dmcu_wait_reg_ready_interval);
+		regValue = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG));
+		dmcu_max_retry_on_wait_reg_ready--;
+	} while
+	/* expected value is 0, loop while not 0*/
+	((MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & regValue) &&
+		dmcu_max_retry_on_wait_reg_ready > 0);
+
+	/* setDMCUParam_Cmd */
+	masterCmd = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG));
+	if (enable)
+		set_reg_field_value(
+				masterCmd,
+				PSR_ENABLE,
+				MASTER_COMM_CMD_REG,
+				MASTER_COMM_CMD_REG_BYTE0);
+	else
+		set_reg_field_value(
+				masterCmd,
+				PSR_EXIT,
+				MASTER_COMM_CMD_REG,
+				MASTER_COMM_CMD_REG_BYTE0);
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG), masterCmd);
+
+	/* notifyDMCUMsg */
+	masterComCntl = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG));
+	set_reg_field_value(
+			masterComCntl,
+			1,
+			MASTER_COMM_CNTL_REG,
+			MASTER_COMM_INTERRUPT);
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG), masterComCntl);
+
+	for (retryCount = 0; retryCount <= 100; retryCount++) {
+		get_dmcu_psr_state(enc, &psr_state);
+		if (enable) {
+			if (psr_state != 0)
+				break;
+		} else {
+			if (psr_state == 0)
+				break;
+		}
+		dm_delay_in_microseconds(ctx, 10);
+	}
+}
+
+void dce110_link_encoder_setup_dmcu_psr(struct link_encoder *enc,
+			struct psr_dmcu_context *psr_context)
+{
+	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
+	struct dc_context *ctx = enc110->base.ctx;
+
+	unsigned int dmcu_max_retry_on_wait_reg_ready = 801;
+	unsigned int dmcu_wait_reg_ready_interval = 100;
+	unsigned int regValue;
+
+	uint32_t dphyFastTraining;
+	uint32_t dpDphyBsSrSwapCntl;
+	uint32_t interruptEnableMask;
+	uint32_t dpSecCntl1;
+	uint32_t smuInterruptControl;
+	uint32_t masterCmd;
+	uint32_t masterComCntl;
+	union dce110_dmcu_psr_config_data_reg1 masterCmdData1;
+	union dce110_dmcu_psr_config_data_reg2 masterCmdData2;
+	union dce110_dmcu_psr_config_data_reg3 masterCmdData3;
+
+	dphyFastTraining = dm_read_reg(ctx, LINK_REG(DP_DPHY_FAST_TRAINING));
+	if (psr_context->psrExitLinkTrainingRequired)
+		set_reg_field_value(
+					dphyFastTraining,
+					1,
+					DP_DPHY_FAST_TRAINING,
+					DPHY_RX_FAST_TRAINING_CAPABLE);
+	else {
+		set_reg_field_value(
+					dphyFastTraining,
+					0,
+					DP_DPHY_FAST_TRAINING,
+					DPHY_RX_FAST_TRAINING_CAPABLE);
+		/*In DCE 11, we are able to pre-program a Force SR register
+		 * to be able to trigger SR symbol after 5 idle patterns
+		 * transmitted. Upon PSR Exit, DMCU can trigger
+		 * DPHY_LOAD_BS_COUNT_START = 1. Upon writing 1 to
+		 * DPHY_LOAD_BS_COUNT_START and the internal counter
+		 * reaches DPHY_LOAD_BS_COUNT, the next BS symbol will be
+		 * replaced by SR symbol once.
+		 */
+		dpDphyBsSrSwapCntl =
+			dm_read_reg(ctx, LINK_REG(DP_DPHY_BS_SR_SWAP_CNTL));
+		set_reg_field_value(
+					dpDphyBsSrSwapCntl,
+					0x5,
+					DP_DPHY_BS_SR_SWAP_CNTL,
+					DPHY_LOAD_BS_COUNT);
+		dm_write_reg(ctx, LINK_REG(DP_DPHY_BS_SR_SWAP_CNTL),
+						dpDphyBsSrSwapCntl);
+	}
+	dm_write_reg(ctx, LINK_REG(DP_DPHY_FAST_TRAINING), dphyFastTraining);
+
+	/* Enable static screen interrupts for PSR supported display */
+	interruptEnableMask =
+		dm_read_reg(ctx, DMCU_REG(DMCU_INTERRUPT_TO_UC_EN_MASK));
+	/* Disable the interrupt coming from other displays. */
+	set_reg_field_value(
+				interruptEnableMask,
+				0,
+				DMCU_INTERRUPT_TO_UC_EN_MASK,
+				STATIC_SCREEN1_INT_TO_UC_EN);
+	set_reg_field_value(
+				interruptEnableMask,
+				0,
+				DMCU_INTERRUPT_TO_UC_EN_MASK,
+				STATIC_SCREEN2_INT_TO_UC_EN);
+	set_reg_field_value(
+				interruptEnableMask,
+				0,
+				DMCU_INTERRUPT_TO_UC_EN_MASK,
+				STATIC_SCREEN3_INT_TO_UC_EN);
+	set_reg_field_value(
+				interruptEnableMask,
+				0,
+				DMCU_INTERRUPT_TO_UC_EN_MASK,
+				STATIC_SCREEN4_INT_TO_UC_EN);
+
+	switch (psr_context->controllerId) {
+	/* Driver uses case 1 for unconfigured */
+	case 1:
+		psr_crtc_offset = mmCRTC0_CRTC_STATIC_SCREEN_CONTROL -
+				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
+		set_reg_field_value(
+					interruptEnableMask,
+					1,
+					DMCU_INTERRUPT_TO_UC_EN_MASK,
+					STATIC_SCREEN1_INT_TO_UC_EN);
+		break;
+	case 2:
+		psr_crtc_offset = mmCRTC1_CRTC_STATIC_SCREEN_CONTROL -
+				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
+		set_reg_field_value(
+					interruptEnableMask,
+					1,
+					DMCU_INTERRUPT_TO_UC_EN_MASK,
+					STATIC_SCREEN2_INT_TO_UC_EN);
+		break;
+	case 3:
+		psr_crtc_offset = mmCRTC2_CRTC_STATIC_SCREEN_CONTROL -
+				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
+		set_reg_field_value(
+					interruptEnableMask,
+					1,
+					DMCU_INTERRUPT_TO_UC_EN_MASK,
+					STATIC_SCREEN3_INT_TO_UC_EN);
+		break;
+	case 4:
+		psr_crtc_offset = mmCRTC3_CRTC_STATIC_SCREEN_CONTROL -
+				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
+		set_reg_field_value(
+					interruptEnableMask,
+					1,
+					DMCU_INTERRUPT_TO_UC_EN_MASK,
+					STATIC_SCREEN4_INT_TO_UC_EN);
+		break;
+	case 5:
+		psr_crtc_offset = mmCRTC4_CRTC_STATIC_SCREEN_CONTROL -
+				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
+		/* CZ/NL only has 4 CRTC!!
+		 * really valid.
+		 * There is no interrupt enable mask for these instances.
+		 */
+		break;
+	case 6:
+		psr_crtc_offset = mmCRTC5_CRTC_STATIC_SCREEN_CONTROL -
+				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
+		/* CZ/NL only has 4 CRTC!!
+		 * These are here because they are defined in HW regspec,
+		 * but not really valid. There is no interrupt enable mask
+		 * for these instances.
+		 */
+		break;
+	default:
+		psr_crtc_offset = mmCRTC0_CRTC_STATIC_SCREEN_CONTROL -
+				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
+		set_reg_field_value(
+					interruptEnableMask,
+					1,
+					DMCU_INTERRUPT_TO_UC_EN_MASK,
+					STATIC_SCREEN1_INT_TO_UC_EN);
+		break;
+	}
+	dm_write_reg(ctx, DMCU_REG(DMCU_INTERRUPT_TO_UC_EN_MASK),
+							interruptEnableMask);
+
+	dpSecCntl1 = dm_read_reg(ctx, LINK_REG(DP_SEC_CNTL1));
+	set_reg_field_value(
+				dpSecCntl1,
+				psr_context->sdpTransmitLineNumDeadline,
+				DP_SEC_CNTL1,
+				DP_SEC_GSP0_LINE_NUM);
+	set_reg_field_value(
+				dpSecCntl1,
+				1,
+				DP_SEC_CNTL1,
+				DP_SEC_GSP0_PRIORITY);
+	dm_write_reg(ctx, LINK_REG(DP_SEC_CNTL1), dpSecCntl1);
+
+	if (psr_context->psr_level.bits.SKIP_SMU_NOTIFICATION) {
+		smuInterruptControl =
+			dm_read_reg(ctx, DMCU_REG(SMU_INTERRUPT_CONTROL));
+		set_reg_field_value(
+					smuInterruptControl,
+					1,
+					SMU_INTERRUPT_CONTROL,
+					DC_SMU_INT_ENABLE);
+		dm_write_reg(ctx, DMCU_REG(SMU_INTERRUPT_CONTROL),
+						smuInterruptControl);
+	}
+
+	/* waitDMCUReadyForCmd */
+	do {
+		dm_delay_in_microseconds(ctx, dmcu_wait_reg_ready_interval);
+		regValue = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CNTL_REG));
+		dmcu_max_retry_on_wait_reg_ready--;
+	} while
+	/* expected value is 0, loop while not 0*/
+	((MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & regValue) &&
+		dmcu_max_retry_on_wait_reg_ready > 0);
+
+	/* setDMCUParam_PSRHostConfigData */
+	masterCmdData1.u32All = 0;
+	masterCmdData1.bits.timehyst_frames = psr_context->timehyst_frames;
+	masterCmdData1.bits.hyst_lines = psr_context->hyst_lines;
+	masterCmdData1.bits.rfb_update_auto_en =
+			psr_context->rfb_update_auto_en;
+	masterCmdData1.bits.dp_port_num = psr_context->transmitterId;
+	masterCmdData1.bits.dcp_sel = psr_context->controllerId;
+	masterCmdData1.bits.phy_type  = psr_context->phyType;
+	masterCmdData1.bits.frame_cap_ind =
+			psr_context->psrFrameCaptureIndicationReq;
+	masterCmdData1.bits.aux_chan = psr_context->channel;
+	masterCmdData1.bits.aux_repeat = psr_context->aux_repeats;
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_DATA_REG1),
+					masterCmdData1.u32All);
+
+	masterCmdData2.u32All = 0;
+	masterCmdData2.bits.dig_fe = psr_context->engineId;
+	masterCmdData2.bits.dig_be = psr_context->transmitterId;
+	masterCmdData2.bits.skip_wait_for_pll_lock =
+			psr_context->skipPsrWaitForPllLock;
+	masterCmdData2.bits.frame_delay = psr_context->frame_delay;
+	masterCmdData2.bits.smu_phy_id = psr_context->smuPhyId;
+	masterCmdData2.bits.num_of_controllers =
+			psr_context->numberOfControllers;
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_DATA_REG2),
+			masterCmdData2.u32All);
+
+	masterCmdData3.u32All = 0;
+	masterCmdData3.bits.psr_level = psr_context->psr_level.u32all;
+	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_DATA_REG3),
+			masterCmdData3.u32All);
+
+	/* setDMCUParam_Cmd */
+	masterCmd = dm_read_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG));
+	set_reg_field_value(
+			masterCmd,
+			PSR_SET,
+			MASTER_COMM_CMD_REG,
+			MASTER_COMM_CMD_REG_BYTE0);
 	dm_write_reg(ctx, DMCU_REG(MASTER_COMM_CMD_REG), masterCmd);
 
 	/* notifyDMCUMsg */

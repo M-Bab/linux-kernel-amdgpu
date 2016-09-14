@@ -1343,6 +1343,15 @@ static void set_drr(struct pipe_ctx **pipe_ctx,
 	}
 }
 
+static void set_static_screen_control(struct pipe_ctx **pipe_ctx,
+		int num_pipes, int value)
+{
+	unsigned int i;
+
+	for (i = 0; i < num_pipes; i++)
+		pipe_ctx[i]->tg->funcs->
+			set_static_screen_control(pipe_ctx[i]->tg, value);
+}
 /*TODO: const validate_context*/
 static enum dc_status apply_ctx_to_hw(
 		struct core_dc *dc,
@@ -2100,7 +2109,8 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.set_displaymarks = set_displaymarks,
 	.increase_watermarks_for_pipe = dce110_increase_watermarks_for_pipe,
 	.set_bandwidth = dce110_set_bandwidth,
-	.set_drr = set_drr
+	.set_drr = set_drr,
+	.set_static_screen_control = set_static_screen_control
 };
 
 bool dce110_hw_sequencer_construct(struct core_dc *dc)

@@ -142,6 +142,9 @@ struct hw_sequencer_funcs {
 
 	void (*set_drr)(struct pipe_ctx **pipe_ctx, int num_pipes,
 			int vmin, int vmax);
+
+	void (*set_static_screen_control)(struct pipe_ctx **pipe_ctx,
+			int num_pipes, int value);
 };
 
 void color_space_to_black_color(

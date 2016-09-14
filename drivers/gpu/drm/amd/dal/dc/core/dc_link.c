@@ -38,6 +38,8 @@
 #include "link_encoder.h"
 #include "hw_sequencer.h"
 #include "fixed31_32.h"
+#include "adapter/adapter_service.h"
+#include "include/asic_capability_interface.h"
 
 #define LINK_INFO(...) \
 	dal_logger_write(dc_ctx->logger, \
@@ -1414,6 +1416,138 @@ bool dc_link_set_abm_level(const struct dc_link *dc_link, uint32_t level)
 
 	link->link_enc->funcs->set_dmcu_abm_level(link->link_enc, level);
 	return true;
+}
+
+bool dc_link_set_psr_enable(const struct dc_link *dc_link, bool enable)
+{
+	struct core_link *link = DC_LINK_TO_CORE(dc_link);
+	struct dc_context *ctx = link->ctx;
+
+	if (dc_link != NULL && dc_link->psr_caps.psr_version > 0)
+		link->link_enc->funcs->set_dmcu_psr_enable(link->link_enc,
+								enable);
+	return true;
+}
+
+bool dc_link_setup_psr(const struct dc_link *dc_link,
+		const struct dc_stream *stream)
+{
+
+	struct core_link *link = DC_LINK_TO_CORE(dc_link);
+	struct dc_context *ctx = link->ctx;
+	struct core_dc *core_dc = DC_TO_CORE(ctx->dc);
+	struct core_stream *core_stream = DC_STREAM_TO_CORE(stream);
+
+	struct psr_dmcu_context psr_context = {0};
+
+	psr_context.controllerId = CONTROLLER_ID_UNDEFINED;
+	int i;
+
+	if (dc_link != NULL && dc_link->psr_caps.psr_version > 0) {
+		/* updateSinkPsrDpcdConfig*/
+		union dpcd_psr_configuration psr_configuration = {0};
+
+		psr_configuration.bits.ENABLE                    = 1;
+		psr_configuration.bits.CRC_VERIFICATION          = 1;
+		psr_configuration.bits.FRAME_CAPTURE_INDICATION  =
+			dc_link->psr_caps.psr_frame_capture_indication_req;
+
+		/* Check for PSR v2*/
+		if (dc_link->psr_caps.psr_version == 0x2) {
+			/* For PSR v2 selective update.
+			 * Indicates whether sink should start capturing
+			 * immediately following active scan line,
+			 * or starting with the 2nd active scan line.
+			 */
+			psr_configuration.bits.LINE_CAPTURE_INDICATION = 0;
+			/*For PSR v2, determines whether Sink should generate
+			 * IRQ_HPD when CRC mismatch is detected.
+			 */
+			psr_configuration.bits.IRQ_HPD_WITH_CRC_ERROR    = 1;
+		}
+		dal_ddc_service_write_dpcd_data(
+					link->ddc,
+					368,
+					&psr_configuration.raw,
+					sizeof(psr_configuration.raw));
+
+		psr_context.channel = link->ddc->ddc_pin->hw_info.ddc_channel;
+		if (psr_context.channel == 0)
+			psr_context.channel = 1;
+		psr_context.transmitterId = link->link_enc->transmitter;
+		psr_context.engineId = link->link_enc->preferred_engine;
+
+		for (i = 0; i < MAX_PIPES; i++) {
+			if (core_dc->current_context->res_ctx.pipe_ctx[i].stream
+					== core_stream) {
+				/* dmcu -1 for all controller id values,
+				 * therefore +1 here
+				 */
+				psr_context.controllerId =
+					core_dc->current_context->res_ctx.
+					pipe_ctx[i].tg->inst + 1;
+				break;
+			}
+		}
+
+		/* Hardcoded for now.  Can be Pcie or Uniphy (or Unknown)*/
+		psr_context.phyType = PHY_TYPE_UNIPHY;
+		/*PhyId is associated with the transmitter id*/
+		psr_context.smuPhyId = link->link_enc->transmitter;
+
+		psr_context.crtcTimingVerticalTotal = stream->timing.v_total;
+		psr_context.vsyncRateHz = div64_u64(div64_u64((stream->
+						timing.pix_clk_khz * 1000),
+						stream->timing.v_total),
+						stream->timing.h_total);
+
+		psr_context.psrSupportedDisplayConfig =
+			(dc_link->psr_caps.psr_version > 0) ? true : false;
+		psr_context.psrExitLinkTrainingRequired =
+			dc_link->psr_caps.psr_exit_link_training_required;
+		psr_context.sdpTransmitLineNumDeadline =
+			dc_link->psr_caps.psr_sdp_transmit_line_num_deadline;
+		psr_context.psrFrameCaptureIndicationReq =
+			dc_link->psr_caps.psr_frame_capture_indication_req;
+
+		psr_context.skipPsrWaitForPllLock =
+				link->link_enc->adapter_service->
+				asic_cap->caps.SKIP_PSR_WAIT_FOR_PLL_LOCK_BIT;
+
+		psr_context.numberOfControllers =
+				link->link_enc->adapter_service->asic_cap->
+				data[ASIC_DATA_CONTROLLERS_NUM];
+
+		psr_context.rfb_update_auto_en = true;
+
+		/* 2 frames before enter PSR. */
+		psr_context.timehyst_frames = 2;
+		/* half a frame
+		 * (units in 100 lines, i.e. a value of 1 represents 100 lines)
+		 */
+		psr_context.hyst_lines = stream->timing.v_total / 2 / 100;
+		psr_context.aux_repeats = 10;
+
+		psr_context.psr_level.u32all = 0;
+
+		/* SMU will perform additional powerdown sequence.
+		 * For unsupported ASICs, set psr_level flag to skip PSR
+		 *  static screen notification to SMU.
+		 *  (Always set for DAL2, did not check ASIC)
+		 */
+		psr_context.psr_level.bits.SKIP_SMU_NOTIFICATION = 1;
+
+		/* Controls additional delay after remote frame capture before
+		 * continuing power down, default = 0
+		 */
+		psr_context.frame_delay = 0;
+
+		link->link_enc->funcs->setup_dmcu_psr
+			(link->link_enc, &psr_context);
+		return true;
+	} else
+		return false;
+
 }
 
 const struct dc_link_status *dc_link_get_status(const struct dc_link *dc_link)

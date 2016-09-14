@@ -66,6 +66,18 @@
 	#define mmBIOS_SCRATCH_2 0x05CB
 #endif
 
+#ifndef mmDP_DPHY_BS_SR_SWAP_CNTL
+	#define mmDP_DPHY_BS_SR_SWAP_CNTL 0x4ADC
+#endif
+
+#ifndef mmDP0_DP_DPHY_FAST_TRAINING
+	#define mmDP0_DP_DPHY_FAST_TRAINING 0x193A
+#endif
+
+#ifndef DPHY_RX_FAST_TRAINING_CAPABLE
+	#define DPHY_RX_FAST_TRAINING_CAPABLE 0x1
+#endif
+
 static const struct dce110_timing_generator_offsets dce110_tg_offsets[] = {
 	{
 		.crtc = (mmCRTC0_CRTC_CONTROL - mmCRTC_CONTROL),
@@ -168,9 +180,17 @@ static const struct dce110_link_enc_bl_registers link_enc_bl_regs = {
 static const struct dce110_link_enc_dmcu_registers link_enc_dmcu_regs = {
 		.BL1_PWM_USER_LEVEL = mmBL1_PWM_USER_LEVEL,
 		.MASTER_COMM_DATA_REG1 = mmMASTER_COMM_DATA_REG1,
+		.MASTER_COMM_DATA_REG2 = mmMASTER_COMM_DATA_REG2,
+		.MASTER_COMM_DATA_REG3 = mmMASTER_COMM_DATA_REG3,
 		.MASTER_COMM_CMD_REG = mmMASTER_COMM_CMD_REG,
 		.MASTER_COMM_CNTL_REG = mmMASTER_COMM_CNTL_REG,
-		.BIOS_SCRATCH_2 = mmBIOS_SCRATCH_2
+		.BIOS_SCRATCH_2 = mmBIOS_SCRATCH_2,
+		.DMCU_RAM_ACCESS_CTRL = mmDMCU_RAM_ACCESS_CTRL,
+		.DCI_MEM_PWR_STATUS = mmDCI_MEM_PWR_STATUS,
+		.DMCU_IRAM_RD_CTRL = mmDMCU_IRAM_RD_CTRL,
+		.DMCU_IRAM_RD_DATA = mmDMCU_IRAM_RD_DATA,
+		.DMCU_INTERRUPT_TO_UC_EN_MASK = mmDMCU_INTERRUPT_TO_UC_EN_MASK,
+		.SMU_INTERRUPT_CONTROL = mmSMU_INTERRUPT_CONTROL
 };
 
 #define aux_regs(id)\
@@ -207,7 +227,10 @@ static const struct dce110_link_enc_aux_registers link_enc_aux_regs[] = {
 	.DP_MSE_SAT2 = mmDP ## id ## _DP_MSE_SAT2,\
 	.DP_MSE_SAT_UPDATE = mmDP ## id ## _DP_MSE_SAT_UPDATE,\
 	.DP_SEC_CNTL = mmDP ## id ## _DP_SEC_CNTL,\
-	.DP_VID_STREAM_CNTL = mmDP ## id ## _DP_VID_STREAM_CNTL\
+	.DP_VID_STREAM_CNTL = mmDP ## id ## _DP_VID_STREAM_CNTL,\
+	.DP_DPHY_FAST_TRAINING = mmDP ## id ## _DP_DPHY_FAST_TRAINING,\
+	.DP_DPHY_BS_SR_SWAP_CNTL = mmDP ## id ## _DP_DPHY_BS_SR_SWAP_CNTL,\
+	.DP_SEC_CNTL1  = mmDP ## id ## _DP_SEC_CNTL1\
 }
 
 static const struct dce110_link_enc_registers link_enc_regs[] = {

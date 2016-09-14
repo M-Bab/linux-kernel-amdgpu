@@ -226,6 +226,10 @@ void dce110_timing_generator_set_drr(
 	struct timing_generator *tg,
 	const struct drr_params *params);
 
+void dce110_timing_generator_set_static_screen_control(
+	struct timing_generator *tg,
+	uint32_t value);
+
 uint32_t dce110_timing_generator_get_crtc_scanoutpos(
 	struct timing_generator *tg,
 	uint32_t *vbl,

@@ -111,6 +111,9 @@ struct link_encoder_funcs {
 	void (*set_dmcu_backlight_level)(struct link_encoder *enc,
 		uint32_t level, uint32_t frame_ramp, uint32_t controller_id);
 	void (*set_dmcu_abm_level)(struct link_encoder *enc, uint32_t level);
+	void (*set_dmcu_psr_enable)(struct link_encoder *enc, bool enable);
+	void (*setup_dmcu_psr)(struct link_encoder *enc,
+			struct psr_dmcu_context *psr_context);
 	void (*backlight_control) (struct link_encoder *enc,
 		bool enable);
 	void (*power_control) (struct link_encoder *enc,
@@ -119,6 +122,122 @@ struct link_encoder_funcs {
 		enum engine_id engine,
 		bool connect);
 	void (*destroy)(struct link_encoder **enc);
+};
+
+
+enum physical_phy_id {
+	PHYLD_0,
+	PHYLD_1,
+	PHYLD_2,
+	PHYLD_3,
+	PHYLD_4,
+	PHYLD_5,
+	PHYLD_6,
+	PHYLD_7,
+	PHYLD_8,
+	PHYLD_9,
+	PHYLD_COUNT,
+	PHYLD_UNKNOWN = (-1L)
+};
+
+enum phy_type {
+	PHY_TYPE_UNKNOWN  = 1,
+	PHY_TYPE_PCIE_PHY = 2,
+	PHY_TYPE_UNIPHY = 3,
+};
+
+union dmcu_psr_level {
+	struct {
+		unsigned int SKIP_CRC:1;
+		unsigned int SKIP_DP_VID_STREAM_DISABLE:1;
+		unsigned int SKIP_PHY_POWER_DOWN:1;
+		unsigned int SKIP_AUX_ACK_CHECK:1;
+		unsigned int SKIP_CRTC_DISABLE:1;
+		unsigned int SKIP_AUX_RFB_CAPTURE_CHECK:1;
+		unsigned int SKIP_SMU_NOTIFICATION:1;
+		unsigned int SKIP_AUTO_STATE_ADVANCE:1;
+		unsigned int DISABLE_PSR_ENTRY_ABORT:1;
+		unsigned int RESERVED:23;
+	} bits;
+	unsigned int u32all;
+};
+
+union dpcd_psr_configuration {
+	struct {
+		unsigned char ENABLE                    : 1;
+		unsigned char TRANSMITTER_ACTIVE_IN_PSR : 1;
+		unsigned char CRC_VERIFICATION          : 1;
+		unsigned char FRAME_CAPTURE_INDICATION  : 1;
+		/* For eDP 1.4, PSR v2*/
+		unsigned char LINE_CAPTURE_INDICATION   : 1;
+		/* For eDP 1.4, PSR v2*/
+		unsigned char IRQ_HPD_WITH_CRC_ERROR    : 1;
+		unsigned char RESERVED                  : 2;
+	} bits;
+	unsigned char raw;
+};
+
+struct psr_dmcu_context {
+	/* ddc line */
+	enum channel_id channel;
+	/* Transmitter id */
+	enum transmitter transmitterId;
+	/* Engine Id is used for Dig Be source select */
+	enum engine_id engineId;
+	/* Controller Id used for Dig Fe source select */
+	enum controller_id controllerId;
+	/* Pcie or Uniphy */
+	enum phy_type phyType;
+	/* Physical PHY Id used by SMU interpretation */
+	enum physical_phy_id smuPhyId;
+	/* Vertical total pixels from crtc timing.
+	 * This is used for static screen detection.
+	 * ie. If we want to detect half a frame,
+	 * we use this to determine the hyst lines.
+	 */
+	unsigned int crtcTimingVerticalTotal;
+	/* PSR supported from panel capabilities and
+	 * current display configuration
+	 */
+	bool psrSupportedDisplayConfig;
+	/* Whether fast link training is supported by the panel */
+	bool psrExitLinkTrainingRequired;
+	/* If RFB setup time is greater than the total VBLANK time,
+	 * it is not possible for the sink to capture the video frame
+	 * in the same frame the SDP is sent. In this case,
+	 * the frame capture indication bit should be set and an extra
+	 * static frame should be transmitted to the sink.
+	 */
+	bool psrFrameCaptureIndicationReq;
+	/* Set the last possible line SDP may be transmitted without violating
+	 * the RFB setup time or entering the active video frame.
+	 */
+	unsigned int sdpTransmitLineNumDeadline;
+	/* The VSync rate in Hz used to calculate the
+	 * step size for smooth brightness feature
+	 */
+	unsigned int vsyncRateHz;
+	unsigned int skipPsrWaitForPllLock;
+	unsigned int numberOfControllers;
+	/* Unused, for future use. To indicate that first changed frame from
+	 * state3 shouldn't result in psr_inactive, but rather to perform
+	 * an automatic single frame rfb_update.
+	 */
+	bool rfb_update_auto_en;
+	/* Number of frame before entering static screen */
+	unsigned int timehyst_frames;
+	/* Partial frames before entering static screen */
+	unsigned int hyst_lines;
+	/* # of repeated AUX transaction attempts to make before
+	 * indicating failure to the driver
+	 */
+	unsigned int aux_repeats;
+	/* Controls hw blocks to power down during PSR active state */
+	union dmcu_psr_level psr_level;
+	/* Controls additional delay after remote frame capture before
+	 * continuing powerd own
+	 */
+	unsigned int frame_delay;
 };
 
 #endif /* LINK_ENCODER_H_ */

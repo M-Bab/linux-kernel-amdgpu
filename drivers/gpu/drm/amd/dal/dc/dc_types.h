@@ -537,4 +537,19 @@ struct csc_transform {
 	bool enable_adjustment;
 };
 
+struct psr_caps {
+	/* These parameters are from PSR capabilities reported by Sink DPCD */
+	unsigned char psr_version;
+	unsigned int psr_rfb_setup_time;
+	bool psr_exit_link_training_required;
+
+	/* These parameters are calculated in Driver,
+	 * based on display timing and Sink capabilities.
+	 * If VBLANK region is too small and Sink takes a long time
+	 * to set up RFB, it may take an extra frame to enter PSR state.
+	 */
+	bool psr_frame_capture_indication_req;
+	unsigned int psr_sdp_transmit_line_num_deadline;
+};
+
 #endif /* DC_TYPES_H_ */

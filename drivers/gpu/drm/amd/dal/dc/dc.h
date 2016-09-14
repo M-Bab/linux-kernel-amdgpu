@@ -70,8 +70,10 @@ struct dc_stream_funcs {
 	bool (*set_gamut_remap)(struct dc *dc,
 			const struct dc_stream **stream, int num_streams);
 	bool (*set_backlight)(struct dc *dc, unsigned int backlight_level,
-			unsigned int frame_ramp, const struct dc_stream *stream);
+		unsigned int frame_ramp, const struct dc_stream *stream);
 	bool (*set_abm_level)(struct dc *dc, unsigned int abm_level);
+	bool (*set_psr_enable)(struct dc *dc, bool enable);
+	bool (*setup_psr)(struct dc *dc, const struct dc_stream *stream);
 };
 
 /* Structure to hold configuration flags set by dm at dc creation. */
@@ -456,6 +458,8 @@ struct dc_link {
 
 	uint8_t ddc_hw_inst;
 	uint8_t link_enc_hw_inst;
+
+	struct psr_caps psr_caps;
 };
 
 struct dpcd_caps {
@@ -501,6 +505,11 @@ bool dc_link_set_backlight_level(const struct dc_link *dc_link, uint32_t level,
 		uint32_t frame_ramp, const struct dc_stream *stream);
 
 bool dc_link_set_abm_level(const struct dc_link *dc_link, uint32_t level);
+
+bool dc_link_set_psr_enable(const struct dc_link *dc_link, bool enable);
+
+bool dc_link_setup_psr(const struct dc_link *dc_link,
+		const struct dc_stream *stream);
 
 /* Request DC to detect if there is a Panel connected.
  * boot - If this call is during initial boot.

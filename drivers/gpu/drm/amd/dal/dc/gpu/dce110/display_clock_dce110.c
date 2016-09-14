@@ -40,6 +40,8 @@
 #define FROM_DISPLAY_CLOCK(base) \
 	container_of(base, struct display_clock_dce110, disp_clk_base)
 
+#define PSR_SET_WAITLOOP 0x31
+
 static struct state_dependent_clocks max_clks_by_state[] = {
 /*ClocksStateInvalid - should not be used*/
 { .display_clk_khz = 0, .pixel_clk_khz = 0 },
@@ -84,6 +86,14 @@ enum divider_range_step_size {
 	DIVIDER_RANGE_01_STEP_SIZE = 25, /* 0.25*/
 	DIVIDER_RANGE_02_STEP_SIZE = 50, /* 0.50*/
 	DIVIDER_RANGE_03_STEP_SIZE = 100 /* 1.00 */
+};
+
+union dce110_dmcu_psr_config_data_wait_loop_reg1 {
+	struct {
+		unsigned int waitLoop:16; /* [15:0] */
+		unsigned int reserved:16; /* [31:16] */
+	} bits;
+	unsigned int u32All;
 };
 
 static struct divider_range divider_ranges[DIVIDER_RANGE_MAX];
@@ -775,6 +785,49 @@ static enum clocks_state get_required_clocks_state(
 	return low_req_clk;
 }
 
+static void psr_wait_loop(struct dc_context *ctx, unsigned int display_clk_khz)
+{
+	unsigned int dmcu_max_retry_on_wait_reg_ready = 801;
+	unsigned int dmcu_wait_reg_ready_interval = 100;
+	unsigned int regValue;
+	uint32_t masterCmd;
+	uint32_t masterComCntl;
+	union dce110_dmcu_psr_config_data_wait_loop_reg1 masterCmdData1;
+
+	/* waitDMCUReadyForCmd */
+	do {
+		dm_delay_in_microseconds(ctx, dmcu_wait_reg_ready_interval);
+		regValue = dm_read_reg(ctx, mmMASTER_COMM_CNTL_REG);
+		dmcu_max_retry_on_wait_reg_ready--;
+	} while
+	/* expected value is 0, loop while not 0*/
+	((MASTER_COMM_CNTL_REG__MASTER_COMM_INTERRUPT_MASK & regValue) &&
+		dmcu_max_retry_on_wait_reg_ready > 0);
+
+	masterCmdData1.u32All = 0;
+	masterCmdData1.bits.waitLoop = display_clk_khz / 1000 / 7;
+	dm_write_reg(ctx, mmMASTER_COMM_DATA_REG1, masterCmdData1.u32All);
+
+	/* setDMCUParam_Cmd */
+	masterCmd = dm_read_reg(ctx, mmMASTER_COMM_CMD_REG);
+	set_reg_field_value(
+		masterCmd,
+		PSR_SET_WAITLOOP,
+		MASTER_COMM_CMD_REG,
+		MASTER_COMM_CMD_REG_BYTE0);
+
+	dm_write_reg(ctx, mmMASTER_COMM_CMD_REG, masterCmd);
+
+	/* notifyDMCUMsg */
+	masterComCntl = dm_read_reg(ctx, mmMASTER_COMM_CNTL_REG);
+	set_reg_field_value(
+		masterComCntl,
+		1,
+		MASTER_COMM_CNTL_REG,
+		MASTER_COMM_INTERRUPT);
+	dm_write_reg(ctx, mmMASTER_COMM_CNTL_REG, masterComCntl);
+}
+
 static void set_clock(
 	struct display_clock *base,
 	uint32_t requested_clk_khz)
@@ -807,6 +860,8 @@ static void set_clock(
 	 * from HWReset, so when resume we will call pplib voltage regulator.*/
 	if (requested_clk_khz == 0)
 		base->cur_min_clks_state = CLOCKS_STATE_NOMINAL;
+
+	psr_wait_loop(base->ctx, requested_clk_khz);
 }
 
 static void set_clock_state(

@@ -335,6 +335,7 @@ bool dm_query_extended_brightness_caps
 			struct dm_acpi_atif_backlight_caps *pCaps);
 
 bool dm_dmcu_set_pipe(struct dc_context *ctx, unsigned int controller_id);
+
 /*
  *
  * print-out services

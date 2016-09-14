@@ -316,6 +316,43 @@ static bool set_abm_level(struct dc *dc, unsigned int abm_level)
 	return true;
 }
 
+static bool set_psr_enable(struct dc *dc, bool enable)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	int i;
+
+	for (i = 0; i < core_dc->link_count; i++)
+		dc_link_set_psr_enable(&core_dc->links[i]->public,
+				enable);
+
+	return true;
+}
+
+
+static bool setup_psr(struct dc *dc, const struct dc_stream *stream)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	struct core_stream *core_stream = DC_STREAM_TO_CORE(stream);
+	struct pipe_ctx *pipes;
+	int i;
+
+	for (i = 0; i < core_dc->link_count; i++)
+		dc_link_setup_psr(&core_dc->links[i]->public,
+				stream);
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream
+			== core_stream) {
+
+			pipes = &core_dc->current_context->res_ctx.pipe_ctx[i];
+			core_dc->hwss.set_static_screen_control(&pipes, 1,
+					0x182);
+		}
+	}
+
+	return true;
+}
+
 static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 {
 	core_dc->public.stream_funcs.stream_update_scaling = stream_update_scaling;
@@ -332,6 +369,12 @@ static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 
 	core_dc->public.stream_funcs.set_abm_level =
 			set_abm_level;
+
+	core_dc->public.stream_funcs.set_psr_enable =
+			set_psr_enable;
+
+	core_dc->public.stream_funcs.setup_psr =
+			setup_psr;
 }
 
 static bool construct(struct core_dc *dc,

@@ -42,9 +42,20 @@ struct dce110_link_enc_bl_registers {
 struct dce110_link_enc_dmcu_registers {
 	uint32_t BL1_PWM_USER_LEVEL;
 	uint32_t MASTER_COMM_DATA_REG1;
+	uint32_t MASTER_COMM_DATA_REG2;
+	uint32_t MASTER_COMM_DATA_REG3;
 	uint32_t MASTER_COMM_CMD_REG;
 	uint32_t MASTER_COMM_CNTL_REG;
 	uint32_t BIOS_SCRATCH_2;
+	uint32_t DMCU_RAM_ACCESS_CTRL;
+	uint32_t DCI_MEM_PWR_STATUS;
+	uint32_t DMCU_IRAM_RD_CTRL;
+	uint32_t DMCU_IRAM_RD_DATA;
+	uint32_t DP_DPHY_FAST_TRAINING;
+	uint32_t DP_DPHY_BS_SR_SWAP_CNTL;
+	uint32_t DMCU_INTERRUPT_TO_UC_EN_MASK;
+	uint32_t DP_SEC_CNTL1;
+	uint32_t SMU_INTERRUPT_CONTROL;
 };
 
 struct dce110_link_enc_aux_registers {
@@ -71,6 +82,9 @@ struct dce110_link_enc_registers {
 	uint32_t DP_MSE_SAT_UPDATE;
 	uint32_t DP_SEC_CNTL;
 	uint32_t DP_VID_STREAM_CNTL;
+	uint32_t DP_DPHY_FAST_TRAINING;
+	uint32_t DP_DPHY_BS_SR_SWAP_CNTL;
+	uint32_t DP_SEC_CNTL1;
 };
 
 struct dce110_link_encoder {
@@ -79,6 +93,63 @@ struct dce110_link_encoder {
 	const struct dce110_link_enc_aux_registers *aux_regs;
 	const struct dce110_link_enc_bl_registers *bl_regs;
 	const struct dce110_link_enc_dmcu_registers *dmcu_regs;
+};
+
+/*******************************************************************
+*   MASTER_COMM_DATA_REG1   Bit position    Data
+*                           7:0	            hyst_frames[7:0]
+*                           14:8	        hyst_lines[6:0]
+*                           15	            RFB_UPDATE_AUTO_EN
+*                           18:16	        phy_num[2:0]
+*                           21:19	        dcp_sel[2:0]
+*                           22	            phy_type
+*                           23	            frame_cap_ind
+*                           26:24	        aux_chan[2:0]
+*                           30:27	        aux_repeat[3:0]
+*                           31:31	        reserved[31:31]
+*******************************************************************/
+union dce110_dmcu_psr_config_data_reg1 {
+	struct {
+		unsigned int timehyst_frames:8;    /*[7:0]*/
+		unsigned int hyst_lines:7;         /*[14:8]*/
+		unsigned int rfb_update_auto_en:1; /*[15:15]*/
+		unsigned int dp_port_num:3;        /*[18:16]*/
+		unsigned int dcp_sel:3;            /*[21:19]*/
+		unsigned int phy_type:1;           /*[22:22]*/
+		unsigned int frame_cap_ind:1;      /*[23:23]*/
+		unsigned int aux_chan:3;           /*[26:24]*/
+		unsigned int aux_repeat:4;         /*[30:27]*/
+		unsigned int reserved:1;           /*[31:31]*/
+	} bits;
+	unsigned int u32All;
+};
+
+/*******************************************************************
+*   MASTER_COMM_DATA_REG2
+*******************************************************************/
+union dce110_dmcu_psr_config_data_reg2 {
+	struct {
+		unsigned int dig_fe:3;                  /*[2:0]*/
+		unsigned int dig_be:3;                  /*[5:3]*/
+		unsigned int skip_wait_for_pll_lock:1;  /*[6:6]*/
+		unsigned int reserved:9;                /*[15:7]*/
+		unsigned int frame_delay:8;             /*[23:16]*/
+		unsigned int smu_phy_id:4;              /*[27:24]*/
+		unsigned int num_of_controllers:4;      /*[31:28]*/
+	} bits;
+	unsigned int u32All;
+};
+
+/*******************************************************************
+*   MASTER_COMM_DATA_REG3
+*******************************************************************/
+union dce110_dmcu_psr_config_data_reg3 {
+	struct {
+		unsigned int psr_level:16;      /*[15:0]*/
+		unsigned int link_rate:4;       /*[19:16]*/
+		unsigned int reserved:12;       /*[31:20]*/
+	} bits;
+	unsigned int u32All;
 };
 
 bool dce110_link_encoder_construct(
@@ -174,6 +245,12 @@ void dce110_link_encoder_set_dmcu_backlight_level(
 void dce110_link_encoder_set_dmcu_abm_level(
 	struct link_encoder *enc,
 	uint32_t level);
+
+void dce110_link_encoder_set_dmcu_psr_enable(
+		struct link_encoder *enc, bool enable);
+
+void dce110_link_encoder_setup_dmcu_psr(struct link_encoder *enc,
+			struct psr_dmcu_context *psr_context);
 
 void dce110_link_encoder_edp_backlight_control(
 	struct link_encoder *enc,

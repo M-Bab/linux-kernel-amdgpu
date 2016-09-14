@@ -1644,6 +1644,49 @@ static void set_spd_info_packet(struct core_stream *stream,
 	info_packet->valid = true;
 }
 
+static void set_vsc_info_packet(struct core_stream *stream,
+		struct hw_info_packet *info_packet)
+{
+	unsigned int vscPacketRevision = 0;
+	unsigned int i;
+	bool psrPanelSupport = false;
+
+	if (stream->sink->link->public.psr_caps.psr_version != 0) {
+		psrPanelSupport = true;
+		vscPacketRevision = 2;
+	}
+
+	/* VSC packet not needed based on the features
+	 * supported by this DP display
+	 */
+	if (vscPacketRevision == 0)
+		return;
+
+	if (vscPacketRevision == 0x2) {
+		/* Secondary-data Packet ID = 0*/
+		info_packet->hb0 = 0x00;
+		/* 07h - Packet Type Value indicating Video
+		 * Stream Configuration packet
+		 */
+		info_packet->hb1 = 0x07;
+		/* 02h = VSC SDP supporting 3D stereo and PSR
+		 * (applies to eDP v1.3 or higher).
+		 */
+		info_packet->hb2 = 0x02;
+		/* 08h = VSC packet supporting 3D stereo + PSR
+		 * (HB2 = 02h).
+		 */
+		info_packet->hb3 = 0x08;
+
+		for (i = 0; i < 28; i++)
+			info_packet->sb[i] = 0;
+
+		info_packet->valid = true;
+	}
+
+	/*TODO: stereo 3D support and extend pixel encoding colorimetry*/
+}
+
 void resource_validate_ctx_destruct(struct validate_context *context)
 {
 	int i, j;
@@ -1726,6 +1769,7 @@ void resource_build_info_frame(struct pipe_ctx *pipe_ctx)
 	}
 
 	else if (dc_is_dp_signal(signal))
+		set_vsc_info_packet(pipe_ctx->stream, &info_frame.vsc_packet);
 		set_spd_info_packet(pipe_ctx->stream, &info_frame.spd_packet);
 
 	translate_info_frame(&info_frame,

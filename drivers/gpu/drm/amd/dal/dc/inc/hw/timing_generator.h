@@ -150,6 +150,8 @@ struct timing_generator_funcs {
 	void (*enable_advanced_request)(struct timing_generator *tg,
 					bool enable, const struct dc_crtc_timing *timing);
 	void (*set_drr)(struct timing_generator *tg, const struct drr_params *params);
+	void (*set_static_screen_control)(struct timing_generator *tg,
+							uint32_t value);
 };
 
 #endif
