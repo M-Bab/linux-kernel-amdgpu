@@ -32,6 +32,7 @@
 	container_of(stream_encoder, struct dce110_stream_encoder, base)
 
 struct dce110_stream_enc_registers {
+	uint32_t AFMT_CNTL;
 	uint32_t AFMT_AVI_INFO0;
 	uint32_t AFMT_AVI_INFO1;
 	uint32_t AFMT_AVI_INFO2;
@@ -41,6 +42,9 @@ struct dce110_stream_enc_registers {
 	uint32_t AFMT_GENERIC_HDR;
 	uint32_t AFMT_INFOFRAME_CONTROL0;
 	uint32_t AFMT_VBI_PACKET_CONTROL;
+	uint32_t AFMT_AUDIO_PACKET_CONTROL;
+	uint32_t AFMT_AUDIO_PACKET_CONTROL2;
+	uint32_t AFMT_60958_0;
 	uint32_t DIG_FE_CNTL;
 	uint32_t DP_MSE_RATE_CNTL;
 	uint32_t DP_MSE_RATE_UPDATE;
@@ -51,6 +55,8 @@ struct dce110_stream_enc_registers {
 	uint32_t DP_VID_N;
 	uint32_t DP_VID_STREAM_CNTL;
 	uint32_t DP_VID_TIMING;
+	uint32_t DP_SEC_AUD_N;
+	uint32_t DP_SEC_TIMESTAMP;
 	uint32_t HDMI_CONTROL;
 	uint32_t HDMI_GC;
 	uint32_t HDMI_GENERIC_PACKET_CONTROL0;
@@ -59,9 +65,6 @@ struct dce110_stream_enc_registers {
 	uint32_t HDMI_INFOFRAME_CONTROL1;
 	uint32_t HDMI_VBI_PACKET_CONTROL;
 	uint32_t TMDS_CNTL;
-
-	/* audio stream registers */
-	uint32_t AFMT_AUDIO_PACKET_CONTROL;
 };
 
 struct dce110_stream_encoder {
@@ -77,7 +80,13 @@ bool dce110_stream_encoder_construct(
 	const struct dce110_stream_enc_registers *regs);
 
 
-void dce110_audio_mute_control(
+void dce110_se_audio_mute_control(
 	struct stream_encoder *enc, bool mute);
+
+void dce110_se_dp_audio_enable(
+		struct stream_encoder *enc);
+
+void dce110_se_dp_audio_disable(
+		struct stream_encoder *enc);
 
 #endif /* __DC_STREAM_ENCODER_DCE110_H__ */

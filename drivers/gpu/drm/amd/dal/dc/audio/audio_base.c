@@ -61,16 +61,6 @@ static enum audio_result setup(
 	return AUDIO_RESULT_OK;
 }
 
-static enum audio_result enable_output(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	/*DCE specific, must be implemented in derived*/
-	BREAK_TO_DEBUGGER();
-	return AUDIO_RESULT_OK;
-}
-
 static enum audio_result disable_output(
 	struct audio *audio,
 	enum engine_id engine_id,
@@ -105,7 +95,6 @@ static void setup_audio_wall_dto(
 static const struct audio_funcs audio_funcs = {
 	.destroy = destroy,
 	.setup = setup,
-	.enable_output = enable_output,
 	.disable_output = disable_output,
 	.initialize = initialize,
 	.setup_audio_wall_dto = setup_audio_wall_dto,
@@ -216,15 +205,6 @@ enum audio_result dal_audio_setup(
 	struct audio_info *info)
 {
 	return audio->funcs->setup(audio, output, info);
-}
-
-/* enable audio */
-enum audio_result dal_audio_enable_output(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	return audio->funcs->enable_output(audio, engine_id, signal);
 }
 
 /* disable audio */

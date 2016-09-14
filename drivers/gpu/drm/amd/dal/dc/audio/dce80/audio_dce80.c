@@ -107,45 +107,6 @@ static enum audio_result setup(
 }
 
 /**
-* enable_output
-*
-* @brief
-*  enable Audio HW block, to be called by dal_audio_enable_output
-*
-* @param
-*  engine_id         - HDMI engine id
-*/
-static enum audio_result enable_output(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal)
-{
-	/* enable audio output */
-	switch (signal) {
-	case SIGNAL_TYPE_HDMI_TYPE_A:
-		break;
-	case SIGNAL_TYPE_DISPLAY_PORT:
-	case SIGNAL_TYPE_DISPLAY_PORT_MST:
-	case SIGNAL_TYPE_EDP: {
-			/* setup DP audio engine */
-			audio->hw_ctx->funcs->setup_dp_audio(
-				audio->hw_ctx, engine_id);
-			/* enabl DP audio packets will be done at unblank */
-			audio->hw_ctx->funcs->enable_dp_audio(
-				audio->hw_ctx, engine_id);
-		}
-		break;
-	case SIGNAL_TYPE_WIRELESS:
-		/* route audio to VCE block */
-		audio->hw_ctx->funcs->setup_vce_audio(audio->hw_ctx);
-		break;
-	default:
-		return AUDIO_RESULT_ERROR;
-	}
-	return AUDIO_RESULT_OK;
-}
-
-/**
 * disable_output
 *
 * @brief
@@ -242,7 +203,6 @@ static void setup_audio_wall_dto(
 static const struct audio_funcs funcs = {
 	.destroy = destroy,
 	.setup = setup,
-	.enable_output = enable_output,
 	.disable_output = disable_output,
 	.initialize = initialize,
 	.setup_audio_wall_dto = setup_audio_wall_dto,

@@ -62,11 +62,6 @@ struct audio_funcs {
 		struct audio_output *output,
 		struct audio_info *info);
 
-	enum audio_result (*enable_output)(
-		struct audio *audio,
-		enum engine_id engine_id,
-		enum signal_type signal);
-
 	enum audio_result (*disable_output)(
 		struct audio *audio,
 		enum engine_id engine_id,

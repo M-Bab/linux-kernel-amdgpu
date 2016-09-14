@@ -73,12 +73,6 @@ enum audio_result dal_audio_setup(
 	struct audio_output *output,
 	struct audio_info *info);
 
-/* enable audio */
-enum audio_result dal_audio_enable_output(
-	struct audio *audio,
-	enum engine_id engine_id,
-	enum signal_type signal);
-
 /* disable audio */
 enum audio_result dal_audio_disable_output(
 	struct audio *audio,

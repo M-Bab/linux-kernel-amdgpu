@@ -281,6 +281,9 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 	.AFMT_GENERIC_HDR = mmDIG ## id ## _AFMT_GENERIC_HDR,\
 	.AFMT_INFOFRAME_CONTROL0 = mmDIG ## id ## _AFMT_INFOFRAME_CONTROL0,\
 	.AFMT_VBI_PACKET_CONTROL = mmDIG ## id ## _AFMT_VBI_PACKET_CONTROL,\
+	.AFMT_AUDIO_PACKET_CONTROL = mmDIG ## id ## _AFMT_AUDIO_PACKET_CONTROL,\
+	.AFMT_AUDIO_PACKET_CONTROL2 = mmDIG ## id ## _AFMT_AUDIO_PACKET_CONTROL2,\
+	.AFMT_60958_0 = mmDIG ## id ## _AFMT_60958_0,\
 	.DIG_FE_CNTL = mmDIG ## id ## _DIG_FE_CNTL,\
 	.DP_MSE_RATE_CNTL = mmDP ## id ## _DP_MSE_RATE_CNTL,\
 	.DP_MSE_RATE_UPDATE = mmDP ## id ## _DP_MSE_RATE_UPDATE,\
@@ -291,6 +294,8 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 	.DP_VID_N = mmDP ## id ## _DP_VID_N,\
 	.DP_VID_STREAM_CNTL = mmDP ## id ## _DP_VID_STREAM_CNTL,\
 	.DP_VID_TIMING = mmDP ## id ## _DP_VID_TIMING,\
+	.DP_SEC_AUD_N = mmDP ## id ## _DP_SEC_AUD_N,\
+	.DP_SEC_TIMESTAMP = mmDP ## id ## _DP_SEC_TIMESTAMP,\
 	.HDMI_CONTROL = mmDIG ## id ## _HDMI_CONTROL,\
 	.HDMI_GC = mmDIG ## id ## _HDMI_GC,\
 	.HDMI_GENERIC_PACKET_CONTROL0 = mmDIG ## id ## _HDMI_GENERIC_PACKET_CONTROL0,\
@@ -299,7 +304,8 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 	.HDMI_INFOFRAME_CONTROL1 = mmDIG ## id ## _HDMI_INFOFRAME_CONTROL1,\
 	.HDMI_VBI_PACKET_CONTROL = mmDIG ## id ## _HDMI_VBI_PACKET_CONTROL,\
 	.TMDS_CNTL = mmDIG ## id ## _TMDS_CNTL,\
-	.AFMT_AUDIO_PACKET_CONTROL = mmDIG ## id ## _AFMT_AUDIO_PACKET_CONTROL,\
+	\
+	.AFMT_CNTL = 0,\
 }
 
 static const struct dce110_stream_enc_registers stream_enc_regs[] = {

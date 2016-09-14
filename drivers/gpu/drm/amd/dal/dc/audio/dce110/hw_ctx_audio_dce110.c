@@ -728,138 +728,6 @@ static void setup_hdmi_audio(
 	}
 }
 
- /* setup DP audio */
-static void setup_dp_audio(
-	const struct hw_ctx_audio *hw_ctx,
-	enum engine_id engine_id)
-{
-	/* --- DP Audio packet configurations --- */
-	uint32_t addr = 0;
-	uint32_t value = 0;
-
-	/* ATP Configuration */
-	{
-		addr = mmDP_SEC_AUD_N + engine_offset[engine_id];
-
-		set_reg_field_value(value,
-			DP_SEC_AUD_N__DP_SEC_AUD_N__DEFAULT,
-			DP_SEC_AUD_N,
-			DP_SEC_AUD_N);
-		dm_write_reg(hw_ctx->ctx, addr, value);
-	}
-
-	/* Async/auto-calc timestamp mode */
-	{
-		addr = mmDP_SEC_TIMESTAMP +
-			engine_offset[engine_id];
-
-		value = 0;
-
-		set_reg_field_value(value,
-			DP_SEC_TIMESTAMP__DP_SEC_TIMESTAMP_MODE__AUTO_CALC,
-			DP_SEC_TIMESTAMP,
-			DP_SEC_TIMESTAMP_MODE);
-
-		dm_write_reg(hw_ctx->ctx, addr, value);
-	}
-
-	/* --- The following are the registers
-	 *  copied from the SetupHDMI --- */
-
-	/* AFMT_AUDIO_PACKET_CONTROL */
-	{
-		addr = mmAFMT_AUDIO_PACKET_CONTROL +
-			engine_offset[engine_id];
-
-		value = 0;
-
-		value = dm_read_reg(hw_ctx->ctx, addr);
-		set_reg_field_value(value,
-			1,
-			AFMT_AUDIO_PACKET_CONTROL,
-			AFMT_60958_CS_UPDATE);
-
-		dm_write_reg(hw_ctx->ctx, addr, value);
-	}
-
-	/* AFMT_AUDIO_PACKET_CONTROL2 */
-	{
-		addr =
-			mmAFMT_AUDIO_PACKET_CONTROL2 + engine_offset[engine_id];
-
-		value = 0;
-
-		value = dm_read_reg(hw_ctx->ctx, addr);
-		set_reg_field_value(value,
-			0,
-			AFMT_AUDIO_PACKET_CONTROL2,
-			AFMT_AUDIO_LAYOUT_OVRD);
-
-		set_reg_field_value(value,
-			0,
-			AFMT_AUDIO_PACKET_CONTROL2,
-			AFMT_60958_OSF_OVRD);
-
-		dm_write_reg(hw_ctx->ctx, addr, value);
-	}
-
-	/* AFMT_INFOFRAME_CONTROL0 */
-	{
-		addr =
-			mmAFMT_INFOFRAME_CONTROL0 + engine_offset[engine_id];
-
-		value = 0;
-
-		value = dm_read_reg(hw_ctx->ctx, addr);
-
-		set_reg_field_value(value,
-			1,
-			AFMT_INFOFRAME_CONTROL0,
-			AFMT_AUDIO_INFO_UPDATE);
-
-		dm_write_reg(hw_ctx->ctx, addr, value);
-	}
-
-	/* AFMT_60958_0__AFMT_60958_CS_CLOCK_ACCURACY_MASK */
-	{
-		addr = mmAFMT_60958_0 + engine_offset[engine_id];
-
-		value = 0;
-
-		value = dm_read_reg(hw_ctx->ctx, addr);
-		set_reg_field_value(value,
-			0,
-			AFMT_60958_0,
-			AFMT_60958_CS_CLOCK_ACCURACY);
-
-		dm_write_reg(hw_ctx->ctx, addr, value);
-	}
-}
-
- /* setup VCE audio */
-static void setup_vce_audio(
-	const struct hw_ctx_audio *hw_ctx)
-{
-	struct dc_context *ctx = hw_ctx->ctx;
-
-	NOT_IMPLEMENTED();
-
-	/*TODO:
-	const uint32_t addr = mmDOUT_DCE_VCE_CONTROL;
-	uint32_t value = 0;
-
-	value = dal_read_reg(hw_ctx->ctx,
-			addr);
-
-	set_reg_field_value(value,
-		FROM_BASE(hw_ctx)->azalia_stream_id - 1,
-		DOUT_DCE_VCE_CONTROL,
-		DC_VCE_AUDIO_STREAM_SELECT);
-
-	dal_write_reg(hw_ctx->ctx,
-			addr, value);*/
-}
-
 static void enable_afmt_clock(
 	const struct hw_ctx_audio *hw_ctx,
 	enum engine_id engine_id,
@@ -935,42 +803,6 @@ static void disable_azalia_audio(
 		hw_ctx,
 		ixAZALIA_F0_CODEC_PIN_CONTROL_HOT_PLUG_CONTROL,
 		value);
-}
-
-/* enable DP audio */
-static void enable_dp_audio(
-	const struct hw_ctx_audio *hw_ctx,
-	enum engine_id engine_id)
-{
-	const uint32_t addr = mmDP_SEC_CNTL + engine_offset[engine_id];
-
-	uint32_t value;
-
-	/* Enable Audio packets */
-	value = dm_read_reg(hw_ctx->ctx, addr);
-	set_reg_field_value(value, 1,
-		DP_SEC_CNTL,
-		DP_SEC_ASP_ENABLE);
-
-	dm_write_reg(hw_ctx->ctx, addr, value);
-
-	/* Program the ATP and AIP next */
-	set_reg_field_value(value, 1,
-		DP_SEC_CNTL,
-		DP_SEC_ATP_ENABLE);
-
-	set_reg_field_value(value, 1,
-		DP_SEC_CNTL,
-		DP_SEC_AIP_ENABLE);
-
-	dm_write_reg(hw_ctx->ctx, addr, value);
-
-	/* Program STREAM_ENABLE after all the other enables. */
-	set_reg_field_value(value, 1,
-		DP_SEC_CNTL,
-		DP_SEC_STREAM_ENABLE);
-
-	dm_write_reg(hw_ctx->ctx, addr, value);
 }
 
 /* disable DP audio */
@@ -1681,14 +1513,10 @@ static const struct hw_ctx_audio_funcs funcs = {
 		setup_audio_wall_dto,
 	.setup_hdmi_audio =
 		setup_hdmi_audio,
-	.setup_dp_audio = setup_dp_audio,
-	.setup_vce_audio = setup_vce_audio,
 	.enable_azalia_audio =
 		enable_azalia_audio,
 	.disable_azalia_audio =
 		disable_azalia_audio,
-	.enable_dp_audio =
-		enable_dp_audio,
 	.disable_dp_audio =
 		disable_dp_audio,
 	.setup_azalia =

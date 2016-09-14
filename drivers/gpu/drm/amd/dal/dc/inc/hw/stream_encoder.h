@@ -84,8 +84,9 @@ struct stream_encoder_funcs {
 		const struct encoder_unblank_param *param);
 
 	void (*audio_mute_control)(
-		struct stream_encoder *enc,
-		bool mute);
+		struct stream_encoder *enc, bool mute);
+	void (*dp_audio_enable) (struct stream_encoder *enc);
+	void (*dp_audio_disable) (struct stream_encoder *enc);
 };
 
 #endif /* STREAM_ENCODER_H_ */

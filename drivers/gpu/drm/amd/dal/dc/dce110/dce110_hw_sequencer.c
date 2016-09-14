@@ -554,10 +554,8 @@ static void enable_stream(struct pipe_ctx *pipe_ctx)
 
 	/* enable audio only within mode set */
 	if (pipe_ctx->audio != NULL) {
-		dal_audio_enable_output(
-			pipe_ctx->audio,
-			pipe_ctx->stream_enc->id,
-			pipe_ctx->stream->signal);
+		if (dc_is_dp_signal(pipe_ctx->stream->signal))
+			pipe_ctx->stream_enc->funcs->dp_audio_enable(pipe_ctx->stream_enc);
 	}
 
 	/* For MST, there are multiply stream go to only one link.
@@ -1307,6 +1305,10 @@ static void reset_single_pipe_hw_ctx(
 		dal_audio_disable_output(pipe_ctx->audio,
 				pipe_ctx->stream_enc->id,
 				pipe_ctx->stream->signal);
+
+		/* todo: core_link_disable_stream rely
+		 * audio pointer to mute audio. we never mute correctly
+		 */
 		pipe_ctx->audio = NULL;
 	}
 

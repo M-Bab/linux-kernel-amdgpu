@@ -62,15 +62,6 @@ struct hw_ctx_audio_funcs {
 		enum engine_id engine_id,
 		const struct audio_crtc_info *crtc_info);
 
-	/* setup DP audio */
-	void (*setup_dp_audio)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id);
-
-	/* setup VCE audio */
-	void (*setup_vce_audio)(
-		const struct hw_ctx_audio *hw_ctx);
-
 	/* enable Azalia audio */
 	void (*enable_azalia_audio)(
 		const struct hw_ctx_audio *hw_ctx,
@@ -78,11 +69,6 @@ struct hw_ctx_audio_funcs {
 
 	/* disable Azalia audio */
 	void (*disable_azalia_audio)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum engine_id engine_id);
-
-	/* enable DP audio */
-	void (*enable_dp_audio)(
 		const struct hw_ctx_audio *hw_ctx,
 		enum engine_id engine_id);
 

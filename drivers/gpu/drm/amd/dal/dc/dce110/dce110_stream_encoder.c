@@ -1071,19 +1071,162 @@ static void dce110_stream_encoder_dp_unblank(
 	dm_write_reg(ctx, addr, value);
 }
 
+#define LINK_REG_READ(reg_name) \
+		dm_read_reg(enc110->base.ctx, LINK_REG(reg_name))
+
+#define LINK_REG_WRITE(reg_name, value) \
+		dm_write_reg(enc110->base.ctx, LINK_REG(reg_name), value)
+
+#define LINK_REG_SET_N(reg_name, n, ...)	\
+		generic_reg_update_ex(enc110->base.ctx, \
+				LINK_REG(reg_name), \
+				0, \
+				n, __VA_ARGS__)
+
+#define LINK_REG_SET(reg_name, field, val)	\
+		LINK_REG_SET_N(reg_name, 1, FD(reg_name##__##field), val)
+
 #define LINK_REG_UPDATE_N(reg_name, n, ...)	\
-		generic_reg_update_ex(enc110->base.ctx, LINK_REG(reg_name), dm_read_reg(enc110->base.ctx, LINK_REG(reg_name)), n, __VA_ARGS__)
+		generic_reg_update_ex(enc110->base.ctx, \
+				LINK_REG(reg_name), \
+				LINK_REG_READ(reg_name), \
+				n, __VA_ARGS__)
 
 #define LINK_REG_UPDATE(reg_name, field, val)	\
 		LINK_REG_UPDATE_N(reg_name, 1, FD(reg_name##__##field), val)
 
-void dce110_audio_mute_control(
+#define LINK_REG_WAIT(reg_name, field, val, delay, max_try)	\
+		generic_reg_wait(enc110->base.ctx, \
+				LINK_REG(reg_name), FD(reg_name##__##field), val,\
+				delay, max_try)
+
+#define DP_SEC_AUD_N__DP_SEC_AUD_N__DEFAULT 0x8000
+#define DP_SEC_TIMESTAMP__DP_SEC_TIMESTAMP_MODE__AUTO_CALC 1
+
+static void dce110_se_setup_dp_audio(
+	struct stream_encoder *enc)
+{
+	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
+
+	/* --- DP Audio packet configurations --- */
+	uint32_t addr = 0;
+	uint32_t value = 0;
+
+	/* ATP Configuration */
+	LINK_REG_SET(DP_SEC_AUD_N, DP_SEC_AUD_N, DP_SEC_AUD_N__DP_SEC_AUD_N__DEFAULT);
+
+	/* Async/auto-calc timestamp mode */
+	LINK_REG_SET(DP_SEC_TIMESTAMP, DP_SEC_TIMESTAMP_MODE,
+			DP_SEC_TIMESTAMP__DP_SEC_TIMESTAMP_MODE__AUTO_CALC);
+
+	/* --- The following are the registers
+	 *  copied from the SetupHDMI --- */
+
+	/* AFMT_AUDIO_PACKET_CONTROL */
+	LINK_REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL, AFMT_60958_CS_UPDATE, 1);
+
+	/* AFMT_AUDIO_PACKET_CONTROL2 */
+	/* Program the ATP and AIP next */
+	LINK_REG_UPDATE_N(AFMT_AUDIO_PACKET_CONTROL2, 2,
+			FD(AFMT_AUDIO_PACKET_CONTROL2__AFMT_AUDIO_LAYOUT_OVRD), 0,
+			FD(AFMT_AUDIO_PACKET_CONTROL2__AFMT_60958_OSF_OVRD), 0);
+
+	/* AFMT_INFOFRAME_CONTROL0 */
+	LINK_REG_UPDATE(AFMT_INFOFRAME_CONTROL0, AFMT_AUDIO_INFO_UPDATE, 1);
+
+	/* AFMT_60958_0__AFMT_60958_CS_CLOCK_ACCURACY_MASK */
+	LINK_REG_UPDATE(AFMT_60958_0, AFMT_60958_CS_CLOCK_ACCURACY, 0);
+}
+
+static void dce110_se_enable_audio_clock(
+	struct stream_encoder *enc,
+	bool enable)
+{
+	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
+
+	if (LINK_REG(AFMT_CNTL) == 0)
+		return;   /* DCE8/10 does not have this register */
+
+	LINK_REG_UPDATE(AFMT_CNTL, AFMT_AUDIO_CLOCK_EN, !!enable);
+
+	/* wait for AFMT clock to turn on,
+	 * expectation: this should complete in 1-2 reads
+	 */
+	LINK_REG_WAIT(AFMT_CNTL, AFMT_AUDIO_CLOCK_ON, !!enable,
+			1, 10);
+}
+
+static void dce110_se_enable_dp_audio(
+	struct stream_encoder *enc)
+{
+	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
+
+	/* Enable Audio packets */
+	LINK_REG_UPDATE(DP_SEC_CNTL, DP_SEC_ASP_ENABLE, 1);
+
+	/* Program the ATP and AIP next */
+	LINK_REG_UPDATE_N(DP_SEC_CNTL, 2,
+			FD(DP_SEC_CNTL__DP_SEC_ATP_ENABLE), 1,
+			FD(DP_SEC_CNTL__DP_SEC_AIP_ENABLE), 1);
+
+	/* Program STREAM_ENABLE after all the other enables. */
+	LINK_REG_UPDATE(DP_SEC_CNTL, DP_SEC_STREAM_ENABLE, 1);
+}
+
+static void dce110_se_disable_dp_audio(
+	struct stream_encoder *enc)
+{
+	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
+
+	uint32_t value = LINK_REG_READ(DP_SEC_CNTL);
+
+	/* Disable Audio packets */
+	set_reg_field_value(value, 0,
+		DP_SEC_CNTL, DP_SEC_ASP_ENABLE);
+
+	set_reg_field_value(value, 0,
+		DP_SEC_CNTL, DP_SEC_ATP_ENABLE);
+
+	set_reg_field_value(value, 0,
+		DP_SEC_CNTL, DP_SEC_AIP_ENABLE);
+
+	set_reg_field_value(value, 0,
+		DP_SEC_CNTL, DP_SEC_ACM_ENABLE);
+
+	set_reg_field_value(value, 0,
+		DP_SEC_CNTL, DP_SEC_STREAM_ENABLE);
+
+	/* This register shared with encoder info frame. Therefore we need to
+	keep master enabled if at least on of the fields is not 0 */
+	if (value != 0)
+		set_reg_field_value(value, 1,
+			DP_SEC_CNTL, DP_SEC_STREAM_ENABLE);
+
+	LINK_REG_WRITE(DP_SEC_CNTL, value);
+}
+
+void dce110_se_audio_mute_control(
 	struct stream_encoder *enc,
 	bool mute)
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
 
 	LINK_REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL, AFMT_AUDIO_SAMPLE_SEND, !mute);
+}
+
+void dce110_se_dp_audio_enable(
+	struct stream_encoder *enc)
+{
+	dce110_se_enable_audio_clock(enc, true);
+	dce110_se_setup_dp_audio(enc);
+	dce110_se_enable_dp_audio(enc);
+}
+
+void dce110_se_dp_audio_disable(
+	struct stream_encoder *enc)
+{
+	dce110_se_disable_dp_audio(enc);
+	dce110_se_enable_audio_clock(enc, false);
 }
 
 
@@ -1109,7 +1252,9 @@ static const struct stream_encoder_funcs dce110_str_enc_funcs = {
 	.dp_unblank =
 		dce110_stream_encoder_dp_unblank,
 
-	.audio_mute_control = dce110_audio_mute_control,
+	.audio_mute_control = dce110_se_audio_mute_control,
+	.dp_audio_enable = dce110_se_dp_audio_enable,
+	.dp_audio_disable = dce110_se_dp_audio_disable,
 };
 
 bool dce110_stream_encoder_construct(
