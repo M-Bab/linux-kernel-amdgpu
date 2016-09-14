@@ -743,12 +743,13 @@ static int amdgpu_cgs_get_firmware_info(struct cgs_device *cgs_device,
 		info->version = (uint16_t)le32_to_cpu(header->header.ucode_version);
 		info->feature_version = (uint16_t)le32_to_cpu(header->ucode_feature_version);
 	} else {
+		uint32_t fw_ver;
 		char fw_name[30] = {0};
 		int err = 0;
 		uint32_t ucode_size;
 		uint32_t ucode_start_address;
 		const uint8_t *src;
-		const struct smc_firmware_header_v1_0 *hdr;
+		struct smc_firmware_header_v1_0 *hdr;
 
 		if (!adev->pm.fw) {
 			switch (adev->asic_type) {
@@ -793,12 +794,15 @@ static int amdgpu_cgs_get_firmware_info(struct cgs_device *cgs_device,
 			}
 		}
 
-		hdr = (const struct smc_firmware_header_v1_0 *)	adev->pm.fw->data;
+		hdr = (struct smc_firmware_header_v1_0 *)adev->pm.fw->data;
+		/* firmware version is located at 69 dw from begining */
+		fw_ver = *((uint32_t *)adev->pm.fw->data + 69);
+		hdr->header.ucode_version = fw_ver;
 		amdgpu_ucode_print_smc_hdr(&hdr->header);
 		adev->pm.fw_version = le32_to_cpu(hdr->header.ucode_version);
 		ucode_size = le32_to_cpu(hdr->header.ucode_size_bytes);
 		ucode_start_address = le32_to_cpu(hdr->ucode_start_addr);
-		src = (const uint8_t *)(adev->pm.fw->data +
+		src = (uint8_t *)(adev->pm.fw->data +
 		       le32_to_cpu(hdr->header.ucode_array_offset_bytes));
 
 		info->version = adev->pm.fw_version;
