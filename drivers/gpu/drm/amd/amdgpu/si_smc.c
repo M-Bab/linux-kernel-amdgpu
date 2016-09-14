@@ -143,9 +143,9 @@ void amdgpu_si_smc_clock(struct amdgpu_device *adev, bool enable)
 	u32 tmp = RREG32_SMC(SMC_SYSCON_CLOCK_CNTL_0);
 
 	if (enable)
-		tmp |= CK_DISABLE;
-	else
 		tmp &= ~CK_DISABLE;
+	else
+		tmp |= CK_DISABLE;
 
 	WREG32_SMC(SMC_SYSCON_CLOCK_CNTL_0, tmp);
 }
