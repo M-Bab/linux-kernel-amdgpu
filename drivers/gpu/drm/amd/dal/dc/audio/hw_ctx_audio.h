@@ -46,12 +46,6 @@ struct hw_ctx_audio_funcs {
 
 	/***** from dal2 hwcontextaudio.hpp *****/
 
-	void (*setup_audio_wall_dto)(
-		const struct hw_ctx_audio *hw_ctx,
-		enum signal_type signal,
-		const struct audio_crtc_info *crtc_info,
-		const struct audio_pll_info *pll_info);
-
 	/* MM register access  read_register  write_register */
 
 	/* initialize HW state */
@@ -66,20 +60,6 @@ struct hw_ctx_audio_funcs {
 	/* speakers_to_channels */
 	/* is_audio_format_supported */
 	/* get_audio_clock_info */
-
-	/* search pixel clock value for Azalia HDMI Audio */
-	bool (*get_azalia_clock_info_hdmi)(
-		const struct hw_ctx_audio *hw_ctx,
-		uint32_t crtc_pixel_clock_in_khz,
-		uint32_t actual_pixel_clock_in_khz,
-		struct azalia_clock_info *azalia_clock_info);
-
-	/* search pixel clock value for Azalia DP Audio */
-	bool (*get_azalia_clock_info_dp)(
-		const struct hw_ctx_audio *hw_ctx,
-		uint32_t requested_pixel_clock_in_khz,
-		const struct audio_pll_info *pll_info,
-		struct azalia_clock_info *azalia_clock_info);
 
 	/* @@@@   private:  @@@@  */
 

@@ -79,7 +79,7 @@ struct audio_funcs {
 		struct audio *audio);
 
 	/* Update audio wall clock source */
-	void (*setup_audio_wall_dto)(
+	void (*wall_dto_setup)(
 		struct audio *audio,
 		enum signal_type signal,
 		const struct audio_crtc_info *crtc_info,

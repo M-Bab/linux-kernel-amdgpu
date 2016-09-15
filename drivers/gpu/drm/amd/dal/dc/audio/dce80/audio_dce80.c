@@ -92,31 +92,10 @@ static enum audio_result initialize(
 	return AUDIO_RESULT_OK;
 }
 
-/**
-* SetupAudioDTO
-*
-* @brief
-*  Update audio source clock from hardware context.
-*
-* @param
-*  determines if we have a HDMI link active
-*  known pixel rate for HDMI
-*  known DCPLL frequency
-*/
-static void setup_audio_wall_dto(
-	struct audio *audio,
-	enum signal_type signal,
-	const struct audio_crtc_info *crtc_info,
-	const struct audio_pll_info *pll_info)
-{
-	audio->hw_ctx->funcs->setup_audio_wall_dto(
-		audio->hw_ctx, signal, crtc_info, pll_info);
-}
-
 static const struct audio_funcs funcs = {
 	.destroy = destroy,
 	.initialize = initialize,
-	.setup_audio_wall_dto = setup_audio_wall_dto,
+	.wall_dto_setup = dce110_aud_wall_dto_setup,
 	.az_enable = dce110_aud_az_enable,
 	.az_disable = dce110_aud_az_disable,
 	.az_configure = dce110_aud_az_configure,

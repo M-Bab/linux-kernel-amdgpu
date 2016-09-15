@@ -1477,7 +1477,7 @@ static enum dc_status apply_ctx_to_hw(
 					&pipe_ctx->stream->public.audio_info);
 
 			if (!programmed_audio_dto) {
-				dal_audio_setup_audio_wall_dto(
+				pipe_ctx->audio->funcs->wall_dto_setup(
 					pipe_ctx->audio,
 					pipe_ctx->stream->signal,
 					&audio_output.crtc_info,

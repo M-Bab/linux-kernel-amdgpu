@@ -61,21 +61,9 @@ static enum audio_result initialize(
 	return AUDIO_RESULT_OK;
 }
 
-/* update audio wall clock source */
-static void setup_audio_wall_dto(
-	struct audio *audio,
-	enum signal_type signal,
-	const struct audio_crtc_info *crtc_info,
-	const struct audio_pll_info *pll_info)
-{
-	/*DCE specific, must be implemented in derived*/
-	BREAK_TO_DEBUGGER();
-}
-
 static const struct audio_funcs audio_funcs = {
 	.destroy = destroy,
 	.initialize = initialize,
-	.setup_audio_wall_dto = setup_audio_wall_dto,
 };
 
 /***** SCOPE : declare in audio.h. use within dal-audio. *****/
@@ -132,15 +120,5 @@ enum audio_result dal_audio_power_up(
 	struct audio *audio)
 {
 	return audio->funcs->initialize(audio);
-}
-
-/* update audio wall clock source */
-void dal_audio_setup_audio_wall_dto(
-	struct audio *audio,
-	enum signal_type signal,
-	const struct audio_crtc_info *crtc_info,
-	const struct audio_pll_info *pll_info)
-{
-	audio->funcs->setup_audio_wall_dto(audio, signal, crtc_info, pll_info);
 }
 

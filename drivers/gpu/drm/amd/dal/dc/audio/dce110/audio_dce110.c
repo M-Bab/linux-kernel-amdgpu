@@ -88,6 +88,15 @@ static void destroy(struct audio **ptr)
 #define REG_SET(reg_name, field, val)	\
 		REG_SET_N(reg_name, 1, FD(reg_name##__##field), val)
 
+#define REG_UPDATE_N(reg_name, n, ...)	\
+		generic_reg_update_ex(CTX, \
+				REG(reg_name), \
+				REG_READ(reg_name), \
+				n, __VA_ARGS__)
+
+#define REG_UPDATE(reg_name, field, val)	\
+		REG_UPDATE_N(reg_name, 1, FD(reg_name##__##field), val)
+
 #define AZ_REG_READ(reg_name) \
 		read_indirect_azalia_reg(audio, IX_REG(reg_name))
 
@@ -784,27 +793,148 @@ static enum audio_result initialize(struct audio *audio)
 	return AUDIO_RESULT_OK;
 }
 
-/**
-* setup_audio_wall_dto
-*
-* @brief
-*  Update audio source clock from hardware context.
-*
+/*
+* todo: wall clk related functionality probably belong to clock_src.
 */
-static void setup_audio_wall_dto(
+
+/* search pixel clock value for Azalia HDMI Audio */
+static bool get_azalia_clock_info_hdmi(
+	uint32_t crtc_pixel_clock_in_khz,
+	uint32_t actual_pixel_clock_in_khz,
+	struct azalia_clock_info *azalia_clock_info)
+{
+	if (azalia_clock_info == NULL)
+		return false;
+
+	/* audio_dto_phase= 24 * 10,000;
+	 *   24MHz in [100Hz] units */
+	azalia_clock_info->audio_dto_phase =
+			24 * 10000;
+
+	/* audio_dto_module = PCLKFrequency * 10,000;
+	 *  [khz] -> [100Hz] */
+	azalia_clock_info->audio_dto_module =
+			actual_pixel_clock_in_khz * 10;
+
+	return true;
+}
+
+static bool get_azalia_clock_info_dp(
+	uint32_t requested_pixel_clock_in_khz,
+	const struct audio_pll_info *pll_info,
+	struct azalia_clock_info *azalia_clock_info)
+{
+	if (pll_info == NULL || azalia_clock_info == NULL)
+		return false;
+
+	/* Reported dpDtoSourceClockInkhz value for
+	 * DCE8 already adjusted for SS, do not need any
+	 * adjustment here anymore
+	 */
+
+	/*audio_dto_phase = 24 * 10,000;
+	 * 24MHz in [100Hz] units */
+	azalia_clock_info->audio_dto_phase = 24 * 10000;
+
+	/*audio_dto_module = dpDtoSourceClockInkhz * 10,000;
+	 *  [khz] ->[100Hz] */
+	azalia_clock_info->audio_dto_module =
+		pll_info->dp_dto_source_clock_in_khz * 10;
+
+	return true;
+}
+
+void dce110_aud_wall_dto_setup(
 	struct audio *audio,
 	enum signal_type signal,
 	const struct audio_crtc_info *crtc_info,
 	const struct audio_pll_info *pll_info)
 {
-	audio->hw_ctx->funcs->setup_audio_wall_dto(
-		audio->hw_ctx, signal, crtc_info, pll_info);
+	struct audio_dce110 *aud110 = DCE110_AUD(audio);
+
+	struct azalia_clock_info clock_info = { 0 };
+
+	if (dc_is_hdmi_signal(signal)) {
+		uint32_t src_sel;
+
+		/*DTO0 Programming goal:
+		-generate 24MHz, 128*Fs from 24MHz
+		-use DTO0 when an active HDMI port is connected
+		(optionally a DP is connected) */
+
+		/* calculate DTO settings */
+		get_azalia_clock_info_hdmi(
+			crtc_info->requested_pixel_clock,
+			crtc_info->calculated_pixel_clock,
+			&clock_info);
+
+		/* On TN/SI, Program DTO source select and DTO select before
+		programming DTO modulo and DTO phase. These bits must be
+		programmed first, otherwise there will be no HDMI audio at boot
+		up. This is a HW sequence change (different from old ASICs).
+		Caution when changing this programming sequence.
+
+		HDMI enabled, using DTO0
+		program master CRTC for DTO0 */
+		src_sel = pll_info->dto_source - DTO_SOURCE_ID0;
+		REG_UPDATE_N(DCCG_AUDIO_DTO_SOURCE, 2,
+			FD(DCCG_AUDIO_DTO_SOURCE__DCCG_AUDIO_DTO0_SOURCE_SEL), src_sel,
+			FD(DCCG_AUDIO_DTO_SOURCE__DCCG_AUDIO_DTO_SEL), 0);
+
+		/* module */
+		REG_UPDATE(DCCG_AUDIO_DTO0_MODULE,
+			DCCG_AUDIO_DTO0_MODULE, clock_info.audio_dto_module);
+
+		/* phase */
+		REG_UPDATE(DCCG_AUDIO_DTO0_PHASE,
+			DCCG_AUDIO_DTO0_PHASE, clock_info.audio_dto_phase);
+	} else {
+		/*DTO1 Programming goal:
+		-generate 24MHz, 512*Fs, 128*Fs from 24MHz
+		-default is to used DTO1, and switch to DTO0 when an audio
+		master HDMI port is connected
+		-use as default for DP
+
+		calculate DTO settings */
+		get_azalia_clock_info_dp(
+			crtc_info->requested_pixel_clock,
+			pll_info,
+			&clock_info);
+
+		/* Program DTO select before programming DTO modulo and DTO
+		phase. default to use DTO1 */
+
+		REG_UPDATE(DCCG_AUDIO_DTO_SOURCE,
+				DCCG_AUDIO_DTO_SEL, 1);
+
+		REG_UPDATE_N(DCCG_AUDIO_DTO_SOURCE, 1,
+			FD(DCCG_AUDIO_DTO_SOURCE__DCCG_AUDIO_DTO_SEL), 1);
+			/* FD(DCCG_AUDIO_DTO2_USE_512FBR_DTO), 1)
+			 * Select 512fs for DP TODO: web register definition
+			 * does not match register header file
+			 * DCE11 version it's commented out while DCE8 it's set to 1
+			*/
+
+		/* module */
+		REG_UPDATE(DCCG_AUDIO_DTO1_MODULE,
+				DCCG_AUDIO_DTO1_MODULE, clock_info.audio_dto_module);
+
+		/* phase */
+		REG_UPDATE(DCCG_AUDIO_DTO1_PHASE,
+				DCCG_AUDIO_DTO1_PHASE, clock_info.audio_dto_phase);
+
+		/* DAL2 code separate DCCG_AUDIO_DTO_SEL and
+		DCCG_AUDIO_DTO2_USE_512FBR_DTO programming into two different
+		location. merge together should not hurt */
+		/*value.bits.DCCG_AUDIO_DTO2_USE_512FBR_DTO = 1;
+		dal_write_reg(mmDCCG_AUDIO_DTO_SOURCE, value);*/
+	}
 }
 
 static const struct audio_funcs funcs = {
 	.destroy = destroy,
 	.initialize = initialize,
-	.setup_audio_wall_dto = setup_audio_wall_dto,
+	.wall_dto_setup = dce110_aud_wall_dto_setup,
 	.az_enable = dce110_aud_az_enable,
 	.az_disable = dce110_aud_az_disable,
 	.az_configure = dce110_aud_az_configure,

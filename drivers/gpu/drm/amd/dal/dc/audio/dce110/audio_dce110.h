@@ -32,16 +32,31 @@
 #define AUD_REG(reg_name, block_prefix, id)\
 	.reg_name = block_prefix ## id ## _ ## reg_name\
 
+#define MM_REG(reg_name)\
+	.reg_name = mm ## reg_name\
+
 #define AUD_COMMON_REG_LIST(id)\
 	SE_REG(AZALIA_F0_CODEC_ENDPOINT_INDEX, mmAZF0ENDPOINT, id),\
 	SE_REG(AZALIA_F0_CODEC_ENDPOINT_DATA, mmAZF0ENDPOINT, id),\
-	.AZALIA_F0_CODEC_FUNCTION_PARAMETER_STREAM_FORMATS = mmAZALIA_F0_CODEC_FUNCTION_PARAMETER_STREAM_FORMATS,
+	MM_REG(AZALIA_F0_CODEC_FUNCTION_PARAMETER_STREAM_FORMATS),\
+	MM_REG(DCCG_AUDIO_DTO_SOURCE),\
+	MM_REG(DCCG_AUDIO_DTO0_MODULE),\
+	MM_REG(DCCG_AUDIO_DTO0_PHASE),\
+	MM_REG(DCCG_AUDIO_DTO1_MODULE),\
+	MM_REG(DCCG_AUDIO_DTO1_PHASE),\
+
 
 struct dce110_audio_registers {
 	uint32_t AZALIA_F0_CODEC_ENDPOINT_INDEX;
 	uint32_t AZALIA_F0_CODEC_ENDPOINT_DATA;
 
 	uint32_t AZALIA_F0_CODEC_FUNCTION_PARAMETER_STREAM_FORMATS;
+
+	uint32_t DCCG_AUDIO_DTO_SOURCE;
+	uint32_t DCCG_AUDIO_DTO0_MODULE;
+	uint32_t DCCG_AUDIO_DTO0_PHASE;
+	uint32_t DCCG_AUDIO_DTO1_MODULE;
+	uint32_t DCCG_AUDIO_DTO1_PHASE;
 };
 
 struct audio_dce110 {
@@ -60,5 +75,10 @@ void dce110_aud_az_configure(struct audio *audio,
 	enum signal_type signal,
 	const struct audio_crtc_info *crtc_info,
 	const struct audio_info *audio_info);
+
+void dce110_aud_wall_dto_setup(struct audio *audio,
+	enum signal_type signal,
+	const struct audio_crtc_info *crtc_info,
+	const struct audio_pll_info *pll_info);
 
 #endif   /*__DAL_AUDIO_DCE_110_H__*/
