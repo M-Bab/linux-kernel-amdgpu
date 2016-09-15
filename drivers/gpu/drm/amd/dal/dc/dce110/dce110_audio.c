@@ -24,41 +24,10 @@
  */
 
 #include "dm_services.h"
-
-#include "include/logger_interface.h"
-
 #include "audio_dce110.h"
-
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
-/***** static functions  *****/
-
-static void destruct(struct audio_dce110 *audio)
-{
-	/*release memory allocated for hw_ctx -- allocated is initiated
-	 *by audio_dce110 power_up
-	 *audio->base->hw_ctx = NULL is done within hw-ctx->destroy
-	 */
-	if (audio->base.hw_ctx)
-		audio->base.hw_ctx->funcs->destroy(&(audio->base.hw_ctx));
-
-	/* reset base_audio_block */
-	dal_audio_destruct_base(&audio->base);
-}
-
-static void destroy(struct audio **ptr)
-{
-	struct audio_dce110 *audio = NULL;
-
-	audio = container_of(*ptr, struct audio_dce110, base);
-
-	destruct(audio);
-
-	/* release memory allocated for audio_dce110*/
-	dm_free(audio);
-	*ptr = NULL;
-}
 
 #define DCE110_AUD(audio)\
 	container_of(audio, struct audio_dce110, base)
@@ -762,37 +731,6 @@ void dce110_aud_az_configure(
 	AZ_REG_WRITE(AZALIA_F0_CODEC_PIN_CONTROL_SINK_INFO8, value);
 }
 
-/**
-* initialize
-*
-* @brief
-*  Perform SW initialization - create audio hw context. Then do HW
-*  initialization. this function is called at dal_audio_power_up.
-*
-*/
-static enum audio_result initialize(struct audio *audio)
-{
-	uint8_t audio_endpoint_enum_id = 0;
-
-	audio_endpoint_enum_id = audio->id.enum_id;
-
-	/* HW CTX already create*/
-	if (audio->hw_ctx != NULL)
-		return AUDIO_RESULT_OK;
-
-	audio->hw_ctx = dal_hw_ctx_audio_dce110_create(
-			audio->ctx,
-			audio_endpoint_enum_id);
-
-	if (audio->hw_ctx == NULL)
-		return AUDIO_RESULT_ERROR;
-
-	/* override HW default settings */
-	audio->hw_ctx->funcs->hw_initialize(audio->hw_ctx);
-
-	return AUDIO_RESULT_OK;
-}
-
 /*
 * todo: wall clk related functionality probably belong to clock_src.
 */
@@ -956,7 +894,6 @@ void dce110_aud_hw_init(
 }
 
 static const struct audio_funcs funcs = {
-	.destroy = destroy,
 	.hw_init = dce110_aud_hw_init,
 	.wall_dto_setup = dce110_aud_wall_dto_setup,
 	.az_enable = dce110_aud_az_enable,
@@ -970,33 +907,38 @@ static bool construct(
 {
 	struct audio *base = &audio->base;
 
-	/* base audio construct*/
-	if (!dal_audio_construct_base(base, init_data))
-		return false;
-
-	/*vtable methods*/
+	base->ctx = init_data->ctx;
+	base->inst = init_data->inst;
 	base->funcs = &funcs;
+
+	audio->regs = init_data->reg;
+
 	return true;
 }
 
-/* --- audio scope functions  --- */
+void dce110_aud_destroy(struct audio **audio)
+{
+	dm_free(audio);
+	*audio = NULL;
+}
 
 struct audio *dal_audio_create_dce110(
 	const struct audio_init_data *init_data)
 {
 	/*allocate memory for audio_dce110 */
 	struct audio_dce110 *audio = dm_alloc(sizeof(*audio));
+	struct audio *base = &audio->base;
 
 	if (audio == NULL) {
 		ASSERT_CRITICAL(audio);
 		return NULL;
 	}
 
-	audio->regs = init_data->reg;
+	base->ctx = init_data->ctx;
+	base->inst = init_data->inst;
+	base->funcs = &funcs;
 
-	/*pointer to base_audio_block of audio_dce110 ==> audio base object */
-	if (construct(audio, init_data))
-		return &audio->base;
+	audio->regs = init_data->reg;
 
 	dal_logger_write(
 		init_data->ctx->logger,
@@ -1008,8 +950,4 @@ struct audio *dal_audio_create_dce110(
 	dm_free(audio);
 	return NULL;
 }
-
-/* Do not need expose construct_dce110 and destruct_dce110 becuase there is
- *derived object after dce110
- */
 

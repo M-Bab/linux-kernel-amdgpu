@@ -30,6 +30,7 @@
 #include "bandwidth_calcs.h"
 #include "ddc_service_types.h"
 #include "scaler_types.h"
+#include "dc_bios_types.h"
 
 struct core_stream;
 /********* core_target *************/
@@ -74,7 +75,7 @@ void enable_surface_flip_reporting(struct dc_surface *dc_surface,
 #include "link_encoder.h"
 #include "stream_encoder.h"
 #include "clock_source.h"
-#include "audio_interface.h"
+#include "audio.h"
 #include "scaler_types.h"
 #include "hw_sequencer_types.h"
 #include "opp.h"

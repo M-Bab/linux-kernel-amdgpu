@@ -23,25 +23,43 @@
  *
  */
 
-#ifndef __DAL_HW_CTX_AUDIO_DCE110_H__
-#define __DAL_HW_CTX_AUDIO_DCE110_H__
+#ifndef __DAL_AUDIO_H__
+#define __DAL_AUDIO_H__
 
-#include "audio/hw_ctx_audio.h"
+#include "audio_types.h"
 
-struct hw_ctx_audio_dce110 {
-	struct hw_ctx_audio base;
+struct audio;
 
-	/* azalia stream id 1 based indexing, corresponding to audio GO enumId*/
-	uint32_t azalia_stream_id;
+struct audio_funcs {
 
-	/* azalia stream endpoint register offsets */
-	struct azalia_reg_offsets az_mm_reg_offsets;
+	void (*hw_init)(struct audio *audio);
 
-	/* audio encoder block MM register offset -- associate with DIG FRONT */
+	void (*az_enable)(struct audio *audio);
+
+	void (*az_disable)(struct audio *audio);
+
+	void (*az_configure)(struct audio *audio,
+		enum signal_type signal,
+		const struct audio_crtc_info *crtc_info,
+		const struct audio_info *audio_info);
+
+	void (*wall_dto_setup)(struct audio *audio,
+		enum signal_type signal,
+		const struct audio_crtc_info *crtc_info,
+		const struct audio_pll_info *pll_info);
 };
 
-struct hw_ctx_audio *dal_hw_ctx_audio_dce110_create(
-	struct dc_context *ctx,
-	uint32_t azalia_stream_id);
+struct audio_init_data {
+	struct dc_context *ctx;
 
-#endif  /* __DAL_HW_CTX_AUDIO_DCE110_H__ */
+	unsigned int inst;
+	const struct dce110_audio_registers *reg;
+};
+
+struct audio {
+	const struct audio_funcs *funcs;
+	struct dc_context *ctx;
+	unsigned int inst;
+};
+
+#endif  /* __DAL_AUDIO__ */

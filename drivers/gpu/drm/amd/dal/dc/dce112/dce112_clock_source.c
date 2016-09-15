@@ -36,6 +36,7 @@
 
 #include "include/grph_object_id.h"
 #include "include/logger_interface.h"
+#include "dc_bios_types.h"
 
 /**
  * Calculate PLL Dividers for given Clock Value.

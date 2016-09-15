@@ -32,6 +32,7 @@
 #include "timing_generator.h"
 #include "transform.h"
 #include "set_mode_types.h"
+#include "adapter_service_interface.h"
 
 #if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 #include "dce80/dce80_resource.h"

@@ -44,8 +44,8 @@
 #include "stream_encoder.h"
 #include "link_encoder.h"
 #include "clock_source.h"
-#include "audio/audio.h"
 #include "gamma_calcs.h"
+#include "audio.h"
 
 /* include DCE11 register header files */
 #include "dce/dce_11_0_d.h"

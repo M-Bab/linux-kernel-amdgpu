@@ -30,6 +30,7 @@
 
 #include "resource.h"
 #include "include/irq_service_interface.h"
+#include "include/adapter_service_interface.h"
 #include "../virtual/virtual_stream_encoder.h"
 #include "dce110/dce110_resource.h"
 #include "dce110/dce110_timing_generator.h"
@@ -38,10 +39,10 @@
 #include "dce110/dce110_link_encoder.h"
 #include "dce110/dce110_transform.h"
 #include "dce110/dce110_stream_encoder.h"
+#include "dce110/audio_dce110.h"
 #include "dce112/dce112_opp.h"
 #include "dce110/dce110_ipp.h"
 #include "dce112/dce112_clock_source.h"
-#include "audio/dce110/audio_dce110.h"
 
 #include "dce112/dce112_hw_sequencer.h"
 
@@ -593,7 +594,7 @@ static void destruct(struct dce110_resource_pool *pool)
 
 	for (i = 0; i < pool->base.audio_count; i++)	{
 		if (pool->base.audios[i] != NULL) {
-			dal_audio_destroy(&pool->base.audios[i]);
+			dce110_aud_destroy(&pool->base.audios[i]);
 		}
 	}
 
@@ -1247,7 +1248,6 @@ static bool construct(
 			break;
 		}
 
-		audio_init_data.audio_stream_id = obj_id;
 		audio_init_data.inst = i;
 		audio_init_data.reg = &audio_regs[i];
 
@@ -1308,7 +1308,7 @@ stream_enc_create_fail:
 audio_create_fail:
 	for (i = 0; i < pool->base.pipe_count; i++) {
 		if (pool->base.audios[i] != NULL)
-			dal_audio_destroy(&pool->base.audios[i]);
+			dce110_aud_destroy(&pool->base.audios[i]);
 	}
 
 controller_create_fail:

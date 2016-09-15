@@ -25,9 +25,7 @@
 #ifndef __DAL_AUDIO_DCE_110_H__
 #define __DAL_AUDIO_DCE_110_H__
 
-#include "audio/audio.h"
-#include "audio/hw_ctx_audio.h"
-#include "audio/dce110/hw_ctx_audio_dce110.h"
+#include "audio.h"
 
 #define AUD_REG(reg_name, block_prefix, id)\
 	.reg_name = block_prefix ## id ## _ ## reg_name
@@ -74,6 +72,7 @@ struct audio_dce110 {
 };
 
 struct audio *dal_audio_create_dce110(const struct audio_init_data *init_data);
+void dce110_aud_destroy(struct audio **audio);
 
 void dce110_aud_hw_init(struct audio *audio);
 

@@ -35,7 +35,6 @@
 #include "dc_link_ddc.h"
 #include "link_hwss.h"
 #include "stream_encoder.h"
-#include "audio/audio.h"
 #include "link_encoder.h"
 #include "hw_sequencer.h"
 #include "fixed31_32.h"

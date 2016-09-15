@@ -26,7 +26,6 @@
 #ifndef __AUDIO_TYPES_H__
 #define __AUDIO_TYPES_H__
 
-#include "grph_object_defs.h"
 #include "signal_types.h"
 
 #define AUDIO_INFO_DISPLAY_NAME_SIZE_IN_CHARS 20
