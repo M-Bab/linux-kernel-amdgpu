@@ -1819,9 +1819,7 @@ static void init_hw(struct core_dc *dc)
 
 	for (i = 0; i < dc->res_pool->audio_count; i++) {
 		struct audio *audio = dc->res_pool->audios[i];
-
-		if (dal_audio_power_up(audio) != AUDIO_RESULT_OK)
-			dm_error("Failed audio power up!\n");
+		audio->funcs->hw_init(audio);
 	}
 }
 

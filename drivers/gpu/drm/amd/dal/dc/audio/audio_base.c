@@ -51,19 +51,8 @@ static void destroy(
 	BREAK_TO_DEBUGGER();
 }
 
-static enum audio_result initialize(
-	struct audio *audio)
-{
-	/*DCE specific, must be implemented in derived. Implemeentaion of
-	 *initialize will create audio hw context. create_hw_ctx
-	 */
-	BREAK_TO_DEBUGGER();
-	return AUDIO_RESULT_OK;
-}
-
 static const struct audio_funcs audio_funcs = {
 	.destroy = destroy,
-	.initialize = initialize,
 };
 
 /***** SCOPE : declare in audio.h. use within dal-audio. *****/
@@ -110,15 +99,3 @@ void dal_audio_destroy(
 
 	*audio = NULL;
 }
-
-/* DP Audio register write access. This function call hw_ctx directly
- * not overwitten at audio level.
- */
-
-/* perform power up sequence (boot up, resume, recovery) */
-enum audio_result dal_audio_power_up(
-	struct audio *audio)
-{
-	return audio->funcs->initialize(audio);
-}
-

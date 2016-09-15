@@ -39,17 +39,22 @@
 struct audio;
 
 struct audio_funcs {
-	void (*az_enable)(
-			struct audio *audio);
 
-	void (*az_disable)(
-			struct audio *audio);
+	void (*hw_init)(struct audio *audio);
+
+	void (*az_enable)(struct audio *audio);
+
+	void (*az_disable)(struct audio *audio);
 
 	void (*az_configure)(struct audio *audio,
 		enum signal_type signal,
 		const struct audio_crtc_info *crtc_info,
 		const struct audio_info *audio_info);
 
+	void (*wall_dto_setup)(struct audio *audio,
+		enum signal_type signal,
+		const struct audio_crtc_info *crtc_info,
+		const struct audio_pll_info *pll_info);
 	/*
 	 *get_object_id
 	 *get_object_type
@@ -71,19 +76,10 @@ struct audio_funcs {
 	 * disable_azalia_audio_jack_presence
 	 */
 
-	/* SW initialization that cannot be done in constructor. This will
-	 * be done is audio_power_up but is not in audio_interface. It is only
-	 * called by power_up
-	 */
-	enum audio_result (*initialize)(
-		struct audio *audio);
+
 
 	/* Update audio wall clock source */
-	void (*wall_dto_setup)(
-		struct audio *audio,
-		enum signal_type signal,
-		const struct audio_crtc_info *crtc_info,
-		const struct audio_pll_info *pll_info);
+
 
 	/* options and features supported by Audio */
 

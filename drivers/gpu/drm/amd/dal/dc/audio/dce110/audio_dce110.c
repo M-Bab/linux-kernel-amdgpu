@@ -931,9 +931,33 @@ void dce110_aud_wall_dto_setup(
 	}
 }
 
+/* initialize HW state */
+void dce110_aud_hw_init(
+		struct audio *audio)
+{
+	struct audio_dce110 *aud110 = DCE110_AUD(audio);
+
+	/* we only need to program the following registers once, so we only do
+	it for the inst 0*/
+	if (audio->inst != 0)
+		return;
+
+	/* Suport R5 - 32khz
+	 * Suport R6 - 44.1khz
+	 * Suport R7 - 48khz
+	 */
+	REG_UPDATE(AZALIA_F0_CODEC_FUNCTION_PARAMETER_SUPPORTED_SIZE_RATES,
+			AUDIO_RATE_CAPABILITIES, 0x70);
+
+	/*Keep alive bit to verify HW block in BU. */
+	REG_UPDATE_N(AZALIA_F0_CODEC_FUNCTION_PARAMETER_POWER_STATES, 2,
+			FD(AZALIA_F0_CODEC_FUNCTION_PARAMETER_POWER_STATES__CLKSTOP), 1,
+			FD(AZALIA_F0_CODEC_FUNCTION_PARAMETER_POWER_STATES__EPSS), 1);
+}
+
 static const struct audio_funcs funcs = {
 	.destroy = destroy,
-	.initialize = initialize,
+	.hw_init = dce110_aud_hw_init,
 	.wall_dto_setup = dce110_aud_wall_dto_setup,
 	.az_enable = dce110_aud_az_enable,
 	.az_disable = dce110_aud_az_disable,

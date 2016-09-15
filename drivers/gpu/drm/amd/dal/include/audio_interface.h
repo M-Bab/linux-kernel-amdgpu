@@ -60,12 +60,6 @@ enum audio_result {
 void dal_audio_destroy(
 	struct audio **audio);
 
-/***** programming interface *****/
-
-/* perform power up sequence (boot up, resume, recovery) */
-enum audio_result dal_audio_power_up(
-	struct audio *audio);
-
 /***** information interface *****/
 
 /* Update audio wall clock source */

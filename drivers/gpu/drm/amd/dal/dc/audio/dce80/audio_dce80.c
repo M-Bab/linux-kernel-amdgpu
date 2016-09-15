@@ -94,7 +94,7 @@ static enum audio_result initialize(
 
 static const struct audio_funcs funcs = {
 	.destroy = destroy,
-	.initialize = initialize,
+	.hw_init = dce110_aud_hw_init,
 	.wall_dto_setup = dce110_aud_wall_dto_setup,
 	.az_enable = dce110_aud_az_enable,
 	.az_disable = dce110_aud_az_disable,

@@ -30,20 +30,25 @@
 #include "audio/dce110/hw_ctx_audio_dce110.h"
 
 #define AUD_REG(reg_name, block_prefix, id)\
-	.reg_name = block_prefix ## id ## _ ## reg_name\
+	.reg_name = block_prefix ## id ## _ ## reg_name
 
 #define MM_REG(reg_name)\
-	.reg_name = mm ## reg_name\
+	.reg_name = mm ## reg_name
 
-#define AUD_COMMON_REG_LIST(id)\
+#define AUD_COMMON_REG_LIST_BASE(id)\
 	SE_REG(AZALIA_F0_CODEC_ENDPOINT_INDEX, mmAZF0ENDPOINT, id),\
 	SE_REG(AZALIA_F0_CODEC_ENDPOINT_DATA, mmAZF0ENDPOINT, id),\
 	MM_REG(AZALIA_F0_CODEC_FUNCTION_PARAMETER_STREAM_FORMATS),\
+	MM_REG(AZALIA_F0_CODEC_FUNCTION_PARAMETER_SUPPORTED_SIZE_RATES),\
+	MM_REG(AZALIA_F0_CODEC_FUNCTION_PARAMETER_POWER_STATES),\
 	MM_REG(DCCG_AUDIO_DTO_SOURCE),\
 	MM_REG(DCCG_AUDIO_DTO0_MODULE),\
 	MM_REG(DCCG_AUDIO_DTO0_PHASE),\
 	MM_REG(DCCG_AUDIO_DTO1_MODULE),\
-	MM_REG(DCCG_AUDIO_DTO1_PHASE),\
+	MM_REG(DCCG_AUDIO_DTO1_PHASE)
+
+#define AUD_COMMON_REG_LIST(id)\
+	AUD_COMMON_REG_LIST_BASE(id)
 
 
 struct dce110_audio_registers {
@@ -51,6 +56,8 @@ struct dce110_audio_registers {
 	uint32_t AZALIA_F0_CODEC_ENDPOINT_DATA;
 
 	uint32_t AZALIA_F0_CODEC_FUNCTION_PARAMETER_STREAM_FORMATS;
+	uint32_t AZALIA_F0_CODEC_FUNCTION_PARAMETER_SUPPORTED_SIZE_RATES;
+	uint32_t AZALIA_F0_CODEC_FUNCTION_PARAMETER_POWER_STATES;
 
 	uint32_t DCCG_AUDIO_DTO_SOURCE;
 	uint32_t DCCG_AUDIO_DTO0_MODULE;
@@ -67,6 +74,8 @@ struct audio_dce110 {
 };
 
 struct audio *dal_audio_create_dce110(const struct audio_init_data *init_data);
+
+void dce110_aud_hw_init(struct audio *audio);
 
 void dce110_aud_az_enable(struct audio *audio);
 void dce110_aud_az_disable(struct audio *audio);
