@@ -945,10 +945,9 @@ static void disable_vga_and_power_gate_all_controllers(
 		 * powergating. */
 		enable_display_pipe_clock_gating(ctx,
 				true);
-		dc->hwss.enable_display_power_gating(dc, i, dcb,
-				PIPE_GATING_CONTROL_ENABLE);
-		dc->res_pool->transforms[i]->funcs->transform_reset(
-				dc->res_pool->transforms[i]);
+
+		dc->hwss.power_down_front_end(
+			dc, &dc->current_context->res_ctx.pipe_ctx[i]);
 	}
 }
 
@@ -1334,9 +1333,8 @@ static void reset_single_pipe_hw_ctx(
 	pipe_ctx->xfm->funcs->transform_set_scaler_bypass(pipe_ctx->xfm, NULL);
 	pipe_ctx->xfm->funcs->transform_reset(pipe_ctx->xfm);
 	resource_unreference_clock_source(&context->res_ctx, pipe_ctx->clock_source);
-	dc->hwss.enable_display_power_gating(
-		(struct core_dc *)dc, pipe_ctx->pipe_idx, dcb,
-			PIPE_GATING_CONTROL_ENABLE);
+
+	dc->hwss.power_down_front_end((struct core_dc *)dc, pipe_ctx);
 
 	pipe_ctx->stream = NULL;
 }
@@ -2084,6 +2082,10 @@ static void dce110_apply_ctx_for_surface(
 {
 	int i;
 
+	/* TODO remove when removing the surface reset workaroud*/
+	if (!surface)
+		return;
+
 	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
@@ -2095,6 +2097,15 @@ static void dce110_apply_ctx_for_surface(
 
 	}
 
+}
+
+static void dce110_power_down_fe(struct core_dc *dc, struct pipe_ctx *pipe)
+{
+	dc->hwss.enable_display_power_gating(
+		dc, pipe->pipe_idx, dc->ctx->dc_bios, PIPE_GATING_CONTROL_ENABLE);
+	if (pipe->xfm)
+		pipe->xfm->funcs->transform_reset(pipe->xfm);
+	memset(&pipe->scl_data, 0, sizeof(struct scaler_data));
 }
 
 static const struct hw_sequencer_funcs dce110_funcs = {
@@ -2115,10 +2126,11 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.enable_display_pipe_clock_gating = enable_display_pipe_clock_gating,
 	.crtc_switch_to_clk_src = dce110_crtc_switch_to_clk_src,
 	.enable_display_power_gating = dce110_enable_display_power_gating,
+	.power_down_front_end = dce110_power_down_fe,
 	.enable_fe_clock = dce110_enable_fe_clock,
 	.pipe_control_lock = dce110_pipe_control_lock,
 	.set_blender_mode = dce110_set_blender_mode,
-	.clock_gating_power_up = dal_dc_clock_gating_dce110_power_up,/*todo*/
+	.clock_gating_power_up = dal_dc_clock_gating_dce110_power_up,
 	.set_display_clock = set_display_clock,
 	.set_displaymarks = set_displaymarks,
 	.increase_watermarks_for_pipe = dce110_increase_watermarks_for_pipe,

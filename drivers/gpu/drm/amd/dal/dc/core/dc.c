@@ -1225,13 +1225,8 @@ bool dc_post_update_surfaces_to_target(struct dc *dc)
 
 	for (i = 0; i < core_dc->current_context->res_ctx.pool->pipe_count; i++) {
 		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == NULL) {
-			core_dc->hwss.enable_display_power_gating(
-				core_dc, i, core_dc->ctx->dc_bios,
-				PIPE_GATING_CONTROL_ENABLE);
-			if (core_dc->current_context->res_ctx.pipe_ctx[i].xfm)
-				core_dc->current_context->res_ctx.pipe_ctx[i].xfm->funcs->transform_reset(
-						core_dc->current_context->res_ctx.pipe_ctx[i].xfm);
-			memset(&core_dc->current_context->res_ctx.pipe_ctx[i].scl_data, 0, sizeof(struct scaler_data));
+			core_dc->hwss.power_down_front_end(
+				core_dc, &core_dc->current_context->res_ctx.pipe_ctx[i]);
 		}
 	}
 
@@ -1351,7 +1346,7 @@ bool dc_commit_surfaces_to_target(
 				context->bw_results.dispclk_khz;
 	}
 
-	for (i = 0; i < new_surface_count; i++)
+	for (i = 0; i < new_surface_count; i++) {
 		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
 			struct pipe_ctx *pipe_ctx =
 						&context->res_ctx.pipe_ctx[j];
@@ -1376,10 +1371,18 @@ bool dc_commit_surfaces_to_target(
 					true);
 
 			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
-
-			core_dc->hwss.apply_ctx_for_surface(
-						core_dc, pipe_ctx->surface, context);
 		}
+		core_dc->hwss.apply_ctx_for_surface(
+			core_dc, DC_SURFACE_TO_CORE(new_surfaces[i]), context);
+	}
+	/* TODO W/A, get rid of this*/
+	if (!new_surface_count)
+		core_dc->hwss.apply_ctx_for_surface(
+			core_dc, 0, context);
+
+	if (current_enabled_surface_count > 0 && new_enabled_surface_count == 0)
+		target_disable_memory_requests(dc_target,
+				&context->res_ctx);
 
 	/* Go in reverse order so that all pipes are unlocked simultaneously
 	 * when pipe 0 is unlocked
@@ -1403,23 +1406,10 @@ bool dc_commit_surfaces_to_target(
 	dm_free(core_dc->current_context);
 	core_dc->current_context = context;
 
-	if (current_enabled_surface_count > 0 && new_enabled_surface_count == 0)
-		target_disable_memory_requests(dc_target,
-				&context->res_ctx);
-
-
-	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
-		if (context->res_ctx.pipe_ctx[i].stream == NULL) {
-			core_dc->hwss.enable_display_power_gating(
-				core_dc, i, core_dc->ctx->dc_bios,
-				PIPE_GATING_CONTROL_ENABLE);
-			if (context->res_ctx.pipe_ctx[i].xfm)
-				context->res_ctx.pipe_ctx[i].xfm->funcs->transform_reset(
-						context->res_ctx.pipe_ctx[i].xfm);
-			memset(&context->res_ctx.pipe_ctx[i].scl_data,
-					0, sizeof(struct scaler_data));
-		}
-	}
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++)
+		if (context->res_ctx.pipe_ctx[i].surface == NULL)
+			core_dc->hwss.power_down_front_end(
+				core_dc, &context->res_ctx.pipe_ctx[i]);
 
 	core_dc->hwss.set_bandwidth(core_dc);
 
@@ -1553,6 +1543,7 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 
 	for (i = 0; i < surface_count; i++) {
 		struct core_surface *surface = DC_SURFACE_TO_CORE(updates[i].surface);
+		bool apply_ctx = false;
 
 		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
 			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
@@ -1572,6 +1563,8 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 			if (updates[i].plane_info || updates[i].scaling_info
 					|| is_new_pipe_surface[j]) {
 
+				apply_ctx = true;
+
 				core_dc->hwss.pipe_control_lock(
 						core_dc->ctx,
 						pipe_ctx->pipe_idx,
@@ -1581,14 +1574,14 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 						PIPE_LOCK_CONTROL_BLENDER |
 						PIPE_LOCK_CONTROL_MODE,
 						true);
-				core_dc->hwss.apply_ctx_for_surface(
-						core_dc, surface, context);
 			}
 
 			if (updates[i].gamma)
 				core_dc->hwss.prepare_pipe_for_context(
 						core_dc, pipe_ctx, context);
 		}
+		if (apply_ctx)
+			core_dc->hwss.apply_ctx_for_surface(core_dc, surface, context);
 	}
 
 	for (i = context->res_ctx.pool->pipe_count - 1; i >= 0; i--) {
