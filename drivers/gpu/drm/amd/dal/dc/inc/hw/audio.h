@@ -49,13 +49,6 @@ struct audio_funcs {
 		const struct audio_pll_info *pll_info);
 };
 
-struct audio_init_data {
-	struct dc_context *ctx;
-
-	unsigned int inst;
-	const struct dce110_audio_registers *reg;
-};
-
 struct audio {
 	const struct audio_funcs *funcs;
 	struct dc_context *ctx;

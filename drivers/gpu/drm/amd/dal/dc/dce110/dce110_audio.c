@@ -901,53 +901,30 @@ static const struct audio_funcs funcs = {
 	.az_configure = dce110_aud_az_configure,
 };
 
-static bool construct(
-	struct audio_dce110 *audio,
-	const struct audio_init_data *init_data)
-{
-	struct audio *base = &audio->base;
-
-	base->ctx = init_data->ctx;
-	base->inst = init_data->inst;
-	base->funcs = &funcs;
-
-	audio->regs = init_data->reg;
-
-	return true;
-}
-
 void dce110_aud_destroy(struct audio **audio)
 {
 	dm_free(audio);
 	*audio = NULL;
 }
 
-struct audio *dal_audio_create_dce110(
-	const struct audio_init_data *init_data)
+struct audio *dce110_audio_create(
+		struct dc_context *ctx,
+		unsigned int inst,
+		const struct dce110_audio_registers *reg)
 {
-	/*allocate memory for audio_dce110 */
 	struct audio_dce110 *audio = dm_alloc(sizeof(*audio));
-	struct audio *base = &audio->base;
 
 	if (audio == NULL) {
 		ASSERT_CRITICAL(audio);
 		return NULL;
 	}
 
-	base->ctx = init_data->ctx;
-	base->inst = init_data->inst;
-	base->funcs = &funcs;
+	audio->base.ctx = ctx;
+	audio->base.inst = inst;
+	audio->base.funcs = &funcs;
 
-	audio->regs = init_data->reg;
+	audio->regs = reg;
 
-	dal_logger_write(
-		init_data->ctx->logger,
-		LOG_MAJOR_ERROR,
-		LOG_MINOR_COMPONENT_AUDIO,
-		"Failed to create audio object for DCE11\n");
-
-	 /*release memory allocated if fail */
-	dm_free(audio);
-	return NULL;
+	return &audio->base;
 }
 

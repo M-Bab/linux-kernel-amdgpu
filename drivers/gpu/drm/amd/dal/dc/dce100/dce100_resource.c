@@ -286,6 +286,14 @@ static const struct dce110_stream_enc_registers stream_enc_regs[] = {
 	stream_enc_regs(6)
 };
 
+/* set register offset */
+#define SR(reg_name)\
+	.reg_name = mm ## reg_name
+
+/* set register offset with instance */
+#define SRI(reg_name, block, id)\
+	.reg_name = mm ## block ## id ## _ ## reg_name
+
 #define audio_regs(id)\
 [id] = {\
 	AUD_COMMON_REG_LIST(id)\
@@ -781,7 +789,6 @@ static bool construct(
 	struct dce110_resource_pool *pool)
 {
 	unsigned int i;
-	struct audio_init_data audio_init_data = { 0 };
 	struct dc_context *ctx = dc->ctx;
 	struct firmware_info info;
 	struct dc_bios *bp;
@@ -922,7 +929,6 @@ static bool construct(
 		}
 	}
 
-	audio_init_data.ctx = ctx;
 	pool->base.audio_count = 0;
 	for (i = 0; i < pool->base.pipe_count; i++) {
 		struct graphics_object_id obj_id;
@@ -933,10 +939,8 @@ static bool construct(
 			break;
 		}
 
-		audio_init_data.inst = i;
-		audio_init_data.reg = &audio_regs[i];
-
-		pool->base.audios[i] = dal_audio_create_dce110(&audio_init_data);
+		pool->base.audios[i] = dce110_audio_create(
+				ctx, i, &audio_regs[i]);
 		if (pool->base.audios[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create DPPs!\n");
