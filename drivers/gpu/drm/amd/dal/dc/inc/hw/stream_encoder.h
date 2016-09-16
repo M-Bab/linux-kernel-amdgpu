@@ -7,6 +7,7 @@
 #define STREAM_ENCODER_H_
 
 #include "include/hw_sequencer_types.h"
+#include "audio_types.h"
 
 struct dc_bios;
 struct dc_context;
