@@ -289,9 +289,17 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 	link_regs(6)
 };
 
+/* set register offset */
+#define SR(reg_name)\
+	.reg_name = mm ## reg_name
+
+/* set register offset with instance */
+#define SRI(reg_name, block, id)\
+	.reg_name = mm ## block ## id ## _ ## reg_name
+
 #define stream_enc_regs(id)\
 [id] = {\
-	SE_COMMON_REG_LIST(id)\
+	SE_COMMON_REG_LIST_BASE(id),\
 	.AFMT_CNTL = 0,\
 }
 
@@ -304,14 +312,6 @@ static const struct dce110_stream_enc_registers stream_enc_regs[] = {
 	stream_enc_regs(5),
 	stream_enc_regs(6)
 };
-
-/* set register offset */
-#define SR(reg_name)\
-	.reg_name = mm ## reg_name
-
-/* set register offset with instance */
-#define SRI(reg_name, block, id)\
-	.reg_name = mm ## block ## id ## _ ## reg_name
 
 #define audio_regs(id)\
 [id] = {\
