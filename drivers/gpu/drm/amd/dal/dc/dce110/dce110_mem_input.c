@@ -1016,9 +1016,3 @@ bool dce110_mem_input_construct(
 
 	return true;
 }
-
-void dce110_mem_input_destroy(struct mem_input **mem_input)
-{
-	dm_free(TO_DCE110_MEM_INPUT(*mem_input));
-	*mem_input = NULL;
-}
