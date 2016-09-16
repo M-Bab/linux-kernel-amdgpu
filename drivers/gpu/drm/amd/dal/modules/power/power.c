@@ -23,13 +23,13 @@
  *
  */
 
+#include "mod_power.h"
 #include "dm_services.h"
 #include "dc.h"
-#include "mod_backlight.h"
 #include "core_types.h"
 #include "core_dc.h"
 
-#define MOD_BACKLIGHT_MAX_CONCURRENT_SINKS 32
+#define MOD_POWER_MAX_CONCURRENT_SINKS 32
 #define SMOOTH_BRIGHTNESS_ADJUSTMENT_TIME_IN_MS 500
 
 struct sink_caps {
@@ -42,8 +42,8 @@ struct backlight_state {
 	bool smooth_brightness_enabled;
 };
 
-struct core_backlight {
-	struct mod_backlight public;
+struct core_power {
+	struct mod_power public;
 	struct dc *dc;
 	int num_sinks;
 	struct sink_caps *caps;
@@ -74,6 +74,9 @@ static unsigned int abm_level;
 static bool abm_user_enable;
 static bool abm_active;
 
+/*PSR cached properties*/
+static unsigned int block_psr;
+
 /* Defines default backlight curve F(x) = A(x*x) + Bx + C.
  *
  * Backlight curve should always  satisfy F(0) = min, F(100) = max,
@@ -94,8 +97,8 @@ static const unsigned int default_max_backlight          = 255;
 /* Other backlight constants */
 static const unsigned int absolute_backlight_max         = 255;
 
-#define MOD_BACKLIGHT_TO_CORE(mod_backlight)\
-		container_of(mod_backlight, struct core_backlight, public)
+#define MOD_POWER_TO_CORE(mod_power)\
+		container_of(mod_power, struct core_power, public)
 
 static bool check_dc_support(const struct dc *dc)
 {
@@ -108,13 +111,13 @@ static bool check_dc_support(const struct dc *dc)
 /* Given a specific dc_sink* this function finds its equivalent
  * on the dc_sink array and returns the corresponding index
  */
-static unsigned int sink_index_from_sink(struct core_backlight *core_backlight,
+static unsigned int sink_index_from_sink(struct core_power *core_power,
 		const struct dc_sink *sink)
 {
 	unsigned int index = 0;
 
-	for (index = 0; index < core_backlight->num_sinks; index++)
-		if (core_backlight->caps[index].sink == sink)
+	for (index = 0; index < core_power->num_sinks; index++)
+		if (core_power->caps[index].sink == sink)
 			return index;
 
 	/* Could not find sink requested */
@@ -149,40 +152,40 @@ static unsigned int convertBL17to8(unsigned int backlight_17bit)
 		return (backlight_17bit >> 8);
 }
 
-struct mod_backlight *mod_backlight_create(struct dc *dc)
+struct mod_power *mod_power_create(struct dc *dc)
 {
-	struct core_backlight *core_backlight =
-			dm_alloc(sizeof(struct core_backlight));
+	struct core_power *core_power =
+			dm_alloc(sizeof(struct core_power));
 
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 
 	int i = 0;
 
-	if (core_backlight == NULL)
+	if (core_power == NULL)
 		goto fail_alloc_context;
 
-	core_backlight->caps = dm_alloc(sizeof(struct sink_caps) *
-			MOD_BACKLIGHT_MAX_CONCURRENT_SINKS);
+	core_power->caps = dm_alloc(sizeof(struct sink_caps) *
+			MOD_POWER_MAX_CONCURRENT_SINKS);
 
-	if (core_backlight->caps == NULL)
+	if (core_power->caps == NULL)
 		goto fail_alloc_caps;
 
-	for (i = 0; i < MOD_BACKLIGHT_MAX_CONCURRENT_SINKS; i++)
-		core_backlight->caps[i].sink = NULL;
+	for (i = 0; i < MOD_POWER_MAX_CONCURRENT_SINKS; i++)
+		core_power->caps[i].sink = NULL;
 
-	core_backlight->state = dm_alloc(sizeof(struct backlight_state) *
-				MOD_BACKLIGHT_MAX_CONCURRENT_SINKS);
+	core_power->state = dm_alloc(sizeof(struct backlight_state) *
+				MOD_POWER_MAX_CONCURRENT_SINKS);
 
-	if (core_backlight->state == NULL)
+	if (core_power->state == NULL)
 		goto fail_alloc_state;
 
-	core_backlight->num_sinks = 0;
+	core_power->num_sinks = 0;
 	backlight_caps_valid = false;
 
 	if (dc == NULL)
 		goto fail_construct;
 
-	core_backlight->dc = dc;
+	core_power->dc = dc;
 
 	if (!check_dc_support(dc))
 		goto fail_construct;
@@ -190,80 +193,80 @@ struct mod_backlight *mod_backlight_create(struct dc *dc)
 	abm_user_enable = false;
 	abm_active = false;
 
-	return &core_backlight->public;
+	return &core_power->public;
 
 fail_construct:
-	dm_free(core_backlight->state);
+	dm_free(core_power->state);
 
 fail_alloc_state:
-	dm_free(core_backlight->caps);
+	dm_free(core_power->caps);
 
 fail_alloc_caps:
-	dm_free(core_backlight);
+	dm_free(core_power);
 
 fail_alloc_context:
 	return NULL;
 }
 
 
-void mod_backlight_destroy(struct mod_backlight *mod_backlight)
+void mod_power_destroy(struct mod_power *mod_power)
 {
-	if (mod_backlight != NULL) {
+	if (mod_power != NULL) {
 		int i;
-		struct core_backlight *core_backlight =
-				MOD_BACKLIGHT_TO_CORE(mod_backlight);
+		struct core_power *core_power =
+				MOD_POWER_TO_CORE(mod_power);
 
-		dm_free(core_backlight->state);
+		dm_free(core_power->state);
 
-		for (i = 0; i < core_backlight->num_sinks; i++)
-			dc_sink_release(core_backlight->caps[i].sink);
+		for (i = 0; i < core_power->num_sinks; i++)
+			dc_sink_release(core_power->caps[i].sink);
 
-		dm_free(core_backlight->caps);
+		dm_free(core_power->caps);
 
-		dm_free(core_backlight);
+		dm_free(core_power);
 	}
 }
 
-bool mod_backlight_add_sink(struct mod_backlight *mod_backlight,
+bool mod_power_add_sink(struct mod_power *mod_power,
 						const struct dc_sink *sink)
 {
-	struct core_backlight *core_backlight =
-				MOD_BACKLIGHT_TO_CORE(mod_backlight);
-	struct core_dc *core_dc = DC_TO_CORE(core_backlight->dc);
+	struct core_power *core_power =
+				MOD_POWER_TO_CORE(mod_power);
+	struct core_dc *core_dc = DC_TO_CORE(core_power->dc);
 
-	if (core_backlight->num_sinks < MOD_BACKLIGHT_MAX_CONCURRENT_SINKS) {
+	if (core_power->num_sinks < MOD_POWER_MAX_CONCURRENT_SINKS) {
 		dc_sink_retain(sink);
-		core_backlight->caps[core_backlight->num_sinks].sink = sink;
-		core_backlight->state[core_backlight->num_sinks].
+		core_power->caps[core_power->num_sinks].sink = sink;
+		core_power->state[core_power->num_sinks].
 					smooth_brightness_enabled = false;
-		core_backlight->state[core_backlight->num_sinks].
+		core_power->state[core_power->num_sinks].
 					backlight = 100;
-		core_backlight->num_sinks++;
+		core_power->num_sinks++;
 		return true;
 	}
 
 	return false;
 }
 
-bool mod_backlight_remove_sink(struct mod_backlight *mod_backlight,
+bool mod_power_remove_sink(struct mod_power *mod_power,
 		const struct dc_sink *sink)
 {
 	int i = 0, j = 0;
-	struct core_backlight *core_backlight =
-			MOD_BACKLIGHT_TO_CORE(mod_backlight);
+	struct core_power *core_power =
+			MOD_POWER_TO_CORE(mod_power);
 
-	for (i = 0; i < core_backlight->num_sinks; i++) {
-		if (core_backlight->caps[i].sink == sink) {
+	for (i = 0; i < core_power->num_sinks; i++) {
+		if (core_power->caps[i].sink == sink) {
 			/* To remove this sink, shift everything after down */
-			for (j = i; j < core_backlight->num_sinks - 1; j++) {
-				core_backlight->caps[j].sink =
-					core_backlight->caps[j + 1].sink;
+			for (j = i; j < core_power->num_sinks - 1; j++) {
+				core_power->caps[j].sink =
+					core_power->caps[j + 1].sink;
 
-				memcpy(&core_backlight->state[j],
-					&core_backlight->state[j + 1],
+				memcpy(&core_power->state[j],
+					&core_power->state[j + 1],
 					sizeof(struct backlight_state));
 			}
-			core_backlight->num_sinks--;
+			core_power->num_sinks--;
 			dc_sink_release(sink);
 			return true;
 		}
@@ -271,12 +274,12 @@ bool mod_backlight_remove_sink(struct mod_backlight *mod_backlight,
 	return false;
 }
 
-bool mod_backlight_set_backlight(struct mod_backlight *mod_backlight,
+bool mod_power_set_backlight(struct mod_power *mod_power,
 		const struct dc_stream **streams, int num_streams,
 		unsigned int backlight_8bit)
 {
-	struct core_backlight *core_backlight =
-			MOD_BACKLIGHT_TO_CORE(mod_backlight);
+	struct core_power *core_power =
+			MOD_POWER_TO_CORE(mod_power);
 
 	unsigned int frame_ramp = 0;
 
@@ -285,7 +288,7 @@ bool mod_backlight_set_backlight(struct mod_backlight *mod_backlight,
 	union dmcu_abm_set_bl_params params;
 
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
-		sink_index = sink_index_from_sink(core_backlight,
+		sink_index = sink_index_from_sink(core_power,
 				streams[stream_index]->sink);
 
 		vsync_rate_hz = div64_u64(div64_u64((streams[stream_index]->
@@ -293,49 +296,49 @@ bool mod_backlight_set_backlight(struct mod_backlight *mod_backlight,
 				streams[stream_index]->timing.v_total),
 				streams[stream_index]->timing.h_total);
 
-		core_backlight->state[sink_index].backlight = backlight_8bit;
+		core_power->state[sink_index].backlight = backlight_8bit;
 
-		if (core_backlight->state[sink_index].smooth_brightness_enabled)
+		if (core_power->state[sink_index].smooth_brightness_enabled)
 			frame_ramp = ((vsync_rate_hz *
 				SMOOTH_BRIGHTNESS_ADJUSTMENT_TIME_IN_MS) + 500)
 				/ 1000;
 		else
 			frame_ramp = 0;
 
-		core_backlight->state[sink_index].frame_ramp = frame_ramp;
+		core_power->state[sink_index].frame_ramp = frame_ramp;
 	}
 
 	params.u32All = 0;
 	params.bits.gradual_change = (frame_ramp > 0);
 	params.bits.frame_ramp = frame_ramp;
 
-	core_backlight->dc->stream_funcs.set_backlight
-		(core_backlight->dc, backlight_8bit, params.u32All, streams[0]);
+	core_power->dc->stream_funcs.set_backlight
+		(core_power->dc, backlight_8bit, params.u32All, streams[0]);
 
 	return true;
 }
 
-bool mod_backlight_get_backlight(struct mod_backlight *mod_backlight,
+bool mod_power_get_backlight(struct mod_power *mod_power,
 		const struct dc_sink *sink,
 		unsigned int *backlight_8bit)
 {
-	struct core_backlight *core_backlight =
-				MOD_BACKLIGHT_TO_CORE(mod_backlight);
+	struct core_power *core_power =
+				MOD_POWER_TO_CORE(mod_power);
 
-	unsigned int sink_index = sink_index_from_sink(core_backlight, sink);
+	unsigned int sink_index = sink_index_from_sink(core_power, sink);
 
-	*backlight_8bit = core_backlight->state[sink_index].backlight;
+	*backlight_8bit = core_power->state[sink_index].backlight;
 
 	return true;
 }
 
 /* hard coded to default backlight curve. */
-void mod_backlight_initialize_backlight_caps(struct mod_backlight
-							*mod_backlight)
+void mod_power_initialize_backlight_caps(struct mod_power
+							*mod_power)
 {
-	struct core_backlight *core_backlight =
-			MOD_BACKLIGHT_TO_CORE(mod_backlight);
-	struct core_dc *core_dc = DC_TO_CORE(core_backlight->dc);
+	struct core_power *core_power =
+			MOD_POWER_TO_CORE(mod_power);
+	struct core_dc *core_dc = DC_TO_CORE(core_power->dc);
 	unsigned int i;
 
 	backlight_caps_initialized = true;
@@ -489,12 +492,12 @@ void mod_backlight_initialize_backlight_caps(struct mod_backlight
 	backlight_def_levels_valid = customDefLevelsPresent;
 }
 
-unsigned int mod_backlight_backlight_level_percentage_to_signal(
-		struct mod_backlight *mod_backlight, unsigned int percentage)
+unsigned int mod_power_backlight_level_percentage_to_signal(
+		struct mod_power *mod_power, unsigned int percentage)
 {
 	/* Do lazy initialization of backlight capabilities*/
 	if (!backlight_caps_initialized)
-		mod_backlight_initialize_backlight_caps(mod_backlight);
+		mod_power_initialize_backlight_caps(mod_power);
 
 	/* Since the translation table is indexed by percentage,
 	* we simply return backlight value at given percent
@@ -505,20 +508,20 @@ unsigned int mod_backlight_backlight_level_percentage_to_signal(
 	return -1;
 }
 
-unsigned int mod_backlight_backlight_level_signal_to_percentage(
-		struct mod_backlight *mod_backlight,
+unsigned int mod_power_backlight_level_signal_to_percentage(
+		struct mod_power *mod_power,
 		unsigned int signalLevel8bit)
 {
 	unsigned int invalid_backlight = (unsigned int)(-1);
 	/* Do lazy initialization of backlight capabilities */
 	if (!backlight_caps_initialized)
-		mod_backlight_initialize_backlight_caps(mod_backlight);
+		mod_power_initialize_backlight_caps(mod_power);
 
 	/* If customer curve cannot convert to differentiated value near min
 	* it is important to report 0 for min signal to pass setting "Dimmed"
 	* setting in HCK brightness2 tests.
 	*/
-	if (signalLevel8bit == backlight_8bit_lut_array[0])
+	if (signalLevel8bit <= backlight_8bit_lut_array[0])
 		return 0;
 
 	/* Since the translation table is indexed by percentage
@@ -553,8 +556,8 @@ unsigned int mod_backlight_backlight_level_signal_to_percentage(
 }
 
 
-bool mod_backlight_get_panel_backlight_boundaries(
-				struct mod_backlight *mod_backlight,
+bool mod_power_get_panel_backlight_boundaries(
+				struct mod_power *mod_power,
 				unsigned int *min_backlight,
 				unsigned int *max_backlight,
 				unsigned int *output_ac_level_percentage,
@@ -562,7 +565,7 @@ bool mod_backlight_get_panel_backlight_boundaries(
 {
 	/* Do lazy initialization of backlight capabilities */
 	if (!backlight_caps_initialized)
-		mod_backlight_initialize_backlight_caps(mod_backlight);
+		mod_power_initialize_backlight_caps(mod_power);
 
 	/* If cache was successfully updated,
 	 * copy the values to output structure and return success
@@ -580,46 +583,50 @@ bool mod_backlight_get_panel_backlight_boundaries(
 	return false;
 }
 
-bool mod_backlight_set_smooth_brightness(struct mod_backlight *mod_backlight,
+bool mod_power_set_smooth_brightness(struct mod_power *mod_power,
 		const struct dc_sink *sink, bool enable_brightness)
 {
-	struct core_backlight *core_backlight =
-			MOD_BACKLIGHT_TO_CORE(mod_backlight);
-	unsigned int sink_index = sink_index_from_sink(core_backlight, sink);
+	struct core_power *core_power =
+			MOD_POWER_TO_CORE(mod_power);
+	unsigned int sink_index = sink_index_from_sink(core_power, sink);
 
-	core_backlight->state[sink_index].smooth_brightness_enabled
+	core_power->state[sink_index].smooth_brightness_enabled
 					= enable_brightness;
 	return true;
 }
 
-bool mod_backlight_notify_mode_change(struct mod_backlight *mod_backlight,
+bool mod_power_notify_mode_change(struct mod_power *mod_power,
 		const struct dc_stream *stream)
 {
-	struct core_backlight *core_backlight =
-			MOD_BACKLIGHT_TO_CORE(mod_backlight);
+	struct core_power *core_power =
+			MOD_POWER_TO_CORE(mod_power);
 
-	unsigned int sink_index = sink_index_from_sink(core_backlight,
+	unsigned int sink_index = sink_index_from_sink(core_power,
 					stream->sink);
-	unsigned int frame_ramp = core_backlight->state[sink_index].frame_ramp;
+	unsigned int frame_ramp = core_power->state[sink_index].frame_ramp;
 	union dmcu_abm_set_bl_params params;
 
 	params.u32All = 0;
 	params.bits.gradual_change = (frame_ramp > 0);
 	params.bits.frame_ramp = frame_ramp;
 
-	return core_backlight->dc->stream_funcs.set_backlight
-			(core_backlight->dc,
-			core_backlight->state[sink_index].backlight,
+	core_power->dc->stream_funcs.set_backlight
+			(core_power->dc,
+			core_power->state[sink_index].backlight,
 			params.u32All, stream);
 
+	core_power->dc->stream_funcs.setup_psr
+			(core_power->dc, stream);
+
+	return true;
 }
 
 
-static bool mod_backlight_abm_feature_enable(struct mod_backlight
-		*mod_backlight, bool enable)
+static bool mod_power_abm_feature_enable(struct mod_power
+		*mod_power, bool enable)
 {
-	struct core_backlight *core_backlight =
-					MOD_BACKLIGHT_TO_CORE(mod_backlight);
+	struct core_power *core_power =
+					MOD_POWER_TO_CORE(mod_power);
 	if (abm_user_enable == enable)
 		return true;
 
@@ -627,24 +634,24 @@ static bool mod_backlight_abm_feature_enable(struct mod_backlight
 
 	if (enable) {
 		if (abm_level != 0 && abm_active)
-			core_backlight->dc->stream_funcs.set_abm_level
-					(core_backlight->dc, abm_level);
+			core_power->dc->stream_funcs.set_abm_level
+					(core_power->dc, abm_level);
 	} else {
 		if (abm_level != 0 && abm_active) {
 			abm_level = 0;
-			core_backlight->dc->stream_funcs.set_abm_level
-					(core_backlight->dc, abm_level);
+			core_power->dc->stream_funcs.set_abm_level
+					(core_power->dc, abm_level);
 		}
 	}
 
 	return true;
 }
 
-static bool mod_backlight_abm_activate(struct mod_backlight
-		*mod_backlight, bool activate)
+static bool mod_power_abm_activate(struct mod_power
+		*mod_power, bool activate)
 {
-	struct core_backlight *core_backlight =
-					MOD_BACKLIGHT_TO_CORE(mod_backlight);
+	struct core_power *core_power =
+					MOD_POWER_TO_CORE(mod_power);
 	if (abm_active == activate)
 		return true;
 
@@ -652,47 +659,47 @@ static bool mod_backlight_abm_activate(struct mod_backlight
 
 	if (activate) {
 		if (abm_level != 0 && abm_user_enable)
-			core_backlight->dc->stream_funcs.set_abm_level
-					(core_backlight->dc, abm_level);
+			core_power->dc->stream_funcs.set_abm_level
+					(core_power->dc, abm_level);
 	} else {
 		if (abm_level != 0 && abm_user_enable) {
 			abm_level = 0;
-			core_backlight->dc->stream_funcs.set_abm_level
-					(core_backlight->dc, abm_level);
+			core_power->dc->stream_funcs.set_abm_level
+					(core_power->dc, abm_level);
 		}
 	}
 
 	return true;
 }
 
-static bool mod_backlight_abm_set_level(struct mod_backlight *mod_backlight,
+static bool mod_power_abm_set_level(struct mod_power *mod_power,
 		unsigned int level)
 {
-	struct core_backlight *core_backlight =
-					MOD_BACKLIGHT_TO_CORE(mod_backlight);
+	struct core_power *core_power =
+					MOD_POWER_TO_CORE(mod_power);
 	if (abm_level == level)
 		return true;
 
 	if (abm_active && abm_user_enable && level == 0)
-		core_backlight->dc->stream_funcs.set_abm_level
-			(core_backlight->dc, 0);
+		core_power->dc->stream_funcs.set_abm_level
+			(core_power->dc, 0);
 	else if (abm_active && abm_user_enable && level != 0)
-		core_backlight->dc->stream_funcs.set_abm_level
-				(core_backlight->dc, level);
+		core_power->dc->stream_funcs.set_abm_level
+				(core_power->dc, level);
 
 	abm_level = level;
 
 	return true;
 }
 
-bool mod_backlight_varibright_control(struct mod_backlight *mod_backlight,
+bool mod_power_varibright_control(struct mod_power *mod_power,
 		struct varibright_info *input_varibright_info)
 {
 	switch (input_varibright_info->cmd) {
 	case VariBright_Cmd__SetVBLevel:
 	{
 		/* Set VariBright user level. */
-		mod_backlight_abm_set_level(mod_backlight,
+		mod_power_abm_set_level(mod_power,
 				input_varibright_info->level);
 	}
 	break;
@@ -700,7 +707,7 @@ bool mod_backlight_varibright_control(struct mod_backlight *mod_backlight,
 	case VariBright_Cmd__UserEnable:
 	{
 		/* Set VariBright user enable state. */
-		mod_backlight_abm_feature_enable(mod_backlight,
+		mod_power_abm_feature_enable(mod_power,
 				input_varibright_info->enable);
 	}
 	break;
@@ -708,15 +715,15 @@ bool mod_backlight_varibright_control(struct mod_backlight *mod_backlight,
 	case VariBright_Cmd__PostDisplayConfigChange:
 	{
 		/* Set VariBright user level. */
-		mod_backlight_abm_set_level(mod_backlight,
+		mod_power_abm_set_level(mod_power,
 						input_varibright_info->level);
 
 		/* Set VariBright user enable state. */
-		mod_backlight_abm_feature_enable(mod_backlight,
+		mod_power_abm_feature_enable(mod_power,
 				input_varibright_info->enable);
 
 		/* Set VariBright activate based on power state. */
-		mod_backlight_abm_activate(mod_backlight,
+		mod_power_abm_activate(mod_power,
 				input_varibright_info->activate);
 	}
 	break;
@@ -729,6 +736,30 @@ bool mod_backlight_varibright_control(struct mod_backlight *mod_backlight,
 	}
 
 	return true;
+}
+
+bool mod_power_block_psr(bool block_enable, enum dmcu_block_psr_reason reason)
+{
+	if (block_enable)
+		block_psr |= reason;
+	else
+		block_psr &= ~reason;
+
+	return true;
+}
+
+
+bool mod_power_set_psr_enable(struct mod_power *mod_power,
+		bool psr_enable)
+{
+	struct core_power *core_power =
+				MOD_POWER_TO_CORE(mod_power);
+
+	if (block_psr == 0)
+		return core_power->dc->stream_funcs.set_psr_enable
+				(core_power->dc, psr_enable);
+
+	return false;
 }
 
 
