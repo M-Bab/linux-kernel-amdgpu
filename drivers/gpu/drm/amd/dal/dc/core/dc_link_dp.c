@@ -1486,6 +1486,60 @@ static bool allow_hpd_rx_irq(const struct core_link *link)
 	return false;
 }
 
+static bool handle_hpd_irq_psr_sink(const struct core_link *link)
+{
+	if (link->public.psr_caps.psr_version == 0)
+		return false;
+
+	union dpcd_psr_configuration psr_configuration = {0};
+	dal_ddc_service_read_dpcd_data(
+					link->ddc,
+					368 /*DpcdAddress_PSR_Enable_Cfg*/,
+					&psr_configuration.raw,
+					sizeof(psr_configuration.raw));
+	if (psr_configuration.bits.ENABLE) {
+		unsigned char dpcdbuf[3] = {0};
+		union psr_error_status psr_error_status = {0};
+		union psr_sink_psr_status psr_sink_psr_status = {0};
+
+		dal_ddc_service_read_dpcd_data(
+					link->ddc,
+					0x2006 /*DpcdAddress_PSR_Error_Status*/,
+					(unsigned char *) dpcdbuf,
+					sizeof(dpcdbuf));
+
+		/*DPCD 2006h   ERROR STATUS*/
+		psr_error_status.raw = dpcdbuf[0];
+		/*DPCD 2008h   SINK PANEL SELF REFRESH STATUS*/
+		psr_sink_psr_status.raw = dpcdbuf[2];
+
+		if (psr_error_status.bits.LINK_CRC_ERROR ||
+				psr_error_status.bits.RFB_STORAGE_ERROR) {
+			/* Acknowledge and clear error bits */
+			dal_ddc_service_write_dpcd_data(
+				link->ddc,
+				8198 /*DpcdAddress_PSR_Error_Status*/,
+				&psr_error_status.raw,
+				sizeof(psr_error_status.raw));
+
+			/* PSR error, disable and re-enable PSR */
+			dc_link_set_psr_enable(&link->public, false);
+			dc_link_set_psr_enable(&link->public, true);
+
+			return true;
+		} else if (psr_sink_psr_status.bits.SINK_SELF_REFRESH_STATUS ==
+				PSR_SINK_STATE_ACTIVE_DISPLAY_FROM_SINK_RFB){
+			/* No error is detect, PSR is active.
+			 * We should return with IRQ_HPD handled without
+			 * checking for loss of sync since PSR would have
+			 * powered down main link.
+			 */
+			return true;
+		}
+	}
+	return false;
+}
+
 bool dc_link_handle_hpd_rx_irq(const struct dc_link *dc_link)
 {
 	struct core_link *link = DC_LINK_TO_LINK(dc_link);
@@ -1527,25 +1581,37 @@ bool dc_link_handle_hpd_rx_irq(const struct dc_link *dc_link)
 		return false;
 	}
 
+	if (handle_hpd_irq_psr_sink(link))
+		/* PSR-related error was detected and handled */
+		return true;
+
+	/* If PSR-related error handled, Main link may be off,
+	 * so do not handle as a normal sink status change interrupt.
+	 */
+
 	/* check if we have MST msg and return since we poll for it */
-	if (hpd_irq_dpcd_data.bytes.device_service_irq.bits.DOWN_REP_MSG_RDY ||
-		hpd_irq_dpcd_data.bytes.device_service_irq.bits.UP_REQ_MSG_RDY)
+	if (hpd_irq_dpcd_data.bytes.device_service_irq.
+			bits.DOWN_REP_MSG_RDY ||
+		hpd_irq_dpcd_data.bytes.device_service_irq.
+			bits.UP_REQ_MSG_RDY)
 		return false;
 
-	/* For now we only handle 'Downstream port status' case. */
-	/* If we got sink count changed it means Downstream port status changed,
+	/* For now we only handle 'Downstream port status' case.
+	 * If we got sink count changed it means
+	 * Downstream port status changed,
 	 * then DM should call DC to do the detection. */
 	if (hpd_rx_irq_check_link_loss_status(
 		link,
 		&hpd_irq_dpcd_data)) {
 		/* Connectivity log: link loss */
 		CONN_DATA_LINK_LOSS(link,
-							hpd_irq_dpcd_data.raw,
-							sizeof(hpd_irq_dpcd_data),
-							"Status: ");
+					hpd_irq_dpcd_data.raw,
+					sizeof(hpd_irq_dpcd_data),
+					"Status: ");
 
 		perform_link_training_with_retries(link,
-			&link->public.cur_link_settings, true, LINK_TRAINING_ATTEMPTS);
+			&link->public.cur_link_settings,
+			true, LINK_TRAINING_ATTEMPTS);
 
 		status = false;
 	}
@@ -1561,8 +1627,10 @@ bool dc_link_handle_hpd_rx_irq(const struct dc_link *dc_link)
 	 * 3. Automated Test - ie. Internal Commit
 	 * 4. CP (copy protection) - (not interesting for DM???)
 	 * 5. DRR
-	 * 6. Downstream Port status changed -ie. Detect - this the only one
-	 * which is interesting for DM because it must call dc_link_detect.
+	 * 6. Downstream Port status changed
+	 * -ie. Detect - this the only one
+	 * which is interesting for DM because
+	 * it must call dc_link_detect.
 	 */
 	return status;
 }

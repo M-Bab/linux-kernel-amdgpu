@@ -500,6 +500,10 @@ void dce110_timing_generator_set_static_screen_control(
 				CRTC_STATIC_SCREEN_CONTROL,
 				CRTC_STATIC_SCREEN_EVENT_MASK);
 
+	set_reg_field_value(static_screen_cntl,
+				2,
+				CRTC_STATIC_SCREEN_CONTROL,
+				CRTC_STATIC_SCREEN_FRAME_COUNT);
 
 	dm_write_reg(tg->ctx, addr, static_screen_cntl);
 }

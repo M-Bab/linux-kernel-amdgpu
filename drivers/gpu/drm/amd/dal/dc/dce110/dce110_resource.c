@@ -619,14 +619,24 @@ void dce110_resource_build_bit_depth_reduction_params(
 	/* Diagnostics need consistent CRC of the image, that means
 	 * dithering should not be enabled for Diagnostics. */
 	if (IS_DIAG_DC(stream->ctx->dce_environment) == false) {
-
-		fmt_bit_depth->flags.SPATIAL_DITHER_DEPTH = 1;
-		fmt_bit_depth->flags.SPATIAL_DITHER_ENABLED = 1;
-
-		/* frame random is on by default */
-		fmt_bit_depth->flags.FRAME_RANDOM = 1;
-		/* apply RGB dithering */
-		fmt_bit_depth->flags.RGB_RANDOM = true;
+		switch (stream->public.timing.display_color_depth) {
+		case COLOR_DEPTH_666:
+			fmt_bit_depth->flags.SPATIAL_DITHER_ENABLED = 1;
+			fmt_bit_depth->flags.SPATIAL_DITHER_DEPTH = 0;
+		break;
+		case COLOR_DEPTH_888:
+			fmt_bit_depth->flags.SPATIAL_DITHER_ENABLED = 1;
+			fmt_bit_depth->flags.SPATIAL_DITHER_DEPTH = 1;
+		break;
+		case COLOR_DEPTH_101010:
+			fmt_bit_depth->flags.SPATIAL_DITHER_ENABLED = 1;
+			fmt_bit_depth->flags.SPATIAL_DITHER_DEPTH = 2;
+		break;
+		}
+		fmt_bit_depth->flags.RGB_RANDOM = 1;
+		fmt_bit_depth->flags.HIGHPASS_RANDOM = 1;
+		fmt_bit_depth->flags.TRUNCATE_ENABLED = 1;
+		fmt_bit_depth->flags.TRUNCATE_DEPTH = 2;
 	}
 
 	return;

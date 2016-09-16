@@ -118,6 +118,23 @@ union dpcd_psr_configuration {
 	unsigned char raw;
 };
 
+union psr_error_status {
+	struct {
+		unsigned char LINK_CRC_ERROR        :1;
+		unsigned char RFB_STORAGE_ERROR     :1;
+		unsigned char RESERVED              :6;
+	} bits;
+	unsigned char raw;
+};
+
+union psr_sink_psr_status {
+	struct {
+	unsigned char SINK_SELF_REFRESH_STATUS  :3;
+	unsigned char RESERVED                  :5;
+	} bits;
+	unsigned char raw;
+};
+
 struct psr_dmcu_context {
 	/* ddc line */
 	enum channel_id channel;
