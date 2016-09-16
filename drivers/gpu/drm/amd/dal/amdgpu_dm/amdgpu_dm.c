@@ -771,15 +771,22 @@ void amdgpu_dm_update_connector_after_detect(
 		/* For S3 resume with headless use eml_sink to fake target
 		 * because on resume connecotr->sink is set ti NULL
 		 */
+		mutex_lock(&dev->mode_config.mutex);
+
 		if (sink) {
+			if (aconnector->dc_sink)
+				amdgpu_dm_remove_sink_from_freesync_module(
+								connector);
 			aconnector->dc_sink = sink;
 			amdgpu_dm_add_sink_to_freesync_module(
-								connector, aconnector->edid);
+						connector, aconnector->edid);
 		} else {
 			amdgpu_dm_remove_sink_from_freesync_module(connector);
 			if (!aconnector->dc_sink)
 				aconnector->dc_sink = aconnector->dc_em_sink;
 		}
+
+		mutex_unlock(&dev->mode_config.mutex);
 		return;
 	}
 
@@ -808,6 +815,9 @@ void amdgpu_dm_update_connector_after_detect(
 	if (sink) {
 		/* TODO: check if we still need the S3 mode update workaround.
 		 * If yes, put it here. */
+		if (aconnector->dc_sink)
+			amdgpu_dm_remove_sink_from_freesync_module(
+							connector);
 
 		aconnector->dc_sink = sink;
 		if (sink->dc_edid.length == 0)
