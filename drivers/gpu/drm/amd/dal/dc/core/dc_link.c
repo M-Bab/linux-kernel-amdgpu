@@ -1437,11 +1437,11 @@ bool dc_link_setup_psr(const struct dc_link *dc_link,
 	struct dc_context *ctx = link->ctx;
 	struct core_dc *core_dc = DC_TO_CORE(ctx->dc);
 	struct core_stream *core_stream = DC_STREAM_TO_CORE(stream);
-
 	struct psr_dmcu_context psr_context = {0};
+	int i;
 
 	psr_context.controllerId = CONTROLLER_ID_UNDEFINED;
-	int i;
+
 
 	if (dc_link != NULL && dc_link->psr_caps.psr_version > 0) {
 		/* updateSinkPsrDpcdConfig*/
