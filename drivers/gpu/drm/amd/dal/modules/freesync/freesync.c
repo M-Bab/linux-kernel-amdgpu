@@ -832,6 +832,34 @@ void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 		set_freesync_on_streams(core_freesync, streams, num_streams);
 }
 
+
+bool mod_freesync_get_state(struct mod_freesync *mod_freesync,
+		const struct dc_sink *sink,
+		struct mod_freesync_params *freesync_params)
+{
+	struct core_freesync *core_freesync =
+				MOD_FREESYNC_TO_CORE(mod_freesync);
+
+	unsigned int index = map_index_from_sink(core_freesync, sink);
+
+	if (core_freesync->map[index].state.fullscreen) {
+		freesync_params->state = FREESYNC_STATE_FULLSCREEN;
+		freesync_params->enable = true;
+	} else if (core_freesync->map[index].state.static_screen) {
+		freesync_params->state = FREESYNC_STATE_STATIC_SCREEN;
+		freesync_params->enable = true;
+	} else if (core_freesync->map[index].state.video) {
+		freesync_params->state = FREESYNC_STATE_VIDEO;
+		freesync_params->enable = true;
+	} else
+		freesync_params->enable = false;
+
+	freesync_params->update_duration_in_ns =
+		core_freesync->map[index].state.time.update_duration_in_ns;
+
+	return true;
+}
+
 bool mod_freesync_get_freesync_caps(struct mod_freesync *mod_freesync,
 		const struct dc_sink *sink, struct mod_freesync_caps *caps)
 {

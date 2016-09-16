@@ -106,6 +106,10 @@ void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 		const struct dc_stream **streams, int num_streams,
 		struct mod_freesync_params *freesync_params);
 
+bool mod_freesync_get_state(struct mod_freesync *mod_freesync,
+		const struct dc_sink *sink,
+		struct mod_freesync_params *freesync_params);
+
 bool mod_freesync_get_freesync_caps(struct mod_freesync *mod_freesync,
 		const struct dc_sink *sink, struct mod_freesync_caps *caps);
 
