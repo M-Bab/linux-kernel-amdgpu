@@ -31,6 +31,20 @@
 #include "dce/dce_11_0_sh_mask.h"
 #include "dce/dce_11_0_enum.h"
 
+#include "include/audio_types.h"
+
+
+#define CTX \
+		enc110->base.ctx
+#define REG(reg)\
+		LINK_REG(reg)
+#include "reg_helper.h"
+
+
+#define DP_SEC_AUD_N__DP_SEC_AUD_N__DEFAULT 0x8000
+#define DP_SEC_TIMESTAMP__DP_SEC_TIMESTAMP_MODE__AUTO_CALC 1
+
+
 #define LINK_REG(reg)\
 	(enc110->regs->reg)
 
@@ -1071,39 +1085,6 @@ static void dce110_stream_encoder_dp_unblank(
 	dm_write_reg(ctx, addr, value);
 }
 
-#define LINK_REG_READ(reg_name) \
-		dm_read_reg(enc110->base.ctx, LINK_REG(reg_name))
-
-#define LINK_REG_WRITE(reg_name, value) \
-		dm_write_reg(enc110->base.ctx, LINK_REG(reg_name), value)
-
-#define LINK_REG_SET_N(reg_name, n, ...)	\
-		generic_reg_update_ex(enc110->base.ctx, \
-				LINK_REG(reg_name), \
-				0, \
-				n, __VA_ARGS__)
-
-#define LINK_REG_SET(reg_name, field, val)	\
-		LINK_REG_SET_N(reg_name, 1, FD(reg_name##__##field), val)
-
-#define LINK_REG_UPDATE_N(reg_name, n, ...)	\
-		generic_reg_update_ex(enc110->base.ctx, \
-				LINK_REG(reg_name), \
-				LINK_REG_READ(reg_name), \
-				n, __VA_ARGS__)
-
-#define LINK_REG_UPDATE(reg_name, field, val)	\
-		LINK_REG_UPDATE_N(reg_name, 1, FD(reg_name##__##field), val)
-
-#define LINK_REG_WAIT(reg_name, field, val, delay, max_try)	\
-		generic_reg_wait(enc110->base.ctx, \
-				LINK_REG(reg_name), FD(reg_name##__##field), val,\
-				delay, max_try)
-
-#define DP_SEC_AUD_N__DP_SEC_AUD_N__DEFAULT 0x8000
-#define DP_SEC_TIMESTAMP__DP_SEC_TIMESTAMP_MODE__AUTO_CALC 1
-
-#include "include/audio_types.h"
 
 /**
 * speakersToChannels
@@ -1401,10 +1382,10 @@ static void dce110_se_audio_setup(
 	channels = speakers_to_channels(audio_info->flags.speaker_flags).all;
 
 	/* setup the audio stream source select (audio -> dig mapping) */
-	LINK_REG_SET(AFMT_AUDIO_SRC_CONTROL, AFMT_AUDIO_SRC_SELECT, az_inst);
+	REG_SET(AFMT_AUDIO_SRC_CONTROL, AFMT_AUDIO_SRC_SELECT, az_inst);
 
 	/* Channel allocation */
-	LINK_REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL2, AFMT_AUDIO_CHANNEL_ENABLE, channels);
+	REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL2, AFMT_AUDIO_CHANNEL_ENABLE, channels);
 }
 
 static void dce110_se_setup_hdmi_audio(
@@ -1423,23 +1404,23 @@ static void dce110_se_setup_hdmi_audio(
 	max_packets_per_line = calc_max_audio_packets_per_line(crtc_info);
 
 	/* HDMI_AUDIO_PACKET_CONTROL */
-	LINK_REG_UPDATE_N(HDMI_AUDIO_PACKET_CONTROL, 2,
-			FD(HDMI_AUDIO_PACKET_CONTROL__HDMI_AUDIO_PACKETS_PER_LINE), max_packets_per_line,
-			FD(HDMI_AUDIO_PACKET_CONTROL__HDMI_AUDIO_DELAY_EN), 1);
+	REG_UPDATE_2(HDMI_AUDIO_PACKET_CONTROL,
+			HDMI_AUDIO_PACKETS_PER_LINE, max_packets_per_line,
+			HDMI_AUDIO_DELAY_EN, 1);
 
 	/* AFMT_AUDIO_PACKET_CONTROL */
-	LINK_REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL, AFMT_60958_CS_UPDATE, 1);
+	REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL, AFMT_60958_CS_UPDATE, 1);
 
 	/* AFMT_AUDIO_PACKET_CONTROL2 */
-	LINK_REG_UPDATE_N(AFMT_AUDIO_PACKET_CONTROL2, 2,
-			FD(AFMT_AUDIO_PACKET_CONTROL2__AFMT_AUDIO_LAYOUT_OVRD), 0,
-			FD(AFMT_AUDIO_PACKET_CONTROL2__AFMT_60958_OSF_OVRD), 0);
+	REG_UPDATE_2(AFMT_AUDIO_PACKET_CONTROL2,
+			AFMT_AUDIO_LAYOUT_OVRD, 0,
+			AFMT_60958_OSF_OVRD, 0);
 
 	/* HDMI_ACR_PACKET_CONTROL */
-	LINK_REG_UPDATE_N(HDMI_ACR_PACKET_CONTROL, 3,
-			FD(HDMI_ACR_PACKET_CONTROL__HDMI_ACR_AUTO_SEND), 1,
-			FD(HDMI_ACR_PACKET_CONTROL__HDMI_ACR_SOURCE), 0,
-			FD(HDMI_ACR_PACKET_CONTROL__HDMI_ACR_AUDIO_PRIORITY), 0);
+	REG_UPDATE_3(HDMI_ACR_PACKET_CONTROL,
+			HDMI_ACR_AUTO_SEND, 1,
+			HDMI_ACR_SOURCE, 0,
+			HDMI_ACR_AUDIO_PRIORITY, 0);
 
 	/* Program audio clock sample/regeneration parameters */
 	if (get_audio_clock_info(
@@ -1449,22 +1430,22 @@ static void dce110_se_setup_hdmi_audio(
 		&audio_clock_info)) {
 
 		/* HDMI_ACR_32_0__HDMI_ACR_CTS_32_MASK */
-		LINK_REG_UPDATE(HDMI_ACR_32_0, HDMI_ACR_CTS_32, audio_clock_info.cts_32khz);
+		REG_UPDATE(HDMI_ACR_32_0, HDMI_ACR_CTS_32, audio_clock_info.cts_32khz);
 
 		/* HDMI_ACR_32_1__HDMI_ACR_N_32_MASK */
-		LINK_REG_UPDATE(HDMI_ACR_32_1, HDMI_ACR_N_32, audio_clock_info.n_32khz);
+		REG_UPDATE(HDMI_ACR_32_1, HDMI_ACR_N_32, audio_clock_info.n_32khz);
 
 		/* HDMI_ACR_44_0__HDMI_ACR_CTS_44_MASK */
-		LINK_REG_UPDATE(HDMI_ACR_44_0, HDMI_ACR_CTS_44, audio_clock_info.cts_44khz);
+		REG_UPDATE(HDMI_ACR_44_0, HDMI_ACR_CTS_44, audio_clock_info.cts_44khz);
 
 		/* HDMI_ACR_44_1__HDMI_ACR_N_44_MASK */
-		LINK_REG_UPDATE(HDMI_ACR_44_1, HDMI_ACR_N_44, audio_clock_info.n_44khz);
+		REG_UPDATE(HDMI_ACR_44_1, HDMI_ACR_N_44, audio_clock_info.n_44khz);
 
 		/* HDMI_ACR_48_0__HDMI_ACR_CTS_48_MASK */
-		LINK_REG_UPDATE(HDMI_ACR_48_0, HDMI_ACR_CTS_48, audio_clock_info.cts_48khz);
+		REG_UPDATE(HDMI_ACR_48_0, HDMI_ACR_CTS_48, audio_clock_info.cts_48khz);
 
 		/* HDMI_ACR_48_1__HDMI_ACR_N_48_MASK */
-		LINK_REG_UPDATE(HDMI_ACR_48_1, HDMI_ACR_N_48, audio_clock_info.n_48khz);
+		REG_UPDATE(HDMI_ACR_48_1, HDMI_ACR_N_48, audio_clock_info.n_48khz);
 
 		/* Video driver cannot know in advance which sample rate will
 		be used by HD Audio driver
@@ -1474,22 +1455,22 @@ static void dce110_se_setup_hdmi_audio(
 
 	/* AFMT_60958_0__AFMT_60958_CS_CHANNEL_NUMBER_L_MASK &
 	AFMT_60958_0__AFMT_60958_CS_CLOCK_ACCURACY_MASK */
-	LINK_REG_UPDATE_N(AFMT_60958_0, 2,
-			FD(AFMT_60958_0__AFMT_60958_CS_CHANNEL_NUMBER_L), 1,
-			FD(AFMT_60958_0__AFMT_60958_CS_CLOCK_ACCURACY), 0);
+	REG_UPDATE_2(AFMT_60958_0,
+			AFMT_60958_CS_CHANNEL_NUMBER_L, 1,
+			AFMT_60958_CS_CLOCK_ACCURACY, 0);
 
 	/* AFMT_60958_1 AFMT_60958_CS_CHALNNEL_NUMBER_R */
-	LINK_REG_UPDATE(AFMT_60958_1, AFMT_60958_CS_CHANNEL_NUMBER_R, 2);
+	REG_UPDATE(AFMT_60958_1, AFMT_60958_CS_CHANNEL_NUMBER_R, 2);
 
 	/*AFMT_60958_2 now keep this settings until
 	 *  Programming guide comes out*/
-	LINK_REG_UPDATE_N(AFMT_60958_2, 6,
-			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_2), 3,
-			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_3), 4,
-			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_4), 5,
-			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_5), 6,
-			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_6), 7,
-			FD(AFMT_60958_2__AFMT_60958_CS_CHANNEL_NUMBER_7), 8);
+	REG_UPDATE_6(AFMT_60958_2,
+			AFMT_60958_CS_CHANNEL_NUMBER_2, 3,
+			AFMT_60958_CS_CHANNEL_NUMBER_3, 4,
+			AFMT_60958_CS_CHANNEL_NUMBER_4, 5,
+			AFMT_60958_CS_CHANNEL_NUMBER_5, 6,
+			AFMT_60958_CS_CHANNEL_NUMBER_6, 7,
+			AFMT_60958_CS_CHANNEL_NUMBER_7, 8);
 }
 
 static void dce110_se_setup_dp_audio(
@@ -1502,29 +1483,29 @@ static void dce110_se_setup_dp_audio(
 	uint32_t value = 0;
 
 	/* ATP Configuration */
-	LINK_REG_SET(DP_SEC_AUD_N, DP_SEC_AUD_N, DP_SEC_AUD_N__DP_SEC_AUD_N__DEFAULT);
+	REG_SET(DP_SEC_AUD_N, DP_SEC_AUD_N, DP_SEC_AUD_N__DP_SEC_AUD_N__DEFAULT);
 
 	/* Async/auto-calc timestamp mode */
-	LINK_REG_SET(DP_SEC_TIMESTAMP, DP_SEC_TIMESTAMP_MODE,
+	REG_SET(DP_SEC_TIMESTAMP, DP_SEC_TIMESTAMP_MODE,
 			DP_SEC_TIMESTAMP__DP_SEC_TIMESTAMP_MODE__AUTO_CALC);
 
 	/* --- The following are the registers
 	 *  copied from the SetupHDMI --- */
 
 	/* AFMT_AUDIO_PACKET_CONTROL */
-	LINK_REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL, AFMT_60958_CS_UPDATE, 1);
+	REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL, AFMT_60958_CS_UPDATE, 1);
 
 	/* AFMT_AUDIO_PACKET_CONTROL2 */
 	/* Program the ATP and AIP next */
-	LINK_REG_UPDATE_N(AFMT_AUDIO_PACKET_CONTROL2, 2,
-			FD(AFMT_AUDIO_PACKET_CONTROL2__AFMT_AUDIO_LAYOUT_OVRD), 0,
-			FD(AFMT_AUDIO_PACKET_CONTROL2__AFMT_60958_OSF_OVRD), 0);
+	REG_UPDATE_2(AFMT_AUDIO_PACKET_CONTROL2,
+			AFMT_AUDIO_LAYOUT_OVRD, 0,
+			AFMT_60958_OSF_OVRD, 0);
 
 	/* AFMT_INFOFRAME_CONTROL0 */
-	LINK_REG_UPDATE(AFMT_INFOFRAME_CONTROL0, AFMT_AUDIO_INFO_UPDATE, 1);
+	REG_UPDATE(AFMT_INFOFRAME_CONTROL0, AFMT_AUDIO_INFO_UPDATE, 1);
 
 	/* AFMT_60958_0__AFMT_60958_CS_CLOCK_ACCURACY_MASK */
-	LINK_REG_UPDATE(AFMT_60958_0, AFMT_60958_CS_CLOCK_ACCURACY, 0);
+	REG_UPDATE(AFMT_60958_0, AFMT_60958_CS_CLOCK_ACCURACY, 0);
 }
 
 static void dce110_se_enable_audio_clock(
@@ -1536,12 +1517,12 @@ static void dce110_se_enable_audio_clock(
 	if (LINK_REG(AFMT_CNTL) == 0)
 		return;   /* DCE8/10 does not have this register */
 
-	LINK_REG_UPDATE(AFMT_CNTL, AFMT_AUDIO_CLOCK_EN, !!enable);
+	REG_UPDATE(AFMT_CNTL, AFMT_AUDIO_CLOCK_EN, !!enable);
 
 	/* wait for AFMT clock to turn on,
 	 * expectation: this should complete in 1-2 reads
 	 */
-	LINK_REG_WAIT(AFMT_CNTL, AFMT_AUDIO_CLOCK_ON, !!enable,
+	REG_WAIT(AFMT_CNTL, AFMT_AUDIO_CLOCK_ON, !!enable,
 			1, 10);
 }
 
@@ -1551,15 +1532,15 @@ static void dce110_se_enable_dp_audio(
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
 
 	/* Enable Audio packets */
-	LINK_REG_UPDATE(DP_SEC_CNTL, DP_SEC_ASP_ENABLE, 1);
+	REG_UPDATE(DP_SEC_CNTL, DP_SEC_ASP_ENABLE, 1);
 
 	/* Program the ATP and AIP next */
-	LINK_REG_UPDATE_N(DP_SEC_CNTL, 2,
-			FD(DP_SEC_CNTL__DP_SEC_ATP_ENABLE), 1,
-			FD(DP_SEC_CNTL__DP_SEC_AIP_ENABLE), 1);
+	REG_UPDATE_2(DP_SEC_CNTL,
+			DP_SEC_ATP_ENABLE, 1,
+			DP_SEC_AIP_ENABLE, 1);
 
 	/* Program STREAM_ENABLE after all the other enables. */
-	LINK_REG_UPDATE(DP_SEC_CNTL, DP_SEC_STREAM_ENABLE, 1);
+	REG_UPDATE(DP_SEC_CNTL, DP_SEC_STREAM_ENABLE, 1);
 }
 
 static void dce110_se_disable_dp_audio(
@@ -1567,7 +1548,7 @@ static void dce110_se_disable_dp_audio(
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
 
-	uint32_t value = LINK_REG_READ(DP_SEC_CNTL);
+	uint32_t value = REG_READ(DP_SEC_CNTL);
 
 	/* Disable Audio packets */
 	set_reg_field_value(value, 0,
@@ -1591,7 +1572,7 @@ static void dce110_se_disable_dp_audio(
 		set_reg_field_value(value, 1,
 			DP_SEC_CNTL, DP_SEC_STREAM_ENABLE);
 
-	LINK_REG_WRITE(DP_SEC_CNTL, value);
+	REG_WRITE(DP_SEC_CNTL, value);
 }
 
 void dce110_se_audio_mute_control(
@@ -1600,7 +1581,7 @@ void dce110_se_audio_mute_control(
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
 
-	LINK_REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL, AFMT_AUDIO_SAMPLE_SEND, !mute);
+	REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL, AFMT_AUDIO_SAMPLE_SEND, !mute);
 }
 
 void dce110_se_dp_audio_setup(

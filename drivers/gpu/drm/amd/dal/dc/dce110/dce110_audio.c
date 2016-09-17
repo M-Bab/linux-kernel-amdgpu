@@ -32,46 +32,22 @@
 #define DCE110_AUD(audio)\
 	container_of(audio, struct audio_dce110, base)
 
+
 #define CTX \
 	aud110->base.ctx
-
 #define REG(reg)\
 	(aud110->regs->reg)
+#include "reg_helper.h"
+
 
 #define IX_REG(reg)\
 	ix ## reg
-
-
-#define REG_READ(reg_name) \
-		dm_read_reg(CTX, REG(reg_name))
-
-#define REG_WRITE(reg_name, value) \
-		dm_write_reg(CTX, REG(reg_name), value)
-
-#define REG_SET_N(reg_name, n, ...)	\
-		generic_reg_update_ex(CTX, \
-				REG(reg_name), \
-				0, \
-				n, __VA_ARGS__)
-
-#define REG_SET(reg_name, field, val)	\
-		REG_SET_N(reg_name, 1, FD(reg_name##__##field), val)
-
-#define REG_UPDATE_N(reg_name, n, ...)	\
-		generic_reg_update_ex(CTX, \
-				REG(reg_name), \
-				REG_READ(reg_name), \
-				n, __VA_ARGS__)
-
-#define REG_UPDATE(reg_name, field, val)	\
-		REG_UPDATE_N(reg_name, 1, FD(reg_name##__##field), val)
 
 #define AZ_REG_READ(reg_name) \
 		read_indirect_azalia_reg(audio, IX_REG(reg_name))
 
 #define AZ_REG_WRITE(reg_name, value) \
 		write_indirect_azalia_reg(audio, IX_REG(reg_name), value)
-
 
 static void write_indirect_azalia_reg(struct audio *audio,
 	uint32_t reg_index,
@@ -815,9 +791,9 @@ void dce110_aud_wall_dto_setup(
 		HDMI enabled, using DTO0
 		program master CRTC for DTO0 */
 		src_sel = pll_info->dto_source - DTO_SOURCE_ID0;
-		REG_UPDATE_N(DCCG_AUDIO_DTO_SOURCE, 2,
-			FD(DCCG_AUDIO_DTO_SOURCE__DCCG_AUDIO_DTO0_SOURCE_SEL), src_sel,
-			FD(DCCG_AUDIO_DTO_SOURCE__DCCG_AUDIO_DTO_SEL), 0);
+		REG_UPDATE_2(DCCG_AUDIO_DTO_SOURCE,
+			DCCG_AUDIO_DTO0_SOURCE_SEL, src_sel,
+			DCCG_AUDIO_DTO_SEL, 0);
 
 		/* module */
 		REG_UPDATE(DCCG_AUDIO_DTO0_MODULE,
@@ -845,9 +821,9 @@ void dce110_aud_wall_dto_setup(
 		REG_UPDATE(DCCG_AUDIO_DTO_SOURCE,
 				DCCG_AUDIO_DTO_SEL, 1);
 
-		REG_UPDATE_N(DCCG_AUDIO_DTO_SOURCE, 1,
-			FD(DCCG_AUDIO_DTO_SOURCE__DCCG_AUDIO_DTO_SEL), 1);
-			/* FD(DCCG_AUDIO_DTO2_USE_512FBR_DTO), 1)
+		REG_UPDATE(DCCG_AUDIO_DTO_SOURCE,
+			DCCG_AUDIO_DTO_SEL, 1);
+			/* DCCG_AUDIO_DTO2_USE_512FBR_DTO, 1)
 			 * Select 512fs for DP TODO: web register definition
 			 * does not match register header file
 			 * DCE11 version it's commented out while DCE8 it's set to 1
@@ -888,9 +864,9 @@ void dce110_aud_hw_init(
 			AUDIO_RATE_CAPABILITIES, 0x70);
 
 	/*Keep alive bit to verify HW block in BU. */
-	REG_UPDATE_N(AZALIA_F0_CODEC_FUNCTION_PARAMETER_POWER_STATES, 2,
-			FD(AZALIA_F0_CODEC_FUNCTION_PARAMETER_POWER_STATES__CLKSTOP), 1,
-			FD(AZALIA_F0_CODEC_FUNCTION_PARAMETER_POWER_STATES__EPSS), 1);
+	REG_UPDATE_2(AZALIA_F0_CODEC_FUNCTION_PARAMETER_POWER_STATES,
+			CLKSTOP, 1,
+			EPSS, 1);
 }
 
 static const struct audio_funcs funcs = {
