@@ -41,7 +41,6 @@
 /*
  * Post-requisites: headers required by this unit
  */
-#include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
 #define CTX \
@@ -395,15 +394,6 @@ static enum aux_channel_operation_result get_channel_status(
 	}
 }
 
-static const int32_t aux_channel_offset[] = {
-	mmDP_AUX0_AUX_CONTROL - mmDP_AUX0_AUX_CONTROL,
-	mmDP_AUX1_AUX_CONTROL - mmDP_AUX0_AUX_CONTROL,
-	mmDP_AUX2_AUX_CONTROL - mmDP_AUX0_AUX_CONTROL,
-	mmDP_AUX3_AUX_CONTROL - mmDP_AUX0_AUX_CONTROL,
-	mmDP_AUX4_AUX_CONTROL - mmDP_AUX0_AUX_CONTROL,
-	mmDP_AUX5_AUX_CONTROL - mmDP_AUX0_AUX_CONTROL
-};
-
 static const struct aux_engine_funcs aux_engine_funcs = {
 	.destroy = destroy,
 	.acquire_engine = acquire_engine,
@@ -423,14 +413,6 @@ static bool construct(
 	struct aux_engine_dce110 *engine,
 	const struct aux_engine_dce110_init_data *aux_init_data)
 {
-	int32_t offset;
-
-	if (aux_init_data->engine_id >=
-		sizeof(aux_channel_offset) / sizeof(int32_t)) {
-		ASSERT_CRITICAL(false);
-		return false;
-	}
-
 	if (!dal_aux_engine_construct(
 		&engine->base, aux_init_data->ctx)) {
 		ASSERT_CRITICAL(false);
@@ -438,16 +420,8 @@ static bool construct(
 	}
 	engine->base.base.funcs = &engine_funcs;
 	engine->base.funcs = &aux_engine_funcs;
-	offset = aux_channel_offset[aux_init_data->engine_id];
-	engine->addr.aux_control = mmAUX_CONTROL + offset;
-	engine->addr.aux_arb_control = mmAUX_ARB_CONTROL + offset;
-	engine->addr.aux_sw_data = mmAUX_SW_DATA + offset;
-	engine->addr.aux_sw_control = mmAUX_SW_CONTROL + offset;
-	engine->addr.aux_interrupt_control = mmAUX_INTERRUPT_CONTROL + offset;
-	engine->addr.aux_sw_status = mmAUX_SW_STATUS + offset;
 
 	engine->timeout_period = aux_init_data->timeout_period;
-
 	engine->regs = aux_init_data->regs;
 
 	return true;
