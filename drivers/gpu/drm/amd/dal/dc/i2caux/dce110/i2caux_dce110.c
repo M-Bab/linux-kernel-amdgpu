@@ -148,6 +148,30 @@ static const struct i2caux_funcs i2caux_funcs = {
 	.acquire_aux_engine = dal_i2caux_acquire_aux_engine,
 };
 
+#include "dce/dce_11_0_d.h"
+
+/* set register offset */
+#define SR(reg_name)\
+	.reg_name = mm ## reg_name
+
+/* set register offset with instance */
+#define SRI(reg_name, block, id)\
+	.reg_name = mm ## block ## id ## _ ## reg_name
+
+#define aux_regs(id)\
+[id] = {\
+	AUX_COMMON_REG_LIST(id) \
+}
+
+static const struct dce110_aux_registers link_enc_aux_regs[] = {
+		aux_regs(0),
+		aux_regs(1),
+		aux_regs(2),
+		aux_regs(3),
+		aux_regs(4),
+		aux_regs(5)
+};
+
 bool dal_i2caux_dce110_construct(
 	struct i2caux_dce110 *i2caux_dce110,
 	struct adapter_service *as,

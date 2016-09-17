@@ -28,6 +28,23 @@
 
 #include "../aux_engine.h"
 
+#define AUX_COMMON_REG_LIST(id)\
+	SRI(AUX_CONTROL, DP_AUX, id), \
+	SRI(AUX_ARB_CONTROL, DP_AUX, id), \
+	SRI(AUX_SW_DATA, DP_AUX, id), \
+	SRI(AUX_SW_CONTROL, DP_AUX, id), \
+	SRI(AUX_INTERRUPT_CONTROL, DP_AUX, id), \
+	SRI(AUX_SW_STATUS, DP_AUX, id)
+
+struct dce110_aux_registers {
+	uint32_t AUX_CONTROL;
+	uint32_t AUX_ARB_CONTROL;
+	uint32_t AUX_SW_DATA;
+	uint32_t AUX_SW_CONTROL;
+	uint32_t AUX_INTERRUPT_CONTROL;
+	uint32_t AUX_SW_STATUS;
+};
+
 struct aux_engine_dce110 {
 	struct aux_engine base;
 	struct {
