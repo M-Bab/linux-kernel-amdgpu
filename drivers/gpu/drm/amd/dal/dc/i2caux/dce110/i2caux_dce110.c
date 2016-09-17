@@ -149,6 +149,7 @@ static const struct i2caux_funcs i2caux_funcs = {
 };
 
 #include "dce/dce_11_0_d.h"
+#include "dce/dce_11_0_sh_mask.h"
 
 /* set register offset */
 #define SR(reg_name)\
@@ -160,10 +161,11 @@ static const struct i2caux_funcs i2caux_funcs = {
 
 #define aux_regs(id)\
 [id] = {\
-	AUX_COMMON_REG_LIST(id) \
+	AUX_COMMON_REG_LIST(id), \
+	.AUX_RESET_MASK = AUX_CONTROL__AUX_RESET_MASK \
 }
 
-static const struct dce110_aux_registers aux_regs[] = {
+static const struct dce110_aux_registers dce110_aux_regs[] = {
 		aux_regs(0),
 		aux_regs(1),
 		aux_regs(2),
@@ -175,7 +177,8 @@ static const struct dce110_aux_registers aux_regs[] = {
 bool dal_i2caux_dce110_construct(
 	struct i2caux_dce110 *i2caux_dce110,
 	struct adapter_service *as,
-	struct dc_context *ctx)
+	struct dc_context *ctx,
+	const struct dce110_aux_registers aux_regs[])
 {
 	uint32_t i = 0;
 	uint32_t reference_frequency = 0;
@@ -280,7 +283,7 @@ struct i2caux *dal_i2caux_dce110_create(
 		return NULL;
 	}
 
-	if (dal_i2caux_dce110_construct(i2caux_dce110, as, ctx))
+	if (dal_i2caux_dce110_construct(i2caux_dce110, as, ctx, dce110_aux_regs))
 		return &i2caux_dce110->base;
 
 	ASSERT_CRITICAL(false);

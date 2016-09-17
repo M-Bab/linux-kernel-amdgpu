@@ -23,27 +23,11 @@
  *
  */
 
-#ifndef __DAL_I2C_AUX_DCE110_H__
-#define __DAL_I2C_AUX_DCE110_H__
+#ifndef __DAL_I2C_AUX_DCE100_H__
+#define __DAL_I2C_AUX_DCE100_H__
 
-#include "../i2caux.h"
-
-struct i2caux_dce110 {
-	struct i2caux base;
-	/* indicate the I2C HW circular buffer is in use */
-	bool i2c_hw_buffer_in_use;
-};
-
-struct dce110_aux_registers;
-
-struct i2caux *dal_i2caux_dce110_create(
+struct i2caux *dal_i2caux_dce100_create(
 	struct adapter_service *as,
 	struct dc_context *ctx);
 
-bool dal_i2caux_dce110_construct(
-	struct i2caux_dce110 *i2caux_dce110,
-	struct adapter_service *as,
-	struct dc_context *ctx,
-	const struct dce110_aux_registers *aux_regs);
-
-#endif /* __DAL_I2C_AUX_DCE110_H__ */
+#endif /* __DAL_I2C_AUX_DCE100_H__ */

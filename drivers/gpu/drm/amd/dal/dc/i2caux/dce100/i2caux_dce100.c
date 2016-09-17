@@ -23,27 +23,62 @@
  *
  */
 
-#ifndef __DAL_I2C_AUX_DCE110_H__
-#define __DAL_I2C_AUX_DCE110_H__
+#include "dm_services.h"
 
+#include "include/i2caux_interface.h"
 #include "../i2caux.h"
+#include "../engine.h"
+#include "../i2c_engine.h"
+#include "../i2c_sw_engine.h"
+#include "../i2c_hw_engine.h"
 
-struct i2caux_dce110 {
-	struct i2caux base;
-	/* indicate the I2C HW circular buffer is in use */
-	bool i2c_hw_buffer_in_use;
+#include "../dce110/aux_engine_dce110.h"
+#include "../dce110/i2caux_dce110.h"
+
+#include "dce/dce_10_0_d.h"
+#include "dce/dce_10_0_sh_mask.h"
+
+/* set register offset */
+#define SR(reg_name)\
+	.reg_name = mm ## reg_name
+
+/* set register offset with instance */
+#define SRI(reg_name, block, id)\
+	.reg_name = mm ## block ## id ## _ ## reg_name
+
+#define aux_regs(id)\
+[id] = {\
+	AUX_COMMON_REG_LIST(id), \
+	.AUX_RESET_MASK = 0 \
+}
+
+static const struct dce110_aux_registers dce100_aux_regs[] = {
+		aux_regs(0),
+		aux_regs(1),
+		aux_regs(2),
+		aux_regs(3),
+		aux_regs(4),
+		aux_regs(5),
 };
 
-struct dce110_aux_registers;
-
-struct i2caux *dal_i2caux_dce110_create(
+struct i2caux *dal_i2caux_dce100_create(
 	struct adapter_service *as,
-	struct dc_context *ctx);
+	struct dc_context *ctx)
+{
+	struct i2caux_dce110 *i2caux_dce110 =
+		dm_alloc(sizeof(struct i2caux_dce110));
 
-bool dal_i2caux_dce110_construct(
-	struct i2caux_dce110 *i2caux_dce110,
-	struct adapter_service *as,
-	struct dc_context *ctx,
-	const struct dce110_aux_registers *aux_regs);
+	if (!i2caux_dce110) {
+		ASSERT_CRITICAL(false);
+		return NULL;
+	}
 
-#endif /* __DAL_I2C_AUX_DCE110_H__ */
+	if (dal_i2caux_dce110_construct(i2caux_dce110, as, ctx, dce100_aux_regs))
+		return &i2caux_dce110->base;
+
+	ASSERT_CRITICAL(false);
+
+	dm_free(i2caux_dce110);
+
+	return NULL;
+}

@@ -35,6 +35,8 @@
 #include "../dce110/i2caux_dce110.h"
 #include "i2caux_dce112.h"
 
+#include "../dce110/aux_engine_dce110.h"
+
 #include "i2c_hw_engine_dce112.h"
 
 static const enum gpio_ddc_line hw_ddc_lines[] = {
@@ -46,6 +48,32 @@ static const enum gpio_ddc_line hw_ddc_lines[] = {
 	GPIO_DDC_LINE_DDC6,
 };
 
+#include "dce/dce_11_2_d.h"
+#include "dce/dce_11_2_sh_mask.h"
+
+/* set register offset */
+#define SR(reg_name)\
+	.reg_name = mm ## reg_name
+
+/* set register offset with instance */
+#define SRI(reg_name, block, id)\
+	.reg_name = mm ## block ## id ## _ ## reg_name
+
+#define aux_regs(id)\
+[id] = {\
+	AUX_COMMON_REG_LIST(id), \
+	.AUX_RESET_MASK = AUX_CONTROL__AUX_RESET_MASK \
+}
+
+static const struct dce110_aux_registers dce112_aux_regs[] = {
+		aux_regs(0),
+		aux_regs(1),
+		aux_regs(2),
+		aux_regs(3),
+		aux_regs(4),
+		aux_regs(5),
+};
+
 static bool construct(
 	struct i2caux_dce110 *i2caux_dce110,
 	struct adapter_service *as,
@@ -55,7 +83,7 @@ static bool construct(
 	uint32_t reference_frequency = 0;
 	struct i2caux *base = NULL;
 
-	if (!dal_i2caux_dce110_construct(i2caux_dce110, as, ctx)) {
+	if (!dal_i2caux_dce110_construct(i2caux_dce110, as, ctx, dce112_aux_regs)) {
 		ASSERT_CRITICAL(false);
 		return false;
 	}

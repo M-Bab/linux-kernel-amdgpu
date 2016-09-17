@@ -47,6 +47,8 @@ struct dce110_aux_registers {
 	uint32_t AUX_SW_STATUS;
 	uint32_t AUXN_IMPCAL;
 	uint32_t AUXP_IMPCAL;
+
+	uint32_t AUX_RESET_MASK;
 };
 
 struct aux_engine_dce110 {

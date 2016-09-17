@@ -98,7 +98,6 @@ static bool acquire_engine(
 	struct aux_engine *engine)
 {
 	struct aux_engine_dce110 *aux110 = FROM_AUX_ENGINE(engine);
-	bool acquire_reset = true;  /*DCE11 = 1, DCE8 = 0 */
 
 	/* enable AUX before request SW to access AUX */
 	uint32_t value = REG_READ(AUX_CONTROL);
@@ -115,7 +114,7 @@ static bool acquire_engine(
 				AUX_CONTROL,
 				AUX_EN);
 
-		if (acquire_reset) {
+		if (REG(AUX_RESET_MASK)) {
 			/*DP_AUX block as part of the enable sequence*/
 			set_reg_field_value(
 				value,
@@ -126,7 +125,7 @@ static bool acquire_engine(
 
 		REG_WRITE(AUX_CONTROL, value);
 
-		if (acquire_reset) {
+		if (REG(AUX_RESET_MASK)) {
 			/*poll HW to make sure reset it done*/
 
 			REG_WAIT(AUX_CONTROL, AUX_RESET_DONE, 1,

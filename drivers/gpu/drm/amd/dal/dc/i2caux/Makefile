@@ -22,6 +22,17 @@ AMD_DAL_FILES += $(AMD_DAL_I2CAUX_DCE80)
 endif
 
 ###############################################################################
+# DCE 100 family
+###############################################################################
+ifdef CONFIG_DRM_AMD_DAL_DCE10_0
+I2CAUX_DCE100 = i2caux_dce100.o
+
+AMD_DAL_I2CAUX_DCE100 = $(addprefix $(AMDDALPATH)/dc/i2caux/dce100/,$(I2CAUX_DCE100))
+
+AMD_DAL_FILES += $(AMD_DAL_I2CAUX_DCE100)
+endif
+
+###############################################################################
 # DCE 110 family
 ###############################################################################
 ifdef CONFIG_DRM_AMD_DAL_DCE11_0
