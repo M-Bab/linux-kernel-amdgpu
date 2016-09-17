@@ -34,7 +34,9 @@
 	SRI(AUX_SW_DATA, DP_AUX, id), \
 	SRI(AUX_SW_CONTROL, DP_AUX, id), \
 	SRI(AUX_INTERRUPT_CONTROL, DP_AUX, id), \
-	SRI(AUX_SW_STATUS, DP_AUX, id)
+	SRI(AUX_SW_STATUS, DP_AUX, id), \
+	SR(AUXN_IMPCAL), \
+	SR(AUXP_IMPCAL)
 
 struct dce110_aux_registers {
 	uint32_t AUX_CONTROL;
@@ -43,6 +45,8 @@ struct dce110_aux_registers {
 	uint32_t AUX_SW_CONTROL;
 	uint32_t AUX_INTERRUPT_CONTROL;
 	uint32_t AUX_SW_STATUS;
+	uint32_t AUXN_IMPCAL;
+	uint32_t AUXP_IMPCAL;
 };
 
 struct aux_engine_dce110 {

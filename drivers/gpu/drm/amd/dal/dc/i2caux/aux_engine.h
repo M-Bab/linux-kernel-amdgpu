@@ -94,6 +94,8 @@ struct aux_engine {
 	/* following values are expressed in milliseconds */
 	uint32_t delay;
 	uint32_t max_defer_write_retry;
+
+	bool acquire_reset;
 };
 
 bool dal_aux_engine_construct(

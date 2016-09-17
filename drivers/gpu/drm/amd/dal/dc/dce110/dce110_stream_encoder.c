@@ -1382,7 +1382,8 @@ static void dce110_se_audio_setup(
 	channels = speakers_to_channels(audio_info->flags.speaker_flags).all;
 
 	/* setup the audio stream source select (audio -> dig mapping) */
-	REG_SET(AFMT_AUDIO_SRC_CONTROL, AFMT_AUDIO_SRC_SELECT, az_inst);
+	REG_SET(AFMT_AUDIO_SRC_CONTROL, 0,
+			AFMT_AUDIO_SRC_SELECT, az_inst);
 
 	/* Channel allocation */
 	REG_UPDATE(AFMT_AUDIO_PACKET_CONTROL2, AFMT_AUDIO_CHANNEL_ENABLE, channels);
@@ -1483,10 +1484,12 @@ static void dce110_se_setup_dp_audio(
 	uint32_t value = 0;
 
 	/* ATP Configuration */
-	REG_SET(DP_SEC_AUD_N, DP_SEC_AUD_N, DP_SEC_AUD_N__DP_SEC_AUD_N__DEFAULT);
+	REG_SET(DP_SEC_AUD_N, 0,
+			DP_SEC_AUD_N, DP_SEC_AUD_N__DP_SEC_AUD_N__DEFAULT);
 
 	/* Async/auto-calc timestamp mode */
-	REG_SET(DP_SEC_TIMESTAMP, DP_SEC_TIMESTAMP_MODE,
+	REG_SET(DP_SEC_TIMESTAMP, 0,
+			DP_SEC_TIMESTAMP_MODE,
 			DP_SEC_TIMESTAMP__DP_SEC_TIMESTAMP_MODE__AUTO_CALC);
 
 	/* --- The following are the registers

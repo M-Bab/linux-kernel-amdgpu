@@ -41,17 +41,32 @@
 		dm_write_reg(CTX, REG(reg_name), value)
 
 
-/* macro to set register fields.
- * note: assume initial value of register is 0.  be careful about that assumption
- */
-#define REG_SET_N(reg_name, n, ...)	\
+/* macro to set register fields. */
+#define REG_SET_N(reg_name, n, initial_val, ...)	\
 		generic_reg_update_ex(CTX, \
 				REG(reg_name), \
-				0, \
+				initial_val, \
 				n, __VA_ARGS__)
 
-#define REG_SET(reg_name, field, val)	\
-		REG_SET_N(reg_name, 1, FD(reg_name##__##field), val)
+#define REG_SET(reg_name, initial_val, field, val)	\
+		REG_SET_N(reg_name, 1, initial_val, \
+				FD(reg_name##__##field), val)
+
+#define REG_SET_2(reg, init_value, f1, v1, f2, v2)	\
+		REG_SET_N(reg, 2, init_value, \
+				FD(reg##__##f1), v1,\
+				FD(reg##__##f2), v2)
+
+
+/* macro to get register fields
+ * read given register and fill in field value in output parameter */
+#define REG_GET_N(reg_name, n, ...)	\
+		generic_reg_get(CTX, \
+				REG(reg_name), \
+				n, __VA_ARGS__)
+
+#define REG_GET(reg_name, field, val)	\
+		REG_GET_N(reg_name, 1, FD(reg_name##__##field), val)
 
 /* macro to poll and wait for a register field to read back given value */
 
@@ -139,5 +154,26 @@
 				FD(reg##__##f7), val7, \
 				FD(reg##__##f8), val8, \
 				FD(reg##__##f9), val9)
+
+/* macro to update a register field to specified values in given sequences.
+ * useful when toggling bits
+ */
+#define REG_UPDATE_SEQ(reg, field, value1, value2) \
+{	uint32_t val = REG_UPDATE(reg, field, value1); \
+	REG_SET(reg, val, field, value2); }
+
+/* macro to update fields in register 1 field at a time in given order */
+#define REG_UPDATE_1BY1_2(reg, f1, v1, f2, v2) \
+{	uint32_t val = REG_UPDATE(reg, f1, v1); \
+	REG_SET(reg, val, f2, v2); }
+
+#define REG_UPDATE_1BY1_3(reg, f1, v1, f2, v2, f3, v3) \
+{	uint32_t val = REG_UPDATE(reg, f1, v1); \
+	val = REG_SET(reg, val, f2, v2); \
+	REG_SET(reg, val, f3, v3); }
+
+
+uint32_t generic_reg_get(const struct dc_context *ctx,
+		uint32_t addr, int n, ...);
 
 #endif /* DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_INC_REG_HELPER_H_ */
