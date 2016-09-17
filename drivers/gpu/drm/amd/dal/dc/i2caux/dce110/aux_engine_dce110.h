@@ -47,6 +47,7 @@ struct dce110_aux_registers {
 
 struct aux_engine_dce110 {
 	struct aux_engine base;
+	const struct dce110_aux_registers *regs;
 	struct {
 		uint32_t aux_control;
 		uint32_t aux_arb_control;
@@ -62,6 +63,7 @@ struct aux_engine_dce110_init_data {
 	uint32_t engine_id;
 	uint32_t timeout_period;
 	struct dc_context *ctx;
+	const struct dce110_aux_registers *regs;
 };
 
 struct aux_engine *dal_aux_engine_dce110_create(

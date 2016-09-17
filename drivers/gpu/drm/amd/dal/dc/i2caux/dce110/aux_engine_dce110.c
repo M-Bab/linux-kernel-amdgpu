@@ -44,6 +44,12 @@
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
+#define CTX \
+	aux110->base.base.ctx
+#define REG(reg_name)\
+	(aux110->regs->reg_name)
+#include "reg_helper.h"
+
 /*
  * This unit
  */
@@ -67,19 +73,9 @@
 static void release_engine(
 	struct engine *engine)
 {
-	struct aux_engine_dce110 *aux_engine = FROM_ENGINE(engine);
+	struct aux_engine_dce110 *aux110 = FROM_ENGINE(engine);
 
-	const uint32_t addr = aux_engine->addr.aux_arb_control;
-
-	uint32_t value = dm_read_reg(engine->ctx, addr);
-
-	set_reg_field_value(
-		value,
-		1,
-		AUX_ARB_CONTROL,
-		AUX_SW_DONE_USING_AUX_REG);
-
-	dm_write_reg(engine->ctx, addr, value);
+	REG_UPDATE(AUX_ARB_CONTROL, AUX_SW_DONE_USING_AUX_REG, 1);
 }
 
 static void destruct(
@@ -728,6 +724,8 @@ static bool construct(
 	engine->addr.aux_sw_status = mmAUX_SW_STATUS + offset;
 
 	engine->timeout_period = aux_init_data->timeout_period;
+
+	engine->regs = aux_init_data->regs;
 
 	return true;
 }

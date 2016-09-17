@@ -163,7 +163,7 @@ static const struct i2caux_funcs i2caux_funcs = {
 	AUX_COMMON_REG_LIST(id) \
 }
 
-static const struct dce110_aux_registers link_enc_aux_regs[] = {
+static const struct dce110_aux_registers aux_regs[] = {
 		aux_regs(0),
 		aux_regs(1),
 		aux_regs(2),
@@ -242,6 +242,7 @@ bool dal_i2caux_dce110_construct(
 		aux_init_data.engine_id = i;
 		aux_init_data.timeout_period = base->aux_timeout_period;
 		aux_init_data.ctx = ctx;
+		aux_init_data.regs = &aux_regs[i];
 
 		base->aux_engines[line_id] =
 			dal_aux_engine_dce110_create(&aux_init_data);
