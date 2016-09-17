@@ -712,7 +712,6 @@ static const struct aux_engine_funcs aux_engine_funcs = {
 static const struct engine_funcs engine_funcs = {
 	.release_engine = release_engine,
 	.submit_request = dal_aux_engine_submit_request,
-	.keep_power_up_count = dal_i2caux_keep_power_up_count,
 	.get_engine_type = dal_aux_engine_get_engine_type,
 	.acquire = dal_aux_engine_acquire,
 };

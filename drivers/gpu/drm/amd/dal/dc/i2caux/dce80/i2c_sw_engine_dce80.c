@@ -131,7 +131,6 @@ static const struct engine_funcs engine_funcs = {
 	.get_engine_type = dal_i2c_sw_engine_get_engine_type,
 	.acquire = dal_i2c_engine_acquire,
 	.submit_request = dal_i2c_sw_engine_submit_request,
-	.keep_power_up_count = dal_i2caux_keep_power_up_count,
 };
 
 static bool construct(

@@ -79,11 +79,6 @@ bool dal_i2caux_submit_aux_command(
 	struct ddc *ddc,
 	struct aux_command *cmd);
 
-void dal_i2caux_keep_engine_power_up(
-	struct i2caux *i2caux,
-	struct ddc *ddc,
-	bool keep_power_up);
-
 bool dal_i2caux_start_gtc_sync(
 	struct i2caux *i2caux,
 	struct ddc *ddc);

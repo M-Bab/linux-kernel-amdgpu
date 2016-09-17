@@ -36,20 +36,6 @@
 
 #include "engine.h"
 
-/*
- * Post-requisites: headers required by this unit
- */
-
-/*
- * This unit
- */
-void dal_i2caux_keep_power_up_count(
-	struct engine *engine,
-	bool keep_power_up)
-{
-
-}
-
 bool dal_i2caux_construct_engine(
 	struct engine *engine,
 	struct dc_context *ctx)

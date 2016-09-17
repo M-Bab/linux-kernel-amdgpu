@@ -177,22 +177,6 @@ static void release_engine(
 		disable_i2c_hw_engine(hw_engine);
 }
 
-static void keep_power_up_count(
-	struct engine *engine,
-	bool keep_power_up)
-{
-	struct i2c_hw_engine_dce110 *hw_engine = FROM_ENGINE(engine);
-
-	if (keep_power_up)
-		++hw_engine->engine_keep_power_up_count;
-	else {
-		--hw_engine->engine_keep_power_up_count;
-
-		if (!hw_engine->engine_keep_power_up_count)
-			disable_i2c_hw_engine(hw_engine);
-	}
-}
-
 static bool setup_engine(
 	struct i2c_engine *i2c_engine)
 {
@@ -844,7 +828,6 @@ static const struct i2c_engine_funcs i2c_engine_funcs = {
 
 static const struct engine_funcs engine_funcs = {
 	.release_engine = release_engine,
-	.keep_power_up_count = keep_power_up_count,
 	.get_engine_type = dal_i2c_hw_engine_get_engine_type,
 	.acquire = dal_i2c_engine_acquire,
 	.submit_request = dal_i2c_hw_engine_submit_request,

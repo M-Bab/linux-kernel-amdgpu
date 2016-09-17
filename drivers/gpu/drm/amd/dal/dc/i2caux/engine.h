@@ -100,11 +100,6 @@ struct engine_funcs {
 		struct engine *engine,
 		struct i2caux_transaction_request *request,
 		bool middle_of_transaction);
-	/* [anaumov] Actually, following method is meaningful
-	 * only in I2C HW engines */
-	void (*keep_power_up_count)(
-		struct engine *engine,
-		bool keep_power_up);
 	void (*release_engine)(
 		struct engine *engine);
 };
@@ -121,9 +116,5 @@ bool dal_i2caux_construct_engine(
 
 void dal_i2caux_destruct_engine(
 	struct engine *engine);
-
-void dal_i2caux_keep_power_up_count(
-	struct engine *engine,
-	bool keep_power_up);
 
 #endif

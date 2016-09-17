@@ -289,22 +289,6 @@ static bool get_hw_supported_ddc_line(
 	return true;
 }
 
-void dal_i2caux_keep_engine_power_up(
-	struct i2caux *i2caux,
-	struct ddc *ddc,
-	bool keep_power_up)
-{
-	enum gpio_ddc_line line;
-	struct i2c_engine *engine;
-
-	if (!get_hw_supported_ddc_line(ddc, &line))
-		return;
-
-	engine = i2caux->i2c_hw_engines[line];
-
-	engine->base.funcs->keep_power_up_count(&engine->base, keep_power_up);
-}
-
 bool dal_i2caux_start_gtc_sync(
 	struct i2caux *i2caux,
 	struct ddc *ddc)
