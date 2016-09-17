@@ -79,14 +79,6 @@ bool dal_i2caux_submit_aux_command(
 	struct ddc *ddc,
 	struct aux_command *cmd);
 
-bool dal_i2caux_start_gtc_sync(
-	struct i2caux *i2caux,
-	struct ddc *ddc);
-
-bool dal_i2caux_stop_gtc_sync(
-	struct i2caux *i2caux,
-	struct ddc *ddc);
-
 void dal_i2caux_configure_aux(
 	struct i2caux *i2caux,
 	struct ddc *ddc,

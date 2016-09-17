@@ -1111,8 +1111,6 @@ static void set_display_clock(struct validate_context *context)
 	/* TODO: When changing display engine clock, DMCU WaitLoop must be
 	 * reconfigured in order to maintain the same delays within DMCU
 	 * programming sequences. */
-
-	/* TODO: Start GTC counter */
 }
 
 static uint32_t compute_pstate_blackout_duration(

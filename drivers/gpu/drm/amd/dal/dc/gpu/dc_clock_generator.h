@@ -38,15 +38,6 @@ struct dc_clock_generator_funcs {
 	bool (*get_dp_ref_clk_ds_params)(
 		struct dc_clock_generator *dc_clk_gen,
 		struct dccg_dp_ref_clk_ds_params *params);
-	bool (*enable_gtc_counter)(
-		struct dc_clock_generator *dc_clk_gen,
-		uint32_t dprefclk);
-	void (*disable_gtc_counter)(
-		struct dc_clock_generator *dc_clk_gen);
-	void (*set_gtc_group_offset)(
-		struct dc_clock_generator *dc_clk_gen,
-		enum gtc_group group_num,
-		uint32_t offset);
 };
 struct dc_clock_generator {
 	const struct dc_clock_generator_funcs *funcs;

@@ -220,19 +220,6 @@ static void configure(
 	dm_write_reg(engine->base.ctx, addr, value);
 }
 
-static bool start_gtc_sync(
-	struct aux_engine *engine)
-{
-	/*TODO*/
-	return false;
-}
-
-static void stop_gtc_sync(
-	struct aux_engine *engine)
-{
-	/*TODO*/
-}
-
 #define COMPOSE_AUX_SW_DATA_16_20(command, address) \
 	((command) | ((0xF0000 & (address)) >> 16))
 
@@ -701,9 +688,6 @@ static const int32_t aux_channel_offset[] = {
 static const struct aux_engine_funcs aux_engine_funcs = {
 	.destroy = destroy,
 	.acquire_engine = acquire_engine,
-	.configure = configure,
-	.start_gtc_sync = start_gtc_sync,
-	.stop_gtc_sync = stop_gtc_sync,
 	.submit_channel_request = submit_channel_request,
 	.process_channel_reply = process_channel_reply,
 	.get_channel_status = get_channel_status,
@@ -742,10 +726,6 @@ static bool construct(
 	engine->addr.aux_sw_control = mmAUX_SW_CONTROL + offset;
 	engine->addr.aux_interrupt_control = mmAUX_INTERRUPT_CONTROL + offset;
 	engine->addr.aux_sw_status = mmAUX_SW_STATUS + offset;
-	engine->addr.aux_gtc_sync_control = mmAUX_GTC_SYNC_CONTROL + offset;
-	engine->addr.aux_gtc_sync_status = mmAUX_GTC_SYNC_STATUS + offset;
-	engine->addr.aux_gtc_sync_controller_status =
-		mmAUX_GTC_SYNC_CONTROLLER_STATUS + offset;
 
 	engine->timeout_period = aux_init_data->timeout_period;
 

@@ -289,60 +289,6 @@ static bool get_hw_supported_ddc_line(
 	return true;
 }
 
-bool dal_i2caux_start_gtc_sync(
-	struct i2caux *i2caux,
-	struct ddc *ddc)
-{
-	enum gpio_ddc_line line;
-
-	struct aux_engine *engine;
-
-	bool result;
-
-	if (!get_hw_supported_ddc_line(ddc, &line))
-		return false;
-
-	engine = i2caux->aux_engines[line];
-
-	if (!engine)
-		return false;
-
-	if (!engine->base.funcs->acquire(&engine->base, ddc))
-		return false;
-
-	result = engine->funcs->start_gtc_sync(engine);
-
-	i2caux->funcs->release_engine(i2caux, &engine->base);
-
-	return result;
-}
-
-bool dal_i2caux_stop_gtc_sync(
-	struct i2caux *i2caux,
-	struct ddc *ddc)
-{
-	enum gpio_ddc_line line;
-
-	struct aux_engine *engine;
-
-	if (!get_hw_supported_ddc_line(ddc, &line))
-		return false;
-
-	engine = i2caux->aux_engines[line];
-
-	if (!engine)
-		return false;
-
-	if (!engine->base.funcs->acquire(&engine->base, ddc))
-		return false;
-
-	engine->funcs->stop_gtc_sync(engine);
-
-	i2caux->funcs->release_engine(i2caux, &engine->base);
-
-	return true;
-}
-
 void dal_i2caux_configure_aux(
 	struct i2caux *i2caux,
 	struct ddc *ddc,

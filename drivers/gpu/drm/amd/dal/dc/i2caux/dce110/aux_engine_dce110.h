@@ -37,9 +37,6 @@ struct aux_engine_dce110 {
 		uint32_t aux_sw_control;
 		uint32_t aux_interrupt_control;
 		uint32_t aux_sw_status;
-		uint32_t aux_gtc_sync_control;
-		uint32_t aux_gtc_sync_status;
-		uint32_t aux_gtc_sync_controller_status;
 	} addr;
 	uint32_t timeout_period;
 };

@@ -117,7 +117,6 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_ALLOW_EDP_RESOURCE_SHARING, false, true},
 	{FEATURE_SUPPORT_DP_YUV, false, true},
 	{FEATURE_SUPPORT_DP_Y_ONLY, false, true},
-	{FEATURE_DISABLE_DP_GTC_SYNC, true, true},
 	{FEATURE_MODIFY_TIMINGS_FOR_WIRELESS, false, true},
 	{FEATURE_DCP_BIT_DEPTH_REDUCTION_MODE, 0, false},
 	{FEATURE_DCP_DITHER_MODE, 0, false},

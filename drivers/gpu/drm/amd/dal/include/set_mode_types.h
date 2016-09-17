@@ -28,18 +28,6 @@
 
 #include "dc_types.h"
 
-/* GTC group number */
-enum gtc_group {
-	GTC_GROUP_DISABLED,
-	GTC_GROUP_1,
-	GTC_GROUP_2,
-	GTC_GROUP_3,
-	GTC_GROUP_4,
-	GTC_GROUP_5,
-	GTC_GROUP_6,
-	GTC_GROUP_MAX
-};
-
 /* Info frame packet status */
 enum info_frame_flag {
 	INFO_PACKET_PACKET_INVALID = 0,

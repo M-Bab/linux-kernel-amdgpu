@@ -77,10 +77,6 @@ struct aux_engine_funcs {
 	void (*configure)(
 		struct aux_engine *engine,
 		union aux_config cfg);
-	bool (*start_gtc_sync)(
-		struct aux_engine *engine);
-	void (*stop_gtc_sync)(
-		struct aux_engine *engine);
 	void (*submit_channel_request)(
 		struct aux_engine *engine,
 		struct aux_request_transaction_data *request);

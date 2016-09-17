@@ -35,9 +35,6 @@ struct aux_engine_dce80 {
 		uint32_t AUX_SW_CONTROL;
 		uint32_t AUX_INTERRUPT_CONTROL;
 		uint32_t AUX_SW_STATUS;
-		uint32_t AUX_GTC_SYNC_CONTROL;
-		uint32_t AUX_GTC_SYNC_STATUS;
-		uint32_t AUX_GTC_SYNC_CONTROLLER_STATUS;
 	} addr;
 	uint32_t timeout_period;
 };

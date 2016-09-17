@@ -64,14 +64,5 @@ void dal_dc_clock_generator_set_display_pipe_mapping(
 bool dal_dc_clock_generator_get_dp_ref_clk_ds_params(
 	struct dc_clock_generator *dc_clk_gen,
 	struct dccg_dp_ref_clk_ds_params *params);
-bool dal_dc_clock_generator_enable_gtc_counter(
-	struct dc_clock_generator *dc_clk_gen,
-	uint32_t dprefclk);
-void dal_dc_clock_generator_disable_gtc_counter(
-	struct dc_clock_generator *dc_clk_gen);
-void dal_dc_clock_generator_set_gtc_group_offset(
-	struct dc_clock_generator *dc_clk_gen,
-	enum gtc_group group_num,
-	uint32_t offset);
 
 #endif /* __DC_CLOCK_GENERATOR_INTERFACE_H__ */
