@@ -49,7 +49,37 @@
 #include "i2c_hw_engine_dce80.h"
 #include "../i2c_generic_hw_engine.h"
 #include "../aux_engine.h"
-#include "aux_engine_dce80.h"
+
+
+#include "../dce110/aux_engine_dce110.h"
+#include "../dce110/i2caux_dce110.h"
+
+#include "dce/dce_8_0_d.h"
+#include "dce/dce_8_0_sh_mask.h"
+
+
+/* set register offset */
+#define SR(reg_name)\
+	.reg_name = mm ## reg_name
+
+/* set register offset with instance */
+#define SRI(reg_name, block, id)\
+	.reg_name = mm ## block ## id ## _ ## reg_name
+
+#define aux_regs(id)\
+[id] = {\
+	AUX_COMMON_REG_LIST(id), \
+	.AUX_RESET_MASK = 0 \
+}
+
+static const struct dce110_aux_registers dce80_aux_regs[] = {
+		aux_regs(0),
+		aux_regs(1),
+		aux_regs(2),
+		aux_regs(3),
+		aux_regs(4),
+		aux_regs(5)
+};
 
 /*
  * This unit
@@ -226,14 +256,15 @@ static bool construct(
 	do {
 		enum gpio_ddc_line line_id = hw_aux_lines[i];
 
-		struct aux_engine_dce80_create_arg arg;
+		struct aux_engine_dce110_init_data arg;
 
 		arg.engine_id = i;
 		arg.timeout_period = base->aux_timeout_period;
 		arg.ctx = ctx;
+		arg.regs = &dce80_aux_regs[i];
 
 		base->aux_engines[line_id] =
-			dal_aux_engine_dce80_create(&arg);
+			dal_aux_engine_dce110_create(&arg);
 
 		++i;
 	} while (i < ARRAY_SIZE(hw_aux_lines));

@@ -14,7 +14,7 @@ AMD_DAL_FILES += $(AMD_DAL_I2CAUX)
 ###############################################################################
 ifdef CONFIG_DRM_AMD_DAL_DCE8_0
 I2CAUX_DCE80 = i2caux_dce80.o i2c_hw_engine_dce80.o \
-	i2c_sw_engine_dce80.o aux_engine_dce80.o
+	i2c_sw_engine_dce80.o
 
 AMD_DAL_I2CAUX_DCE80 = $(addprefix $(AMDDALPATH)/dc/i2caux/dce80/,$(I2CAUX_DCE80))
 
