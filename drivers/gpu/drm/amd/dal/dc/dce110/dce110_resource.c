@@ -632,6 +632,8 @@ void dce110_resource_build_bit_depth_reduction_params(
 			fmt_bit_depth->flags.SPATIAL_DITHER_ENABLED = 1;
 			fmt_bit_depth->flags.SPATIAL_DITHER_DEPTH = 2;
 		break;
+		default:
+		break;
 		}
 		fmt_bit_depth->flags.RGB_RANDOM = 1;
 		fmt_bit_depth->flags.HIGHPASS_RANDOM = 1;
