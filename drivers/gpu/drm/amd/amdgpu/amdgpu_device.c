@@ -1527,15 +1527,6 @@ static int amdgpu_resume(struct amdgpu_device *adev)
 	return 0;
 }
 
-static bool amdgpu_device_is_virtual(void)
-{
-#ifdef CONFIG_X86
-	return boot_cpu_has(X86_FEATURE_HYPERVISOR);
-#else
-	return false;
-#endif
-}
-
 bool amdgpu_device_asic_has_dal_support(enum amd_asic_type asic_type)
 {
 	switch (asic_type) {
