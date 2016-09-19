@@ -1636,6 +1636,12 @@ static uint32_t cik_get_rev_id(struct amdgpu_device *adev)
 		>> CC_DRM_ID_STRAPS__ATI_REV_ID__SHIFT;
 }
 
+static void cik_detect_hw_virtualization(struct amdgpu_device *adev)
+{
+	if (is_virtual_machine()) /* passthrough mode */
+		adev->virtualization.virtual_caps |= AMDGPU_PASSTHROUGH_MODE;
+}
+
 #if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 static const struct amdgpu_ip_block_version bonaire_ip_blocks_dal[] =
 {
@@ -2540,6 +2546,7 @@ static const struct amdgpu_asic_funcs cik_asic_funcs =
 {
 	.read_disabled_bios = &cik_read_disabled_bios,
 	.read_bios_from_rom = &cik_read_bios_from_rom,
+	.detect_hw_virtualization = cik_detect_hw_virtualization,
 	.read_register = &cik_read_register,
 	.reset = &cik_asic_reset,
 	.set_vga_state = &cik_vga_set_state,
