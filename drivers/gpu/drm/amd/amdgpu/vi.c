@@ -466,12 +466,6 @@ static void vi_detect_hw_virtualization(struct amdgpu_device *adev)
 	}
 }
 
-static void vi_detect_sriov_bios(struct amdgpu_device *adev)
-{
-	if (amdgpu_atombios_has_gpu_virtualization_table(adev))
-		adev->virtualization.virtual_caps |= AMDGPU_SRIOV_CAPS_SRIOV_VBIOS;
-}
-
 static const struct amdgpu_allowed_register_entry tonga_allowed_read_registers[] = {
 	{mmGB_MACROTILE_MODE7, true},
 };
@@ -1865,7 +1859,6 @@ static const struct amdgpu_asic_funcs vi_asic_funcs =
 	.read_disabled_bios = &vi_read_disabled_bios,
 	.read_bios_from_rom = &vi_read_bios_from_rom,
 	.detect_hw_virtualization = vi_detect_hw_virtualization,
-	.detect_sriov_bios = vi_detect_sriov_bios,
 	.read_register = &vi_read_register,
 	.reset = &vi_asic_reset,
 	.set_vga_state = &vi_vga_set_state,

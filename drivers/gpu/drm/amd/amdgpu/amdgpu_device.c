@@ -1564,6 +1564,12 @@ bool amdgpu_device_has_dal_support(struct amdgpu_device *adev)
 	return amdgpu_device_asic_has_dal_support(adev->asic_type);
 }
 
+static void amdgpu_device_detect_sriov_bios(struct amdgpu_device *adev)
+{
+	if (amdgpu_atombios_has_gpu_virtualization_table(adev))
+		adev->virtualization.virtual_caps |= AMDGPU_SRIOV_CAPS_SRIOV_VBIOS;
+}
+
 /**
  * amdgpu_device_init - initialize the driver
  *
@@ -1719,8 +1725,7 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	}
 
 	/* detect if we are with an SRIOV vbios */
-	if (adev->asic_funcs->detect_sriov_bios)
-		amdgpu_asic_detect_sriov_bios(adev);
+	amdgpu_device_detect_sriov_bios(adev);
 
 	/* Post card if necessary */
 	if (amdgpu_vpost_needed(adev)) {
