@@ -449,7 +449,8 @@ static bool vi_read_bios_from_rom(struct amdgpu_device *adev,
 	return true;
 }
 
-static void vi_detect_hw_virtualization(struct amdgpu_device *adev) {
+static void vi_detect_hw_virtualization(struct amdgpu_device *adev)
+{
 	uint32_t reg = RREG32(mmBIF_IOV_FUNC_IDENTIFIER);
 	/* bit0: 0 means pf and 1 means vf */
 	/* bit31: 0 means disable IOV and 1 means enable */
@@ -465,7 +466,8 @@ static void vi_detect_hw_virtualization(struct amdgpu_device *adev) {
 	}
 }
 
-static void vi_detect_sriov_bios(struct amdgpu_device *adev) {
+static void vi_detect_sriov_bios(struct amdgpu_device *adev)
+{
 	if (amdgpu_atombios_has_gpu_virtualization_table(adev))
 		adev->virtualization.virtual_caps |= AMDGPU_SRIOV_CAPS_SRIOV_VBIOS;
 }
