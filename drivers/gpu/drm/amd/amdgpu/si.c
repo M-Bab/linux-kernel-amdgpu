@@ -952,12 +952,6 @@ static void si_smc_wreg(struct amdgpu_device *adev, u32 reg, u32 v)
 	spin_unlock_irqrestore(&adev->smc_idx_lock, flags);
 }
 
-static u32 si_get_virtual_caps(struct amdgpu_device *adev)
-{
-	/* SI does not support SR-IOV */
-	return 0;
-}
-
 static struct amdgpu_allowed_register_entry si_allowed_read_registers[] = {
 	{GRBM_STATUS, false},
 	{GB_ADDR_CONFIG, false},
@@ -1133,7 +1127,6 @@ static const struct amdgpu_asic_funcs si_asic_funcs =
 	.get_xclk = &si_get_xclk,
 	.set_uvd_clocks = &si_set_uvd_clocks,
 	.set_vce_clocks = NULL,
-	.get_virtual_caps = &si_get_virtual_caps,
 };
 
 static uint32_t si_get_rev_id(struct amdgpu_device *adev)
