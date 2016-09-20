@@ -43,6 +43,28 @@
 	AUD_COMMON_REG_LIST_BASE(id)
 
 
+ /* set field name */
+#define SF(reg_name, field_name, post_fix)\
+	.field_name = reg_name ## __ ## field_name ## post_fix
+
+
+#define AUD_COMMON_MASK_SH_LIST_BASE(mask_sh)\
+		SF(DCCG_AUDIO_DTO_SOURCE, DCCG_AUDIO_DTO0_SOURCE_SEL, mask_sh),\
+		SF(DCCG_AUDIO_DTO_SOURCE, DCCG_AUDIO_DTO_SEL, mask_sh),\
+		SF(DCCG_AUDIO_DTO0_MODULE, DCCG_AUDIO_DTO0_MODULE, mask_sh),\
+		SF(DCCG_AUDIO_DTO0_PHASE, DCCG_AUDIO_DTO0_PHASE, mask_sh),\
+		SF(DCCG_AUDIO_DTO0_MODULE, DCCG_AUDIO_DTO0_MODULE, mask_sh),\
+		SF(DCCG_AUDIO_DTO0_PHASE, DCCG_AUDIO_DTO0_PHASE, mask_sh),\
+		SF(AZALIA_F0_CODEC_FUNCTION_PARAMETER_SUPPORTED_SIZE_RATES, AUDIO_RATE_CAPABILITIES, mask_sh),\
+		SF(AZALIA_F0_CODEC_FUNCTION_PARAMETER_POWER_STATES, CLKSTOP, mask_sh),\
+		SF(AZALIA_F0_CODEC_FUNCTION_PARAMETER_POWER_STATES, EPSS, mask_sh)
+
+#define AUD_COMMON_MASK_SH_LIST(mask_sh)\
+		AUD_COMMON_MASK_SH_LIST_BASE(mask_sh),\
+		SF(AZALIA_F0_CODEC_ENDPOINT_INDEX, AZALIA_ENDPOINT_REG_INDEX, mask_sh),\
+		SF(AZALIA_F0_CODEC_ENDPOINT_DATA, AZALIA_ENDPOINT_REG_DATA, mask_sh)
+
+
 struct dce110_audio_registers {
 	uint32_t AZALIA_F0_CODEC_ENDPOINT_INDEX;
 	uint32_t AZALIA_F0_CODEC_ENDPOINT_DATA;
@@ -56,11 +78,48 @@ struct dce110_audio_registers {
 	uint32_t DCCG_AUDIO_DTO0_PHASE;
 	uint32_t DCCG_AUDIO_DTO1_MODULE;
 	uint32_t DCCG_AUDIO_DTO1_PHASE;
+
+	uint32_t AUDIO_RATE_CAPABILITIES;
+};
+
+struct dce110_audio_shift {
+	uint8_t AZALIA_ENDPOINT_REG_INDEX;
+	uint8_t AZALIA_ENDPOINT_REG_DATA;
+
+	uint8_t AUDIO_RATE_CAPABILITIES;
+	uint8_t CLKSTOP;
+	uint8_t EPSS;
+
+	uint8_t DCCG_AUDIO_DTO0_SOURCE_SEL;
+	uint8_t DCCG_AUDIO_DTO_SEL;
+	uint8_t DCCG_AUDIO_DTO0_MODULE;
+	uint8_t DCCG_AUDIO_DTO0_PHASE;
+	uint8_t DCCG_AUDIO_DTO1_MODULE;
+	uint8_t DCCG_AUDIO_DTO1_PHASE;
+};
+
+struct dce110_aduio_mask {
+	uint32_t AZALIA_ENDPOINT_REG_INDEX;
+	uint32_t AZALIA_ENDPOINT_REG_DATA;
+
+	uint32_t AUDIO_RATE_CAPABILITIES;
+	uint32_t CLKSTOP;
+	uint32_t EPSS;
+
+	uint32_t DCCG_AUDIO_DTO0_SOURCE_SEL;
+	uint32_t DCCG_AUDIO_DTO_SEL;
+	uint32_t DCCG_AUDIO_DTO0_MODULE;
+	uint32_t DCCG_AUDIO_DTO0_PHASE;
+	uint32_t DCCG_AUDIO_DTO1_MODULE;
+	uint32_t DCCG_AUDIO_DTO1_PHASE;
 };
 
 struct audio_dce110 {
 	struct audio base;
 	const struct dce110_audio_registers *regs;
+	const struct dce110_audio_shift *shifts;
+	const struct dce110_aduio_mask *masks;
+
 	/* dce-specific members are following */
 	/* none */
 };
@@ -68,7 +127,9 @@ struct audio_dce110 {
 struct audio *dce110_audio_create(
 		struct dc_context *ctx,
 		unsigned int inst,
-		const struct dce110_audio_registers *reg);
+		const struct dce110_audio_registers *reg,
+		const struct dce110_audio_shift *shifts,
+		const struct dce110_aduio_mask *masks);
 
 void dce110_aud_destroy(struct audio **audio);
 

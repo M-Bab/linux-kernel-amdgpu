@@ -28,17 +28,20 @@
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
-
 #define DCE110_AUD(audio)\
 	container_of(audio, struct audio_dce110, base)
 
+
+#include "reg_helper.h"
 
 #define CTX \
 	aud110->base.ctx
 #define REG(reg)\
 	(aud110->regs->reg)
-#include "reg_helper.h"
 
+#undef FN
+#define FN(reg_name, field_name) \
+	aud110->shifts->field_name, aud110->masks->field_name
 
 #define IX_REG(reg)\
 	ix ## reg
@@ -886,7 +889,10 @@ void dce110_aud_destroy(struct audio **audio)
 struct audio *dce110_audio_create(
 		struct dc_context *ctx,
 		unsigned int inst,
-		const struct dce110_audio_registers *reg)
+		const struct dce110_audio_registers *reg,
+		const struct dce110_audio_shift *shifts,
+		const struct dce110_aduio_mask *masks
+		)
 {
 	struct audio_dce110 *audio = dm_alloc(sizeof(*audio));
 
@@ -900,6 +906,8 @@ struct audio *dce110_audio_create(
 	audio->base.funcs = &funcs;
 
 	audio->regs = reg;
+	audio->shifts = shifts;
+	audio->masks = masks;
 
 	return &audio->base;
 }

@@ -45,6 +45,8 @@
 #include "dce110/audio_dce110.h"
 #include "dce100/dce100_hw_sequencer.h"
 #include "dce/dce_10_0_d.h"
+#include "dce/dce_10_0_sh_mask.h"
+
 
 #ifndef mmDP_DPHY_INTERNAL_CTRL
 	#define mmDP_DPHY_INTERNAL_CTRL 0x4aa7
@@ -297,6 +299,15 @@ static const struct dce110_audio_registers audio_regs[] = {
 	audio_regs(5),
 	audio_regs(6),
 };
+
+static const struct dce110_audio_shift audio_shift = {
+		AUD_COMMON_MASK_SH_LIST(__SHIFT)
+};
+
+static const struct dce110_aduio_mask audio_mask = {
+		AUD_COMMON_MASK_SH_LIST(_MASK)
+};
+
 
 #define DCFE_MEM_PWR_CTRL_REG_BASE 0x1b03
 
@@ -933,7 +944,7 @@ static bool construct(
 		}
 
 		pool->base.audios[i] = dce110_audio_create(
-				ctx, i, &audio_regs[i]);
+				ctx, i, &audio_regs[i], &audio_shift, &audio_mask);
 		if (pool->base.audios[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create DPPs!\n");
