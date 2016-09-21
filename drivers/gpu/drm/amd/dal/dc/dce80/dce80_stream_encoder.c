@@ -1076,8 +1076,13 @@ static const struct stream_encoder_funcs dce80_str_enc_funcs = {
 		dce80_stream_encoder_dp_unblank,
 
 	.audio_mute_control = dce110_se_audio_mute_control,
+
+	.dp_audio_setup = dce110_se_dp_audio_setup,
 	.dp_audio_enable = dce110_se_dp_audio_enable,
 	.dp_audio_disable = dce110_se_dp_audio_disable,
+
+	.hdmi_audio_setup = dce110_se_hdmi_audio_setup,
+	.hdmi_audio_disable = dce110_se_hdmi_audio_disable,
 };
 
 bool dce80_stream_encoder_construct(

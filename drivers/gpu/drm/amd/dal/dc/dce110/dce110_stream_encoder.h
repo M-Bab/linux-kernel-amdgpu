@@ -143,10 +143,24 @@ bool dce110_stream_encoder_construct(
 void dce110_se_audio_mute_control(
 	struct stream_encoder *enc, bool mute);
 
+void dce110_se_dp_audio_setup(
+	struct stream_encoder *enc,
+	unsigned int az_inst,
+	struct audio_info *info);
+
 void dce110_se_dp_audio_enable(
 		struct stream_encoder *enc);
 
 void dce110_se_dp_audio_disable(
 		struct stream_encoder *enc);
+
+void dce110_se_hdmi_audio_setup(
+	struct stream_encoder *enc,
+	unsigned int az_inst,
+	struct audio_info *info,
+	struct audio_crtc_info *audio_crtc_info);
+
+void dce110_se_hdmi_audio_disable(
+	struct stream_encoder *enc);
 
 #endif /* __DC_STREAM_ENCODER_DCE110_H__ */
