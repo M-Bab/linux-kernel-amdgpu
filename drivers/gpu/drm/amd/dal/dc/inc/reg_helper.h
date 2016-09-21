@@ -57,6 +57,40 @@
 				FD(reg##__##f1), v1,\
 				FD(reg##__##f2), v2)
 
+#define REG_SET_3(reg, init_value, f1, v1, f2, v2, f3, v3)	\
+		REG_SET_N(reg, 3, init_value, \
+				FD(reg##__##f1), v1,\
+				FD(reg##__##f2), v2,\
+				FD(reg##__##f3), v3)
+
+#define REG_SET_4(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4)	\
+		REG_SET_N(reg, 4, init_value, \
+				FD(reg##__##f1), v1,\
+				FD(reg##__##f2), v2,\
+				FD(reg##__##f3), v3,\
+				FD(reg##__##f4), v4)
+
+#define REG_SET_6(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4,	\
+		f5, v5, f6, v6)	\
+		REG_SET_N(reg, 6, init_value, \
+				FD(reg##__##f1), v1,\
+				FD(reg##__##f2), v2,\
+				FD(reg##__##f3), v3,\
+				FD(reg##__##f4), v4,\
+				FD(reg##__##f5), v5,\
+				FD(reg##__##f6), v6)
+
+#define REG_SET_7(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4,	\
+		f5, v5, f6, v6, f7, v7)	\
+		REG_SET_N(reg, 7, init_value, \
+				FD(reg##__##f1), v1,\
+				FD(reg##__##f2), v2,\
+				FD(reg##__##f3), v3,\
+				FD(reg##__##f4), v4,\
+				FD(reg##__##f5), v5,\
+				FD(reg##__##f6), v6,\
+				FD(reg##__##f7), v7)
+
 
 /* macro to get register fields
  * read given register and fill in field value in output parameter */
