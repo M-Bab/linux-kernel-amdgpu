@@ -38,6 +38,7 @@
 
 #ifndef ATOM_S2_CURRENT_BL_LEVEL_MASK
 #define ATOM_S2_CURRENT_BL_LEVEL_MASK   0x0000FF00L
+#define ATOM_S2_VRI_BRIGHT_ENABLE       0x20000000L
 #endif
 
 #ifndef ATOM_S2_CURRENT_BL_LEVEL_SHIFT
@@ -105,6 +106,9 @@
 /*TODO: Used for psr wakeup for set backlight level*/
 static unsigned int psr_crtc_offset;
 
+/* registers setting needs to be save and restored used at InitBacklight */
+static struct dce110_abm_backlight_registers stored_backlight_registers;
+
 enum {
 	DP_MST_UPDATE_MAX_RETRY = 50
 };
@@ -130,6 +134,8 @@ static const struct link_encoder_funcs dce110_lnk_enc_funcs = {
 		dce110_link_encoder_update_mst_stream_allocation_table,
 	.set_dmcu_backlight_level =
 			dce110_link_encoder_set_dmcu_backlight_level,
+	.init_dmcu_backlight_settings =
+			dce110_link_encoder_init_dmcu_backlight_settings,
 	.set_dmcu_abm_level = dce110_link_encoder_set_dmcu_abm_level,
 	.set_dmcu_psr_enable = dce110_link_encoder_set_dmcu_psr_enable,
 	.setup_dmcu_psr = dce110_link_encoder_setup_dmcu_psr,
@@ -1873,6 +1879,85 @@ void dce110_link_encoder_set_dmcu_backlight_level(
 	s2 |= (level << ATOM_S2_CURRENT_BL_LEVEL_SHIFT);
 
 	dm_write_reg(ctx, DMCU_REG(BIOS_SCRATCH_2), s2);
+}
+
+void dce110_link_encoder_init_dmcu_backlight_settings(
+	struct link_encoder *enc)
+{
+	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
+	struct dc_context *ctx = enc110->base.ctx;
+	uint32_t bl_pwm_cntl;
+	uint32_t pwmCntl;
+	uint32_t pwmCntl2;
+	uint32_t periodCntl;
+	uint32_t pwmSeqRefDiv;
+	uint32_t s2;
+
+	bl_pwm_cntl = dm_read_reg(ctx, BL_REG(BL_PWM_CNTL));
+
+	/* It must not be 0, so we have to restore them
+	 * Bios bug w/a - period resets to zero,
+	 * restoring to cache values which is always correct
+	 */
+	if (get_reg_field_value(bl_pwm_cntl, BL_PWM_CNTL,
+			BL_ACTIVE_INT_FRAC_CNT) == 0 || bl_pwm_cntl == 1) {
+		if (stored_backlight_registers.vBL_PWM_CNTL != 0) {
+			pwmCntl = stored_backlight_registers.vBL_PWM_CNTL;
+			dm_write_reg(ctx, BL_REG(BL_PWM_CNTL), pwmCntl);
+
+			pwmCntl2 = stored_backlight_registers.vBL_PWM_CNTL2;
+			dm_write_reg(ctx, BL_REG(BL_PWM_CNTL2), pwmCntl2);
+
+			periodCntl =
+				stored_backlight_registers.vBL_PWM_PERIOD_CNTL;
+			dm_write_reg(ctx, BL_REG(BL_PWM_PERIOD_CNTL),
+					periodCntl);
+
+
+			pwmSeqRefDiv =
+					dm_read_reg(ctx,
+						BL_REG(LVTMA_PWRSEQ_REF_DIV));
+			set_reg_field_value(
+					pwmSeqRefDiv,
+					stored_backlight_registers.
+					vLVTMA_PWRSEQ_REF_DIV_BL_PWM_REF_DIV,
+					LVTMA_PWRSEQ_REF_DIV,
+					BL_PWM_REF_DIV);
+			dm_write_reg(ctx, BL_REG(LVTMA_PWRSEQ_REF_DIV),
+					pwmSeqRefDiv);
+		}
+	} else {
+		stored_backlight_registers.vBL_PWM_CNTL =
+				dm_read_reg(ctx, BL_REG(BL_PWM_CNTL));
+		stored_backlight_registers.vBL_PWM_CNTL2 =
+				dm_read_reg(ctx, BL_REG(BL_PWM_CNTL2));
+		stored_backlight_registers.vBL_PWM_PERIOD_CNTL =
+				dm_read_reg(ctx, BL_REG(BL_PWM_PERIOD_CNTL));
+
+		uint32_t pwmSeqRefDiv;
+
+		pwmSeqRefDiv = dm_read_reg(ctx, BL_REG(LVTMA_PWRSEQ_REF_DIV));
+		stored_backlight_registers.
+				vLVTMA_PWRSEQ_REF_DIV_BL_PWM_REF_DIV =
+				get_reg_field_value(pwmSeqRefDiv,
+				LVTMA_PWRSEQ_REF_DIV, BL_PWM_REF_DIV);
+	}
+
+	/* Have driver take backlight control
+	 * TakeBacklightControl(true)
+	 */
+	s2 = dm_read_reg(ctx, DMCU_REG(BIOS_SCRATCH_2));
+	s2 |= ATOM_S2_VRI_BRIGHT_ENABLE;
+	dm_write_reg(ctx, DMCU_REG(BIOS_SCRATCH_2), s2);
+
+	/* Enable the backlight output */
+	pwmCntl = dm_read_reg(ctx, BL_REG(BL_PWM_CNTL));
+	set_reg_field_value(
+			pwmCntl,
+			1,
+			BL_PWM_CNTL,
+			BL_PWM_EN);
+	dm_write_reg(ctx, BL_REG(BL_PWM_CNTL), pwmCntl);
 }
 
 void dce110_link_encoder_set_dmcu_abm_level(

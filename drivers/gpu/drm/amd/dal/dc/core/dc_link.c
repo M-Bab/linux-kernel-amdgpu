@@ -1405,6 +1405,18 @@ bool dc_link_set_backlight_level(const struct dc_link *dc_link, uint32_t level,
 	return true;
 }
 
+
+bool dc_link_init_dmcu_backlight_settings(const struct dc_link *dc_link)
+{
+	struct core_link *link = DC_LINK_TO_CORE(dc_link);
+
+	if (link->link_enc->funcs->init_dmcu_backlight_settings != NULL)
+		link->link_enc->funcs->
+			init_dmcu_backlight_settings(link->link_enc);
+
+	return true;
+}
+
 bool dc_link_set_abm_level(const struct dc_link *dc_link, uint32_t level)
 {
 	struct core_link *link = DC_LINK_TO_CORE(dc_link);

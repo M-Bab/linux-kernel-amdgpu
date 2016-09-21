@@ -304,6 +304,19 @@ static bool set_backlight(struct dc *dc, unsigned int backlight_level,
 
 }
 
+static bool init_dmcu_backlight_settings(struct dc *dc)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	int i;
+
+	for (i = 0; i < core_dc->link_count; i++)
+		dc_link_init_dmcu_backlight_settings
+			(&core_dc->links[i]->public);
+
+	return true;
+}
+
+
 static bool set_abm_level(struct dc *dc, unsigned int abm_level)
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
@@ -366,6 +379,9 @@ static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 
 	core_dc->public.stream_funcs.set_backlight =
 			set_backlight;
+
+	core_dc->public.stream_funcs.init_dmcu_backlight_settings =
+			init_dmcu_backlight_settings;
 
 	core_dc->public.stream_funcs.set_abm_level =
 			set_abm_level;

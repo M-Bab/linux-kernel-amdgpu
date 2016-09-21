@@ -174,7 +174,9 @@ static const struct dce110_link_enc_bl_registers link_enc_bl_regs = {
 		.BL_PWM_GRP1_REG_LOCK = mmBL_PWM_GRP1_REG_LOCK,
 		.BL_PWM_PERIOD_CNTL = mmBL_PWM_PERIOD_CNTL,
 		.LVTMA_PWRSEQ_CNTL = mmLVTMA_PWRSEQ_CNTL,
-		.LVTMA_PWRSEQ_STATE = mmLVTMA_PWRSEQ_STATE
+		.LVTMA_PWRSEQ_STATE = mmLVTMA_PWRSEQ_STATE,
+		.BL_PWM_CNTL2 = mmBL_PWM_CNTL2,
+		.LVTMA_PWRSEQ_REF_DIV = mmLVTMA_PWRSEQ_REF_DIV
 };
 
 static const struct dce110_link_enc_dmcu_registers link_enc_dmcu_regs = {

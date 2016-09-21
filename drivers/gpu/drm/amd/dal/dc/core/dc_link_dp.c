@@ -1491,16 +1491,18 @@ static bool handle_hpd_irq_psr_sink(const struct core_link *link)
 	if (link->public.psr_caps.psr_version == 0)
 		return false;
 
-	union dpcd_psr_configuration psr_configuration = {0};
+	union dpcd_psr_configuration psr_configuration;
+
 	dal_ddc_service_read_dpcd_data(
 					link->ddc,
 					368 /*DpcdAddress_PSR_Enable_Cfg*/,
 					&psr_configuration.raw,
 					sizeof(psr_configuration.raw));
+
 	if (psr_configuration.bits.ENABLE) {
 		unsigned char dpcdbuf[3] = {0};
-		union psr_error_status psr_error_status = {0};
-		union psr_sink_psr_status psr_sink_psr_status = {0};
+		union psr_error_status psr_error_status;
+		union psr_sink_psr_status psr_sink_psr_status;
 
 		dal_ddc_service_read_dpcd_data(
 					link->ddc,
