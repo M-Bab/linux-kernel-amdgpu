@@ -1317,11 +1317,6 @@ static void reset_single_pipe_hw_ctx(
 		struct pipe_ctx *pipe_ctx,
 		struct validate_context *context)
 {
-	struct dc_bios *dcb;
-
-	dcb = dal_adapter_service_get_bios_parser(
-			context->res_ctx.pool->adapter_srv);
-
 	core_link_disable_stream(pipe_ctx);
 	if (!pipe_ctx->tg->funcs->set_blank(pipe_ctx->tg, true)) {
 		dm_error("DC: failed to blank crtc!\n");
@@ -1330,8 +1325,6 @@ static void reset_single_pipe_hw_ctx(
 	pipe_ctx->tg->funcs->disable_crtc(pipe_ctx->tg);
 	pipe_ctx->mi->funcs->free_mem_input(
 				pipe_ctx->mi, context->target_count);
-	pipe_ctx->xfm->funcs->transform_set_scaler_bypass(pipe_ctx->xfm, NULL);
-	pipe_ctx->xfm->funcs->transform_reset(pipe_ctx->xfm);
 	resource_unreference_clock_source(&context->res_ctx, pipe_ctx->clock_source);
 
 	dc->hwss.power_down_front_end((struct core_dc *)dc, pipe_ctx);
@@ -2101,8 +2094,17 @@ static void dce110_apply_ctx_for_surface(
 
 static void dce110_power_down_fe(struct core_dc *dc, struct pipe_ctx *pipe)
 {
+	int i;
+
+	for (i = 0; i < dc->res_pool->pipe_count; i++)
+		if (&dc->current_context->res_ctx.pipe_ctx[i] == pipe)
+			break;
+
+	if (i == dc->res_pool->pipe_count)
+		return;
+
 	dc->hwss.enable_display_power_gating(
-		dc, pipe->pipe_idx, dc->ctx->dc_bios, PIPE_GATING_CONTROL_ENABLE);
+		dc, i, dc->ctx->dc_bios, PIPE_GATING_CONTROL_ENABLE);
 	if (pipe->xfm)
 		pipe->xfm->funcs->transform_reset(pipe->xfm);
 	memset(&pipe->scl_data, 0, sizeof(struct scaler_data));

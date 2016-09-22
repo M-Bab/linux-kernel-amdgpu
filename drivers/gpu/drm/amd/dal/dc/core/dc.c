@@ -1223,12 +1223,10 @@ bool dc_post_update_surfaces_to_target(struct dc *dc)
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	int i;
 
-	for (i = 0; i < core_dc->current_context->res_ctx.pool->pipe_count; i++) {
-		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == NULL) {
+	for (i = 0; i < core_dc->current_context->res_ctx.pool->pipe_count; i++)
+		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == NULL)
 			core_dc->hwss.power_down_front_end(
 				core_dc, &core_dc->current_context->res_ctx.pipe_ctx[i]);
-		}
-	}
 
 	if (core_dc->res_pool->funcs->validate_bandwidth(core_dc, core_dc->current_context)
 			!= DC_OK) {
@@ -1380,10 +1378,6 @@ bool dc_commit_surfaces_to_target(
 		core_dc->hwss.apply_ctx_for_surface(
 			core_dc, 0, context);
 
-	if (current_enabled_surface_count > 0 && new_enabled_surface_count == 0)
-		target_disable_memory_requests(dc_target,
-				&context->res_ctx);
-
 	/* Go in reverse order so that all pipes are unlocked simultaneously
 	 * when pipe 0 is unlocked
 	 * Need PIPE_LOCK_CONTROL_MODE to be 1 for this
@@ -1405,6 +1399,10 @@ bool dc_commit_surfaces_to_target(
 	resource_validate_ctx_destruct(core_dc->current_context);
 	dm_free(core_dc->current_context);
 	core_dc->current_context = context;
+
+	if (current_enabled_surface_count > 0 && new_enabled_surface_count == 0)
+		target_disable_memory_requests(dc_target,
+				&context->res_ctx);
 
 	for (i = 0; i < context->res_ctx.pool->pipe_count; i++)
 		if (context->res_ctx.pipe_ctx[i].stream == NULL)
