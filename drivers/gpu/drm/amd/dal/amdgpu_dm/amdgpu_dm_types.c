@@ -2572,11 +2572,6 @@ int amdgpu_dm_atomic_commit(
 			acrtc->enabled = true;
 			acrtc->hw_mode = crtc->state->mode;
 			crtc->hwmode = crtc->state->mode;
-			if (adev->dm.freesync_module)
-				for (j = 0; j < acrtc->target->stream_count; j++)
-					mod_freesync_add_stream(
-							adev->dm.freesync_module,
-							acrtc->target->streams[j]);
 			break;
 		}
 
@@ -2694,11 +2689,17 @@ int amdgpu_dm_atomic_commit(
 		 */
 		struct amdgpu_crtc *acrtc = new_crtcs[i];
 
-		if (adev->dm.freesync_module)
+		if (adev->dm.freesync_module) {
+			for (j = 0; j < acrtc->target->stream_count; j++)
+				mod_freesync_add_stream(
+						adev->dm.freesync_module,
+						acrtc->target->streams[j]);
+
 			mod_freesync_notify_mode_change(
 						adev->dm.freesync_module,
 						acrtc->target->streams,
 						acrtc->target->stream_count);
+		}
 
 		manage_dm_interrupts(adev, acrtc, true);
 		dm_crtc_cursor_reset(&acrtc->base);
@@ -2806,45 +2807,32 @@ void dm_restore_drm_connector_state(struct drm_device *dev, struct drm_connector
 			}
 		}
 
-		if (adev->dm.freesync_module)
-			for (i = 0; i < disconnected_acrtc->target->stream_count; i++)
-				mod_freesync_add_stream(
-						adev->dm.freesync_module,
-						disconnected_acrtc->target->streams[i]);
-
 		/* DC is optimized not to do anything if 'targets' didn't change. */
 		if (!dc_commit_targets(dc, commit_targets,
 				commit_targets_count)) {
 			DRM_INFO("Failed to restore connector state!\n");
-			if (adev->dm.freesync_module)
-				for (i = 0; i < disconnected_acrtc->target->stream_count; i++)
-					mod_freesync_remove_stream(
-							adev->dm.freesync_module,
-							disconnected_acrtc->target->streams[i]);
 			dc_target_release(disconnected_acrtc->target);
 			disconnected_acrtc->target = current_target;
 			manage_dm_interrupts(adev, disconnected_acrtc, true);
 			return;
 		}
 
-		if (adev->dm.freesync_module)
+		if (adev->dm.freesync_module) {
 			for (i = 0; i < current_target->stream_count; i++)
 				mod_freesync_remove_stream(
 						adev->dm.freesync_module,
 						current_target->streams[i]);
-
+			for (i = 0; i < new_target->stream_count; i++)
+				mod_freesync_add_stream(
+						adev->dm.freesync_module,
+						new_target->streams[i]);
+		}
 		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 			struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
 
 			if (acrtc->target != NULL) {
 				acrtc->otg_inst =
 					dc_target_get_status(acrtc->target)->primary_otg_inst;
-
-				if (adev->dm.freesync_module)
-					mod_freesync_notify_mode_change(
-							adev->dm.freesync_module,
-							acrtc->target->streams,
-							acrtc->target->stream_count);
 			}
 		}
 
