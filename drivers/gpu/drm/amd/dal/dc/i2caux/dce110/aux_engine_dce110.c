@@ -303,9 +303,12 @@ static void process_channel_reply(
 			--bytes_replied;
 
 			while (i < bytes_replied) {
+				uint32_t aux_sw_data_val;
 
 				REG_GET(AUX_SW_DATA,
-						AUX_SW_DATA, &reply->data[i]);
+						AUX_SW_DATA, &aux_sw_data_val);
+
+				 reply->data[i] = aux_sw_data_val;
 				++i;
 			}
 
