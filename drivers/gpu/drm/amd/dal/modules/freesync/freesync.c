@@ -304,13 +304,8 @@ bool mod_freesync_add_stream(struct mod_freesync *mod_freesync,
 		core_freesync->num_streams < MOD_FREESYNC_MAX_CONCURRENT_SINKS) {
 
 		unsigned int index = map_index_from_sink(core_freesync, stream->sink);
-		if (core_freesync->map[index].stream) {
-			dc_stream_release(core_freesync->map[index].stream);
-			core_freesync->num_streams--;
-			/* don't need any other part of mod_freesync_remove_stream */
-		}
+		ASSERT(core_freesync->map[index].stream == NULL);
 		dc_stream_retain(stream);
-
 		if (core_freesync->map[index].caps.supported)
 			core_stream->public.ignore_msa_timing_param = 1;
 
