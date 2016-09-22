@@ -37,7 +37,7 @@
 
 #include "../dce110/aux_engine_dce110.h"
 
-#include "i2c_hw_engine_dce112.h"
+#include "../dce110/i2c_hw_engine_dce110.h"
 
 static const enum gpio_ddc_line hw_ddc_lines[] = {
 	GPIO_DDC_LINE_DDC1,
@@ -65,6 +65,11 @@ static const enum gpio_ddc_line hw_ddc_lines[] = {
 	.AUX_RESET_MASK = AUX_CONTROL__AUX_RESET_MASK \
 }
 
+#define hw_engine_regs(id)\
+{\
+		I2C_HW_ENGINE_COMMON_REG_LIST(id) \
+}
+
 static const struct dce110_aux_registers dce112_aux_regs[] = {
 		aux_regs(0),
 		aux_regs(1),
@@ -72,6 +77,15 @@ static const struct dce110_aux_registers dce112_aux_regs[] = {
 		aux_regs(3),
 		aux_regs(4),
 		aux_regs(5),
+};
+
+static const struct dce110_i2c_hw_engine_registers dce112_hw_engine_regs[] = {
+		hw_engine_regs(1),
+		hw_engine_regs(2),
+		hw_engine_regs(3),
+		hw_engine_regs(4),
+		hw_engine_regs(5),
+		hw_engine_regs(6)
 };
 
 static bool construct(
@@ -109,12 +123,13 @@ static bool construct(
 		hw_arg_dce110.reference_frequency = reference_frequency;
 		hw_arg_dce110.default_speed = base->default_i2c_hw_speed;
 		hw_arg_dce110.ctx = ctx;
+		hw_arg_dce110.regs = &dce112_hw_engine_regs[i];
 
 		if (base->i2c_hw_engines[line_id])
 			base->i2c_hw_engines[line_id]->funcs->destroy(&base->i2c_hw_engines[line_id]);
 
 		base->i2c_hw_engines[line_id] =
-			dal_i2c_hw_engine_dce112_create(&hw_arg_dce110);
+			dal_i2c_hw_engine_dce110_create(&hw_arg_dce110);
 
 		++i;
 	} while (i < ARRAY_SIZE(hw_ddc_lines));

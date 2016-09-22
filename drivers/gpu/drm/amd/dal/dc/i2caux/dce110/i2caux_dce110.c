@@ -165,6 +165,11 @@ static const struct i2caux_funcs i2caux_funcs = {
 	.AUX_RESET_MASK = AUX_CONTROL__AUX_RESET_MASK \
 }
 
+#define hw_engine_regs(id)\
+[id] = {\
+		I2C_HW_ENGINE_COMMON_REG_LIST(id) \
+}
+
 static const struct dce110_aux_registers dce110_aux_regs[] = {
 		aux_regs(0),
 		aux_regs(1),
@@ -172,6 +177,15 @@ static const struct dce110_aux_registers dce110_aux_regs[] = {
 		aux_regs(3),
 		aux_regs(4),
 		aux_regs(5)
+};
+
+static const struct dce110_i2c_hw_engine_registers i2c_hw_engine_regs[] = {
+		hw_engine_regs(1),
+		hw_engine_regs(2),
+		hw_engine_regs(3),
+		hw_engine_regs(4),
+		hw_engine_regs(5),
+		hw_engine_regs(6)
 };
 
 bool dal_i2caux_dce110_construct(
@@ -225,6 +239,7 @@ bool dal_i2caux_dce110_construct(
 		hw_arg_dce110.reference_frequency = reference_frequency;
 		hw_arg_dce110.default_speed = base->default_i2c_hw_speed;
 		hw_arg_dce110.ctx = ctx;
+		hw_arg_dce110.regs = &i2c_hw_engine_regs[i + 1];
 
 		base->i2c_hw_engines[line_id] =
 			dal_i2c_hw_engine_dce110_create(&hw_arg_dce110);

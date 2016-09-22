@@ -48,7 +48,7 @@ endif
 # DCE 112 family
 ###############################################################################
 ifdef CONFIG_DRM_AMD_DAL_DCE11_2
-I2CAUX_DCE112 = i2caux_dce112.o i2c_hw_engine_dce112.o
+I2CAUX_DCE112 = i2caux_dce112.o
 
 AMD_DAL_I2CAUX_DCE112 = $(addprefix $(AMDDALPATH)/dc/i2caux/dce112/,$(I2CAUX_DCE112))
 

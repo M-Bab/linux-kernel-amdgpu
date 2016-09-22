@@ -45,6 +45,7 @@
  */
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
+#include "reg_helper.h"
 
 /*
  * This unit
@@ -91,17 +92,20 @@ enum {
 #define FROM_ENGINE(ptr) \
 	FROM_I2C_ENGINE(container_of((ptr), struct i2c_engine, base))
 
-static void disable_i2c_hw_engine(
-	struct i2c_hw_engine_dce110 *engine)
-{
-	const uint32_t addr = engine->addr.DC_I2C_DDCX_SETUP;
-	uint32_t value = 0;
+#define CTX \
+		hw_engine->base.base.base.ctx
+#define REG(reg_name)\
+	(hw_engine->regs->reg_name)
+#include "reg_helper.h"
 
+
+static void disable_i2c_hw_engine(
+	struct i2c_hw_engine_dce110 *hw_engine)
+{
+	uint32_t value = 0;
 	struct dc_context *ctx = NULL;
 
-	ctx = engine->base.base.base.ctx;
-
-	value = dm_read_reg(ctx, addr);
+	value = REG_READ(SETUP);
 
 	set_reg_field_value(
 		value,
@@ -109,7 +113,7 @@ static void disable_i2c_hw_engine(
 		DC_I2C_DDC1_SETUP,
 		DC_I2C_DDC1_ENABLE);
 
-	dm_write_reg(ctx, addr, value);
+	REG_WRITE(SETUP, value);
 }
 
 static void release_engine(
@@ -129,7 +133,7 @@ static void release_engine(
 
 	/* Release I2C */
 	{
-		value = dm_read_reg(engine->ctx, mmDC_I2C_ARBITRATION);
+		value = REG_READ(DC_I2C_ARBITRATION);
 
 		set_reg_field_value(
 				value,
@@ -137,14 +141,14 @@ static void release_engine(
 				DC_I2C_ARBITRATION,
 				DC_I2C_SW_DONE_USING_I2C_REG);
 
-		dm_write_reg(engine->ctx, mmDC_I2C_ARBITRATION, value);
+		REG_WRITE(DC_I2C_ARBITRATION, value);
 	}
 
 	/* Reset HW engine */
 	{
 		uint32_t i2c_sw_status = 0;
 
-		value = dm_read_reg(engine->ctx, mmDC_I2C_SW_STATUS);
+		value = REG_READ(DC_I2C_SW_STATUS);
 
 		i2c_sw_status = get_reg_field_value(
 				value,
@@ -154,7 +158,7 @@ static void release_engine(
 		safe_to_reset = (i2c_sw_status == 1);
 	}
 	{
-		value = dm_read_reg(engine->ctx, mmDC_I2C_CONTROL);
+		value = REG_READ(DC_I2C_CONTROL);
 
 		if (safe_to_reset)
 			set_reg_field_value(
@@ -169,7 +173,7 @@ static void release_engine(
 			DC_I2C_CONTROL,
 			DC_I2C_SW_STATUS_RESET);
 
-		dm_write_reg(engine->ctx, mmDC_I2C_CONTROL, value);
+		REG_WRITE(DC_I2C_CONTROL, value);
 	}
 
 	/* HW I2c engine - clock gating feature */
@@ -181,13 +185,11 @@ static bool setup_engine(
 	struct i2c_engine *i2c_engine)
 {
 	uint32_t value = 0;
-	struct i2c_hw_engine_dce110 *engine = FROM_I2C_ENGINE(i2c_engine);
+	struct i2c_hw_engine_dce110 *hw_engine = FROM_I2C_ENGINE(i2c_engine);
 
 	/* Program pin select */
 	{
-		const uint32_t addr = mmDC_I2C_CONTROL;
-
-		value = dm_read_reg(i2c_engine->base.ctx, addr);
+		value = REG_READ(DC_I2C_CONTROL);
 
 		set_reg_field_value(
 			value,
@@ -221,18 +223,16 @@ static bool setup_engine(
 
 		set_reg_field_value(
 			value,
-			engine->engine_id,
+			hw_engine->engine_id,
 			DC_I2C_CONTROL,
 			DC_I2C_DDC_SELECT);
 
-		dm_write_reg(i2c_engine->base.ctx, addr, value);
+		REG_WRITE(DC_I2C_CONTROL, value);
 	}
 
 	/* Program time limit */
 	{
-		const uint32_t addr = engine->addr.DC_I2C_DDCX_SETUP;
-
-		value = dm_read_reg(i2c_engine->base.ctx, addr);
+		value = REG_READ(SETUP);
 
 		set_reg_field_value(
 			value,
@@ -246,7 +246,7 @@ static bool setup_engine(
 			DC_I2C_DDC1_SETUP,
 			DC_I2C_DDC1_ENABLE);
 
-		dm_write_reg(i2c_engine->base.ctx, addr, value);
+		REG_WRITE(SETUP, value);
 	}
 
 	/* Program HW priority
@@ -254,8 +254,7 @@ static bool setup_engine(
 	 * Enable restart of SW I2C that was interrupted by HW
 	 * disable queuing of software while I2C is in use by HW */
 	{
-		value = dm_read_reg(i2c_engine->base.ctx,
-				mmDC_I2C_ARBITRATION);
+		value = REG_READ(DC_I2C_ARBITRATION);
 
 		set_reg_field_value(
 			value,
@@ -269,8 +268,7 @@ static bool setup_engine(
 			DC_I2C_ARBITRATION,
 			DC_I2C_SW_PRIORITY);
 
-		dm_write_reg(i2c_engine->base.ctx,
-				mmDC_I2C_ARBITRATION, value);
+		REG_WRITE(DC_I2C_ARBITRATION, value);
 	}
 
 	return true;
@@ -279,13 +277,9 @@ static bool setup_engine(
 static uint32_t get_speed(
 	const struct i2c_engine *i2c_engine)
 {
-	const struct i2c_hw_engine_dce110 *engine = FROM_I2C_ENGINE(i2c_engine);
-
-	const uint32_t addr = engine->addr.DC_I2C_DDCX_SPEED;
-
+	const struct i2c_hw_engine_dce110 *hw_engine = FROM_I2C_ENGINE(i2c_engine);
 	uint32_t pre_scale = 0;
-
-	uint32_t value = dm_read_reg(i2c_engine->base.ctx, addr);
+	uint32_t value = REG_READ(SPEED);
 
 	pre_scale = get_reg_field_value(
 			value,
@@ -296,24 +290,22 @@ static uint32_t get_speed(
 	/*ASSERT(value.bits.DC_I2C_DDC1_PRESCALE);*/
 
 	return pre_scale ?
-		engine->reference_frequency / pre_scale :
-		engine->base.default_speed;
+		hw_engine->reference_frequency / pre_scale :
+		hw_engine->base.default_speed;
 }
 
 static void set_speed(
 	struct i2c_engine *i2c_engine,
 	uint32_t speed)
 {
-	struct i2c_hw_engine_dce110 *engine = FROM_I2C_ENGINE(i2c_engine);
+	struct i2c_hw_engine_dce110 *hw_engine = FROM_I2C_ENGINE(i2c_engine);
 
 	if (speed) {
-		const uint32_t addr = engine->addr.DC_I2C_DDCX_SPEED;
-
-		uint32_t value = dm_read_reg(i2c_engine->base.ctx, addr);
+		uint32_t value = REG_READ(SPEED);
 
 		set_reg_field_value(
 			value,
-			engine->reference_frequency / speed,
+			hw_engine->reference_frequency / speed,
 			DC_I2C_DDC1_SPEED,
 			DC_I2C_DDC1_PRESCALE);
 
@@ -338,13 +330,14 @@ static void set_speed(
 				DC_I2C_DDC1_START_STOP_TIMING_CNTL);
 		}
 
-		dm_write_reg(i2c_engine->base.ctx, addr, value);
+		REG_WRITE(SPEED, value);
 	}
 }
 
 static inline void reset_hw_engine(struct engine *engine)
 {
-	uint32_t value = dm_read_reg(engine->ctx, mmDC_I2C_CONTROL);
+	struct i2c_hw_engine_dce110 *hw_engine = FROM_ENGINE(engine);
+	uint32_t value = REG_READ(DC_I2C_CONTROL);
 
 	set_reg_field_value(
 		value,
@@ -358,14 +351,15 @@ static inline void reset_hw_engine(struct engine *engine)
 		DC_I2C_CONTROL,
 		DC_I2C_SW_STATUS_RESET);
 
-	dm_write_reg(engine->ctx, mmDC_I2C_CONTROL, value);
+	REG_WRITE(DC_I2C_CONTROL, value);
 }
 
 static bool is_hw_busy(struct engine *engine)
 {
+	struct i2c_hw_engine_dce110 *hw_engine = FROM_ENGINE(engine);
 	uint32_t i2c_sw_status = 0;
 
-	uint32_t value = dm_read_reg(engine->ctx, mmDC_I2C_SW_STATUS);
+	uint32_t value = REG_READ(DC_I2C_SW_STATUS);
 
 	i2c_sw_status = get_reg_field_value(
 			value,
@@ -377,7 +371,7 @@ static bool is_hw_busy(struct engine *engine)
 
 	reset_hw_engine(engine);
 
-	value = dm_read_reg(engine->ctx, mmDC_I2C_SW_STATUS);
+	value = REG_READ(DC_I2C_SW_STATUS);
 
 	i2c_sw_status = get_reg_field_value(
 			value,
@@ -391,15 +385,47 @@ static bool is_hw_busy(struct engine *engine)
  * @brief
  * DC_GPIO_DDC MM register offsets
  */
-static const uint32_t transaction_addr[] = {
-	mmDC_I2C_TRANSACTION0,
-	mmDC_I2C_TRANSACTION1,
-	mmDC_I2C_TRANSACTION2,
-	mmDC_I2C_TRANSACTION3
-};
+static uint32_t transaction_reg_read(struct i2c_hw_engine_dce110 *hw_engine,
+		uint32_t transaction_count)
+{
+	switch (transaction_count) {
+	case 0:
+		return REG_READ(DC_I2C_TRANSACTION0);
+	case 1:
+		return REG_READ(DC_I2C_TRANSACTION1);
+	case 2:
+		return REG_READ(DC_I2C_TRANSACTION2);
+	case 3:
+		return REG_READ(DC_I2C_TRANSACTION3);
+	default:
+		return 0;
+	}
+}
+
+static void transcation_reg_write(struct i2c_hw_engine_dce110 *hw_engine,
+		uint32_t transaction_count, uint32_t value)
+{
+	switch (transaction_count) {
+	case 0:
+		REG_WRITE(DC_I2C_TRANSACTION0, value);
+		break;
+	case 1:
+		REG_WRITE(DC_I2C_TRANSACTION1, value);
+		break;
+	case 2:
+		REG_WRITE(DC_I2C_TRANSACTION2, value);
+		break;
+	case 3:
+		REG_WRITE(DC_I2C_TRANSACTION3, value);
+		break;
+
+	default:
+		break;
+	}
+}
 
 static bool process_transaction(
-	struct i2c_hw_engine_dce110 *engine,
+	struct i2c_hw_engine_dce110 *hw_engine,
 	struct i2c_request_transaction_data *request)
 {
 	uint32_t length = request->length;
@@ -410,13 +436,10 @@ static bool process_transaction(
 
 	struct dc_context *ctx = NULL;
 
-	ctx = engine->base.base.base.ctx;
+	ctx = hw_engine->base.base.base.ctx;
 
 	{
-		const uint32_t addr =
-			transaction_addr[engine->transaction_count];
-
-		value = dm_read_reg(ctx, addr);
+		value = transaction_reg_read(hw_engine, hw_engine->transaction_count);
 
 		set_reg_field_value(
 			value,
@@ -430,7 +453,7 @@ static bool process_transaction(
 			DC_I2C_TRANSACTION0,
 			DC_I2C_START0);
 
-		if ((engine->transaction_count == 3) ||
+		if ((hw_engine->transaction_count == 3) ||
 		(request->action == I2CAUX_TRANSACTION_ACTION_I2C_WRITE) ||
 		(request->action & I2CAUX_TRANSACTION_ACTION_I2C_READ)) {
 
@@ -461,7 +484,7 @@ static bool process_transaction(
 			DC_I2C_TRANSACTION0,
 			DC_I2C_COUNT0);
 
-		dm_write_reg(ctx, addr, value);
+		transcation_reg_write(hw_engine, hw_engine->transaction_count, value);
 	}
 
 	/* Write the I2C address and I2C data
@@ -486,7 +509,7 @@ static bool process_transaction(
 			DC_I2C_DATA,
 			DC_I2C_DATA);
 
-		if (engine->transaction_count == 0) {
+		if (hw_engine->transaction_count == 0) {
 			set_reg_field_value(
 				value,
 				0,
@@ -500,12 +523,12 @@ static bool process_transaction(
 				DC_I2C_DATA,
 				DC_I2C_INDEX_WRITE);
 
-			engine->buffer_used_write = 0;
+			hw_engine->buffer_used_write = 0;
 		}
 
-		dm_write_reg(ctx, mmDC_I2C_DATA, value);
+		REG_WRITE(DC_I2C_DATA, value);
 
-		engine->buffer_used_write++;
+		hw_engine->buffer_used_write++;
 
 		if (!(request->action & I2CAUX_TRANSACTION_ACTION_I2C_READ)) {
 
@@ -523,32 +546,27 @@ static bool process_transaction(
 					DC_I2C_DATA,
 					DC_I2C_DATA);
 
-				dm_write_reg(ctx, mmDC_I2C_DATA, value);
+				REG_WRITE(DC_I2C_DATA, value);
 
-				engine->buffer_used_write++;
+				hw_engine->buffer_used_write++;
 				--length;
 			}
 		}
 	}
 
-	++engine->transaction_count;
-	engine->buffer_used_bytes += length + 1;
+	++hw_engine->transaction_count;
+	hw_engine->buffer_used_bytes += length + 1;
 
 	return last_transaction;
 }
 
 static void execute_transaction(
-	struct i2c_hw_engine_dce110 *engine)
+	struct i2c_hw_engine_dce110 *hw_engine)
 {
 	uint32_t value = 0;
-	struct dc_context *ctx = NULL;
-
-	ctx = engine->base.base.base.ctx;
 
 	{
-		const uint32_t addr = engine->addr.DC_I2C_DDCX_SETUP;
-
-		value = dm_read_reg(ctx, addr);
+		value = REG_READ(SETUP);
 
 		set_reg_field_value(
 			value,
@@ -580,13 +598,11 @@ static void execute_transaction(
 			DC_I2C_DDC1_SETUP,
 			DC_I2C_DDC1_INTRA_BYTE_DELAY);
 
-		dm_write_reg(ctx, addr, value);
+		REG_WRITE(SETUP, value);
 	}
 
 	{
-		const uint32_t addr = mmDC_I2C_CONTROL;
-
-		value = dm_read_reg(ctx, addr);
+		value = REG_READ(DC_I2C_CONTROL);
 
 		set_reg_field_value(
 			value,
@@ -614,18 +630,16 @@ static void execute_transaction(
 
 		set_reg_field_value(
 			value,
-			engine->transaction_count - 1,
+			hw_engine->transaction_count - 1,
 			DC_I2C_CONTROL,
 			DC_I2C_TRANSACTION_COUNT);
 
-		dm_write_reg(ctx, addr, value);
+		REG_WRITE(DC_I2C_CONTROL, value);
 	}
 
 	/* start I2C transfer */
 	{
-		const uint32_t addr = mmDC_I2C_CONTROL;
-
-		value	= dm_read_reg(ctx, addr);
+		value	= REG_READ(DC_I2C_CONTROL);
 
 		set_reg_field_value(
 			value,
@@ -633,13 +647,13 @@ static void execute_transaction(
 			DC_I2C_CONTROL,
 			DC_I2C_GO);
 
-		dm_write_reg(ctx, addr, value);
+		REG_WRITE(DC_I2C_CONTROL, value);
 	}
 
 	/* all transactions were executed and HW buffer became empty
 	 * (even though it actually happens when status becomes DONE) */
-	engine->transaction_count = 0;
-	engine->buffer_used_bytes = 0;
+	hw_engine->transaction_count = 0;
+	hw_engine->buffer_used_bytes = 0;
 }
 
 static void submit_channel_request(
@@ -666,7 +680,7 @@ static void process_channel_reply(
 	uint32_t length = reply->length;
 	uint8_t *buffer = reply->data;
 
-	struct i2c_hw_engine_dce110 *i2c_hw_engine_dce110 =
+	struct i2c_hw_engine_dce110 *hw_engine =
 		FROM_I2C_ENGINE(engine);
 
 	uint32_t value = 0;
@@ -674,7 +688,7 @@ static void process_channel_reply(
 	/*set index*/
 	set_reg_field_value(
 		value,
-		i2c_hw_engine_dce110->buffer_used_write,
+		hw_engine->buffer_used_write,
 		DC_I2C_DATA,
 		DC_I2C_INDEX);
 
@@ -690,7 +704,7 @@ static void process_channel_reply(
 		DC_I2C_DATA,
 		DC_I2C_INDEX_WRITE);
 
-	dm_write_reg(engine->base.ctx, mmDC_I2C_DATA, value);
+	REG_WRITE(DC_I2C_DATA, value);
 
 	while (length) {
 		/* after reading the status,
@@ -698,7 +712,7 @@ static void process_channel_reply(
 		 * (i.e. DC_I2C_STATUS_DONE = 1) then the I2C controller
 		 * should read data bytes from I2C circular data buffer */
 
-		value = dm_read_reg(engine->base.ctx, mmDC_I2C_DATA);
+		value = REG_READ(DC_I2C_DATA);
 
 		*buffer++ = get_reg_field_value(
 				value,
@@ -710,11 +724,12 @@ static void process_channel_reply(
 }
 
 static enum i2c_channel_operation_result get_channel_status(
-	struct i2c_engine *engine,
+	struct i2c_engine *i2c_engine,
 	uint8_t *returned_bytes)
 {
 	uint32_t i2c_sw_status = 0;
-	uint32_t value = dm_read_reg(engine->base.ctx, mmDC_I2C_SW_STATUS);
+	struct i2c_hw_engine_dce110 *hw_engine = FROM_I2C_ENGINE(i2c_engine);
+	uint32_t value = REG_READ(DC_I2C_SW_STATUS);
 
 	i2c_sw_status = get_reg_field_value(
 			value,
@@ -840,7 +855,7 @@ static const struct i2c_hw_engine_funcs i2c_hw_engine_funcs = {
 };
 
 bool i2c_hw_engine_dce110_construct(
-	struct i2c_hw_engine_dce110 *engine_dce110,
+	struct i2c_hw_engine_dce110 *hw_engine,
 	const struct i2c_hw_engine_dce110_create_arg *arg)
 {
 	uint32_t xtal_ref_div = 0;
@@ -855,29 +870,29 @@ bool i2c_hw_engine_dce110_construct(
 	if (!arg->reference_frequency)
 		return false;
 
-	if (!dal_i2c_hw_engine_construct(&engine_dce110->base, arg->ctx))
+	if (!dal_i2c_hw_engine_construct(&hw_engine->base, arg->ctx))
 		return false;
 
-	engine_dce110->base.base.base.funcs = &engine_funcs;
-	engine_dce110->base.base.funcs = &i2c_engine_funcs;
-	engine_dce110->base.funcs = &i2c_hw_engine_funcs;
-	engine_dce110->base.default_speed = arg->default_speed;
+	hw_engine->base.base.base.funcs = &engine_funcs;
+	hw_engine->base.base.funcs = &i2c_engine_funcs;
+	hw_engine->base.funcs = &i2c_hw_engine_funcs;
+	hw_engine->base.default_speed = arg->default_speed;
 
-	engine_dce110->engine_id = arg->engine_id;
+	hw_engine->regs = arg->regs;
 
-	engine_dce110->buffer_used_bytes = 0;
-	engine_dce110->transaction_count = 0;
-	engine_dce110->engine_keep_power_up_count = 1;
+	hw_engine->engine_id = arg->engine_id;
+
+	hw_engine->buffer_used_bytes = 0;
+	hw_engine->transaction_count = 0;
+	hw_engine->engine_keep_power_up_count = 1;
 
 	/*values which are not included by arg*/
-	engine_dce110->addr.DC_I2C_DDCX_SETUP =
+	hw_engine->addr.DC_I2C_DDCX_SETUP =
 		mmDC_I2C_DDC1_SETUP + ddc_setup_offset[arg->engine_id];
-	engine_dce110->addr.DC_I2C_DDCX_SPEED =
+	hw_engine->addr.DC_I2C_DDCX_SPEED =
 		mmDC_I2C_DDC1_SPEED + ddc_speed_offset[arg->engine_id];
 
-	value = dm_read_reg(
-		engine_dce110->base.base.base.ctx,
-		mmMICROSECOND_TIME_BASE_DIV);
+	value = REG_READ(MICROSECOND_TIME_BASE_DIV);
 
 	xtal_ref_div = get_reg_field_value(
 			value,
@@ -886,7 +901,7 @@ bool i2c_hw_engine_dce110_construct(
 
 	if (xtal_ref_div == 0) {
 		dal_logger_write(
-				engine_dce110->base.base.base.ctx->logger,
+				hw_engine->base.base.base.ctx->logger,
 				LOG_MAJOR_WARNING,
 				LOG_MINOR_COMPONENT_I2C_AUX,
 				"Invalid base timer divider\n",
@@ -901,7 +916,7 @@ bool i2c_hw_engine_dce110_construct(
 	 *  which already divided by 2. So we need x2 to get original
 	 *  reference clock from ppll_info
 	 */
-	engine_dce110->reference_frequency =
+	hw_engine->reference_frequency =
 		(arg->reference_frequency * 2) / xtal_ref_div;
 
 	return true;

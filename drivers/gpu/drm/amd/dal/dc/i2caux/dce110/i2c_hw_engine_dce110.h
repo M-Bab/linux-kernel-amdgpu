@@ -26,8 +26,37 @@
 #ifndef __DAL_I2C_HW_ENGINE_DCE110_H__
 #define __DAL_I2C_HW_ENGINE_DCE110_H__
 
+#define I2C_HW_ENGINE_COMMON_REG_LIST(id)\
+	SRI(SETUP, DC_I2C_DDC, id),\
+	SRI(SPEED, DC_I2C_DDC, id),\
+	SR(DC_I2C_ARBITRATION),\
+	SR(DC_I2C_CONTROL),\
+	SR(DC_I2C_SW_STATUS),\
+	SR(DC_I2C_TRANSACTION0),\
+	SR(DC_I2C_TRANSACTION1),\
+	SR(DC_I2C_TRANSACTION2),\
+	SR(DC_I2C_TRANSACTION3),\
+	SR(DC_I2C_DATA),\
+	SR(MICROSECOND_TIME_BASE_DIV)
+
+struct dce110_i2c_hw_engine_registers {
+	uint32_t SETUP;
+	uint32_t SPEED;
+	uint32_t DC_I2C_ARBITRATION;
+	uint32_t DC_I2C_CONTROL;
+	uint32_t DC_I2C_SW_STATUS;
+	uint32_t DC_I2C_TRANSACTION0;
+	uint32_t DC_I2C_TRANSACTION1;
+	uint32_t DC_I2C_TRANSACTION2;
+	uint32_t DC_I2C_TRANSACTION3;
+	uint32_t DC_I2C_DATA;
+	uint32_t MICROSECOND_TIME_BASE_DIV;
+};
+
+
 struct i2c_hw_engine_dce110 {
 	struct i2c_hw_engine base;
+	const struct dce110_i2c_hw_engine_registers *regs;
 	struct {
 		uint32_t DC_I2C_DDCX_SETUP;
 		uint32_t DC_I2C_DDCX_SPEED;
@@ -50,6 +79,7 @@ struct i2c_hw_engine_dce110_create_arg {
 	uint32_t reference_frequency;
 	uint32_t default_speed;
 	struct dc_context *ctx;
+	const struct dce110_i2c_hw_engine_registers *regs;
 };
 
 struct i2c_engine *dal_i2c_hw_engine_dce110_create(
