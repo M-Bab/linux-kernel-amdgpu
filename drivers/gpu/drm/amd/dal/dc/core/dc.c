@@ -1407,7 +1407,7 @@ bool dc_commit_surfaces_to_target(
 	core_dc->current_context = context;
 
 	for (i = 0; i < context->res_ctx.pool->pipe_count; i++)
-		if (context->res_ctx.pipe_ctx[i].surface == NULL)
+		if (context->res_ctx.pipe_ctx[i].stream == NULL)
 			core_dc->hwss.power_down_front_end(
 				core_dc, &context->res_ctx.pipe_ctx[i]);
 
