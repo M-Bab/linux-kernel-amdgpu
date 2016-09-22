@@ -1422,7 +1422,7 @@ static void dce_v6_0_afmt_enable(struct drm_encoder *encoder, bool enable)
 		  enable ? "En" : "Dis", dig->afmt->offset, amdgpu_encoder->encoder_id);
 }
 
-static void dce_v6_0_afmt_init(struct amdgpu_device *adev)
+static int dce_v6_0_afmt_init(struct amdgpu_device *adev)
 {
 	int i, j;
 
@@ -1444,6 +1444,7 @@ static void dce_v6_0_afmt_init(struct amdgpu_device *adev)
 			return -ENOMEM;
 		}
 	}
+	return 0;
 }
 
 static void dce_v6_0_afmt_fini(struct amdgpu_device *adev)
