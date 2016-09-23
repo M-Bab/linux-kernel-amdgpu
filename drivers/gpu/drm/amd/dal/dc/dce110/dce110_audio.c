@@ -879,7 +879,7 @@ static const struct audio_funcs funcs = {
 
 void dce110_aud_destroy(struct audio **audio)
 {
-	dm_free(audio);
+	dm_free(*audio);
 	*audio = NULL;
 }
 
