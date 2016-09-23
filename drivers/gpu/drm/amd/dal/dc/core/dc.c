@@ -1729,6 +1729,9 @@ void dc_set_power_state(
 		 */
 		memset(core_dc->current_context, 0,
 				sizeof(*core_dc->current_context));
+
+		core_dc->current_context->res_ctx.pool = core_dc->res_pool;
+
 		break;
 	}
 
