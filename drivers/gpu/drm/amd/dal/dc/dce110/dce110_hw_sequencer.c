@@ -1673,10 +1673,6 @@ static void update_plane_addr(const struct core_dc *dc,
 
 	if (surface->public.visible)
 		pipe_ctx->tg->funcs->set_blank(pipe_ctx->tg, false);
-
-	if (surface->public.flip_immediate)
-		while (pipe_ctx->mi->funcs->mem_input_is_flip_pending(
-				pipe_ctx->mi));
 }
 
 static void update_pending_status(struct pipe_ctx *pipe_ctx)
