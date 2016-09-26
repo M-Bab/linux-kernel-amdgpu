@@ -77,6 +77,16 @@ struct dc_stream_funcs {
 	bool (*setup_psr)(struct dc *dc, const struct dc_stream *stream);
 };
 
+struct dc_link_funcs {
+	void (*set_drive_settings)(struct dc *dc,
+			struct link_training_settings *lt_settings);
+	void (*perform_link_training)(struct dc *dc,
+			struct dc_link_settings *link_setting,
+			bool skip_video_pattern);
+	void (*set_preferred_link_settings)(struct dc *dc,
+			struct dc_link_settings *link_setting);
+};
+
 /* Structure to hold configuration flags set by dm at dc creation. */
 struct dc_config {
 	bool gpu_vm_support;
@@ -90,6 +100,7 @@ struct dc_debug {
 struct dc {
 	struct dc_caps caps;
 	struct dc_stream_funcs stream_funcs;
+	struct dc_link_funcs link_funcs;
 	struct dc_config config;
 	struct dc_debug debug;
 };
@@ -545,6 +556,15 @@ void dc_link_remove_remote_sink(
 
 /* Used by diagnostics for virtual link at the moment */
 void dc_link_set_sink(const struct dc_link *link, struct dc_sink *sink);
+
+void dc_link_dp_set_drive_settings(
+	struct dc_link *link,
+	struct link_training_settings *lt_settings);
+
+bool dc_link_dp_perform_link_training(
+	struct dc_link *link,
+	const struct dc_link_settings *link_setting,
+	bool skip_video_pattern);
 
 /*******************************************************************************
  * Sink Interfaces - A sink corresponds to a display output device

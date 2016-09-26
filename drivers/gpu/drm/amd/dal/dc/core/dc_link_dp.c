@@ -622,15 +622,16 @@ static bool is_max_vs_reached(
 
 }
 
-void set_drive_settings(
-	struct core_link *link,
+void dc_link_dp_set_drive_settings(
+	struct dc_link *link,
 	struct link_training_settings *lt_settings)
 {
+	struct core_link *core_link = DC_LINK_TO_CORE(link);
 	/* program ASIC PHY settings*/
-	dp_set_hw_lane_settings(link, lt_settings);
+	dp_set_hw_lane_settings(core_link, lt_settings);
 
 	/* Notify DP sink the PHY settings from source */
-	dpcd_set_lane_settings(link, lt_settings);
+	dpcd_set_lane_settings(core_link, lt_settings);
 }
 
 static bool perform_post_lt_adj_req_sequence(
@@ -698,7 +699,8 @@ static bool perform_post_lt_adj_req_sequence(
 				update_drive_settings(
 					lt_settings,req_settings);
 
-				set_drive_settings(link, lt_settings);
+				dc_link_dp_set_drive_settings(&link->public,
+						lt_settings);
 				break;
 			}
 
@@ -964,11 +966,12 @@ static inline bool perform_link_training_int(
 	return status;
 }
 
-bool perform_link_training(
-	struct core_link *link,
+bool dc_link_dp_perform_link_training(
+	struct dc_link *link,
 	const struct dc_link_settings *link_setting,
 	bool skip_video_pattern)
 {
+	struct core_link *core_link = DC_LINK_TO_CORE(link);
 	bool status;
 
 	const int8_t *link_rate = "Unknown";
@@ -992,18 +995,20 @@ bool perform_link_training(
 	lt_settings.link_settings.link_spread = LINK_SPREAD_05_DOWNSPREAD_30KHZ;
 
 	/* 1. set link rate, lane count and spread*/
-	dpcd_set_link_settings(link, &lt_settings);
+	dpcd_set_link_settings(core_link, &lt_settings);
 
 	/* 2. perform link training (set link training done
 	 *  to false is done as well)*/
-	if (perform_clock_recovery_sequence(link, &lt_settings)) {
+	if (perform_clock_recovery_sequence(core_link, &lt_settings)) {
 
-		if (perform_channel_equalization_sequence(link, &lt_settings))
+		if (perform_channel_equalization_sequence(core_link,
+				&lt_settings))
 			status = true;
 	}
 
 	if (status || !skip_video_pattern)
-		status = perform_link_training_int(link, &lt_settings, status);
+		status = perform_link_training_int(core_link,
+				&lt_settings, status);
 
 	/* 6. print status message*/
 	switch (lt_settings.link_settings.link_rate) {
@@ -1028,7 +1033,7 @@ bool perform_link_training(
 	}
 
 	/* Connectivity log: link training */
-	CONN_MSG_LT(link, "%sx%d %s VS=%d, PE=%d",
+	CONN_MSG_LT(core_link, "%sx%d %s VS=%d, PE=%d",
 			link_rate,
 			lt_settings.link_settings.lane_count,
 			status ? "pass" : "fail",
@@ -1050,8 +1055,8 @@ bool perform_link_training_with_retries(
 
 	for (j = 0; j < attempts; ++j) {
 
-		if (perform_link_training(
-				link,
+		if (dc_link_dp_perform_link_training(
+				&link->public,
 				link_setting,
 				skip_video_pattern))
 			return true;

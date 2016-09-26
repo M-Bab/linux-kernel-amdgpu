@@ -366,6 +366,45 @@ static bool setup_psr(struct dc *dc, const struct dc_stream *stream)
 	return true;
 }
 
+static void set_drive_settings(struct dc *dc,
+		struct link_training_settings *lt_settings)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	int i;
+
+	for (i = 0; i < core_dc->link_count; i++)
+		dc_link_dp_set_drive_settings(&core_dc->links[i]->public,
+				lt_settings);
+}
+
+static void perform_link_training(struct dc *dc,
+		struct dc_link_settings *link_setting,
+		bool skip_video_pattern)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	int i;
+
+	for (i = 0; i < core_dc->link_count; i++)
+		dc_link_dp_perform_link_training(
+			&core_dc->links[i]->public,
+			link_setting,
+			skip_video_pattern);
+}
+
+static void set_preferred_link_settings(struct dc *dc,
+		struct dc_link_settings *link_setting)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	int i;
+
+	for (i = 0; i < core_dc->link_count; i++) {
+		core_dc->links[i]->public.verified_link_cap.lane_count =
+				link_setting->lane_count;
+		core_dc->links[i]->public.verified_link_cap.link_rate =
+				link_setting->link_rate;
+	}
+}
+
 static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 {
 	core_dc->public.stream_funcs.stream_update_scaling = stream_update_scaling;
@@ -391,6 +430,15 @@ static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 
 	core_dc->public.stream_funcs.setup_psr =
 			setup_psr;
+
+	core_dc->public.link_funcs.set_drive_settings =
+			set_drive_settings;
+
+	core_dc->public.link_funcs.perform_link_training =
+			perform_link_training;
+
+	core_dc->public.link_funcs.set_preferred_link_settings =
+			set_preferred_link_settings;
 }
 
 static bool construct(struct core_dc *dc,

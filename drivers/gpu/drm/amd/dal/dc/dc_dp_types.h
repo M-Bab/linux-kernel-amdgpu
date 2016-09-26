@@ -97,4 +97,9 @@ struct dc_lane_settings {
 	enum dc_post_cursor2 POST_CURSOR2;
 };
 
+struct dc_link_training_settings {
+	struct dc_link_settings link;
+	struct dc_lane_settings lane_settings[LANE_COUNT_DP_MAX];
+};
+
 #endif /* DC_DP_TYPES_H */
