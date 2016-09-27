@@ -451,6 +451,8 @@ static bool construct(struct core_dc *dc,
 			ASSERT_CRITICAL(false);
 			goto as_fail;
 		}
+
+		dc_ctx->created_bios = true;
 	}
 
 	/* TODO: Refactor DCE code to remove AS and asic caps */
@@ -515,6 +517,8 @@ static void destruct(struct core_dc *dc)
 	destroy_links(dc);
 	dc->res_pool->funcs->destroy(&dc->res_pool);
 	dal_logger_destroy(&dc->ctx->logger);
+	if (dc->ctx->created_bios)
+		dal_bios_parser_destroy(&dc->ctx->dc_bios);
 	dm_free(dc->ctx);
 	dc->ctx = NULL;
 }

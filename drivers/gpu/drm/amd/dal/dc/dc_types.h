@@ -74,6 +74,7 @@ struct dc_context {
 	enum dce_environment dce_environment;
 
 	struct dc_bios *dc_bios;
+	bool created_bios;
 };
 
 /*
