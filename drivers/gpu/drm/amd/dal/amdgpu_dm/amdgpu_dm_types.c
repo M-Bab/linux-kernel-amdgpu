@@ -310,11 +310,13 @@ static int dm_crtc_cursor_move(struct drm_crtc *crtc,
 	position.x_hotspot = xorigin;
 	position.y_hotspot = yorigin;
 
-	if (!dc_target_set_cursor_position(
-				amdgpu_crtc->target,
-				&position)) {
-		DRM_ERROR("DC failed to set cursor position\n");
-		return -EINVAL;
+	if (amdgpu_crtc->target) {
+		if (!dc_target_set_cursor_position(
+					amdgpu_crtc->target,
+					&position)) {
+			DRM_ERROR("DC failed to set cursor position\n");
+			return -EINVAL;
+		}
 	}
 
 	return 0;
