@@ -1155,9 +1155,13 @@ static void dce110_se_enable_audio_clock(
 
 	/* wait for AFMT clock to turn on,
 	 * expectation: this should complete in 1-2 reads
+	 *
+	 * REG_WAIT(AFMT_CNTL, AFMT_AUDIO_CLOCK_ON, !!enable, 1, 10);
+	 *
+	 * TODO: wait for clock_on does not work well. May need HW
+	 * program sequence. But audio seems work normally even without wait
+	 * for clock_on status change
 	 */
-	REG_WAIT(AFMT_CNTL, AFMT_AUDIO_CLOCK_ON, !!enable,
-			1, 10);
 }
 
 static void dce110_se_enable_dp_audio(

@@ -573,23 +573,16 @@ static void disable_stream(struct pipe_ctx *pipe_ctx)
 	struct core_stream *stream = pipe_ctx->stream;
 	struct core_link *link = stream->sink->link;
 
-	if (dc_is_hdmi_signal(pipe_ctx->stream->signal))
-		pipe_ctx->stream_enc->funcs->stop_hdmi_info_packets(
-			pipe_ctx->stream_enc);
-
-	if (dc_is_dp_signal(pipe_ctx->stream->signal))
-		pipe_ctx->stream_enc->funcs->stop_dp_info_packets(
-			pipe_ctx->stream_enc);
-
 	if (pipe_ctx->audio) {
-		pipe_ctx->stream_enc->funcs->audio_mute_control(pipe_ctx->stream_enc, true);
+		pipe_ctx->audio->funcs->az_disable(pipe_ctx->audio);
 
 		if (dc_is_dp_signal(pipe_ctx->stream->signal))
-			pipe_ctx->stream_enc->funcs->dp_audio_disable(pipe_ctx->stream_enc);
+			pipe_ctx->stream_enc->funcs->dp_audio_disable(
+					pipe_ctx->stream_enc);
 		else
-			pipe_ctx->stream_enc->funcs->hdmi_audio_disable(pipe_ctx->stream_enc);
+			pipe_ctx->stream_enc->funcs->hdmi_audio_disable(
+					pipe_ctx->stream_enc);
 
-		pipe_ctx->audio->funcs->az_disable(pipe_ctx->audio);
 		pipe_ctx->audio = NULL;
 
 		/* TODO: notify audio driver for if audio modes list changed
@@ -598,6 +591,18 @@ static void disable_stream(struct pipe_ctx *pipe_ctx)
 		 * stream->stream_engine_id);
 		 */
 	}
+
+	if (dc_is_hdmi_signal(pipe_ctx->stream->signal))
+		pipe_ctx->stream_enc->funcs->stop_hdmi_info_packets(
+			pipe_ctx->stream_enc);
+
+	if (dc_is_dp_signal(pipe_ctx->stream->signal))
+		pipe_ctx->stream_enc->funcs->stop_dp_info_packets(
+			pipe_ctx->stream_enc);
+
+	pipe_ctx->stream_enc->funcs->audio_mute_control(
+			pipe_ctx->stream_enc, true);
+
 
 	/* blank at encoder level */
 	if (dc_is_dp_signal(pipe_ctx->stream->signal))
