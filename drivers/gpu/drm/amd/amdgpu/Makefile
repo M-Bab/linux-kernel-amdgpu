@@ -126,13 +126,9 @@ amdgpu-y += $(AMD_DAL_FILES)
 
 endif
 
-ifneq ($(CONFIG_DRM_AMD_POWERPLAY),)
-
-include drivers/gpu/drm/amd/powerplay/Makefile
+include $(FULL_AMD_PATH)/powerplay/Makefile
 
 amdgpu-y += $(AMD_POWERPLAY_FILES)
-
-endif
 
 obj-$(CONFIG_DRM_AMDGPU)+= amdgpu.o
 
