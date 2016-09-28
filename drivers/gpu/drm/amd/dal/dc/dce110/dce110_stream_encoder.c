@@ -60,7 +60,6 @@ static void dce110_update_generic_info_packet(
 	const struct encoder_info_packet *info_packet)
 {
 	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t addr;
 	uint32_t regval;
 	/* choose which generic packet to use */
 	{
@@ -86,17 +85,15 @@ static void dce110_update_generic_info_packet(
 		const uint32_t *content =
 			(const uint32_t *) &info_packet->sb[0];
 
-		uint32_t counter = 0;
-
-		addr = REG(AFMT_GENERIC_0);
-
-		do {
-			REG_WRITE(AFMT_GENERIC_0, *content++);
-			++counter;
-		} while (counter < 7);
+		REG_WRITE(AFMT_GENERIC_0, *content++);
+		REG_WRITE(AFMT_GENERIC_1, *content++);
+		REG_WRITE(AFMT_GENERIC_2, *content++);
+		REG_WRITE(AFMT_GENERIC_3, *content++);
+		REG_WRITE(AFMT_GENERIC_4, *content++);
+		REG_WRITE(AFMT_GENERIC_5, *content++);
+		REG_WRITE(AFMT_GENERIC_6, *content);
+		REG_WRITE(AFMT_GENERIC_7, 0);
 	}
-
-	REG_WRITE(AFMT_GENERIC_7, 0);
 
 	/* force double-buffered packet update */
 	{
@@ -114,8 +111,6 @@ static void dce110_update_hdmi_info_packet(
 {
 	struct dc_context *ctx = enc110->base.ctx;
 	uint32_t cont, send, line;
-	uint32_t addr;
-
 
 	if (info_packet->valid) {
 		dce110_update_generic_info_packet(
@@ -137,15 +132,30 @@ static void dce110_update_hdmi_info_packet(
 	}
 
 	/* choose which generic packet control to use */
-
 	switch (packet_index) {
 	case 0:
+		REG_UPDATE_3(HDMI_GENERIC_PACKET_CONTROL0,
+				HDMI_GENERIC0_CONT, cont,
+				HDMI_GENERIC0_SEND, send,
+				HDMI_GENERIC0_LINE, line);
+		break;
 	case 1:
-		addr = REG(HDMI_GENERIC_PACKET_CONTROL0);
+		REG_UPDATE_3(HDMI_GENERIC_PACKET_CONTROL0,
+				HDMI_GENERIC1_CONT, cont,
+				HDMI_GENERIC1_SEND, send,
+				HDMI_GENERIC1_LINE, line);
 		break;
 	case 2:
+		REG_UPDATE_3(HDMI_GENERIC_PACKET_CONTROL1,
+				HDMI_GENERIC2_CONT, cont,
+				HDMI_GENERIC2_SEND, send,
+				HDMI_GENERIC2_LINE, line);
+		break;
 	case 3:
-		addr = REG(HDMI_GENERIC_PACKET_CONTROL1);
+		REG_UPDATE_3(HDMI_GENERIC_PACKET_CONTROL1,
+				HDMI_GENERIC3_CONT, cont,
+				HDMI_GENERIC3_SEND, send,
+				HDMI_GENERIC3_LINE, line);
 		break;
 	default:
 		/* invalid HW packet index */
@@ -157,40 +167,6 @@ static void dce110_update_hdmi_info_packet(
 			__func__);
 		return;
 	}
-
-	switch (packet_index) {
-	case 0:
-	case 2:
-		REG_SET_3(
-			HDMI_GENERIC_PACKET_CONTROL0,
-			dm_read_reg(CTX, addr),
-			HDMI_GENERIC0_CONT, cont,
-			HDMI_GENERIC0_SEND, send,
-			HDMI_GENERIC0_LINE, line);
-
-
-		break;
-	case 1:
-	case 3:
-		REG_SET_3(
-			HDMI_GENERIC_PACKET_CONTROL0,
-			dm_read_reg(CTX, addr),
-			HDMI_GENERIC1_CONT, cont,
-			HDMI_GENERIC1_SEND, send,
-			HDMI_GENERIC1_LINE, line);
-
-		break;
-	default:
-		/* invalid HW packet index */
-		dal_logger_write(
-			ctx->logger,
-			LOG_MAJOR_WARNING,
-			LOG_MINOR_COMPONENT_ENCODER,
-			"Invalid HW packet index: %s()\n",
-			__func__);
-		return;
-	}
-
 }
 
 /* setup stream encoder in dp mode */
