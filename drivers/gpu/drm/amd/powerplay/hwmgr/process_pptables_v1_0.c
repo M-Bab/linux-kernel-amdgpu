@@ -132,7 +132,7 @@ static int set_platform_caps(struct pp_hwmgr *hwmgr, uint32_t powerplay_caps)
 /**
  * Private Function to get the PowerPlay Table Address.
  */
-const void *get_powerplay_table(struct pp_hwmgr *hwmgr)
+static const void *get_powerplay_table(struct pp_hwmgr *hwmgr)
 {
 	int index = GetIndexIntoMasterTable(DATA, PowerPlayInfo);
 
@@ -1050,7 +1050,7 @@ static int check_powerplay_tables(
 	return 0;
 }
 
-int pp_tables_v1_0_initialize(struct pp_hwmgr *hwmgr)
+static int pp_tables_v1_0_initialize(struct pp_hwmgr *hwmgr)
 {
 	int result = 0;
 	const ATOM_Tonga_POWERPLAYTABLE *powerplay_table;
@@ -1101,7 +1101,7 @@ int pp_tables_v1_0_initialize(struct pp_hwmgr *hwmgr)
 	return result;
 }
 
-int pp_tables_v1_0_uninitialize(struct pp_hwmgr *hwmgr)
+static int pp_tables_v1_0_uninitialize(struct pp_hwmgr *hwmgr)
 {
 	struct phm_ppt_v1_information *pp_table_information =
 		(struct phm_ppt_v1_information *)(hwmgr->pptable);
