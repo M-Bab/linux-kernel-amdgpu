@@ -41,6 +41,18 @@
 #include "adapter/adapter_service.h"
 #include "include/asic_capability_interface.h"
 
+#include "dce/dce_11_0_d.h"
+#include "dce/dce_11_0_enum.h"
+#include "dce/dce_11_0_sh_mask.h"
+
+#ifndef mmDMCU_STATUS__UC_IN_RESET__SHIFT
+#define mmDMCU_STATUS__UC_IN_RESET__SHIFT 0x0
+#endif
+
+#ifndef mmDMCU_STATUS__UC_IN_RESET_MASK
+#define mmDMCU_STATUS__UC_IN_RESET_MASK 0x00000001L
+#endif
+
 #define LINK_INFO(...) \
 	dal_logger_write(dc_ctx->logger, \
 		LOG_MAJOR_HW_TRACE, LOG_MINOR_HW_TRACE_HOTPLUG, \
@@ -1383,6 +1395,7 @@ bool dc_link_set_backlight_level(const struct dc_link *dc_link, uint32_t level,
 	struct core_stream *core_stream = DC_STREAM_TO_CORE(stream);
 	unsigned int controller_id = 0;
 	int i;
+	uint32_t dmcu_status;
 
 	for (i = 0; i < MAX_PIPES; i++) {
 		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream
@@ -1398,10 +1411,16 @@ bool dc_link_set_backlight_level(const struct dc_link *dc_link, uint32_t level,
 			LOG_MINOR_BACKLIGHT_INTERFACE,
 			"New Backlight level: %d (0x%X)\n", level, level);
 
-	/* always assume dmcu is running */
-	link->link_enc->funcs->set_dmcu_backlight_level
-						(link->link_enc, level,
-						frame_ramp, controller_id);
+	dmcu_status = dm_read_reg(ctx, mmDMCU_STATUS);
+
+	/* If DMCU is in reset state, DMCU is uninitialized */
+	if (get_reg_field_value(dmcu_status, mmDMCU_STATUS, UC_IN_RESET))
+		link->link_enc->funcs->set_lcd_backlight_level(link->link_enc,
+						level);
+	else
+		link->link_enc->funcs->set_dmcu_backlight_level
+					(link->link_enc, level,
+					frame_ramp, controller_id);
 	return true;
 }
 

@@ -245,6 +245,10 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 	struct link_encoder *enc,
 	const struct link_mst_stream_allocation_table *table);
 
+void dce110_link_encoder_set_lcd_backlight_level(
+	struct link_encoder *enc,
+	uint32_t level);
+
 void dce110_link_encoder_set_dmcu_backlight_level(
 	struct link_encoder *enc,
 	uint32_t level,

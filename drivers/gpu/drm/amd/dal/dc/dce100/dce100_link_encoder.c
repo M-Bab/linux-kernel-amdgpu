@@ -54,6 +54,7 @@ static const struct link_encoder_funcs dce100_lnk_enc_funcs = {
 	.dp_set_phy_pattern = dce110_link_encoder_dp_set_phy_pattern,
 	.update_mst_stream_allocation_table =
 		dce110_link_encoder_update_mst_stream_allocation_table,
+	.set_lcd_backlight_level = dce110_link_encoder_set_lcd_backlight_level,
 	.set_dmcu_backlight_level =
 		dce110_link_encoder_set_dmcu_backlight_level,
 	.set_dmcu_abm_level = dce110_link_encoder_set_dmcu_abm_level,
