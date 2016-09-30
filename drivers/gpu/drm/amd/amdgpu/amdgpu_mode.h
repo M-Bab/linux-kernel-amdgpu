@@ -369,8 +369,6 @@ struct amdgpu_mode_info {
 	int			num_dig; /* number of dig blocks */
 	int			disp_priority;
 	const struct amdgpu_display_funcs *funcs;
-	struct hrtimer vblank_timer;
-	enum amdgpu_interrupt_state vsync_timer_enabled;
 };
 
 #define AMDGPU_MAX_BL_LEVEL 0xFF
@@ -446,6 +444,9 @@ struct amdgpu_crtc {
 	uint32_t flip_flags;
 	/* After Set Mode target will be non-NULL */
 	struct dc_target *target;
+	/* for virtual dce */
+	struct hrtimer vblank_timer;
+	enum amdgpu_interrupt_state vsync_timer_enabled;
 };
 
 struct amdgpu_encoder_atom_dig {
