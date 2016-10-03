@@ -156,8 +156,10 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned num_ibs,
 	alloc_size = amdgpu_ring_get_dma_frame_size(ring) +
 		num_ibs * amdgpu_ring_get_emit_ib_size(ring);
 
-	if (job && !job->vm_needs_flush && ring->type == AMDGPU_RING_TYPE_GFX)
+	if (job && !job->vm_needs_flush && ring->type == AMDGPU_RING_TYPE_GFX) {
 		extra_nop = 128;
+		alloc_size += extra_nop;
+	}
 
 	r = amdgpu_ring_alloc(ring, alloc_size);
 	if (r) {
