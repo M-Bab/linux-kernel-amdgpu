@@ -204,10 +204,11 @@ static bool stream_adjust_vmin_vmax(struct dc *dc,
 	int i = 0;
 	bool ret = false;
 	struct pipe_ctx *pipes;
+	unsigned int underlay_idx = core_dc->res_pool->underlay_pipe_index;
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream
-				== core_stream) {
+		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == core_stream
+				&& i != underlay_idx) {
 
 			pipes = &core_dc->current_context->res_ctx.pipe_ctx[i];
 			core_dc->hwss.set_drr(&pipes, 1, vmin, vmax);
@@ -348,14 +349,15 @@ static bool setup_psr(struct dc *dc, const struct dc_stream *stream)
 	struct core_stream *core_stream = DC_STREAM_TO_CORE(stream);
 	struct pipe_ctx *pipes;
 	int i;
+	unsigned int underlay_idx = core_dc->res_pool->underlay_pipe_index;
 
 	for (i = 0; i < core_dc->link_count; i++)
 		dc_link_setup_psr(&core_dc->links[i]->public,
 				stream);
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream
-			== core_stream) {
+		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == core_stream
+				&& i != underlay_idx) {
 
 			pipes = &core_dc->current_context->res_ctx.pipe_ctx[i];
 			core_dc->hwss.set_static_screen_control(&pipes, 1,
