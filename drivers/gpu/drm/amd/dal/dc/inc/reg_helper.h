@@ -40,6 +40,13 @@
 #define REG_WRITE(reg_name, value) \
 		dm_write_reg(CTX, REG(reg_name), value)
 
+#ifdef REG_SET
+#undef REG_SET
+#endif
+
+#ifdef REG_GET
+#undef REG_GET
+#endif
 
 /* macro to set register fields. */
 #define REG_SET_N(reg_name, n, initial_val, ...)	\
