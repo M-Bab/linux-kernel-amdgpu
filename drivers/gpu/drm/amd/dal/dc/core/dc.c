@@ -1479,15 +1479,17 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 
 				apply_ctx = true;
 
-				core_dc->hwss.pipe_control_lock(
-						core_dc->ctx,
-						pipe_ctx->pipe_idx,
-						PIPE_LOCK_CONTROL_SURFACE |
-						PIPE_LOCK_CONTROL_GRAPHICS |
-						PIPE_LOCK_CONTROL_SCL |
-						PIPE_LOCK_CONTROL_BLENDER |
-						PIPE_LOCK_CONTROL_MODE,
-						true);
+				if (!pipe_ctx->tg->funcs->is_blanked(pipe_ctx->tg)) {
+					core_dc->hwss.pipe_control_lock(
+							core_dc->ctx,
+							pipe_ctx->pipe_idx,
+							PIPE_LOCK_CONTROL_SURFACE |
+							PIPE_LOCK_CONTROL_GRAPHICS |
+							PIPE_LOCK_CONTROL_SCL |
+							PIPE_LOCK_CONTROL_BLENDER |
+							PIPE_LOCK_CONTROL_MODE,
+							true);
+				}
 			}
 
 			if (updates[i].gamma)
@@ -1503,14 +1505,16 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 
 		for (j = 0; j < surface_count; j++) {
 			if (updates[j].surface == &pipe_ctx->surface->public) {
-				core_dc->hwss.pipe_control_lock(
-						core_dc->ctx,
-						pipe_ctx->pipe_idx,
-						PIPE_LOCK_CONTROL_GRAPHICS |
-						PIPE_LOCK_CONTROL_SCL |
-						PIPE_LOCK_CONTROL_BLENDER |
-						PIPE_LOCK_CONTROL_SURFACE,
-						false);
+				if (!pipe_ctx->tg->funcs->is_blanked(pipe_ctx->tg)) {
+					core_dc->hwss.pipe_control_lock(
+							core_dc->ctx,
+							pipe_ctx->pipe_idx,
+							PIPE_LOCK_CONTROL_GRAPHICS |
+							PIPE_LOCK_CONTROL_SCL |
+							PIPE_LOCK_CONTROL_BLENDER |
+							PIPE_LOCK_CONTROL_SURFACE,
+							false);
+				}
 				break;
 			}
 		}

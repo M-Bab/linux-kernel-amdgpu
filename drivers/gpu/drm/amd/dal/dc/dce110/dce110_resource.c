@@ -762,8 +762,11 @@ enum dc_status dce110_validate_bandwidth(
 		dal_logger_write(dc->ctx->logger,
 			LOG_MAJOR_BWM,
 			LOG_MINOR_BWM_MODE_VALIDATION,
-			"%s: Bandwidth validation failed!",
-			__func__);
+			"%s: %dx%d@%d Bandwidth validation failed!\n",
+			__func__,
+			context->targets[0]->public.streams[0]->timing.h_addressable,
+			context->targets[0]->public.streams[0]->timing.v_addressable,
+			context->targets[0]->public.streams[0]->timing.pix_clk_khz);
 
 	if (memcmp(&dc->current_context->bw_results,
 			&context->bw_results, sizeof(context->bw_results))) {
