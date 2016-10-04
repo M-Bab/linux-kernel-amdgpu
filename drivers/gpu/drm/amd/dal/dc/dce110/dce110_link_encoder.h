@@ -31,7 +31,72 @@
 #define TO_DCE110_LINK_ENC(link_encoder)\
 	container_of(link_encoder, struct dce110_link_encoder, base)
 
-struct dce110_link_enc_bl_registers {
+#define AUX_REG_LIST(id)\
+	SRI(AUX_CONTROL, DP_AUX, id), \
+	SRI(AUX_DPHY_RX_CONTROL0, DP_AUX, id)
+
+#define LE_COMMON_REG_LIST_BASE(id) \
+	SR(BL_PWM_CNTL), \
+	SR(BL_PWM_GRP1_REG_LOCK), \
+	SR(BL_PWM_PERIOD_CNTL), \
+	SR(LVTMA_PWRSEQ_CNTL), \
+	SR(LVTMA_PWRSEQ_STATE), \
+	SR(BL_PWM_CNTL2), \
+	SR(LVTMA_PWRSEQ_REF_DIV), \
+	SR(BL1_PWM_USER_LEVEL), \
+	SR(MASTER_COMM_DATA_REG1), \
+	SR(MASTER_COMM_DATA_REG2), \
+	SR(MASTER_COMM_DATA_REG3), \
+	SR(MASTER_COMM_CMD_REG), \
+	SR(MASTER_COMM_CNTL_REG), \
+	SR(DMCU_RAM_ACCESS_CTRL), \
+	SR(DMCU_IRAM_RD_CTRL), \
+	SR(DMCU_IRAM_RD_DATA), \
+	SR(DMCU_INTERRUPT_TO_UC_EN_MASK), \
+	SR(SMU_INTERRUPT_CONTROL), \
+	SR(BIOS_SCRATCH_2), \
+	SRI(DIG_BE_CNTL, DIG, id), \
+	SRI(DIG_BE_EN_CNTL, DIG, id), \
+	SRI(DP_CONFIG, DP, id), \
+	SRI(DP_DPHY_CNTL, DP, id), \
+	SRI(DP_DPHY_INTERNAL_CTRL, DP, id), \
+	SRI(DP_DPHY_PRBS_CNTL, DP, id), \
+	SRI(DP_DPHY_SYM0, DP, id), \
+	SRI(DP_DPHY_SYM1, DP, id), \
+	SRI(DP_DPHY_SYM2, DP, id), \
+	SRI(DP_DPHY_TRAINING_PATTERN_SEL, DP, id), \
+	SRI(DP_LINK_CNTL, DP, id), \
+	SRI(DP_LINK_FRAMING_CNTL, DP, id), \
+	SRI(DP_MSE_SAT0, DP, id), \
+	SRI(DP_MSE_SAT1, DP, id), \
+	SRI(DP_MSE_SAT2, DP, id), \
+	SRI(DP_MSE_SAT_UPDATE, DP, id), \
+	SRI(DP_SEC_CNTL, DP, id), \
+	SRI(DP_VID_STREAM_CNTL, DP, id), \
+	SRI(DP_DPHY_FAST_TRAINING, DP, id), \
+	SRI(DP_SEC_CNTL1, DP, id)
+
+
+	#define LE_COMMON_REG_LIST(id)\
+		LE_COMMON_REG_LIST_BASE(id), \
+		SRI(DP_DPHY_BS_SR_SWAP_CNTL, DP, id), \
+		SR(DCI_MEM_PWR_STATUS)
+
+	#define LE_DCE110_REG_LIST(id)\
+		LE_COMMON_REG_LIST_BASE(id), \
+		SRI(DP_DPHY_BS_SR_SWAP_CNTL, DP, id), \
+		SR(DCI_MEM_PWR_STATUS)
+
+	#define LE_DCE80_REG_LIST(id)\
+		LE_COMMON_REG_LIST_BASE(id)
+
+struct dce110_link_enc_aux_registers {
+	uint32_t AUX_CONTROL;
+	uint32_t AUX_DPHY_RX_CONTROL0;
+};
+
+struct dce110_link_enc_registers {
+	/* BL registers */
 	uint32_t BL_PWM_CNTL;
 	uint32_t BL_PWM_GRP1_REG_LOCK;
 	uint32_t BL_PWM_PERIOD_CNTL;
@@ -39,9 +104,8 @@ struct dce110_link_enc_bl_registers {
 	uint32_t LVTMA_PWRSEQ_STATE;
 	uint32_t BL_PWM_CNTL2;
 	uint32_t LVTMA_PWRSEQ_REF_DIV;
-};
 
-struct dce110_link_enc_dmcu_registers {
+	/* DMCU registers */
 	uint32_t BL1_PWM_USER_LEVEL;
 	uint32_t MASTER_COMM_DATA_REG1;
 	uint32_t MASTER_COMM_DATA_REG2;
@@ -53,19 +117,10 @@ struct dce110_link_enc_dmcu_registers {
 	uint32_t DCI_MEM_PWR_STATUS;
 	uint32_t DMCU_IRAM_RD_CTRL;
 	uint32_t DMCU_IRAM_RD_DATA;
-	uint32_t DP_DPHY_FAST_TRAINING;
-	uint32_t DP_DPHY_BS_SR_SWAP_CNTL;
 	uint32_t DMCU_INTERRUPT_TO_UC_EN_MASK;
-	uint32_t DP_SEC_CNTL1;
 	uint32_t SMU_INTERRUPT_CONTROL;
-};
 
-struct dce110_link_enc_aux_registers {
-	uint32_t AUX_CONTROL;
-	uint32_t AUX_DPHY_RX_CONTROL0;
-};
-
-struct dce110_link_enc_registers {
+	/* Common DP registers */
 	uint32_t DIG_BE_CNTL;
 	uint32_t DIG_BE_EN_CNTL;
 	uint32_t DP_CONFIG;
@@ -93,8 +148,6 @@ struct dce110_link_encoder {
 	struct link_encoder base;
 	const struct dce110_link_enc_registers *link_regs;
 	const struct dce110_link_enc_aux_registers *aux_regs;
-	const struct dce110_link_enc_bl_registers *bl_regs;
-	const struct dce110_link_enc_dmcu_registers *dmcu_regs;
 };
 
 /*******************************************************************
@@ -165,9 +218,7 @@ bool dce110_link_encoder_construct(
 	struct dce110_link_encoder *enc110,
 	const struct encoder_init_data *init_data,
 	const struct dce110_link_enc_registers *link_regs,
-	const struct dce110_link_enc_aux_registers *aux_regs,
-	const struct dce110_link_enc_bl_registers *bl_regs,
-	const struct dce110_link_enc_dmcu_registers *dmcu_regs);
+	const struct dce110_link_enc_aux_registers *aux_regs);
 
 bool dce110_link_encoder_validate_dvi_output(
 	const struct dce110_link_encoder *enc110,

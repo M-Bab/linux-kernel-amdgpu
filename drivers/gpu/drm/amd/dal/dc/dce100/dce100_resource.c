@@ -64,11 +64,25 @@
 #endif
 
 #ifndef mmDP_DPHY_BS_SR_SWAP_CNTL
-	#define mmDP_DPHY_BS_SR_SWAP_CNTL 0x4ADC
+	#define mmDP_DPHY_BS_SR_SWAP_CNTL                       0x4ADC
+	#define mmDP0_DP_DPHY_BS_SR_SWAP_CNTL                   0x4ADC
+	#define mmDP1_DP_DPHY_BS_SR_SWAP_CNTL                   0x4BDC
+	#define mmDP2_DP_DPHY_BS_SR_SWAP_CNTL                   0x4CDC
+	#define mmDP3_DP_DPHY_BS_SR_SWAP_CNTL                   0x4DDC
+	#define mmDP4_DP_DPHY_BS_SR_SWAP_CNTL                   0x4EDC
+	#define mmDP5_DP_DPHY_BS_SR_SWAP_CNTL                   0x4FDC
+	#define mmDP6_DP_DPHY_BS_SR_SWAP_CNTL                   0x54DC
 #endif
 
-#ifndef mmDP0_DP_DPHY_FAST_TRAINING
-	#define mmDP0_DP_DPHY_FAST_TRAINING 0x193A
+#ifndef mmDP_DPHY_FAST_TRAINING
+	#define mmDP_DPHY_FAST_TRAINING                         0x4ABC
+	#define mmDP0_DP_DPHY_FAST_TRAINING                     0x4ABC
+	#define mmDP1_DP_DPHY_FAST_TRAINING                     0x4BBC
+	#define mmDP2_DP_DPHY_FAST_TRAINING                     0x4CBC
+	#define mmDP3_DP_DPHY_FAST_TRAINING                     0x4DBC
+	#define mmDP4_DP_DPHY_FAST_TRAINING                     0x4EBC
+	#define mmDP5_DP_DPHY_FAST_TRAINING                     0x4FBC
+	#define mmDP6_DP_DPHY_FAST_TRAINING                     0x54BC
 #endif
 
 static const struct dce110_timing_generator_offsets dce100_tg_offsets[] = {
@@ -214,69 +228,33 @@ static const struct dce110_ipp_reg_offsets dce100_ipp_reg_offsets[] = {
 }
 };
 
-static const struct dce110_link_enc_bl_registers link_enc_bl_regs = {
-		.BL_PWM_CNTL = mmBL_PWM_CNTL,
-		.BL_PWM_GRP1_REG_LOCK = mmBL_PWM_GRP1_REG_LOCK,
-		.BL_PWM_PERIOD_CNTL = mmBL_PWM_PERIOD_CNTL,
-		.LVTMA_PWRSEQ_CNTL = mmLVTMA_PWRSEQ_CNTL,
-		.LVTMA_PWRSEQ_STATE = mmLVTMA_PWRSEQ_STATE
-};
 
-static const struct dce110_link_enc_dmcu_registers link_enc_dmcu_regs = {
-		.BL1_PWM_USER_LEVEL = mmBL1_PWM_USER_LEVEL,
-		.MASTER_COMM_DATA_REG1 = mmMASTER_COMM_DATA_REG1,
-		.MASTER_COMM_DATA_REG2 = mmMASTER_COMM_DATA_REG2,
-		.MASTER_COMM_DATA_REG3 = mmMASTER_COMM_DATA_REG3,
-		.MASTER_COMM_CMD_REG = mmMASTER_COMM_CMD_REG,
-		.MASTER_COMM_CNTL_REG = mmMASTER_COMM_CNTL_REG,
-		.BIOS_SCRATCH_2 = mmBIOS_SCRATCH_2,
-		.DMCU_RAM_ACCESS_CTRL = mmDMCU_RAM_ACCESS_CTRL,
-		.DCI_MEM_PWR_STATUS = mmDCI_MEM_PWR_STATUS,
-		.DMCU_IRAM_RD_CTRL = mmDMCU_IRAM_RD_CTRL,
-		.DMCU_IRAM_RD_DATA = mmDMCU_IRAM_RD_DATA,
-		.DP_DPHY_FAST_TRAINING = mmDP_DPHY_FAST_TRAINING,
-		.DP_DPHY_BS_SR_SWAP_CNTL = mmDP_DPHY_BS_SR_SWAP_CNTL,
-		.DMCU_INTERRUPT_TO_UC_EN_MASK = mmDMCU_INTERRUPT_TO_UC_EN_MASK,
-		.DP_SEC_CNTL1 = mmDP_SEC_CNTL1,
-		.SMU_INTERRUPT_CONTROL = mmSMU_INTERRUPT_CONTROL
-};
 
+/* set register offset */
+#define SR(reg_name)\
+	.reg_name = mm ## reg_name
+
+/* set register offset with instance */
+#define SRI(reg_name, block, id)\
+	.reg_name = mm ## block ## id ## _ ## reg_name
 
 #define aux_regs(id)\
 [id] = {\
-	.AUX_CONTROL = mmDP_AUX ## id ## _AUX_CONTROL,\
-	.AUX_DPHY_RX_CONTROL0 = mmDP_AUX ## id ## _AUX_DPHY_RX_CONTROL0\
+	AUX_REG_LIST(id)\
 }
 
 static const struct dce110_link_enc_aux_registers link_enc_aux_regs[] = {
-	aux_regs(0),
-	aux_regs(1),
-	aux_regs(2),
-	aux_regs(3),
-	aux_regs(4),
-	aux_regs(5)
+		aux_regs(0),
+		aux_regs(1),
+		aux_regs(2),
+		aux_regs(3),
+		aux_regs(4),
+		aux_regs(5)
 };
 
 #define link_regs(id)\
 [id] = {\
-	.DIG_BE_CNTL = mmDIG ## id ## _DIG_BE_CNTL,\
-	.DIG_BE_EN_CNTL = mmDIG ## id ## _DIG_BE_EN_CNTL,\
-	.DP_CONFIG = mmDP ## id ## _DP_CONFIG,\
-	.DP_DPHY_CNTL = mmDP ## id ## _DP_DPHY_CNTL,\
-	.DP_DPHY_INTERNAL_CTRL = mmDP ## id ## _DP_DPHY_INTERNAL_CTRL,\
-	.DP_DPHY_PRBS_CNTL = mmDP ## id ## _DP_DPHY_PRBS_CNTL,\
-	.DP_DPHY_SYM0 = mmDP ## id ## _DP_DPHY_SYM0,\
-	.DP_DPHY_SYM1 = mmDP ## id ## _DP_DPHY_SYM1,\
-	.DP_DPHY_SYM2 = mmDP ## id ## _DP_DPHY_SYM2,\
-	.DP_DPHY_TRAINING_PATTERN_SEL = mmDP ## id ## _DP_DPHY_TRAINING_PATTERN_SEL,\
-	.DP_LINK_CNTL = mmDP ## id ## _DP_LINK_CNTL,\
-	.DP_LINK_FRAMING_CNTL = mmDP ## id ## _DP_LINK_FRAMING_CNTL,\
-	.DP_MSE_SAT0 = mmDP ## id ## _DP_MSE_SAT0,\
-	.DP_MSE_SAT1 = mmDP ## id ## _DP_MSE_SAT1,\
-	.DP_MSE_SAT2 = mmDP ## id ## _DP_MSE_SAT2,\
-	.DP_MSE_SAT_UPDATE = mmDP ## id ## _DP_MSE_SAT_UPDATE,\
-	.DP_SEC_CNTL = mmDP ## id ## _DP_SEC_CNTL,\
-	.DP_VID_STREAM_CNTL = mmDP ## id ## _DP_VID_STREAM_CNTL\
+	LE_DCE110_REG_LIST(id)\
 }
 
 static const struct dce110_link_enc_registers link_enc_regs[] = {
@@ -286,16 +264,8 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 	link_regs(3),
 	link_regs(4),
 	link_regs(5),
-	link_regs(6)
+	link_regs(6),
 };
-
-/* set register offset */
-#define SR(reg_name)\
-	.reg_name = mm ## reg_name
-
-/* set register offset with instance */
-#define SRI(reg_name, block, id)\
-	.reg_name = mm ## block ## id ## _ ## reg_name
 
 #define stream_enc_regs(id)\
 [id] = {\
@@ -478,9 +448,7 @@ struct link_encoder *dce100_link_encoder_create(
 			enc110,
 			enc_init_data,
 			&link_enc_regs[enc_init_data->transmitter],
-			&link_enc_aux_regs[enc_init_data->channel - 1],
-			&link_enc_bl_regs,
-			&link_enc_dmcu_regs))
+			&link_enc_aux_regs[enc_init_data->channel - 1]))
 		return &enc110->base;
 
 	BREAK_TO_DEBUGGER();
