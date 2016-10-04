@@ -2515,7 +2515,7 @@ static enum bp_result enable_disp_power_gating_v2_1(
 {
 	enum bp_result result = BP_RESULT_FAILURE;
 
-	ENABLE_DISP_POWER_GATING_PARAMETERS_V2_1 params = {0};
+	ENABLE_DISP_POWER_GATING_PS_ALLOCATION params = {0};
 	uint8_t atom_crtc_id;
 
 	if (bp->cmd_helper->controller_id_to_atom(crtc_id, &atom_crtc_id))
