@@ -975,115 +975,6 @@ static void enable_accelerated_mode(struct core_dc *dc)
 	dce110_set_scratch_acc_mode_change(dc->ctx);
 }
 
-#if 0
-static enum clocks_state get_required_clocks_state(
-	struct display_clock *display_clock,
-	struct state_dependent_clocks *req_state_dep_clks)
-{
-	enum clocks_state clocks_required_state;
-	enum clocks_state dp_link_required_state;
-	enum clocks_state overall_required_state;
-
-	clocks_required_state = dal_display_clock_get_required_clocks_state(
-			display_clock, req_state_dep_clks);
-
-	dp_link_required_state = CLOCKS_STATE_ULTRA_LOW;
-
-	/* overall required state is the max of required state for clocks
-	 * (pixel, display clock) and the required state for DP link. */
-	overall_required_state =
-		clocks_required_state > dp_link_required_state ?
-			clocks_required_state : dp_link_required_state;
-
-	/* return the min required state */
-	return overall_required_state;
-}
-
-static bool dc_pre_clock_change(
-		struct dc_context *ctx,
-		struct minimum_clocks_calculation_result *min_clk_in,
-		enum clocks_state required_clocks_state,
-		struct power_to_dal_info *output)
-{
-	struct dal_to_power_info input = {0};
-
-	input.min_deep_sleep_sclk = min_clk_in->min_deep_sleep_sclk;
-	input.min_mclk = min_clk_in->min_mclk_khz;
-	input.min_sclk = min_clk_in->min_sclk_khz;
-
-	switch (required_clocks_state) {
-	case CLOCKS_STATE_ULTRA_LOW:
-		input.required_clock = PP_CLOCKS_STATE_ULTRA_LOW;
-		break;
-	case CLOCKS_STATE_LOW:
-		input.required_clock = PP_CLOCKS_STATE_LOW;
-		break;
-	case CLOCKS_STATE_NOMINAL:
-		input.required_clock = PP_CLOCKS_STATE_NOMINAL;
-		break;
-	case CLOCKS_STATE_PERFORMANCE:
-		input.required_clock = PP_CLOCKS_STATE_PERFORMANCE;
-		break;
-	default:
-		input.required_clock = PP_CLOCKS_STATE_NOMINAL;
-		break;
-	}
-
-	if (!dc_service_pp_pre_dce_clock_change(ctx, &input, output)) {
-		dm_error("DC: dc_service_pp_pre_dce_clock_change failed!\n");
-		return false;
-	}
-
-	return true;
-}
-
-static bool dc_set_clocks_and_clock_state (
-		struct validate_context *context)
-{
-	struct power_to_dal_info output = {0};
-
-	struct display_clock *disp_clk = context->res_ctx.pool->display_clock;
-	struct dc_context *ctx = context->targets[0]->ctx;
-
-	if (!dc_pre_clock_change(
-			ctx,
-			&context->res_ctx.min_clocks,
-			get_required_clocks_state(
-					context->res_ctx.pool->display_clock,
-					&context->res_ctx.state_clocks),
-			&output)) {
-		/* "output" was not updated by PPLib.
-		 * DAL will use default values for set mode.
-		 *
-		 * Do NOT fail this call. */
-		return true;
-	}
-
-	/* PPLib accepted the "clock state" that we need, that means we
-	 * can store it as minimum state because PPLib guarantees not go below
-	 * that state.
-	 *
-	 * Update the clock state here (prior to setting Pixel clock,
-	 * or Display clock)
-	 **/
-	if (!dal_display_clock_set_min_clocks_state(
-			disp_clk, context->res_ctx.required_clocks_state)) {
-		BREAK_TO_DEBUGGER();
-		dm_error("DC: failed to set minimum clock state!\n");
-	}
-
-	/*bm_clk_info.max_mclk_khz = output.max_mclk;
-	bm_clk_info.min_mclk_khz = output.min_mclk;
-	bm_clk_info.max_sclk_khz = output.max_sclk;
-	bm_clk_info.min_sclk_khz = output.min_sclk;*/
-
-	/* Now let Bandwidth Manager know about values we got from PPLib. */
-	/*dal_bandwidth_manager_set_dynamic_clock_info(bw_mgr, &bm_clk_info);*/
-
-	return true;
-}
-#endif
-
 /**
  * Call display_engine_clock_dce80 to perform the Dclk programming.
  */
@@ -1330,7 +1221,8 @@ static void reset_single_pipe_hw_ctx(
 	pipe_ctx->tg->funcs->disable_crtc(pipe_ctx->tg);
 	pipe_ctx->mi->funcs->free_mem_input(
 				pipe_ctx->mi, context->target_count);
-	resource_unreference_clock_source(&context->res_ctx, pipe_ctx->clock_source);
+	resource_unreference_clock_source(
+			&context->res_ctx, pipe_ctx->clock_source);
 
 	dc->hwss.power_down_front_end((struct core_dc *)dc, pipe_ctx);
 
@@ -1346,7 +1238,9 @@ static void set_drr(struct pipe_ctx **pipe_ctx,
 	params.vertical_total_max = vmax;
 	params.vertical_total_min = vmin;
 
-	/* TODO: If multiple pipes are to be supported, you need some GSL stuff */
+	/* TODO: If multiple pipes are to be supported, you need
+	 * some GSL stuff
+	 */
 
 	for (i = 0; i < num_pipes; i++) {
 		pipe_ctx[i]->tg->funcs->set_drr(pipe_ctx[i]->tg, &params);
@@ -1362,6 +1256,90 @@ static void set_static_screen_control(struct pipe_ctx **pipe_ctx,
 		pipe_ctx[i]->tg->funcs->
 			set_static_screen_control(pipe_ctx[i]->tg, value);
 }
+
+/* unit: in_khz before mode set, get pixel clock from context. ASIC register
+ * may not be programmed yet.
+ * TODO: after mode set, pre_mode_set = false,
+ * may read PLL register to get pixel clock
+ */
+static uint32_t get_max_pixel_clock_for_all_paths(
+	struct core_dc *dc,
+	struct validate_context *context,
+	bool pre_mode_set)
+{
+	uint32_t max_pix_clk = 0;
+	int i;
+
+	if (!pre_mode_set) {
+		/* TODO: read ASIC register to get pixel clock */
+		ASSERT(0);
+	}
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+
+		if (pipe_ctx->stream == NULL)
+			continue;
+
+		/* do not check under lay */
+		if (pipe_ctx->top_pipe)
+			continue;
+
+		if (pipe_ctx->pix_clk_params.requested_pix_clk > max_pix_clk)
+			max_pix_clk =
+				pipe_ctx->pix_clk_params.requested_pix_clk;
+	}
+
+	if (max_pix_clk == 0)
+		ASSERT(0);
+
+	return max_pix_clk;
+}
+
+/* Find clock state based on clock requested. if clock value is 0, simply
+ * set clock state as requested without finding clock state by clock value
+ */
+static void set_clock_state(
+	struct core_dc *dc,
+	struct validate_context *context,
+	enum clocks_state *clocks_state,
+	bool set_stsate_only)
+{
+	struct state_dependent_clocks req_clocks = {0};
+	struct pipe_ctx *pipe_ctx;
+	int i;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		pipe_ctx = &context->res_ctx.pipe_ctx[i];
+		if (pipe_ctx->dis_clk != NULL)
+			break;
+	}
+
+	if (set_stsate_only) {
+		/* set clock_state without verification */
+		dal_display_clock_set_min_clocks_state(
+				pipe_ctx->dis_clk, *clocks_state);
+
+		return;
+	}
+
+	/* get the required state based on state dependent clocks:
+	 * display clock and pixel clock
+	 */
+	req_clocks.display_clk_khz = context->bw_results.dispclk_khz;
+
+	req_clocks.pixel_clk_khz = get_max_pixel_clock_for_all_paths(
+			dc, context, true);
+
+	*clocks_state =
+		dal_display_clock_get_required_clocks_state(
+				pipe_ctx->dis_clk, &req_clocks);
+
+
+	dal_display_clock_set_min_clocks_state(
+			pipe_ctx->dis_clk, *clocks_state);
+}
+
 /*TODO: const validate_context*/
 static enum dc_status apply_ctx_to_hw(
 		struct core_dc *dc,
@@ -1370,6 +1348,7 @@ static enum dc_status apply_ctx_to_hw(
 	enum dc_status status;
 	int i;
 	bool programmed_audio_dto = false;
+	enum clocks_state clocks_state = CLOCKS_STATE_INVALID;
 
 	/* Reset old context */
 	/* look up the targets that have been removed since last commit */
@@ -1426,7 +1405,8 @@ static enum dc_status apply_ctx_to_hw(
 
 	set_safe_displaymarks(&context->res_ctx);
 	/*TODO: when pplib works*/
-	/*dc_set_clocks_and_clock_state(context);*/
+	/* dc_set_clocks_and_clock_state(context); */
+	set_clock_state(dc, context, &clocks_state, false);
 
 	if (context->bw_results.dispclk_khz
 		> dc->current_context->bw_results.dispclk_khz)
@@ -1507,6 +1487,9 @@ static enum dc_status apply_ctx_to_hw(
 	}
 
 	dc->hwss.set_displaymarks(dc, context);
+
+	/* TODO dc_set_clocks_and_clock_state(context); to save power */
+	set_clock_state(dc, context, &clocks_state, true);
 
 	update_bios_scratch_critical_state(context->res_ctx.pool->adapter_srv, false);
 

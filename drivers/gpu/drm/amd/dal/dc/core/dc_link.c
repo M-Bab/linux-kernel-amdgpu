@@ -1220,9 +1220,29 @@ static enum dc_status enable_link_dp(struct pipe_ctx *pipe_ctx)
 	struct core_link *link = stream->sink->link;
 	struct dc_link_settings link_settings = {0};
 	enum dp_panel_mode panel_mode;
+	enum clocks_state cur_min_clock_state;
+	enum dc_link_rate max_link_rate = LINK_RATE_HIGH2;
 
 	/* get link settings for video mode timing */
 	decide_link_settings(stream, &link_settings);
+
+	/* raise clock state for HBR3 if required. Confirmed with HW DCE/DPCS
+	 * logic for HBR3 still needs Nominal (0.8V) on VDDC rail
+	 */
+
+	if (link->link_enc->features.flags.bits.IS_HBR3_CAPABLE)
+		max_link_rate = LINK_RATE_HIGH3;
+
+	if (link_settings.link_rate == max_link_rate) {
+		cur_min_clock_state = dal_display_clock_get_min_clocks_state(
+				pipe_ctx->dis_clk);
+
+		if (cur_min_clock_state < CLOCKS_STATE_NOMINAL)
+			dal_display_clock_set_min_clocks_state(
+					pipe_ctx->dis_clk,
+					CLOCKS_STATE_NOMINAL);
+	}
+
 	dp_enable_link_phy(
 		link,
 		pipe_ctx->stream->signal,

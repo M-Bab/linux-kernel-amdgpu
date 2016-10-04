@@ -404,6 +404,56 @@ bool dm_pp_get_clock_levels_by_type(
 	return true;
 }
 
+bool dm_pp_get_clock_levels_by_type_with_latency(
+	const struct dc_context *ctx,
+	enum dm_pp_clock_type clk_type,
+	struct dm_pp_clock_levels_with_latency *clk_level_info)
+{
+	/* TODO: to be implemented */
+	return true;
+}
+
+bool dm_pp_get_clock_levels_by_type_with_voltage(
+	const struct dc_context *ctx,
+	enum dm_pp_clock_type clk_type,
+	struct dm_pp_clock_levels_with_voltage *clk_level_info)
+{
+	/* TODO: to be implemented */
+	return true;
+}
+
+bool dm_pp_notify_wm_clock_changes(
+	const struct dc_context *ctx,
+	struct dm_pp_wm_sets_with_clock_ranges *wm_with_clock_ranges)
+{
+	/* TODO: to be implemented */
+	return true;
+}
+
+bool dm_pp_apply_power_level_change_request(
+	const struct dc_context *ctx,
+	struct dm_pp_power_level_change_request *level_change_req)
+{
+	/* TODO: to be implemented */
+	return true;
+}
+
+bool dm_pp_apply_clock_for_voltage_request(
+	const struct dc_context *ctx,
+	struct dm_pp_clock_for_voltage_req *clock_for_voltage_req)
+{
+	/* TODO: to be implemented */
+	return true;
+}
+
+bool dm_pp_get_static_clocks(
+	const struct dc_context *ctx,
+	struct dm_pp_static_clock_info *static_clk_info)
+{
+	/* TODO: to be implemented */
+	return true;
+}
+
 /**** end of power component interfaces ****/
 
 /* Calls to notification */

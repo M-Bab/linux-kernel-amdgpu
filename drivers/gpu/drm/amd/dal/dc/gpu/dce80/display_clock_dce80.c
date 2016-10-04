@@ -582,17 +582,47 @@ static bool set_min_clocks_state(
 {
 	struct display_clock_dce80 *disp_clk = FROM_DISPLAY_CLOCK(dc);
 
+	struct dm_pp_power_level_change_request level_change_req = {
+			DM_PP_POWER_LEVEL_INVALID};
+
 	if (clocks_state > disp_clk->max_clks_state) {
 		/*Requested state exceeds max supported state.*/
-		BREAK_TO_DEBUGGER();
+		dal_logger_write(dc->ctx->logger,
+				LOG_MAJOR_WARNING,
+				LOG_MINOR_COMPONENT_GPU,
+				"Requested state exceeds max supported state");
 		return false;
-	} else if (clocks_state == disp_clk->cur_min_clks_state) {
+	} else if (clocks_state == dc->cur_min_clks_state) {
 		/*if we're trying to set the same state, we can just return
 		 * since nothing needs to be done*/
 		return true;
 	}
 
-	disp_clk->cur_min_clks_state = clocks_state;
+	switch (clocks_state) {
+	case CLOCKS_STATE_ULTRA_LOW:
+		level_change_req.power_level = DM_PP_POWER_LEVEL_ULTRA_LOW;
+		break;
+	case CLOCKS_STATE_LOW:
+		level_change_req.power_level = DM_PP_POWER_LEVEL_LOW;
+		break;
+	case CLOCKS_STATE_NOMINAL:
+		level_change_req.power_level = DM_PP_POWER_LEVEL_NOMINAL;
+		break;
+	case CLOCKS_STATE_PERFORMANCE:
+		level_change_req.power_level = DM_PP_POWER_LEVEL_PERFORMANCE;
+		break;
+	case CLOCKS_STATE_INVALID:
+	default:
+		dal_logger_write(dc->ctx->logger,
+				LOG_MAJOR_WARNING,
+				LOG_MINOR_COMPONENT_GPU,
+				"Requested state invalid state");
+		return false;
+	}
+
+	/* get max clock state from PPLIB */
+	if (dm_pp_apply_power_level_change_request(dc->ctx, &level_change_req))
+		dc->cur_min_clks_state = clocks_state;
 
 	return true;
 }

@@ -793,6 +793,7 @@ static bool construct(
 	struct dc_context *ctx = dc->ctx;
 	struct firmware_info info;
 	struct dc_bios *bp;
+	struct dm_pp_static_clock_info static_clk_info = {0};
 
 	pool->base.adapter_srv = as;
 	pool->base.funcs = &dce100_res_pool_funcs;
@@ -850,6 +851,18 @@ static bool construct(
 		dm_error("DC: failed to create display clock!\n");
 		BREAK_TO_DEBUGGER();
 		goto disp_clk_create_fail;
+	}
+
+	/* get static clock information for PPLIB or firmware, save
+	 * max_clock_state
+	 */
+	if (dm_pp_get_static_clocks(ctx, &static_clk_info)) {
+		enum clocks_state max_clocks_state =
+			dce110_resource_convert_clock_state_pp_to_dc(
+					static_clk_info.max_clocks_state);
+
+		dal_display_clock_store_max_clocks_state(
+				pool->base.display_clock, max_clocks_state);
 	}
 
 	{

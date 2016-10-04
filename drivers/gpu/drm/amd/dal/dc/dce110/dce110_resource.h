@@ -41,7 +41,8 @@ struct dce110_resource_pool {
 
 enum dc_status dce110_resource_build_pipe_hw_param(struct pipe_ctx *pipe_ctx);
 
-
+enum clocks_state dce110_resource_convert_clock_state_pp_to_dc(
+	enum dm_pp_clocks_state pp_clock_state);
 
 struct resource_pool *dce110_create_resource_pool(
 	struct adapter_service *as,

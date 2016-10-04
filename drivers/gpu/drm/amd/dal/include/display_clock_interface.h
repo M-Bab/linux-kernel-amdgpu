@@ -87,11 +87,21 @@ struct minimum_clocks_calculation_result {
 
 /* Enumeration of all clocks states */
 enum clocks_state {
-	CLOCKS_STATE_INVALID,
+	CLOCKS_STATE_INVALID = 0,
 	CLOCKS_STATE_ULTRA_LOW,
 	CLOCKS_STATE_LOW,
 	CLOCKS_STATE_NOMINAL,
-	CLOCKS_STATE_PERFORMANCE
+	CLOCKS_STATE_PERFORMANCE,
+	/* Starting from DCE11, Max 8 level DPM state supported */
+	CLOCKS_DPM_STATE_LEVEL_INVALID = CLOCKS_STATE_INVALID,
+	CLOCKS_DPM_STATE_LEVEL_0 = CLOCKS_STATE_ULTRA_LOW,
+	CLOCKS_DPM_STATE_LEVEL_1 = CLOCKS_STATE_LOW,
+	CLOCKS_DPM_STATE_LEVEL_2 = CLOCKS_STATE_NOMINAL,
+	CLOCKS_DPM_STATE_LEVEL_3 = CLOCKS_STATE_PERFORMANCE,
+	CLOCKS_DPM_STATE_LEVEL_4 = CLOCKS_DPM_STATE_LEVEL_3 + 1,
+	CLOCKS_DPM_STATE_LEVEL_5 = CLOCKS_DPM_STATE_LEVEL_4 + 1,
+	CLOCKS_DPM_STATE_LEVEL_6 = CLOCKS_DPM_STATE_LEVEL_5 + 1,
+	CLOCKS_DPM_STATE_LEVEL_7 = CLOCKS_DPM_STATE_LEVEL_6 + 1,
 };
 
 /* Structure containing all state-dependent clocks
@@ -169,5 +179,9 @@ uint32_t dal_display_clock_get_dfs_bypass_threshold(
 	struct display_clock *disp_clk);
 void dal_display_clock_invalid_clock_state(
 	struct display_clock *disp_clk);
+bool dal_display_clock_apply_clock_voltage_request(
+	struct display_clock *disp_clk,
+	enum dm_pp_clock_type clocks_type,
+	uint32_t clocks_in_khz);
 
 #endif /* __DISPLAY_CLOCK_INTERFACE_H__ */

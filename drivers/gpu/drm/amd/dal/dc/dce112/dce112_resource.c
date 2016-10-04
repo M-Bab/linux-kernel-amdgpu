@@ -961,45 +961,273 @@ static const struct resource_funcs dce112_res_pool_funcs = {
 
 static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 {
-	struct dm_pp_clock_levels clks = {0};
+	struct dm_pp_clock_levels_with_latency eng_clks = {0};
+	struct dm_pp_clock_levels_with_latency mem_clks = {0};
+	struct dm_pp_wm_sets_with_clock_ranges wm_clocks = {0};
 
 	/*do system clock*/
-	dm_pp_get_clock_levels_by_type(
+	dm_pp_get_clock_levels_by_type_with_latency(
 			dc->ctx,
 			DM_PP_CLOCK_TYPE_ENGINE_CLK,
-			&clks);
-	/* convert all the clock fro kHz to fix point mHz */
+			&eng_clks);
+	/* convert all the clock fro kHz to fix point mHz  TODO: wloop data */
 	dc->bw_vbios.high_sclk = bw_frc_to_fixed(
-			clks.clocks_in_khz[clks.num_levels-1], 1000);
+		eng_clks.data[eng_clks.num_levels-1].clocks_in_khz, 1000);
 	dc->bw_vbios.mid1_sclk  = bw_frc_to_fixed(
-			clks.clocks_in_khz[clks.num_levels/8], 1000);
+		eng_clks.data[eng_clks.num_levels/8].clocks_in_khz, 1000);
 	dc->bw_vbios.mid2_sclk  = bw_frc_to_fixed(
-			clks.clocks_in_khz[clks.num_levels*2/8], 1000);
+		eng_clks.data[eng_clks.num_levels*2/8].clocks_in_khz, 1000);
 	dc->bw_vbios.mid3_sclk  = bw_frc_to_fixed(
-			clks.clocks_in_khz[clks.num_levels*3/8], 1000);
+		eng_clks.data[eng_clks.num_levels*3/8].clocks_in_khz, 1000);
 	dc->bw_vbios.mid4_sclk  = bw_frc_to_fixed(
-			clks.clocks_in_khz[clks.num_levels*4/8], 1000);
+		eng_clks.data[eng_clks.num_levels*4/8].clocks_in_khz, 1000);
 	dc->bw_vbios.mid5_sclk  = bw_frc_to_fixed(
-			clks.clocks_in_khz[clks.num_levels*5/8], 1000);
+		eng_clks.data[eng_clks.num_levels*5/8].clocks_in_khz, 1000);
 	dc->bw_vbios.mid6_sclk  = bw_frc_to_fixed(
-			clks.clocks_in_khz[clks.num_levels*6/8], 1000);
+		eng_clks.data[eng_clks.num_levels*6/8].clocks_in_khz, 1000);
 	dc->bw_vbios.low_sclk  = bw_frc_to_fixed(
-			clks.clocks_in_khz[0], 1000);
+			eng_clks.data[0].clocks_in_khz, 1000);
 
 	/*do memory clock*/
-	dm_pp_get_clock_levels_by_type(
+	dm_pp_get_clock_levels_by_type_with_latency(
 			dc->ctx,
 			DM_PP_CLOCK_TYPE_MEMORY_CLK,
-			&clks);
+			&mem_clks);
 
 	dc->bw_vbios.low_yclk = bw_frc_to_fixed(
-		clks.clocks_in_khz[0] * MEMORY_TYPE_MULTIPLIER, 1000);
+		mem_clks.data[0].clocks_in_khz * MEMORY_TYPE_MULTIPLIER, 1000);
 	dc->bw_vbios.mid_yclk = bw_frc_to_fixed(
-		clks.clocks_in_khz[clks.num_levels>>1] * MEMORY_TYPE_MULTIPLIER,
+mem_clks.data[mem_clks.num_levels>>1].clocks_in_khz * MEMORY_TYPE_MULTIPLIER,
 		1000);
 	dc->bw_vbios.high_yclk = bw_frc_to_fixed(
-		clks.clocks_in_khz[clks.num_levels-1] * MEMORY_TYPE_MULTIPLIER,
+mem_clks.data[mem_clks.num_levels-1].clocks_in_khz * MEMORY_TYPE_MULTIPLIER,
 		1000);
+
+	/* Now notify PPLib/SMU about which Watermarks sets they should select
+	 * depending on DPM state they are in. And update BW MGR GFX Engine and
+	 * Memory clock member variables for Watermarks calculations for each
+	 * Watermark Set
+	 */
+
+	/* default expected case: engineClkInfoWithLatency.numLevels == 8
+	 * && memoryClkInfoWithLatency.numLevels == 3
+	 */
+	wm_clocks.num_wm_sets = 4;
+	wm_clocks.wm_clk_ranges[0].wm_set_id = WM_SET_A;
+	wm_clocks.wm_clk_ranges[0].wm_min_eng_clk_in_khz =
+			eng_clks.data[0].clocks_in_khz;
+	wm_clocks.wm_clk_ranges[0].wm_max_eng_clk_in_khz =
+			eng_clks.data[3].clocks_in_khz - 1;
+	wm_clocks.wm_clk_ranges[0].wm_min_memg_clk_in_khz =
+			mem_clks.data[0].clocks_in_khz;
+	wm_clocks.wm_clk_ranges[0].wm_max_mem_clk_in_khz =
+			mem_clks.data[1].clocks_in_khz - 1;
+
+	/* TODO  TODO TODO  : below is for DWB. Will be-revisted later */
+	/* this GFX E clock is used for Watermark Set A and DWB Watermark
+	 * Set B calculations
+	 */
+	/* m_wmSetClocks.wmSetEngineClocks[WMSetA].clockInKHz =
+	 * m_wmDWBSetBEngineClock = eng_clks.data[0].clocks_in_khz;
+	 */
+	/* this M clock is used for Watermark Set A and DWB Watermark Set B
+	 * calculations
+	 */
+	/* m_wmSetClocks.wmSetMemoryClocks[WMSetA].clockInKHz =
+	 * m_wmDWBSetBMemoryClock = mem_clks.data[0].clocks_in_khz;
+	 */
+	/* this GFX E clock is used for Watermark Set A and DWB Watermark Set
+	 *B calculations
+	 */
+	/* m_wmSetClocks.wmSetEngineClocks[WMSetA].latencyInUs =
+	 * eng_clks.data[0].latency_in_us;
+	 */
+	/* this M clock is used for Watermark Set A and DWB Watermark Set B
+	 * calculations
+	 */
+	/* m_wmSetClocks.wmSetMemoryClocks[WMSetA].latencyInUs =
+	 * mem_clks.data[0].latency_in_us;
+	 */
+
+	wm_clocks.wm_clk_ranges[1].wm_set_id = WM_SET_B;
+	wm_clocks.wm_clk_ranges[1].wm_min_eng_clk_in_khz =
+			eng_clks.data[3].clocks_in_khz;
+	/* 5 GHz instead of data[7].clockInKHz to cover Overdrive */
+	wm_clocks.wm_clk_ranges[1].wm_max_eng_clk_in_khz = 5000000;
+	wm_clocks.wm_clk_ranges[1].wm_min_memg_clk_in_khz =
+			mem_clks.data[0].clocks_in_khz;
+	wm_clocks.wm_clk_ranges[1].wm_max_mem_clk_in_khz =
+			mem_clks.data[1].clocks_in_khz - 1;
+
+	wm_clocks.wm_clk_ranges[2].wm_set_id = WM_SET_C;
+	wm_clocks.wm_clk_ranges[2].wm_min_eng_clk_in_khz =
+			eng_clks.data[0].clocks_in_khz;
+	wm_clocks.wm_clk_ranges[2].wm_max_eng_clk_in_khz =
+			eng_clks.data[3].clocks_in_khz - 1;
+	wm_clocks.wm_clk_ranges[2].wm_min_memg_clk_in_khz =
+			mem_clks.data[1].clocks_in_khz;
+	/* 5 GHz instead of data[2].clockInKHz to cover Overdrive */
+	wm_clocks.wm_clk_ranges[2].wm_max_mem_clk_in_khz = 5000000;
+
+	wm_clocks.wm_clk_ranges[3].wm_set_id = WM_SET_D;
+	wm_clocks.wm_clk_ranges[3].wm_min_eng_clk_in_khz =
+			eng_clks.data[3].clocks_in_khz;
+	/* 5 GHz instead of data[7].clockInKHz to cover Overdrive */
+	wm_clocks.wm_clk_ranges[3].wm_max_eng_clk_in_khz = 5000000;
+	wm_clocks.wm_clk_ranges[3].wm_min_memg_clk_in_khz =
+			mem_clks.data[1].clocks_in_khz;
+	/* 5 GHz instead of data[2].clockInKHz to cover Overdrive */
+	wm_clocks.wm_clk_ranges[3].wm_max_mem_clk_in_khz = 5000000;
+
+	/* need to adjust above entries if engineClkInfoWithLatency.numLevels
+	 * != 8 does not need to adjust if memoryClkInfoWithLatency.numLevels
+	 * != 3
+	 */
+	switch (eng_clks.num_levels) {
+	case 8:
+	case 7:
+	default:
+		break;
+
+	case 6:
+	case 5:
+	case 4:
+		wm_clocks.wm_clk_ranges[0].wm_max_eng_clk_in_khz =
+				eng_clks.data[2].clocks_in_khz - 1;
+		wm_clocks.wm_clk_ranges[1].wm_min_eng_clk_in_khz =
+				eng_clks.data[2].clocks_in_khz;
+
+		/* this GFX E clock is used for Watermark Set B calculations
+		 * m_wmSetClocks.wmSetEngineClocks[WMSetB].clockInKHz =
+		 * eng_clks.data[2].clockInKHz;
+		 */
+
+		wm_clocks.wm_clk_ranges[2].wm_max_eng_clk_in_khz =
+				eng_clks.data[2].clocks_in_khz - 1;
+		wm_clocks.wm_clk_ranges[3].wm_min_eng_clk_in_khz =
+				eng_clks.data[2].clocks_in_khz;
+
+		/* this GFX E clock is used for Watermark Set D and DWB
+		 * Watermark Set A calculations
+		 * m_wmSetClocks.wmSetEngineClocks[WMSetD].clockInKHz =
+		 * m_wmDWBSetAEngineClock = eng_clks.data[2].clockInKHz;
+		 */
+		break;
+
+	case 3:
+	case 2:
+		wm_clocks.wm_clk_ranges[0].wm_max_eng_clk_in_khz =
+				eng_clks.data[1].clocks_in_khz - 1;
+		wm_clocks.wm_clk_ranges[1].wm_min_eng_clk_in_khz =
+				eng_clks.data[1].clocks_in_khz;
+
+		/* this GFX E clock is used for Watermark Set B calculations
+		 * m_wmSetClocks.wmSetEngineClocks[WMSetB].clockInKHz =
+		 * eng_clks.data[1].clockInKHz;
+		 */
+
+		wm_clocks.wm_clk_ranges[2].wm_max_eng_clk_in_khz =
+				eng_clks.data[1].clocks_in_khz - 1;
+		wm_clocks.wm_clk_ranges[3].wm_min_eng_clk_in_khz =
+				eng_clks.data[1].clocks_in_khz;
+
+		/* this GFX E clock is used for Watermark Set D and DWB
+		 * Watermark Set A calculations
+		 */
+		/* m_wmSetClocks.wmSetEngineClocks[WMSetD].clockInKHz =
+		 * m_wmDWBSetAEngineClock = eng_clks.data[1].clockInKHz;
+		 */
+		break;
+	}
+
+	/* use same memory clock and latency for all 4 watermark levels if we
+	 * only have one MCLK reported
+	 */
+	if (mem_clks.num_levels == 1) {
+		/* this M clock is used for Watermark Set D and DWB Watermark
+		 * Set A calculations
+		 */
+		/* m_wmSetClocks.wmSetMemoryClocks[WMSetA].clockInKHz  =
+		 * m_wmDWBSetBMemoryClock = 250000;
+		 */
+		/* this M clock is used for Watermark Set D and DWB Watermark
+		 * Set A calculations
+		 */
+		/* m_wmSetClocks.wmSetMemoryClocks[WMSetA].latencyInUs = 45; */
+
+		wm_clocks.wm_clk_ranges[WM_SET_A].wm_min_memg_clk_in_khz =
+				250000;
+		wm_clocks.wm_clk_ranges[WM_SET_A].wm_max_mem_clk_in_khz =
+				mem_clks.data[0].clocks_in_khz - 1;
+
+		/* this M clock is used for Watermark Set D and DWB Watermark
+		 * Set A calculations
+		 */
+		/* m_wmSetClocks.wmSetMemoryClocks[WMSetB].clockInKHz
+		 *  = 250000;
+		 */
+		/* this M clock is used for Watermark Set D and DWB Watermark
+		 * Set A calculations
+		 */
+		/* m_wmSetClocks.wmSetMemoryClocks[WMSetB].latencyInUs = 45; */
+
+		wm_clocks.wm_clk_ranges[WM_SET_B].wm_min_memg_clk_in_khz =
+				250000;
+		wm_clocks.wm_clk_ranges[WM_SET_B].wm_max_mem_clk_in_khz =
+				mem_clks.data[0].clocks_in_khz - 1;
+
+		/* this M clock is used for Watermark Set D and DWB Watermark
+		 * Set A calculations
+		 */
+		/* m_wmSetClocks.wmSetMemoryClocks[WMSetC].clockInKHz =
+		 * memoryClkInfoWithLatency.data[0].clockInKHz;
+		 */
+		/* this M clock is used for Watermark Set D and DWB Watermark
+		 * Set A calculations
+		 */
+		/* m_wmSetClocks.wmSetMemoryClocks[WMSetC].latencyInUs =
+		 * memoryClkInfoWithLatency.data[0].latencyInMicros;
+		 */
+
+		wm_clocks.wm_clk_ranges[WM_SET_C].wm_min_memg_clk_in_khz =
+				mem_clks.data[0].clocks_in_khz;
+		wm_clocks.wm_clk_ranges[WM_SET_C].wm_max_mem_clk_in_khz =
+				5000000;
+
+		/* this M clock is used for Watermark Set D and DWB Watermark
+		 * Set A calculations
+		 */
+		/* m_wmSetClocks.wmSetMemoryClocks[WMSetD].clockInKHz  =
+		 * m_wmDWBSetAMemoryClock =
+		 * memoryClkInfoWithLatency.data[0].clockInKHz;
+		 */
+		/* this M clock is used for Watermark Set D and DWB Watermark
+		 * Set A calculations
+		 */
+		/* m_wmSetClocks.wmSetMemoryClocks[WMSetD].latencyInUs =
+		 * memoryClkInfoWithLatency.data[0].latencyInMicros;
+		 */
+
+		wm_clocks.wm_clk_ranges[WM_SET_D].wm_min_memg_clk_in_khz =
+				mem_clks.data[0].clocks_in_khz;
+		wm_clocks.wm_clk_ranges[WM_SET_D].wm_max_mem_clk_in_khz =
+				5000000;
+	}
+
+	/* Notify PP Lib/SMU which Watermarks to use for which clock ranges */
+	dm_pp_notify_wm_clock_changes(dc->ctx, &wm_clocks);
+
+	/* we don't need to call PPLIB for validation clock any more since they
+	 * also give us the highest sclk and highest mclk (UMA clock).
+	 * ALSO always convert UMA clock (from PPLIB)  to YCLK (HW formula):
+	 * YCLK = UMACLK*m_memoryTypeMultiplier
+	 */
+	/* m_validationMemoryClockInKHz  =
+	 * m_clockLevels.memoryClocksInKHz[m_clockLevels.numMemclkLevels - 1];
+	 */
+	/* m_validationEngineClockInKHz  =
+	 * m_clockLevels.engineClocksInKHz[m_clockLevels.numEngclkLevels - 1];
+	 */
 }
 
 
@@ -1011,6 +1239,7 @@ static bool construct(
 {
 	unsigned int i;
 	struct dc_context *ctx = dc->ctx;
+	struct dm_pp_static_clock_info static_clk_info = {0};
 
 	pool->base.adapter_srv = adapter_serv;
 	pool->base.funcs = &dce112_res_pool_funcs;
@@ -1021,7 +1250,8 @@ static bool construct(
 	pool->base.underlay_pipe_index = -1;
 	pool->base.pipe_count =
 		dal_adapter_service_get_func_controllers_num(adapter_serv);
-	pool->base.stream_enc_count = dal_adapter_service_get_stream_engines_num(adapter_serv);
+	pool->base.stream_enc_count =
+		dal_adapter_service_get_stream_engines_num(adapter_serv);
 	dc->public.caps.max_downscale_ratio = 200;
 	dc->public.caps.i2c_speed_in_khz = 100;
 
@@ -1036,24 +1266,36 @@ static bool construct(
 	pool->base.stream_engines.engine.ENGINE_ID_DIGE = 1;
 	pool->base.stream_engines.engine.ENGINE_ID_DIGF = 1;
 
-	pool->base.clock_sources[DCE112_CLK_SRC_PLL0] = dce112_clock_source_create(
+	pool->base.clock_sources[DCE112_CLK_SRC_PLL0] =
+			dce112_clock_source_create(
 		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL0, &dce112_clk_src_reg_offsets[0], false);
-	pool->base.clock_sources[DCE112_CLK_SRC_PLL1] = dce112_clock_source_create(
+		CLOCK_SOURCE_COMBO_PHY_PLL0,
+		&dce112_clk_src_reg_offsets[0], false);
+	pool->base.clock_sources[DCE112_CLK_SRC_PLL1] =
+			dce112_clock_source_create(
 		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL1, &dce112_clk_src_reg_offsets[1], false);
-	pool->base.clock_sources[DCE112_CLK_SRC_PLL2] = dce112_clock_source_create(
+		CLOCK_SOURCE_COMBO_PHY_PLL1,
+		&dce112_clk_src_reg_offsets[1], false);
+	pool->base.clock_sources[DCE112_CLK_SRC_PLL2] =
+			dce112_clock_source_create(
 		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL2, &dce112_clk_src_reg_offsets[2], false);
-	pool->base.clock_sources[DCE112_CLK_SRC_PLL3] = dce112_clock_source_create(
+		CLOCK_SOURCE_COMBO_PHY_PLL2,
+		&dce112_clk_src_reg_offsets[2], false);
+	pool->base.clock_sources[DCE112_CLK_SRC_PLL3] =
+			dce112_clock_source_create(
 		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL3, &dce112_clk_src_reg_offsets[3], false);
-	pool->base.clock_sources[DCE112_CLK_SRC_PLL4] = dce112_clock_source_create(
+		CLOCK_SOURCE_COMBO_PHY_PLL3,
+		&dce112_clk_src_reg_offsets[3], false);
+	pool->base.clock_sources[DCE112_CLK_SRC_PLL4] =
+			dce112_clock_source_create(
 		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL4, &dce112_clk_src_reg_offsets[4], false);
-	pool->base.clock_sources[DCE112_CLK_SRC_PLL5] = dce112_clock_source_create(
+		CLOCK_SOURCE_COMBO_PHY_PLL4,
+		&dce112_clk_src_reg_offsets[4], false);
+	pool->base.clock_sources[DCE112_CLK_SRC_PLL5] =
+			dce112_clock_source_create(
 		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL5, &dce112_clk_src_reg_offsets[5], false);
+		CLOCK_SOURCE_COMBO_PHY_PLL5,
+		&dce112_clk_src_reg_offsets[5], false);
 	pool->base.clk_src_count = DCE112_CLK_SRC_TOTAL;
 
 	pool->base.dp_clock_source =  dce112_clock_source_create(
@@ -1068,11 +1310,25 @@ static bool construct(
 		}
 	}
 
-	pool->base.display_clock = dal_display_clock_dce112_create(ctx, adapter_serv);
+	pool->base.display_clock = dal_display_clock_dce112_create(
+			ctx, adapter_serv);
+
 	if (pool->base.display_clock == NULL) {
 		dm_error("DC: failed to create display clock!\n");
 		BREAK_TO_DEBUGGER();
 		goto disp_clk_create_fail;
+	}
+
+	/* get static clock information for PPLIB or firmware, save
+	 * max_clock_state
+	 */
+	if (dm_pp_get_static_clocks(ctx, &static_clk_info)) {
+		enum clocks_state max_clocks_state =
+			dce110_resource_convert_clock_state_pp_to_dc(
+					static_clk_info.max_clocks_state);
+
+		dal_display_clock_store_max_clocks_state(
+				pool->base.display_clock, max_clocks_state);
 	}
 
 	{
@@ -1095,11 +1351,12 @@ static bool construct(
 	}
 
 	for (i = 0; i < pool->base.pipe_count; i++) {
-		pool->base.timing_generators[i] = dce112_timing_generator_create(
-				adapter_serv,
-				ctx,
-				i,
-				&dce112_tg_offsets[i]);
+		pool->base.timing_generators[i] =
+				dce112_timing_generator_create(
+					adapter_serv,
+					ctx,
+					i,
+					&dce112_tg_offsets[i]);
 		if (pool->base.timing_generators[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create tg!\n");
@@ -1125,7 +1382,7 @@ static bool construct(
 		if (pool->base.ipps[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error(
-				"DC: failed to create input pixel processor!\n");
+				"DC:failed to create input pixel processor!\n");
 			goto controller_create_fail;
 		}
 
@@ -1150,7 +1407,7 @@ static bool construct(
 		if (pool->base.opps[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error(
-				"DC: failed to create output pixel processor!\n");
+				"DC:failed to create output pixel processor!\n");
 			goto controller_create_fail;
 		}
 	}
@@ -1166,7 +1423,7 @@ static bool construct(
 		}
 
 		pool->base.audios[i] = dce110_audio_create(
-				ctx, i, &audio_regs[i], &audio_shift, &audio_mask);
+			ctx, i, &audio_regs[i], &audio_shift, &audio_mask);
 
 		if (pool->base.audios[i] == NULL) {
 			BREAK_TO_DEBUGGER();
@@ -1179,11 +1436,12 @@ static bool construct(
 	for (i = 0; i < pool->base.stream_enc_count; i++) {
 		/* TODO: rework fragile code*/
 		if (pool->base.stream_engines.u_all & 1 << i) {
-			pool->base.stream_enc[i] = dce112_stream_encoder_create(
-				i, dc->ctx,
-				dal_adapter_service_get_bios_parser(
-					adapter_serv),
-				&stream_enc_regs[i]);
+			pool->base.stream_enc[i] =
+				dce112_stream_encoder_create(
+					i, dc->ctx,
+					dal_adapter_service_get_bios_parser(
+						adapter_serv),
+					&stream_enc_regs[i]);
 			if (pool->base.stream_enc[i] == NULL) {
 				BREAK_TO_DEBUGGER();
 				dm_error("DC: failed to create stream_encoder!\n");

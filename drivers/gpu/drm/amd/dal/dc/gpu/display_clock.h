@@ -55,6 +55,10 @@ struct display_clock_funcs {
 	struct display_clock_state (*get_clock_state)(
 		struct display_clock *disp_clk);
 	uint32_t (*get_dfs_bypass_threshold)(struct display_clock *disp_clk);
+	bool (*apply_clock_voltage_request)(
+		struct display_clock *disp_clk,
+		enum dm_pp_clock_type clocks_type,
+		uint32_t clocks_in_khz);
 };
 
 struct display_clock {
@@ -79,4 +83,23 @@ bool dal_display_clock_construct_base(
 	struct display_clock *base,
 	struct dc_context *ctx,
 	struct adapter_service *as);
+
+enum clocks_state dal_display_clock_get_min_clocks_state(
+	struct display_clock *disp_clk);
+
+enum clocks_state dal_display_clock_get_required_clocks_state(
+	struct display_clock *disp_clk,
+	struct state_dependent_clocks *req_clocks);
+
+bool dal_display_clock_set_min_clocks_state(
+	struct display_clock *disp_clk,
+	enum clocks_state clocks_state);
+
+uint32_t dal_display_clock_get_validation_clock(struct display_clock *disp_clk);
+
+void dal_display_clock_store_max_clocks_state(
+	struct display_clock *disp_clk,
+	enum clocks_state max_clocks_state);
+
+
 #endif /* __DAL_DISPLAY_CLOCK_H__*/

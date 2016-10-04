@@ -120,6 +120,8 @@ bool dispclk_dce112_set_min_clocks_state(
 	enum clocks_state clocks_state)
 {
 	struct display_clock_dce112 *dc = DCLCK112_FROM_BASE(base);
+	struct dm_pp_power_level_change_request level_change_req = {
+			DM_PP_POWER_LEVEL_INVALID};
 
 	if (clocks_state > dc->max_clks_state) {
 		/*Requested state exceeds max supported state.*/
@@ -134,7 +136,32 @@ bool dispclk_dce112_set_min_clocks_state(
 		return true;
 	}
 
-	base->cur_min_clks_state = clocks_state;
+	switch (clocks_state) {
+	case CLOCKS_STATE_ULTRA_LOW:
+		level_change_req.power_level = DM_PP_POWER_LEVEL_ULTRA_LOW;
+		break;
+	case CLOCKS_STATE_LOW:
+		level_change_req.power_level = DM_PP_POWER_LEVEL_LOW;
+		break;
+	case CLOCKS_STATE_NOMINAL:
+		level_change_req.power_level = DM_PP_POWER_LEVEL_NOMINAL;
+		break;
+	case CLOCKS_STATE_PERFORMANCE:
+		level_change_req.power_level = DM_PP_POWER_LEVEL_PERFORMANCE;
+		break;
+	case CLOCKS_STATE_INVALID:
+	default:
+		dal_logger_write(base->ctx->logger,
+				LOG_MAJOR_WARNING,
+				LOG_MINOR_COMPONENT_GPU,
+				"Requested state invalid state");
+		return false;
+	}
+
+	/* get max clock state from PPLIB */
+	if (dm_pp_apply_power_level_change_request(
+			base->ctx, &level_change_req))
+		base->cur_min_clks_state = clocks_state;
 
 	return true;
 }
@@ -227,7 +254,9 @@ uint32_t dispclk_dce112_get_validation_clock(struct display_clock *dc)
 
 	switch (disp_clk->max_clks_state) {
 	case CLOCKS_STATE_ULTRA_LOW:
-		/*Currently not supported, it has 0 in table entry*/
+		clk = (disp_clk->max_clks_by_state + CLOCKS_STATE_ULTRA_LOW)->
+			display_clk_khz;
+
 	case CLOCKS_STATE_LOW:
 		clk = (disp_clk->max_clks_by_state + CLOCKS_STATE_LOW)->
 			display_clk_khz;
@@ -833,6 +862,7 @@ bool dal_display_clock_dce112_construct(
 	struct dc_context *ctx,
 	struct adapter_service *as)
 {
+	struct dm_pp_static_clock_info *static_clk_info = {0};
 	struct display_clock *dc_base = &dc112->disp_clk_base;
 
 	if (NULL == as)

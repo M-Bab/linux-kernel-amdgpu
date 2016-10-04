@@ -95,7 +95,11 @@ struct dm_pp_gpu_clock_range {
 enum dm_pp_clock_type {
 	DM_PP_CLOCK_TYPE_DISPLAY_CLK = 1,
 	DM_PP_CLOCK_TYPE_ENGINE_CLK, /* System clock */
-	DM_PP_CLOCK_TYPE_MEMORY_CLK
+	DM_PP_CLOCK_TYPE_MEMORY_CLK,
+	DM_PP_CLOCK_TYPE_DCFCLK,
+	DM_PP_CLOCK_TYPE_SOCCLK,
+	DM_PP_CLOCK_TYPE_PIXELCLK,
+	DM_PP_CLOCK_TYPE_DISPLAYPHYCLK
 };
 
 #define DC_DECODE_PP_CLOCK_TYPE(clk_type) \
@@ -108,11 +112,26 @@ enum dm_pp_clock_type {
 struct dm_pp_clock_levels {
 	uint32_t num_levels;
 	uint32_t clocks_in_khz[DM_PP_MAX_CLOCK_LEVELS];
+};
 
-	/* TODO: add latency for polaris11
-	 * do we need to know invalid (unsustainable boost) level for watermark
-	 * programming? if not we can just report less elements in array
-	 */
+struct dm_pp_clock_with_latency {
+	uint32_t clocks_in_khz;
+	uint32_t latency_in_us;
+};
+
+struct dm_pp_clock_levels_with_latency {
+	uint32_t num_levels;
+	struct dm_pp_clock_with_latency data[DM_PP_MAX_CLOCK_LEVELS];
+};
+
+struct dm_pp_clock_with_voltage {
+	uint32_t clocks_in_khz;
+	uint32_t voltage_in_mv;
+};
+
+struct dm_pp_clock_levels_with_voltage {
+	uint32_t num_levels;
+	struct dm_pp_clock_with_voltage data[DM_PP_MAX_CLOCK_LEVELS];
 };
 
 struct dm_pp_single_disp_config {
@@ -125,6 +144,29 @@ struct dm_pp_single_disp_config {
 	uint32_t v_refresh;
 	uint32_t sym_clock; /* HDMI only */
 	struct dc_link_settings link_settings; /* DP only */
+};
+
+#define MAX_WM_SETS 4
+
+enum dm_pp_wm_set_id {
+	WM_SET_A = 0,
+	WM_SET_B,
+	WM_SET_C,
+	WM_SET_D,
+	WM_SET_INVALID = 0xffff,
+};
+
+struct dm_pp_clock_range_for_wm_set {
+	enum dm_pp_wm_set_id wm_set_id;
+	uint32_t wm_min_eng_clk_in_khz;
+	uint32_t wm_max_eng_clk_in_khz;
+	uint32_t wm_min_memg_clk_in_khz;
+	uint32_t wm_max_mem_clk_in_khz;
+};
+
+struct dm_pp_wm_sets_with_clock_ranges {
+	uint32_t num_wm_sets;
+	struct dm_pp_clock_range_for_wm_set wm_clk_ranges[MAX_WM_SETS];
 };
 
 #define MAX_DISPLAY_CONFIGS 6
@@ -191,6 +233,40 @@ enum dm_acpi_display_type {
 	AcpiDisplayType_DFP4 = 10,
 	AcpiDisplayType_DFP5 = 11,
 	AcpiDisplayType_DFP6 = 12
+};
+
+enum dm_pp_power_level {
+	DM_PP_POWER_LEVEL_INVALID,
+	DM_PP_POWER_LEVEL_ULTRA_LOW,
+	DM_PP_POWER_LEVEL_LOW,
+	DM_PP_POWER_LEVEL_NOMINAL,
+	DM_PP_POWER_LEVEL_PERFORMANCE,
+
+	DM_PP_POWER_LEVEL_0 = DM_PP_POWER_LEVEL_ULTRA_LOW,
+	DM_PP_POWER_LEVEL_1 = DM_PP_POWER_LEVEL_LOW,
+	DM_PP_POWER_LEVEL_2 = DM_PP_POWER_LEVEL_NOMINAL,
+	DM_PP_POWER_LEVEL_3 = DM_PP_POWER_LEVEL_PERFORMANCE,
+	DM_PP_POWER_LEVEL_4 = DM_PP_CLOCKS_DPM_STATE_LEVEL_3 + 1,
+	DM_PP_POWER_LEVEL_5 = DM_PP_CLOCKS_DPM_STATE_LEVEL_4 + 1,
+	DM_PP_POWER_LEVEL_6 = DM_PP_CLOCKS_DPM_STATE_LEVEL_5 + 1,
+	DM_PP_POWER_LEVEL_7 = DM_PP_CLOCKS_DPM_STATE_LEVEL_6 + 1,
+};
+
+struct dm_pp_power_level_change_request {
+	enum dm_pp_power_level power_level;
+};
+
+struct dm_pp_clock_for_voltage_req {
+	enum dm_pp_clock_type clk_type;
+	uint32_t clocks_in_khz;
+};
+
+struct dm_pp_static_clock_info {
+	uint32_t max_sclk_khz;
+	uint32_t max_mclk_khz;
+
+	/* max possible display block clocks state */
+	enum dm_pp_clocks_state max_clocks_state;
 };
 
 #endif

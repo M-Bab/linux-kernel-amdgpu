@@ -728,6 +728,47 @@ static const struct resource_funcs dce80_res_pool_funcs = {
 	.validate_bandwidth = dce80_validate_bandwidth
 };
 
+static enum clocks_state dce80_resource_convert_clock_state_pp_to_dc(
+	enum dm_pp_clocks_state pp_clock_state)
+{
+	enum clocks_state dc_clocks_state = CLOCKS_STATE_INVALID;
+
+	switch (pp_clock_state) {
+	case DM_PP_CLOCKS_STATE_INVALID:
+		dc_clocks_state = CLOCKS_STATE_INVALID;
+		break;
+	case DM_PP_CLOCKS_STATE_ULTRA_LOW:
+		dc_clocks_state = CLOCKS_STATE_ULTRA_LOW;
+		break;
+	case DM_PP_CLOCKS_STATE_LOW:
+		dc_clocks_state = CLOCKS_STATE_LOW;
+		break;
+	case DM_PP_CLOCKS_STATE_NOMINAL:
+		dc_clocks_state = CLOCKS_STATE_NOMINAL;
+		break;
+	case DM_PP_CLOCKS_STATE_PERFORMANCE:
+		dc_clocks_state = CLOCKS_STATE_PERFORMANCE;
+		break;
+	case DM_PP_CLOCKS_DPM_STATE_LEVEL_4:
+		dc_clocks_state = CLOCKS_DPM_STATE_LEVEL_4;
+		break;
+	case DM_PP_CLOCKS_DPM_STATE_LEVEL_5:
+		dc_clocks_state = CLOCKS_DPM_STATE_LEVEL_5;
+		break;
+	case DM_PP_CLOCKS_DPM_STATE_LEVEL_6:
+		dc_clocks_state = CLOCKS_DPM_STATE_LEVEL_6;
+		break;
+	case DM_PP_CLOCKS_DPM_STATE_LEVEL_7:
+		dc_clocks_state = CLOCKS_DPM_STATE_LEVEL_7;
+		break;
+	default:
+		dc_clocks_state = CLOCKS_STATE_INVALID;
+		break;
+	}
+
+	return dc_clocks_state;
+}
+
 static bool construct(
 	struct adapter_service *as,
 	uint8_t num_virtual_links,
@@ -738,6 +779,7 @@ static bool construct(
 	struct dc_context *ctx = dc->ctx;
 	struct firmware_info info;
 	struct dc_bios *bp;
+	struct dm_pp_static_clock_info static_clk_info = {0};
 
 	pool->base.adapter_srv = as;
 	pool->base.funcs = &dce80_res_pool_funcs;
@@ -808,6 +850,18 @@ static bool construct(
 		dm_error("DC: failed to create display clock!\n");
 		BREAK_TO_DEBUGGER();
 		goto disp_clk_create_fail;
+	}
+
+	/* get static clock information for PPLIB or firmware, save
+	 * max_clock_state
+	 */
+	if (dm_pp_get_static_clocks(ctx, &static_clk_info)) {
+		enum clocks_state max_clocks_state =
+				dce80_resource_convert_clock_state_pp_to_dc(
+					static_clk_info.max_clocks_state);
+
+		dal_display_clock_store_max_clocks_state(
+				pool->base.display_clock, max_clocks_state);
 	}
 
 	{
