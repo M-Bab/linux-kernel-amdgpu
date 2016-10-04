@@ -230,6 +230,9 @@ void mod_power_destroy(struct mod_power *mod_power)
 bool mod_power_add_sink(struct mod_power *mod_power,
 						const struct dc_sink *sink)
 {
+	if (sink->sink_signal == SIGNAL_TYPE_VIRTUAL)
+		return false;
+
 	struct core_power *core_power =
 				MOD_POWER_TO_CORE(mod_power);
 	struct core_dc *core_dc = DC_TO_CORE(core_power->dc);
@@ -288,6 +291,13 @@ bool mod_power_set_backlight(struct mod_power *mod_power,
 	union dmcu_abm_set_bl_params params;
 
 	for (stream_index = 0; stream_index < num_streams; stream_index++) {
+		if (streams[stream_index]->sink->sink_signal == SIGNAL_TYPE_VIRTUAL) {
+			core_power->state[sink_index].backlight = 0;
+			core_power->state[sink_index].frame_ramp = 0;
+			core_power->state[sink_index].smooth_brightness_enabled = false;
+			continue;
+		}
+
 		sink_index = sink_index_from_sink(core_power,
 				streams[stream_index]->sink);
 
@@ -322,6 +332,9 @@ bool mod_power_get_backlight(struct mod_power *mod_power,
 		const struct dc_sink *sink,
 		unsigned int *backlight_8bit)
 {
+	if (sink->sink_signal == SIGNAL_TYPE_VIRTUAL)
+		return false;
+
 	struct core_power *core_power =
 				MOD_POWER_TO_CORE(mod_power);
 
@@ -586,6 +599,9 @@ bool mod_power_get_panel_backlight_boundaries(
 bool mod_power_set_smooth_brightness(struct mod_power *mod_power,
 		const struct dc_sink *sink, bool enable_brightness)
 {
+	if (sink->sink_signal == SIGNAL_TYPE_VIRTUAL)
+		return false;
+
 	struct core_power *core_power =
 			MOD_POWER_TO_CORE(mod_power);
 	unsigned int sink_index = sink_index_from_sink(core_power, sink);
@@ -598,6 +614,9 @@ bool mod_power_set_smooth_brightness(struct mod_power *mod_power,
 bool mod_power_notify_mode_change(struct mod_power *mod_power,
 		const struct dc_stream *stream)
 {
+	if (stream->sink->sink_signal == SIGNAL_TYPE_VIRTUAL)
+		return false;
+
 	struct core_power *core_power =
 			MOD_POWER_TO_CORE(mod_power);
 
