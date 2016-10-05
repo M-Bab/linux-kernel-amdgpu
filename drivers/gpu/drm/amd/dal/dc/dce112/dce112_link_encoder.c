@@ -179,9 +179,9 @@ bool dce112_link_encoder_construct(
 
 	enc110->base.funcs = &dce112_lnk_enc_funcs;
 
-	enc110->base.features.flags.bits.IS_HBR3_CAPABLE = true;
+	enc110->base.features.flags.bits.IS_HBR3_CAPABLE = false;
 
-	enc110->base.features.flags.bits.IS_TPS4_CAPABLE = true;
+	enc110->base.features.flags.bits.IS_TPS4_CAPABLE = false;
 
 	return true;
 }
