@@ -837,51 +837,6 @@ static bool targets_changed(
 	return false;
 }
 
-static void target_enable_memory_requests(struct dc_target *dc_target,
-		struct resource_context *res_ctx)
-{
-	uint8_t i, j;
-	struct core_target *target = DC_TARGET_TO_CORE(dc_target);
-
-	for (i = 0; i < target->public.stream_count; i++) {
-		for (j = 0; j < MAX_PIPES; j++) {
-			struct timing_generator *tg = res_ctx->pipe_ctx[j].tg;
-
-			if (res_ctx->pipe_ctx[j].stream !=
-				DC_STREAM_TO_CORE(target->public.streams[i]))
-				continue;
-
-			if (!tg->funcs->set_blank(tg, false)) {
-				dm_error("DC: failed to unblank crtc!\n");
-				BREAK_TO_DEBUGGER();
-			}
-		}
-	}
-}
-
-static void target_disable_memory_requests(struct dc_target *dc_target,
-		struct resource_context *res_ctx)
-{
-	int i, j;
-	struct core_target *target = DC_TARGET_TO_CORE(dc_target);
-
-	for (i = 0; i < target->public.stream_count; i++) {
-		for (j = 0; j < res_ctx->pool->pipe_count; j++) {
-			struct timing_generator *tg = res_ctx->pipe_ctx[j].tg;
-
-			if (res_ctx->pipe_ctx[j].top_pipe != NULL ||
-				res_ctx->pipe_ctx[j].stream !=
-				DC_STREAM_TO_CORE(target->public.streams[i]))
-				continue;
-
-			if (!tg->funcs->set_blank(tg, true)) {
-				dm_error("DC: failed to blank crtc!\n");
-				BREAK_TO_DEBUGGER();
-			}
-		}
-	}
-}
-
 void pplib_apply_safe_state(
 	const struct core_dc *dc)
 {
@@ -1048,7 +1003,7 @@ bool dc_commit_targets(
 	enum dc_status result = DC_ERROR_UNEXPECTED;
 	struct validate_context *context;
 	struct dc_validation_set set[MAX_TARGETS];
-	uint8_t i;
+	int i, j, k;
 
 	if (false == targets_changed(core_dc, targets, target_count))
 		return DC_OK;
@@ -1106,9 +1061,20 @@ bool dc_commit_targets(
 		struct dc_target *dc_target = &context->targets[i]->public;
 		struct core_sink *sink = DC_SINK_TO_CORE(dc_target->streams[0]->sink);
 
-		if (context->target_status[i].surface_count > 0)
-			target_enable_memory_requests(dc_target,
-					&core_dc->current_context->res_ctx);
+		for (j = 0; j < context->target_status[i].surface_count; j++) {
+			const struct dc_surface *dc_surface =
+					context->target_status[i].surfaces[j];
+
+			for (k = 0; k < context->res_ctx.pool->pipe_count; k++) {
+				struct pipe_ctx *pipe = &context->res_ctx.pipe_ctx[k];
+
+				if (dc_surface != &pipe->surface->public
+						|| !dc_surface->visible)
+					continue;
+
+				pipe->tg->funcs->set_blank(pipe->tg, false);
+			}
+		}
 
 		CONN_MSG_MODE(sink->link, "{%dx%d, %dx%d@%dKhz}",
 				dc_target->streams[0]->timing.h_addressable,
