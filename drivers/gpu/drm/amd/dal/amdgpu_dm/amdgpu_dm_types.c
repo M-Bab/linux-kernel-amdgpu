@@ -2572,6 +2572,11 @@ int amdgpu_dm_atomic_commit(
 			acrtc->enabled = true;
 			acrtc->hw_mode = crtc->state->mode;
 			crtc->hwmode = crtc->state->mode;
+			if (adev->dm.freesync_module)
+				for (j = 0; j < acrtc->target->stream_count; j++)
+					mod_freesync_add_stream(
+							adev->dm.freesync_module,
+							acrtc->target->streams[j]);
 			break;
 		}
 
@@ -2691,11 +2696,7 @@ int amdgpu_dm_atomic_commit(
 
 		if (adev->dm.freesync_module) {
 			for (j = 0; j < acrtc->target->stream_count; j++)
-				mod_freesync_add_stream(
-						adev->dm.freesync_module,
-						acrtc->target->streams[j]);
-
-			mod_freesync_notify_mode_change(
+				mod_freesync_notify_mode_change(
 						adev->dm.freesync_module,
 						acrtc->target->streams,
 						acrtc->target->stream_count);
