@@ -604,6 +604,7 @@ void ProgramPixelDurationV(unsigned int pixelClockInKHz )
 struct dc *dc_create(const struct dc_init_data *init_params)
  {
 	struct core_dc *core_dc = dm_alloc(sizeof(*core_dc));
+	bool has_underlay = false;
 
 	if (NULL == core_dc)
 		goto alloc_fail;
@@ -617,6 +618,12 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 	core_dc->public.caps.max_targets = dm_min(
 			core_dc->res_pool->pipe_count,
 			core_dc->res_pool->stream_enc_count);
+
+	/* Don't report underlay pipe as target */
+	has_underlay = core_dc->res_pool->underlay_pipe_index >= 0;
+	if (has_underlay)
+		core_dc->public.caps.max_targets--;
+
 	core_dc->public.caps.max_links = core_dc->link_count;
 	core_dc->public.caps.max_audios = core_dc->res_pool->audio_count;
 
