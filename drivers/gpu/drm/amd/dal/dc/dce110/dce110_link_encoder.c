@@ -164,15 +164,9 @@ static void enable_phy_bypass_mode(
 {
 	/* This register resides in DP back end block;
 	 * transmitter is used for the offset */
-	struct dc_context *ctx = enc110->base.ctx;
 
-	const uint32_t addr = REG(DP_DPHY_CNTL);
+	REG_UPDATE(DP_DPHY_CNTL, DPHY_BYPASS, enable);
 
-	uint32_t value = dm_read_reg(ctx, addr);
-
-	set_reg_field_value(value, enable, DP_DPHY_CNTL, DPHY_BYPASS);
-
-	dm_write_reg(ctx, addr, value);
 }
 
 static void disable_prbs_symbols(
@@ -181,25 +175,12 @@ static void disable_prbs_symbols(
 {
 	/* This register resides in DP back end block;
 	 * transmitter is used for the offset */
-	struct dc_context *ctx = enc110->base.ctx;
 
-	const uint32_t addr = REG(DP_DPHY_CNTL);
-
-	uint32_t value = dm_read_reg(ctx, addr);
-
-	set_reg_field_value(value, disable,
-			DP_DPHY_CNTL, DPHY_ATEST_SEL_LANE0);
-
-	set_reg_field_value(value, disable,
-			DP_DPHY_CNTL, DPHY_ATEST_SEL_LANE1);
-
-	set_reg_field_value(value, disable,
-			DP_DPHY_CNTL, DPHY_ATEST_SEL_LANE2);
-
-	set_reg_field_value(value, disable,
-			DP_DPHY_CNTL, DPHY_ATEST_SEL_LANE3);
-
-	dm_write_reg(ctx, addr, value);
+	REG_UPDATE_4(DP_DPHY_CNTL,
+			DPHY_ATEST_SEL_LANE0, disable,
+			DPHY_ATEST_SEL_LANE1, disable,
+			DPHY_ATEST_SEL_LANE2, disable,
+			DPHY_ATEST_SEL_LANE3, disable);
 }
 
 static void disable_prbs_mode(
@@ -207,64 +188,36 @@ static void disable_prbs_mode(
 {
 	/* This register resides in DP back end block;
 	 * transmitter is used for the offset */
-	struct dc_context *ctx = enc110->base.ctx;
 
-	const uint32_t addr = REG(DP_DPHY_PRBS_CNTL);
-	uint32_t value;
-
-	value = dm_read_reg(ctx, addr);
-
-	set_reg_field_value(value, 0, DP_DPHY_PRBS_CNTL, DPHY_PRBS_EN);
-
-	dm_write_reg(ctx, addr, value);
+	REG_UPDATE(DP_DPHY_PRBS_CNTL, DPHY_PRBS_EN, 0);
 }
 
 static void program_pattern_symbols(
 	struct dce110_link_encoder *enc110,
 	uint16_t pattern_symbols[8])
 {
-	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t addr;
-	uint32_t value;
+	/* This register resides in DP back end block;
+	 * transmitter is used for the offset */
+
+	REG_SET_3(DP_DPHY_SYM0, 0,
+			DPHY_SYM1, pattern_symbols[0],
+			DPHY_SYM2, pattern_symbols[1],
+			DPHY_SYM3, pattern_symbols[2]);
 
 	/* This register resides in DP back end block;
 	 * transmitter is used for the offset */
 
-	addr = REG(DP_DPHY_SYM0);
-
-	value = 0;
-	set_reg_field_value(value, pattern_symbols[0],
-			DP_DPHY_SYM0, DPHY_SYM1);
-	set_reg_field_value(value, pattern_symbols[1],
-			DP_DPHY_SYM0, DPHY_SYM2);
-	set_reg_field_value(value, pattern_symbols[2],
-			DP_DPHY_SYM0, DPHY_SYM3);
-	dm_write_reg(ctx, addr, value);
+	REG_SET_3(DP_DPHY_SYM1, 0,
+			DPHY_SYM4, pattern_symbols[3],
+			DPHY_SYM5, pattern_symbols[4],
+			DPHY_SYM6, pattern_symbols[5]);
 
 	/* This register resides in DP back end block;
 	 * transmitter is used for the offset */
 
-	addr = REG(DP_DPHY_SYM1);
-
-	value = 0;
-	set_reg_field_value(value, pattern_symbols[3],
-			DP_DPHY_SYM1, DPHY_SYM4);
-	set_reg_field_value(value, pattern_symbols[4],
-			DP_DPHY_SYM1, DPHY_SYM5);
-	set_reg_field_value(value, pattern_symbols[5],
-			DP_DPHY_SYM1, DPHY_SYM6);
-	dm_write_reg(ctx, addr, value);
-
-	/* This register resides in DP back end block;
-	 * transmitter is used for the offset */
-	addr = REG(DP_DPHY_SYM2);
-	value = 0;
-	set_reg_field_value(value, pattern_symbols[6],
-			DP_DPHY_SYM2, DPHY_SYM7);
-	set_reg_field_value(value, pattern_symbols[6],
-			DP_DPHY_SYM2, DPHY_SYM8);
-
-	dm_write_reg(ctx, addr, value);
+	REG_SET_2(DP_DPHY_SYM2, 0,
+			DPHY_SYM7, pattern_symbols[6],
+			DPHY_SYM8, pattern_symbols[7]);
 }
 
 static void set_dp_phy_pattern_d102(
@@ -306,14 +259,9 @@ static void set_link_training_complete(
 {
 	/* This register resides in DP back end block;
 	 * transmitter is used for the offset */
-	struct dc_context *ctx = enc110->base.ctx;
-	const uint32_t addr = REG(DP_LINK_CNTL);
-	uint32_t value = dm_read_reg(ctx, addr);
 
-	set_reg_field_value(value, complete,
-			DP_LINK_CNTL, DP_LINK_TRAINING_COMPLETE);
+	REG_UPDATE(DP_LINK_CNTL, DP_LINK_TRAINING_COMPLETE, complete);
 
-	dm_write_reg(ctx, addr, value);
 }
 
 void dce110_link_encoder_set_dp_phy_pattern_training_pattern(
@@ -322,10 +270,8 @@ void dce110_link_encoder_set_dp_phy_pattern_training_pattern(
 {
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
 	/* Write Training Pattern */
-	struct dc_context *ctx = enc->ctx;
-	uint32_t addr = REG(DP_DPHY_TRAINING_PATTERN_SEL);
 
-	dm_write_reg(ctx, addr, index);
+	REG_WRITE(DP_DPHY_TRAINING_PATTERN_SEL, index);
 
 	/* Set HW Register Training Complete to false */
 
@@ -351,9 +297,11 @@ static void set_dp_phy_pattern_symbol_error(
 
 	/* program correct panel mode*/
 	{
-		const uint32_t addr = REG(DP_DPHY_INTERNAL_CTRL);
+		ASSERT(REG(DP_DPHY_INTERNAL_CTRL));
+		/*DCE 120 does not have this reg*/
+
 		uint32_t value = 0x0;
-		dm_write_reg(ctx, addr, value);
+		REG_WRITE(DP_DPHY_INTERNAL_CTRL, value);
 	}
 
 	/* A PRBS23 pattern is used for most DP electrical measurements. */
@@ -364,14 +312,9 @@ static void set_dp_phy_pattern_symbol_error(
 
 	/* For PRBS23 Set bit DPHY_PRBS_SEL=1 and Set bit DPHY_PRBS_EN=1 */
 	{
-		const uint32_t addr = REG(DP_DPHY_PRBS_CNTL);
-		uint32_t value = dm_read_reg(ctx, addr);
-
-		set_reg_field_value(value, 1,
-				DP_DPHY_PRBS_CNTL, DPHY_PRBS_SEL);
-		set_reg_field_value(value, 1,
-				DP_DPHY_PRBS_CNTL, DPHY_PRBS_EN);
-		dm_write_reg(ctx, addr, value);
+		REG_UPDATE_2(DP_DPHY_PRBS_CNTL,
+					DPHY_PRBS_SEL, 1,
+					DPHY_PRBS_EN, 1);
 	}
 
 	/* Enable phy bypass mode to enable the test pattern */
@@ -383,7 +326,6 @@ static void set_dp_phy_pattern_prbs7(
 	struct dce110_link_encoder *enc110)
 {
 	/* Disable PHY Bypass mode to setup the test pattern */
-	struct dc_context *ctx = enc110->base.ctx;
 
 	enable_phy_bypass_mode(enc110, false);
 
@@ -395,17 +337,9 @@ static void set_dp_phy_pattern_prbs7(
 
 	/* For PRBS7 Set bit DPHY_PRBS_SEL=0 and Set bit DPHY_PRBS_EN=1 */
 	{
-		const uint32_t addr = REG(DP_DPHY_PRBS_CNTL);
-
-		uint32_t value = dm_read_reg(ctx, addr);
-
-		set_reg_field_value(value, 0,
-				DP_DPHY_PRBS_CNTL, DPHY_PRBS_SEL);
-
-		set_reg_field_value(value, 1,
-				DP_DPHY_PRBS_CNTL, DPHY_PRBS_EN);
-
-		dm_write_reg(ctx, addr, value);
+		REG_UPDATE_2(DP_DPHY_PRBS_CNTL,
+					DPHY_PRBS_SEL, 0,
+					DPHY_PRBS_EN, 1);
 	}
 
 	/* Enable phy bypass mode to enable the test pattern */
@@ -461,9 +395,6 @@ static void set_dp_phy_pattern_80bit_custom(
 static void set_dp_phy_pattern_hbr2_compliance(
 	struct dce110_link_encoder *enc110)
 {
-	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t addr;
-	uint32_t value;
 
 	/* previously there is a register DP_HBR2_EYE_PATTERN
 	 * that is enabled to get the pattern.
@@ -483,9 +414,9 @@ static void set_dp_phy_pattern_hbr2_compliance(
 
 	/* program correct panel mode*/
 	{
-		const uint32_t addr = REG(DP_DPHY_INTERNAL_CTRL);
-		uint32_t value = 0x0;
-		dm_write_reg(ctx, addr, value);
+		ASSERT(REG(DP_DPHY_INTERNAL_CTRL));
+
+		REG_WRITE(DP_DPHY_INTERNAL_CTRL, 0x0);
 	}
 
 	/* no vbid after BS (SR)
@@ -520,13 +451,8 @@ static void set_dp_phy_pattern_hbr2_compliance(
 	/* set link training complete */
 	set_link_training_complete(enc110, true);
 	/* do not enable video stream */
-	addr = REG(DP_VID_STREAM_CNTL);
 
-	value = dm_read_reg(ctx, addr);
-
-	set_reg_field_value(value, 0, DP_VID_STREAM_CNTL, DP_VID_STREAM_ENABLE);
-
-	dm_write_reg(ctx, addr, value);
+	REG_UPDATE(DP_VID_STREAM_CNTL, DP_VID_STREAM_ENABLE, 0);
 
 	/* Disable PHY Bypass mode to setup the test pattern */
 
@@ -537,15 +463,12 @@ static void set_dp_phy_pattern_passthrough_mode(
 	struct dce110_link_encoder *enc110,
 	enum dp_panel_mode panel_mode)
 {
-	struct dc_context *ctx = enc110->base.ctx;
+	uint32_t value;
 
 	/* program correct panel mode */
 	{
-		const uint32_t addr = REG(DP_DPHY_INTERNAL_CTRL);
-
-		uint32_t value;
-
-		value = dm_read_reg(ctx, addr);
+		ASSERT(REG(DP_DPHY_INTERNAL_CTRL));
+		value = REG_READ(DP_DPHY_INTERNAL_CTRL);
 
 		switch (panel_mode) {
 		case DP_PANEL_MODE_EDP:
@@ -559,7 +482,7 @@ static void set_dp_phy_pattern_passthrough_mode(
 			break;
 		}
 
-		dm_write_reg(ctx, addr, value);
+		REG_WRITE(DP_DPHY_INTERNAL_CTRL, value);
 	}
 
 	/* set link training complete */
@@ -603,30 +526,20 @@ static void configure_encoder(
 	struct dce110_link_encoder *enc110,
 	const struct dc_link_settings *link_settings)
 {
-	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t addr;
-	uint32_t value;
-
 	/* set number of lanes */
-	addr = REG(DP_CONFIG);
-	value = dm_read_reg(ctx, addr);
-	set_reg_field_value(value, link_settings->lane_count - LANE_COUNT_ONE,
-			DP_CONFIG, DP_UDI_LANES);
-	dm_write_reg(ctx, addr, value);
+
+	REG_SET(DP_CONFIG, 0,
+			DP_UDI_LANES, link_settings->lane_count - LANE_COUNT_ONE);
 
 }
 
 static bool is_panel_powered_on(struct dce110_link_encoder *enc110)
 {
-	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t value;
 	bool ret;
+	uint32_t value;
 
-	value = dm_read_reg(ctx,
-			REG(LVTMA_PWRSEQ_STATE));
-
-	ret = get_reg_field_value(value,
-			LVTMA_PWRSEQ_STATE, LVTMA_PWRSEQ_TARGET_STATE_R);
+	REG_GET(LVTMA_PWRSEQ_STATE, LVTMA_PWRSEQ_TARGET_STATE_R, &value);
+	ret = value;
 
 	return ret == 1;
 }
@@ -788,12 +701,11 @@ static void aux_initialize(
 /*todo: cloned in stream enc, fix*/
 static bool is_panel_backlight_on(struct dce110_link_encoder *enc110)
 {
-	struct dc_context *ctx = enc110->base.ctx;
 	uint32_t value;
 
-	value = dm_read_reg(ctx, REG(LVTMA_PWRSEQ_CNTL));
+	REG_GET(LVTMA_PWRSEQ_CNTL, LVTMA_BLON, &value);
 
-	return get_reg_field_value(value, LVTMA_PWRSEQ_CNTL, LVTMA_BLON);
+	return value;
 }
 
 /*todo: cloned in stream enc, fix*/
@@ -867,51 +779,35 @@ void dce110_link_encoder_edp_backlight_control(
 
 static bool is_dig_enabled(const struct dce110_link_encoder *enc110)
 {
-	struct dc_context *ctx = enc110->base.ctx;
 	uint32_t value;
 
-	value = dm_read_reg(ctx, REG(DIG_BE_EN_CNTL));
-
-	return get_reg_field_value(value, DIG_BE_EN_CNTL, DIG_ENABLE);
+	REG_GET(DIG_BE_EN_CNTL, DIG_ENABLE, &value);
+	return value;
 }
 
 static void link_encoder_disable(struct dce110_link_encoder *enc110)
 {
 	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t addr;
-	uint32_t value;
 
 	/* reset training pattern */
-	addr = REG(DP_DPHY_TRAINING_PATTERN_SEL);
-	value = dm_read_reg(ctx, addr);
-	set_reg_field_value(value, 0,
-			DP_DPHY_TRAINING_PATTERN_SEL,
-			DPHY_TRAINING_PATTERN_SEL);
-	dm_write_reg(ctx, addr, value);
+	REG_SET(DP_DPHY_TRAINING_PATTERN_SEL, 0,
+			DPHY_TRAINING_PATTERN_SEL, 0);
 
 	/* reset training complete */
-	addr = REG(DP_LINK_CNTL);
-	value = dm_read_reg(ctx, addr);
-	set_reg_field_value(value, 0, DP_LINK_CNTL, DP_LINK_TRAINING_COMPLETE);
-	dm_write_reg(ctx, addr, value);
+	REG_UPDATE(DP_LINK_CNTL, DP_LINK_TRAINING_COMPLETE, 0);
 
 	/* reset panel mode */
-	addr = REG(DP_DPHY_INTERNAL_CTRL);
-	value = 0;
-	dm_write_reg(ctx, addr, value);
+	ASSERT(REG(DP_DPHY_INTERNAL_CTRL));
+	REG_WRITE(DP_DPHY_INTERNAL_CTRL, 0);
 }
 
 static void hpd_initialize(
 	struct dce110_link_encoder *enc110)
 {
 	/* Associate HPD with DIG_BE */
-	struct dc_context *ctx = enc110->base.ctx;
 	enum hpd_source_id hpd_source = enc110->base.hpd_source;
-	const uint32_t addr = REG(DIG_BE_CNTL);
-	uint32_t value = dm_read_reg(ctx, addr);
 
-	set_reg_field_value(value, hpd_source, DIG_BE_CNTL, DIG_HPD_SELECT);
-	dm_write_reg(ctx, addr, value);
+	REG_UPDATE(DIG_BE_CNTL, DIG_HPD_SELECT, hpd_source);
 }
 
 bool dce110_link_encoder_validate_dvi_output(
@@ -1262,32 +1158,29 @@ void dce110_link_encoder_setup(
 	enum signal_type signal)
 {
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
-	const uint32_t addr = REG(DIG_BE_CNTL);
-	uint32_t value = dm_read_reg(ctx, addr);
 
 	switch (signal) {
 	case SIGNAL_TYPE_EDP:
 	case SIGNAL_TYPE_DISPLAY_PORT:
 		/* DP SST */
-		set_reg_field_value(value, 0, DIG_BE_CNTL, DIG_MODE);
+		REG_UPDATE(DIG_BE_CNTL, DIG_MODE, 0);
 		break;
 	case SIGNAL_TYPE_LVDS:
 		/* LVDS */
-		set_reg_field_value(value, 1, DIG_BE_CNTL, DIG_MODE);
+		REG_UPDATE(DIG_BE_CNTL, DIG_MODE, 1);
 		break;
 	case SIGNAL_TYPE_DVI_SINGLE_LINK:
 	case SIGNAL_TYPE_DVI_DUAL_LINK:
 		/* TMDS-DVI */
-		set_reg_field_value(value, 2, DIG_BE_CNTL, DIG_MODE);
+		REG_UPDATE(DIG_BE_CNTL, DIG_MODE, 2);
 		break;
 	case SIGNAL_TYPE_HDMI_TYPE_A:
 		/* TMDS-HDMI */
-		set_reg_field_value(value, 3, DIG_BE_CNTL, DIG_MODE);
+		REG_UPDATE(DIG_BE_CNTL, DIG_MODE, 3);
 		break;
 	case SIGNAL_TYPE_DISPLAY_PORT_MST:
 		/* DP MST */
-		set_reg_field_value(value, 5, DIG_BE_CNTL, DIG_MODE);
+		REG_UPDATE(DIG_BE_CNTL, DIG_MODE, 5);
 		break;
 	default:
 		ASSERT_CRITICAL(false);
@@ -1295,7 +1188,6 @@ void dce110_link_encoder_setup(
 		break;
 	}
 
-	dm_write_reg(ctx, addr, value);
 }
 
 /* TODO: still need depth or just pass in adjusted pixel clock? */
@@ -1612,7 +1504,6 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 	const struct link_mst_stream_allocation_table *table)
 {
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
 	uint32_t value0 = 0;
 	uint32_t value1 = 0;
 	uint32_t value2 = 0;
@@ -1628,8 +1519,6 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 	 * to commit payload on both tx and rx side */
 
 	/* we should clean-up table each time */
-	value0 = dm_read_reg(ctx, REG(DP_MSE_SAT0));
-	value1 = dm_read_reg(ctx, REG(DP_MSE_SAT1));
 
 	if (table->stream_count >= 1) {
 		fill_stream_allocation_row_info(
@@ -1641,17 +1530,9 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 		slots = 0;
 	}
 
-	set_reg_field_value(
-		value0,
-		src,
-		DP_MSE_SAT0,
-		DP_MSE_SAT_SRC0);
-
-	set_reg_field_value(
-		value0,
-		slots,
-		DP_MSE_SAT0,
-		DP_MSE_SAT_SLOT_COUNT0);
+	REG_UPDATE_2(DP_MSE_SAT0,
+			DP_MSE_SAT_SRC0, src,
+			DP_MSE_SAT_SLOT_COUNT0, slots);
 
 	if (table->stream_count >= 2) {
 		fill_stream_allocation_row_info(
@@ -1663,17 +1544,9 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 		slots = 0;
 	}
 
-	set_reg_field_value(
-		value0,
-		src,
-		DP_MSE_SAT0,
-		DP_MSE_SAT_SRC1);
-
-	set_reg_field_value(
-		value0,
-		slots,
-		DP_MSE_SAT0,
-		DP_MSE_SAT_SLOT_COUNT1);
+	REG_UPDATE_2(DP_MSE_SAT0,
+			DP_MSE_SAT_SRC1, src,
+			DP_MSE_SAT_SLOT_COUNT1, slots);
 
 	if (table->stream_count >= 3) {
 		fill_stream_allocation_row_info(
@@ -1685,17 +1558,9 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 		slots = 0;
 	}
 
-	set_reg_field_value(
-		value1,
-		src,
-		DP_MSE_SAT1,
-		DP_MSE_SAT_SRC2);
-
-	set_reg_field_value(
-		value1,
-		slots,
-		DP_MSE_SAT1,
-		DP_MSE_SAT_SLOT_COUNT2);
+	REG_UPDATE_2(DP_MSE_SAT1,
+			DP_MSE_SAT_SRC2, src,
+			DP_MSE_SAT_SLOT_COUNT2, slots);
 
 	if (table->stream_count >= 4) {
 		fill_stream_allocation_row_info(
@@ -1707,21 +1572,9 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 		slots = 0;
 	}
 
-	set_reg_field_value(
-		value1,
-		src,
-		DP_MSE_SAT1,
-		DP_MSE_SAT_SRC3);
-
-	set_reg_field_value(
-		value1,
-		slots,
-		DP_MSE_SAT1,
-		DP_MSE_SAT_SLOT_COUNT3);
-
-	/* update ASIC MSE stream allocation table */
-	dm_write_reg(ctx, REG(DP_MSE_SAT0), value0);
-	dm_write_reg(ctx, REG(DP_MSE_SAT1), value1);
+	REG_UPDATE_2(DP_MSE_SAT1,
+			DP_MSE_SAT_SRC3, src,
+			DP_MSE_SAT_SLOT_COUNT3, slots);
 
 	/* --- wait for transaction finish */
 
@@ -1730,20 +1583,14 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 	 * then double buffers the SAT into the hardware
 	 * making the new allocation active on the DP MST mode link */
 
-	value0 = dm_read_reg(ctx, REG(DP_MSE_SAT_UPDATE));
 
 	/* DP_MSE_SAT_UPDATE:
 	 * 0 - No Action
 	 * 1 - Update SAT with trigger
 	 * 2 - Update SAT without trigger */
 
-	set_reg_field_value(
-		value0,
-		1,
-		DP_MSE_SAT_UPDATE,
-		DP_MSE_SAT_UPDATE);
-
-	dm_write_reg(ctx, REG(DP_MSE_SAT_UPDATE), value0);
+	REG_UPDATE(DP_MSE_SAT_UPDATE,
+			DP_MSE_SAT_UPDATE, 1);
 
 	/* wait for update to complete
 	 * (i.e. DP_MSE_SAT_UPDATE field is reset to 0)
@@ -1758,17 +1605,13 @@ void dce110_link_encoder_update_mst_stream_allocation_table(
 	do {
 		udelay(10);
 
-		value0 = dm_read_reg(ctx,
-				REG(DP_MSE_SAT_UPDATE));
+		value0 = REG_READ(DP_MSE_SAT_UPDATE);
 
-		value1 = get_reg_field_value(
-				value0,
-				DP_MSE_SAT_UPDATE,
-				DP_MSE_SAT_UPDATE);
-		value2 = get_reg_field_value(
-				value0,
-				DP_MSE_SAT_UPDATE,
-				DP_MSE_16_MTP_KEEPOUT);
+		REG_GET(DP_MSE_SAT_UPDATE,
+				DP_MSE_SAT_UPDATE, &value1);
+
+		REG_GET(DP_MSE_SAT_UPDATE,
+				DP_MSE_16_MTP_KEEPOUT, &value2);
 
 		/* bit field DP_MSE_SAT_UPDATE is set to 1 already */
 		if (!value1 && !value2)
@@ -1782,7 +1625,6 @@ void dce110_link_encoder_set_lcd_backlight_level(
 	uint32_t level)
 {
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
 
 	const uint32_t backlight_update_pending_max_retry = 1000;
 
@@ -1798,10 +1640,11 @@ void dce110_link_encoder_set_lcd_backlight_level(
 	uint8_t rounding_bit;
 	uint8_t bit_count;
 	uint64_t active_duty_cycle;
+	uint32_t pwm_period_bitcnt;
 
-	backlight = dm_read_reg(ctx, REG(BL_PWM_CNTL));
-	backlight_period = dm_read_reg(ctx, REG(BL_PWM_PERIOD_CNTL));
-	backlight_lock = dm_read_reg(ctx, REG(BL_PWM_GRP1_REG_LOCK));
+	backlight = REG_READ(BL_PWM_CNTL);
+	backlight_period = REG_READ(BL_PWM_PERIOD_CNTL);
+	backlight_lock = REG_READ(BL_PWM_GRP1_REG_LOCK);
 
 	/*
 	 * 1. Convert 8-bit value to 17 bit U1.16 format
@@ -1833,10 +1676,9 @@ void dce110_link_encoder_set_lcd_backlight_level(
 	/* 2.1 Apply bitmask for backlight period value based on value of BITCNT
 	 */
 	{
-		uint32_t pwm_period_bitcnt = get_reg_field_value(
-			backlight_period,
-			BL_PWM_PERIOD_CNTL,
-			BL_PWM_PERIOD_BITCNT);
+		REG_GET(BL_PWM_PERIOD_CNTL,
+			BL_PWM_PERIOD_BITCNT, &pwm_period_bitcnt);
+
 		if (pwm_period_bitcnt == 0)
 			bit_count = 16;
 		else
@@ -1845,10 +1687,9 @@ void dce110_link_encoder_set_lcd_backlight_level(
 
 	/* e.g. maskedPwmPeriod = 0x24 when bitCount is 6 */
 	masked_pwm_period =
-	get_reg_field_value(
-		backlight_period,
-		BL_PWM_PERIOD_CNTL,
-		BL_PWM_PERIOD) & ((1 << bit_count) - 1);
+		REG_GET(BL_PWM_PERIOD_CNTL,
+				BL_PWM_PERIOD, &masked_pwm_period)
+		& ((1 << bit_count) - 1);
 
 	/* 2.2 Calculate integer active duty cycle required upper 16 bits
 	 * contain integer component, lower 16 bits contain fractional component
@@ -1863,47 +1704,31 @@ void dce110_link_encoder_set_lcd_backlight_level(
 	backlight_16bit = active_duty_cycle >> bit_count;
 	backlight_16bit &= 0xFFFF;
 	backlight_16bit += (active_duty_cycle >> (bit_count - 1)) & 0x1;
-	set_reg_field_value(
-		backlight,
-		backlight_16bit,
-		BL_PWM_CNTL,
-		BL_ACTIVE_INT_FRAC_CNT);
+
+	REG_UPDATE(BL_PWM_CNTL,
+			BL_ACTIVE_INT_FRAC_CNT, backlight_16bit);
 
 	/*
 	 * 3. Program register with updated value
 	 */
 
 	/* 3.1 Lock group 2 backlight registers */
-	set_reg_field_value(
-		backlight_lock,
-		1,
-		BL_PWM_GRP1_REG_LOCK,
-		BL_PWM_GRP1_IGNORE_MASTER_LOCK_EN);
-	set_reg_field_value(
-		backlight_lock,
-		1,
-		BL_PWM_GRP1_REG_LOCK,
-		BL_PWM_GRP1_REG_LOCK);
-	dm_write_reg(ctx, REG(BL_PWM_GRP1_REG_LOCK), backlight_lock);
 
-	/* 3.2 Write new active duty cycle */
-	dm_write_reg(ctx, REG(BL_PWM_CNTL), backlight);
+	REG_UPDATE(BL_PWM_GRP1_REG_LOCK,
+			BL_PWM_GRP1_IGNORE_MASTER_LOCK_EN, 1);
+
+	REG_UPDATE(BL_PWM_GRP1_REG_LOCK,
+			BL_PWM_GRP1_REG_LOCK, 1);
 
 	/* 3.3 Unlock group 2 backlight registers */
-	set_reg_field_value(
-		backlight_lock,
-		0,
-		BL_PWM_GRP1_REG_LOCK,
-		BL_PWM_GRP1_REG_LOCK);
-	dm_write_reg(ctx, REG(BL_PWM_GRP1_REG_LOCK), backlight_lock);
+	REG_UPDATE(BL_PWM_GRP1_REG_LOCK,
+			BL_PWM_GRP1_REG_LOCK, 0);
 
 	/* 5.4.4 Wait for pending bit to be cleared */
 	for (i = 0; i < backlight_update_pending_max_retry; ++i) {
-		backlight_lock = dm_read_reg(ctx, REG(BL_PWM_GRP1_REG_LOCK));
-		if (!get_reg_field_value(
-			backlight_lock,
-			BL_PWM_GRP1_REG_LOCK,
-			BL_PWM_GRP1_REG_UPDATE_PENDING))
+		REG_GET(BL_PWM_GRP1_REG_LOCK,
+						BL_PWM_GRP1_REG_UPDATE_PENDING, &backlight_lock);
+		if (!backlight_lock)
 			break;
 
 		udelay(10);
@@ -1925,43 +1750,25 @@ void dce110_link_encoder_set_dmcu_backlight_level(
 			(unsigned char)(((backlight_17bit & 0x80) >> 7) & 1);
 	unsigned int regValue;
 	uint32_t rampingBoundary = 0xFFFF;
-	uint32_t pwmUserLevel;
-	uint32_t masterCmd;
-	uint32_t masterComCntl;
 	uint32_t s2;
 
 	backlight_17bit = (backlight_17bit >> 8) + temp_uchar;
 
 	/* set ramping boundary */
-	dm_write_reg(ctx, REG(MASTER_COMM_DATA_REG1), rampingBoundary);
+	REG_WRITE(MASTER_COMM_DATA_REG1, rampingBoundary);
 
 	/* setDMCUParam_Pipe */
-	masterCmd = dm_read_reg(ctx, REG(MASTER_COMM_CMD_REG));
-	set_reg_field_value(
-			masterCmd,
-			MCP_ABM_PIPE_SET,
-			MASTER_COMM_CMD_REG,
-			MASTER_COMM_CMD_REG_BYTE0);
-	set_reg_field_value(
-			masterCmd,
-			controller_id,
-			MASTER_COMM_CMD_REG,
-			MASTER_COMM_CMD_REG_BYTE1);
-	dm_write_reg(ctx, REG(MASTER_COMM_CMD_REG), masterCmd);
+	REG_UPDATE_2(MASTER_COMM_CMD_REG,
+			MASTER_COMM_CMD_REG_BYTE0, MCP_ABM_PIPE_SET,
+			MASTER_COMM_CMD_REG_BYTE1, controller_id);
 
 	/* notifyDMCUMsg */
-	masterComCntl = dm_read_reg(ctx, REG(MASTER_COMM_CNTL_REG));
-	set_reg_field_value(
-			masterComCntl,
-			1,
-			MASTER_COMM_CNTL_REG,
-			MASTER_COMM_INTERRUPT);
-	dm_write_reg(ctx, REG(MASTER_COMM_CNTL_REG), masterComCntl);
+	REG_UPDATE(MASTER_COMM_CNTL_REG, MASTER_COMM_INTERRUPT, 1);
 
 	/* waitDMCUReadyForCmd */
 	do {
 		dm_delay_in_microseconds(ctx, dmcu_wait_reg_ready_interval);
-		regValue = dm_read_reg(ctx, REG(MASTER_COMM_CNTL_REG));
+		regValue = REG_READ(MASTER_COMM_CNTL_REG);
 		dmcu_max_retry_on_wait_reg_ready--;
 	} while
 	/* expected value is 0, loop while not 0*/
@@ -1969,44 +1776,26 @@ void dce110_link_encoder_set_dmcu_backlight_level(
 		dmcu_max_retry_on_wait_reg_ready > 0);
 
 	/* setDMCUParam_BL */
-	pwmUserLevel = dm_read_reg(ctx, REG(BL1_PWM_USER_LEVEL));
-	set_reg_field_value(
-			pwmUserLevel,
-			backlight_17bit,
-			BL1_PWM_USER_LEVEL,
-			BL1_PWM_USER_LEVEL);
-	dm_write_reg(ctx, REG(BL1_PWM_USER_LEVEL), pwmUserLevel);
+	REG_UPDATE(BL1_PWM_USER_LEVEL, BL1_PWM_USER_LEVEL, backlight_17bit);
 
 	/* write ramp */
-	dm_write_reg(ctx, REG(MASTER_COMM_DATA_REG1), frame_ramp);
+	REG_WRITE(MASTER_COMM_DATA_REG1, frame_ramp);
 
 	/* setDMCUParam_Cmd */
-	masterCmd = dm_read_reg(ctx, REG(MASTER_COMM_CMD_REG));
-	set_reg_field_value(
-			masterCmd,
-			MCP_BL_SET,
-			MASTER_COMM_CMD_REG,
-			MASTER_COMM_CMD_REG_BYTE0);
-	dm_write_reg(ctx, REG(MASTER_COMM_CMD_REG), masterCmd);
+	REG_UPDATE(MASTER_COMM_CMD_REG, MASTER_COMM_CMD_REG_BYTE0, MCP_BL_SET);
 
 	/* notifyDMCUMsg */
-	masterComCntl = dm_read_reg(ctx, REG(MASTER_COMM_CNTL_REG));
-	set_reg_field_value(
-			masterComCntl,
-			1,
-			MASTER_COMM_CNTL_REG,
-			MASTER_COMM_INTERRUPT);
-	dm_write_reg(ctx, REG(MASTER_COMM_CNTL_REG), masterComCntl);
+	REG_UPDATE(MASTER_COMM_CNTL_REG, MASTER_COMM_INTERRUPT, 1);
 
 	/* UpdateRequestedBacklightLevel */
-	s2 = dm_read_reg(ctx, REG(BIOS_SCRATCH_2));
+	s2 = REG_READ(BIOS_SCRATCH_2);
 
 	s2 &= ~ATOM_S2_CURRENT_BL_LEVEL_MASK;
 	level &= (ATOM_S2_CURRENT_BL_LEVEL_MASK >>
 				ATOM_S2_CURRENT_BL_LEVEL_SHIFT);
 	s2 |= (level << ATOM_S2_CURRENT_BL_LEVEL_SHIFT);
 
-	dm_write_reg(ctx, REG(BIOS_SCRATCH_2), s2);
+	REG_WRITE(BIOS_SCRATCH_2, s2);
 }
 
 void dce110_link_encoder_init_dmcu_backlight_settings(
@@ -2020,90 +1809,74 @@ void dce110_link_encoder_init_dmcu_backlight_settings(
 	uint32_t periodCntl;
 	uint32_t pwmSeqRefDiv;
 	uint32_t s2;
+	uint32_t value;
 
-	bl_pwm_cntl = dm_read_reg(ctx, REG(BL_PWM_CNTL));
+	bl_pwm_cntl = REG_READ(BL_PWM_CNTL);
 
 	/* It must not be 0, so we have to restore them
 	 * Bios bug w/a - period resets to zero,
 	 * restoring to cache values which is always correct
 	 */
-	if (get_reg_field_value(bl_pwm_cntl, BL_PWM_CNTL,
-			BL_ACTIVE_INT_FRAC_CNT) == 0 || bl_pwm_cntl == 1) {
+	REG_GET(BL_PWM_CNTL,
+				BL_ACTIVE_INT_FRAC_CNT, &value);
+	if (value == 0 || bl_pwm_cntl == 1) {
 		if (stored_backlight_registers.vBL_PWM_CNTL != 0) {
 			pwmCntl = stored_backlight_registers.vBL_PWM_CNTL;
-			dm_write_reg(ctx, REG(BL_PWM_CNTL), pwmCntl);
+			REG_WRITE(BL_PWM_CNTL, pwmCntl);
 
 			pwmCntl2 = stored_backlight_registers.vBL_PWM_CNTL2;
-			dm_write_reg(ctx, REG(BL_PWM_CNTL2), pwmCntl2);
+			REG_WRITE(BL_PWM_CNTL2, pwmCntl2);
 
 			periodCntl =
 				stored_backlight_registers.vBL_PWM_PERIOD_CNTL;
-			dm_write_reg(ctx, REG(BL_PWM_PERIOD_CNTL),
-					periodCntl);
+			REG_WRITE(BL_PWM_PERIOD_CNTL, periodCntl);
 
-
-			pwmSeqRefDiv =
-					dm_read_reg(ctx,
-						REG(LVTMA_PWRSEQ_REF_DIV));
-			set_reg_field_value(
-					pwmSeqRefDiv,
-					stored_backlight_registers.
-					vLVTMA_PWRSEQ_REF_DIV_BL_PWM_REF_DIV,
-					LVTMA_PWRSEQ_REF_DIV,
-					BL_PWM_REF_DIV);
-			dm_write_reg(ctx, REG(LVTMA_PWRSEQ_REF_DIV),
-					pwmSeqRefDiv);
+			REG_UPDATE(LVTMA_PWRSEQ_REF_DIV,
+				BL_PWM_REF_DIV,
+				stored_backlight_registers.
+				vLVTMA_PWRSEQ_REF_DIV_BL_PWM_REF_DIV);
 		}
 	} else {
 		stored_backlight_registers.vBL_PWM_CNTL =
-				dm_read_reg(ctx, REG(BL_PWM_CNTL));
+				REG_READ(BL_PWM_CNTL);
 		stored_backlight_registers.vBL_PWM_CNTL2 =
-				dm_read_reg(ctx, REG(BL_PWM_CNTL2));
+				REG_READ(BL_PWM_CNTL2);
 		stored_backlight_registers.vBL_PWM_PERIOD_CNTL =
-				dm_read_reg(ctx, REG(BL_PWM_PERIOD_CNTL));
+				REG_READ(BL_PWM_PERIOD_CNTL);
 
-		pwmSeqRefDiv = dm_read_reg(ctx, REG(LVTMA_PWRSEQ_REF_DIV));
-		stored_backlight_registers.
-				vLVTMA_PWRSEQ_REF_DIV_BL_PWM_REF_DIV =
-				get_reg_field_value(pwmSeqRefDiv,
-				LVTMA_PWRSEQ_REF_DIV, BL_PWM_REF_DIV);
+		pwmSeqRefDiv = REG_READ(LVTMA_PWRSEQ_REF_DIV);
+
+		REG_GET(LVTMA_PWRSEQ_REF_DIV, BL_PWM_REF_DIV,
+				&stored_backlight_registers.
+				vLVTMA_PWRSEQ_REF_DIV_BL_PWM_REF_DIV);
 	}
 
 	/* Have driver take backlight control
 	 * TakeBacklightControl(true)
 	 */
-	s2 = dm_read_reg(ctx, REG(BIOS_SCRATCH_2));
+	s2 = REG_READ(BIOS_SCRATCH_2);
 	s2 |= ATOM_S2_VRI_BRIGHT_ENABLE;
-	dm_write_reg(ctx, REG(BIOS_SCRATCH_2), s2);
+	REG_WRITE(BIOS_SCRATCH_2, s2);
 
 	/* Enable the backlight output */
-	pwmCntl = dm_read_reg(ctx, REG(BL_PWM_CNTL));
-	set_reg_field_value(
-			pwmCntl,
-			1,
-			BL_PWM_CNTL,
-			BL_PWM_EN);
-	dm_write_reg(ctx, REG(BL_PWM_CNTL), pwmCntl);
+	REG_UPDATE(BL_PWM_CNTL, BL_PWM_EN, 1);
+
 }
 
 void dce110_link_encoder_set_dmcu_abm_level(
-	struct link_encoder *enc,
-	uint32_t level)
+	struct link_encoder *enc, uint32_t level)
 {
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
 	struct dc_context *ctx = enc110->base.ctx;
 
 	unsigned int dmcu_max_retry_on_wait_reg_ready = 801;
 	unsigned int dmcu_wait_reg_ready_interval = 100;
-
 	unsigned int regValue;
-	uint32_t masterCmd;
-	uint32_t masterComCntl;
 
 	/* waitDMCUReadyForCmd */
 	do {
 		dm_delay_in_microseconds(ctx, dmcu_wait_reg_ready_interval);
-		regValue = dm_read_reg(ctx, REG(MASTER_COMM_CNTL_REG));
+		regValue = REG_READ(MASTER_COMM_CNTL_REG);
 		dmcu_max_retry_on_wait_reg_ready--;
 	} while
 	/* expected value is 0, loop while not 0*/
@@ -2111,27 +1884,12 @@ void dce110_link_encoder_set_dmcu_abm_level(
 		dmcu_max_retry_on_wait_reg_ready > 0);
 
 	/* setDMCUParam_ABMLevel */
-	masterCmd = dm_read_reg(ctx, REG(MASTER_COMM_CMD_REG));
-	set_reg_field_value(
-			masterCmd,
-			MCP_ABM_LEVEL_SET,
-			MASTER_COMM_CMD_REG,
-			MASTER_COMM_CMD_REG_BYTE0);
-	set_reg_field_value(
-			masterCmd,
-			level,
-			MASTER_COMM_CMD_REG,
-			MASTER_COMM_CMD_REG_BYTE2);
-	dm_write_reg(ctx, REG(MASTER_COMM_CMD_REG), masterCmd);
+	REG_UPDATE_2(MASTER_COMM_CMD_REG,
+			MASTER_COMM_CMD_REG_BYTE0, MCP_ABM_LEVEL_SET,
+			MASTER_COMM_CMD_REG_BYTE2, level);
 
 	/* notifyDMCUMsg */
-	masterComCntl = dm_read_reg(ctx, REG(MASTER_COMM_CNTL_REG));
-	set_reg_field_value(
-			masterComCntl,
-			1,
-			MASTER_COMM_CNTL_REG,
-			MASTER_COMM_INTERRUPT);
-	dm_write_reg(ctx, REG(MASTER_COMM_CNTL_REG), masterComCntl);
+	REG_UPDATE(MASTER_COMM_CNTL_REG, MASTER_COMM_INTERRUPT, 1);
 }
 
 static void get_dmcu_psr_state(struct link_encoder *enc, uint32_t *psr_state)
@@ -2139,43 +1897,33 @@ static void get_dmcu_psr_state(struct link_encoder *enc, uint32_t *psr_state)
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
 	struct dc_context *ctx = enc110->base.ctx;
 
-	uint32_t ramAccessCntrl;
 	uint32_t powerStatus;
 
 	uint32_t count = 0;
 	uint32_t psrStateOffset = 0xf0;
+	uint32_t value;
 
 	/* Enable write access to IRAM */
-	ramAccessCntrl = dm_read_reg(ctx, REG(DMCU_RAM_ACCESS_CTRL));
-	set_reg_field_value(
-				ramAccessCntrl,
-				1,
-				DMCU_RAM_ACCESS_CTRL,
-				IRAM_HOST_ACCESS_EN);
-	dm_write_reg(ctx, REG(DMCU_RAM_ACCESS_CTRL), ramAccessCntrl);
+	REG_UPDATE(DMCU_RAM_ACCESS_CTRL, IRAM_HOST_ACCESS_EN, 1);
 
 	do {
 		dm_delay_in_microseconds(ctx, 2);
-		powerStatus = dm_read_reg(ctx, REG(DCI_MEM_PWR_STATUS));
+		powerStatus = REG_READ(DCI_MEM_PWR_STATUS);
+		REG_GET(DCI_MEM_PWR_STATUS,
+					DMCU_IRAM_MEM_PWR_STATE, &value);
 	} while
-		(get_reg_field_value(powerStatus, DCI_MEM_PWR_STATUS,
-				DMCU_IRAM_MEM_PWR_STATE) != 0 && count++ < 10);
+		(value != 0 && count++ < 10);
 
 	/* Write address to IRAM_RD_ADDR in DMCU_IRAM_RD_CTRL */
-	dm_write_reg(ctx, REG(DMCU_IRAM_RD_CTRL), psrStateOffset);
+	REG_WRITE(DMCU_IRAM_RD_CTRL, psrStateOffset);
 
 	/* Read data from IRAM_RD_DATA in DMCU_IRAM_RD_DATA*/
-	*psr_state = dm_read_reg(ctx, REG(DMCU_IRAM_RD_DATA));
+	*psr_state = REG_READ(DMCU_IRAM_RD_DATA);
 
 	/* Disable write access to IRAM after finished using IRAM
 	 * in order to allow dynamic sleep state
 	 */
-	set_reg_field_value(
-				ramAccessCntrl,
-				0,
-				DMCU_RAM_ACCESS_CTRL,
-				IRAM_HOST_ACCESS_EN);
-	dm_write_reg(ctx, REG(DMCU_RAM_ACCESS_CTRL), ramAccessCntrl);
+	REG_UPDATE(DMCU_RAM_ACCESS_CTRL, IRAM_HOST_ACCESS_EN, 0);
 }
 
 void dce110_link_encoder_set_dmcu_psr_enable(struct link_encoder *enc,
@@ -2188,8 +1936,6 @@ void dce110_link_encoder_set_dmcu_psr_enable(struct link_encoder *enc,
 	unsigned int dmcu_wait_reg_ready_interval = 100;
 
 	unsigned int regValue;
-	uint32_t masterCmd;
-	uint32_t masterComCntl;
 
 	unsigned int retryCount;
 	uint32_t psr_state = 0;
@@ -2197,7 +1943,7 @@ void dce110_link_encoder_set_dmcu_psr_enable(struct link_encoder *enc,
 	/* waitDMCUReadyForCmd */
 	do {
 		dm_delay_in_microseconds(ctx, dmcu_wait_reg_ready_interval);
-		regValue = dm_read_reg(ctx, REG(MASTER_COMM_CNTL_REG));
+		regValue = REG_READ(MASTER_COMM_CNTL_REG);
 		dmcu_max_retry_on_wait_reg_ready--;
 	} while
 	/* expected value is 0, loop while not 0*/
@@ -2205,29 +1951,13 @@ void dce110_link_encoder_set_dmcu_psr_enable(struct link_encoder *enc,
 		dmcu_max_retry_on_wait_reg_ready > 0);
 
 	/* setDMCUParam_Cmd */
-	masterCmd = dm_read_reg(ctx, REG(MASTER_COMM_CMD_REG));
 	if (enable)
-		set_reg_field_value(
-				masterCmd,
-				PSR_ENABLE,
-				MASTER_COMM_CMD_REG,
-				MASTER_COMM_CMD_REG_BYTE0);
+		REG_UPDATE(MASTER_COMM_CMD_REG, MASTER_COMM_CMD_REG_BYTE0, PSR_ENABLE);
 	else
-		set_reg_field_value(
-				masterCmd,
-				PSR_EXIT,
-				MASTER_COMM_CMD_REG,
-				MASTER_COMM_CMD_REG_BYTE0);
-	dm_write_reg(ctx, REG(MASTER_COMM_CMD_REG), masterCmd);
+		REG_UPDATE(MASTER_COMM_CMD_REG, MASTER_COMM_CMD_REG_BYTE0, PSR_EXIT);
 
 	/* notifyDMCUMsg */
-	masterComCntl = dm_read_reg(ctx, REG(MASTER_COMM_CNTL_REG));
-	set_reg_field_value(
-			masterComCntl,
-			1,
-			MASTER_COMM_CNTL_REG,
-			MASTER_COMM_INTERRUPT);
-	dm_write_reg(ctx, REG(MASTER_COMM_CNTL_REG), masterComCntl);
+	REG_UPDATE(MASTER_COMM_CNTL_REG, MASTER_COMM_INTERRUPT, 1);
 
 	for (retryCount = 0; retryCount <= 100; retryCount++) {
 		get_dmcu_psr_state(enc, &psr_state);
@@ -2252,30 +1982,14 @@ void dce110_link_encoder_setup_dmcu_psr(struct link_encoder *enc,
 	unsigned int dmcu_wait_reg_ready_interval = 100;
 	unsigned int regValue;
 
-	uint32_t dphyFastTraining;
-	uint32_t dpDphyBsSrSwapCntl;
-	uint32_t interruptEnableMask;
-	uint32_t dpSecCntl1;
-	uint32_t smuInterruptControl;
-	uint32_t masterCmd;
-	uint32_t masterComCntl;
 	union dce110_dmcu_psr_config_data_reg1 masterCmdData1;
 	union dce110_dmcu_psr_config_data_reg2 masterCmdData2;
 	union dce110_dmcu_psr_config_data_reg3 masterCmdData3;
 
-	dphyFastTraining = dm_read_reg(ctx, REG(DP_DPHY_FAST_TRAINING));
 	if (psr_context->psrExitLinkTrainingRequired)
-		set_reg_field_value(
-					dphyFastTraining,
-					1,
-					DP_DPHY_FAST_TRAINING,
-					DPHY_RX_FAST_TRAINING_CAPABLE);
+		REG_UPDATE(DP_DPHY_FAST_TRAINING, DPHY_RX_FAST_TRAINING_CAPABLE, 1);
 	else {
-		set_reg_field_value(
-					dphyFastTraining,
-					0,
-					DP_DPHY_FAST_TRAINING,
-					DPHY_RX_FAST_TRAINING_CAPABLE);
+		REG_UPDATE(DP_DPHY_FAST_TRAINING, DPHY_RX_FAST_TRAINING_CAPABLE, 0);
 		/*In DCE 11, we are able to pre-program a Force SR register
 		 * to be able to trigger SR symbol after 5 idle patterns
 		 * transmitted. Upon PSR Exit, DMCU can trigger
@@ -2284,80 +1998,47 @@ void dce110_link_encoder_setup_dmcu_psr(struct link_encoder *enc,
 		 * reaches DPHY_LOAD_BS_COUNT, the next BS symbol will be
 		 * replaced by SR symbol once.
 		 */
-		dpDphyBsSrSwapCntl =
-			dm_read_reg(ctx, REG(DP_DPHY_BS_SR_SWAP_CNTL));
-		set_reg_field_value(
-					dpDphyBsSrSwapCntl,
-					0x5,
-					DP_DPHY_BS_SR_SWAP_CNTL,
-					DPHY_LOAD_BS_COUNT);
-		dm_write_reg(ctx, REG(DP_DPHY_BS_SR_SWAP_CNTL),
-						dpDphyBsSrSwapCntl);
+
+		REG_UPDATE(DP_DPHY_BS_SR_SWAP_CNTL, DPHY_LOAD_BS_COUNT, 0x5);
 	}
-	dm_write_reg(ctx, REG(DP_DPHY_FAST_TRAINING), dphyFastTraining);
 
 	/* Enable static screen interrupts for PSR supported display */
-	interruptEnableMask =
-		dm_read_reg(ctx, REG(DMCU_INTERRUPT_TO_UC_EN_MASK));
 	/* Disable the interrupt coming from other displays. */
-	set_reg_field_value(
-				interruptEnableMask,
-				0,
-				DMCU_INTERRUPT_TO_UC_EN_MASK,
-				STATIC_SCREEN1_INT_TO_UC_EN);
-	set_reg_field_value(
-				interruptEnableMask,
-				0,
-				DMCU_INTERRUPT_TO_UC_EN_MASK,
-				STATIC_SCREEN2_INT_TO_UC_EN);
-	set_reg_field_value(
-				interruptEnableMask,
-				0,
-				DMCU_INTERRUPT_TO_UC_EN_MASK,
-				STATIC_SCREEN3_INT_TO_UC_EN);
-	set_reg_field_value(
-				interruptEnableMask,
-				0,
-				DMCU_INTERRUPT_TO_UC_EN_MASK,
-				STATIC_SCREEN4_INT_TO_UC_EN);
+	REG_UPDATE_4(DMCU_INTERRUPT_TO_UC_EN_MASK,
+			STATIC_SCREEN1_INT_TO_UC_EN, 0,
+			STATIC_SCREEN2_INT_TO_UC_EN, 0,
+			STATIC_SCREEN3_INT_TO_UC_EN, 0,
+			STATIC_SCREEN4_INT_TO_UC_EN, 0);
 
 	switch (psr_context->controllerId) {
 	/* Driver uses case 1 for unconfigured */
 	case 1:
 		psr_crtc_offset = mmCRTC0_CRTC_STATIC_SCREEN_CONTROL -
 				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
-		set_reg_field_value(
-					interruptEnableMask,
-					1,
-					DMCU_INTERRUPT_TO_UC_EN_MASK,
-					STATIC_SCREEN1_INT_TO_UC_EN);
+
+		REG_UPDATE(DMCU_INTERRUPT_TO_UC_EN_MASK,
+				STATIC_SCREEN1_INT_TO_UC_EN, 1);
 		break;
 	case 2:
 		psr_crtc_offset = mmCRTC1_CRTC_STATIC_SCREEN_CONTROL -
 				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
-		set_reg_field_value(
-					interruptEnableMask,
-					1,
-					DMCU_INTERRUPT_TO_UC_EN_MASK,
-					STATIC_SCREEN2_INT_TO_UC_EN);
+
+		REG_UPDATE(DMCU_INTERRUPT_TO_UC_EN_MASK,
+				STATIC_SCREEN2_INT_TO_UC_EN, 1);
 		break;
 	case 3:
 		psr_crtc_offset = mmCRTC2_CRTC_STATIC_SCREEN_CONTROL -
 				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
-		set_reg_field_value(
-					interruptEnableMask,
-					1,
-					DMCU_INTERRUPT_TO_UC_EN_MASK,
-					STATIC_SCREEN3_INT_TO_UC_EN);
+
+		REG_UPDATE(DMCU_INTERRUPT_TO_UC_EN_MASK,
+				STATIC_SCREEN3_INT_TO_UC_EN, 1);
 		break;
 	case 4:
 		psr_crtc_offset = mmCRTC3_CRTC_STATIC_SCREEN_CONTROL -
 				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
-		set_reg_field_value(
-					interruptEnableMask,
-					1,
-					DMCU_INTERRUPT_TO_UC_EN_MASK,
-					STATIC_SCREEN4_INT_TO_UC_EN);
+
+		REG_UPDATE(DMCU_INTERRUPT_TO_UC_EN_MASK,
+				STATIC_SCREEN4_INT_TO_UC_EN, 1);
 		break;
 	case 5:
 		psr_crtc_offset = mmCRTC4_CRTC_STATIC_SCREEN_CONTROL -
@@ -2379,45 +2060,24 @@ void dce110_link_encoder_setup_dmcu_psr(struct link_encoder *enc,
 	default:
 		psr_crtc_offset = mmCRTC0_CRTC_STATIC_SCREEN_CONTROL -
 				mmCRTC0_CRTC_STATIC_SCREEN_CONTROL;
-		set_reg_field_value(
-					interruptEnableMask,
-					1,
-					DMCU_INTERRUPT_TO_UC_EN_MASK,
-					STATIC_SCREEN1_INT_TO_UC_EN);
+
+		REG_UPDATE(DMCU_INTERRUPT_TO_UC_EN_MASK,
+				STATIC_SCREEN1_INT_TO_UC_EN, 1);
 		break;
 	}
-	dm_write_reg(ctx, REG(DMCU_INTERRUPT_TO_UC_EN_MASK),
-							interruptEnableMask);
 
-	dpSecCntl1 = dm_read_reg(ctx, REG(DP_SEC_CNTL1));
-	set_reg_field_value(
-				dpSecCntl1,
-				psr_context->sdpTransmitLineNumDeadline,
-				DP_SEC_CNTL1,
-				DP_SEC_GSP0_LINE_NUM);
-	set_reg_field_value(
-				dpSecCntl1,
-				1,
-				DP_SEC_CNTL1,
-				DP_SEC_GSP0_PRIORITY);
-	dm_write_reg(ctx, REG(DP_SEC_CNTL1), dpSecCntl1);
+	REG_UPDATE_2(DP_SEC_CNTL1,
+		DP_SEC_GSP0_LINE_NUM, psr_context->sdpTransmitLineNumDeadline,
+		DP_SEC_GSP0_PRIORITY, 1);
 
 	if (psr_context->psr_level.bits.SKIP_SMU_NOTIFICATION) {
-		smuInterruptControl =
-			dm_read_reg(ctx, REG(SMU_INTERRUPT_CONTROL));
-		set_reg_field_value(
-					smuInterruptControl,
-					1,
-					SMU_INTERRUPT_CONTROL,
-					DC_SMU_INT_ENABLE);
-		dm_write_reg(ctx, REG(SMU_INTERRUPT_CONTROL),
-						smuInterruptControl);
+		REG_UPDATE(SMU_INTERRUPT_CONTROL, DC_SMU_INT_ENABLE, 1);
 	}
 
 	/* waitDMCUReadyForCmd */
 	do {
 		dm_delay_in_microseconds(ctx, dmcu_wait_reg_ready_interval);
-		regValue = dm_read_reg(ctx, REG(MASTER_COMM_CNTL_REG));
+		regValue = REG_READ(MASTER_COMM_CNTL_REG);
 		dmcu_max_retry_on_wait_reg_ready--;
 	} while
 	/* expected value is 0, loop while not 0*/
@@ -2458,22 +2118,11 @@ void dce110_link_encoder_setup_dmcu_psr(struct link_encoder *enc,
 			masterCmdData3.u32All);
 
 	/* setDMCUParam_Cmd */
-	masterCmd = dm_read_reg(ctx, REG(MASTER_COMM_CMD_REG));
-	set_reg_field_value(
-			masterCmd,
-			PSR_SET,
-			MASTER_COMM_CMD_REG,
-			MASTER_COMM_CMD_REG_BYTE0);
-	dm_write_reg(ctx, REG(MASTER_COMM_CMD_REG), masterCmd);
+	REG_UPDATE(MASTER_COMM_CMD_REG,
+			MASTER_COMM_CMD_REG_BYTE0, PSR_SET);
 
 	/* notifyDMCUMsg */
-	masterComCntl = dm_read_reg(ctx, REG(MASTER_COMM_CNTL_REG));
-	set_reg_field_value(
-			masterComCntl,
-			1,
-			MASTER_COMM_CNTL_REG,
-			MASTER_COMM_INTERRUPT);
-	dm_write_reg(ctx, REG(MASTER_COMM_CNTL_REG), masterComCntl);
+	REG_UPDATE(MASTER_COMM_CNTL_REG, MASTER_COMM_INTERRUPT, 1);
 }
 
 void dce110_link_encoder_connect_dig_be_to_fe(
@@ -2483,30 +2132,18 @@ void dce110_link_encoder_connect_dig_be_to_fe(
 {
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
 	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t addr;
-	uint32_t value;
 	uint32_t field;
 
 	if (engine != ENGINE_ID_UNKNOWN) {
-		addr = REG(DIG_BE_CNTL);
-		value = dm_read_reg(ctx, addr);
 
-		field = get_reg_field_value(
-				value,
-				DIG_BE_CNTL,
-				DIG_FE_SOURCE_SELECT);
+		REG_GET(DIG_BE_CNTL, DIG_FE_SOURCE_SELECT, &field);
 
 		if (connect)
 			field |= get_frontend_source(engine);
 		else
 			field &= ~get_frontend_source(engine);
 
-		set_reg_field_value(
-			value,
-			field,
-			DIG_BE_CNTL,
-			DIG_FE_SOURCE_SELECT);
-		dm_write_reg(ctx, addr, value);
+		REG_UPDATE(DIG_BE_CNTL, DIG_FE_SOURCE_SELECT, field);
 	}
 }
 
