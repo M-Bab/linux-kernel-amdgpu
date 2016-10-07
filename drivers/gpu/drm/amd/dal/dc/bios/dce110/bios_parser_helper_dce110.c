@@ -48,7 +48,6 @@
  */
 void dce110_set_scratch_acc_mode_change(struct dc_context *ctx)
 {
-#ifdef CONFIG_DRM_AMD_DAL_VBIOS_PRESENT
 	uint32_t addr = mmBIOS_SCRATCH_6;
 	uint32_t value = 0;
 
@@ -57,7 +56,6 @@ void dce110_set_scratch_acc_mode_change(struct dc_context *ctx)
 	value |= ATOM_S6_ACC_MODE;
 
 	dm_write_reg(ctx, addr, value);
-#endif
 }
 
 /*

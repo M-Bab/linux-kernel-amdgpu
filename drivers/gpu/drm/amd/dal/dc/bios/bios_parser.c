@@ -35,10 +35,8 @@
 #include "include/logger_interface.h"
 
 #include "command_table.h"
-#if defined(CONFIG_DRM_AMD_DAL_VBIOS_PRESENT)
 #include "bios_parser_helper.h"
 #include "dce110/bios_dce110.h"
-#endif
 #include "command_table_helper.h"
 #include "bios_parser.h"
 #include "bios_parser_types_internal.h"
@@ -3664,16 +3662,8 @@ static bool bios_parser_is_accelerated_mode(
 {
 	struct bios_parser *bp = BP_FROM_DCB(dcb);
 
-#ifdef CONFIG_DRM_AMD_DAL_VBIOS_PRESENT
 	return bp->bios_helper->is_accelerated_mode(
 			bp->base.ctx);
-#else
-	dal_logger_write(bp->base.ctx->logger,
-			LOG_MAJOR_BIOS,
-			LOG_MINOR_BIOS_CMD_TABLE,
-			"%s: VBIOS is not supported", __func__);
-	return false;
-#endif
 }
 
 /**
@@ -3691,15 +3681,8 @@ static void bios_parser_set_scratch_critical_state(
 {
 	struct bios_parser *bp = BP_FROM_DCB(dcb);
 
-#ifdef CONFIG_DRM_AMD_DAL_VBIOS_PRESENT
 	dce110_set_scratch_critical_state(
 			bp->base.ctx, state);
-#else
-	dal_logger_write(bp->base.ctx->logger,
-			LOG_MAJOR_BIOS,
-			LOG_MINOR_BIOS_CMD_TABLE,
-			"%s: VBIOS is not supported", __func__);
-#endif
 }
 
 /*
@@ -4253,9 +4236,7 @@ static bool bios_parser_construct(
 	else
 		return false;
 
-#if defined(CONFIG_DRM_AMD_DAL_VBIOS_PRESENT)
 	dal_bios_parser_init_bios_helper(bp, dce_version);
-#endif
 	dal_bios_parser_init_cmd_tbl(bp);
 	dal_bios_parser_init_cmd_tbl_helper(&bp->cmd_helper, dce_version);
 
