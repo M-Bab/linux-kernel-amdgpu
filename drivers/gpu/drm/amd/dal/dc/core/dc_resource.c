@@ -34,50 +34,34 @@
 #include "set_mode_types.h"
 #include "adapter_service_interface.h"
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 #include "dce80/dce80_resource.h"
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE10_0)
 #include "dce100/dce100_resource.h"
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 #include "dce110/dce110_resource.h"
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 #include "dce112/dce112_resource.h"
-#endif
 
 enum dce_version resource_parse_asic_id(struct hw_asic_id asic_id)
 {
 	enum dce_version dc_version = DCE_VERSION_UNKNOWN;
 	switch (asic_id.chip_family) {
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 	case FAMILY_CI:
 	case FAMILY_KV:
 		dc_version = DCE_VERSION_8_0;
 		break;
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 	case FAMILY_CZ:
 		dc_version = DCE_VERSION_11_0;
 		break;
-#endif
 
 	case FAMILY_VI:
-#if defined(CONFIG_DRM_AMD_DAL_DCE10_0)
 		if (ASIC_REV_IS_TONGA_P(asic_id.hw_internal_rev) ||
 				ASIC_REV_IS_FIJI_P(asic_id.hw_internal_rev)) {
 			dc_version = DCE_VERSION_10_0;
 			break;
 		}
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 		if (ASIC_REV_IS_POLARIS10_P(asic_id.hw_internal_rev) ||
 				ASIC_REV_IS_POLARIS11_M(asic_id.hw_internal_rev)) {
 			dc_version = DCE_VERSION_11_2;
 		}
-#endif
 		break;
 	default:
 		dc_version = DCE_VERSION_UNKNOWN;
@@ -94,26 +78,18 @@ struct resource_pool *dc_create_resource_pool(struct adapter_service *adapter_se
 {
 
 	switch (dc_version) {
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 	case DCE_VERSION_8_0:
 		return dce80_create_resource_pool(
 			adapter_serv, num_virtual_links, dc);
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE10_0)
 	case DCE_VERSION_10_0:
 		return dce100_create_resource_pool(
 			adapter_serv, num_virtual_links, dc);
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 	case DCE_VERSION_11_0:
 		return dce110_create_resource_pool(
 			adapter_serv, num_virtual_links, dc, asic_id);
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 	case DCE_VERSION_11_2:
 		return dce112_create_resource_pool(
 			adapter_serv, num_virtual_links, dc);
-#endif
 	default:
 		break;
 	}

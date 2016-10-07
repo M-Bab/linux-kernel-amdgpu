@@ -40,13 +40,9 @@
  * Post-requisites: headers required by this unit
  */
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 #include "dce80/hw_factory_dce80.h"
-#endif
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 #include "dce110/hw_factory_dce110.h"
-#endif
 
 #include "diagnostics/hw_factory_diag.h"
 
@@ -65,25 +61,17 @@ bool dal_hw_factory_init(
 	}
 
 	switch (dce_version) {
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 	case DCE_VERSION_8_0:
 		dal_hw_factory_dce80_init(factory);
 		return true;
-#endif
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE10_0)
 	case DCE_VERSION_10_0:
 		dal_hw_factory_dce110_init(factory);
 		return true;
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 	case DCE_VERSION_11_0:
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 	case DCE_VERSION_11_2:
-#endif
 		dal_hw_factory_dce110_init(factory);
 		return true;
-#endif
 	default:
 		ASSERT_CRITICAL(false);
 		return false;

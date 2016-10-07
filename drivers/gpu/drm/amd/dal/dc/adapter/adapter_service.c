@@ -41,17 +41,11 @@
 
 #include "atom.h"
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 #include "dce80/hw_ctx_adapter_service_dce80.h"
-#endif
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 #include "dce110/hw_ctx_adapter_service_dce110.h"
-#endif
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 #include "dce112/hw_ctx_adapter_service_dce112.h"
-#endif
 
 #include "diagnostics/hw_ctx_adapter_service_diag.h"
 
@@ -665,22 +659,14 @@ static struct hw_ctx_adapter_service *create_hw_ctx(
 		return dal_adapter_service_create_hw_ctx_diag(ctx);
 
 	switch (dce_version) {
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 	case DCE_VERSION_8_0:
 		return dal_adapter_service_create_hw_ctx_dce80(ctx);
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE10_0)
 	case DCE_VERSION_10_0:
 		return dal_adapter_service_create_hw_ctx_dce110(ctx);
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 	case DCE_VERSION_11_0:
 		return dal_adapter_service_create_hw_ctx_dce110(ctx);
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 	case DCE_VERSION_11_2:
 		return dal_adapter_service_create_hw_ctx_dce112(ctx);
-#endif
 	default:
 		ASSERT_CRITICAL(false);
 		return NULL;
@@ -738,7 +724,6 @@ static bool adapter_service_construct(
 		as->default_values[id] = feature_entry_table[i].default_value;
 	}
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 	if (dal_adapter_service_get_dce_version(as) == DCE_VERSION_11_0) {
 		uint32_t i;
 
@@ -752,7 +737,6 @@ static bool adapter_service_construct(
 				as->default_values[id] = true;
 		}
 	}
-#endif
 
 	/* Generate feature set table */
 	if (!generate_feature_set(as, init_data->display_param)) {
@@ -894,23 +878,15 @@ enum dce_version dal_adapter_service_get_dce_version(
 	uint32_t version = as->asic_cap->data[ASIC_DATA_DCE_VERSION];
 
 	switch (version) {
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 	case 0x80:
 		/* CI Bonaire */
 		return DCE_VERSION_8_0;
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE10_0)
 	case 0x100:
 		return DCE_VERSION_10_0;
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 	case 0x110:
 		return DCE_VERSION_11_0;
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 	case 0x112:
 		return DCE_VERSION_11_2;
-#endif
 	default:
 		ASSERT_CRITICAL(false);
 		return DCE_VERSION_UNKNOWN;

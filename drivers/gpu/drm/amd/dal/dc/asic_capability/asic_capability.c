@@ -32,21 +32,13 @@
 #include "include/dal_types.h"
 #include "include/dal_asic_id.h"
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 #include "hawaii_asic_capability.h"
-#endif
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE10_0)
 #include "tonga_asic_capability.h"
-#endif
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 #include "carrizo_asic_capability.h"
-#endif
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 #include "polaris10_asic_capability.h"
-#endif
 
 /*
  * Initializes asic_capability instance.
@@ -94,38 +86,30 @@ static bool construct(
 
 	switch (init->chip_family) {
 	case FAMILY_CI:
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 		dal_hawaii_asic_capability_create(cap, init);
 		asic_supported = true;
-#endif
 		break;
 
 	case FAMILY_KV:
 		break;
 
 	case FAMILY_CZ:
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 		carrizo_asic_capability_create(cap, init);
 		asic_supported = true;
-#endif
 		break;
 
 	case FAMILY_VI:
-#if defined(CONFIG_DRM_AMD_DAL_DCE10_0)
 		if (ASIC_REV_IS_TONGA_P(init->hw_internal_rev) ||
 				ASIC_REV_IS_FIJI_P(init->hw_internal_rev)) {
 			tonga_asic_capability_create(cap, init);
 			asic_supported = true;
 			break;
 		}
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 		if (ASIC_REV_IS_POLARIS10_P(init->hw_internal_rev) ||
 				ASIC_REV_IS_POLARIS11_M(init->hw_internal_rev)) {
 			polaris10_asic_capability_create(cap, init);
 			asic_supported = true;
 		}
-#endif
 		break;
 
 	default:

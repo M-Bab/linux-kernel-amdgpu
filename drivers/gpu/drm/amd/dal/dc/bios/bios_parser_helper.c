@@ -38,29 +38,21 @@ bool dal_bios_parser_init_bios_helper(
 	enum dce_version version)
 {
 	switch (version) {
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 	case DCE_VERSION_8_0:
 		bp->bios_helper = dal_bios_parser_helper_dce80_get_table();
 		return true;
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE10_0)
 	case DCE_VERSION_10_0:
 		bp->bios_helper = dal_bios_parser_helper_dce110_get_table();
 		return true;
 
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0)
 	case DCE_VERSION_11_0:
 		bp->bios_helper = dal_bios_parser_helper_dce110_get_table();
 		return true;
 
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 	case DCE_VERSION_11_2:
 		bp->bios_helper = dal_bios_parser_helper_dce112_get_table();
 		return true;
 
-#endif
 	default:
 		BREAK_TO_DEBUGGER();
 		return false;

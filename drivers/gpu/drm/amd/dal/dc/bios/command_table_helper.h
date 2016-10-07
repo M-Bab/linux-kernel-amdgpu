@@ -26,15 +26,9 @@
 #ifndef __DAL_COMMAND_TABLE_HELPER_H__
 #define __DAL_COMMAND_TABLE_HELPER_H__
 
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
 #include "dce80/command_table_helper_dce80.h"
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_0) || defined(CONFIG_DRM_AMD_DAL_DCE10_0)
 #include "dce110/command_table_helper_dce110.h"
-#endif
-#if defined(CONFIG_DRM_AMD_DAL_DCE11_2)
 #include "dce112/command_table_helper_dce112.h"
-#endif
 
 struct command_table_helper {
 	bool (*controller_id_to_atom)(enum controller_id id, uint8_t *atom_id);
