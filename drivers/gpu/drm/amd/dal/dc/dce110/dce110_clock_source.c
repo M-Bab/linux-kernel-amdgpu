@@ -801,7 +801,7 @@ static bool dce110_clock_source_power_down(
 	enum bp_result bp_result;
 	struct bp_pixel_clock_parameters bp_pixel_clock_params = {0};
 
-	if (clk_src->id == CLOCK_SOURCE_ID_EXTERNAL)
+	if (clk_src->dp_clk_src)
 		return true;
 
 	/* If Pixel Clock is 0 it means Power Down Pll*/

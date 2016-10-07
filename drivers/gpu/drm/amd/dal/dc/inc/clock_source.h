@@ -172,6 +172,7 @@ struct clock_source {
 	const struct clock_source_funcs *funcs;
 	struct dc_context *ctx;
 	enum clock_source_id id;
+	bool dp_clk_src;
 };
 
 #endif

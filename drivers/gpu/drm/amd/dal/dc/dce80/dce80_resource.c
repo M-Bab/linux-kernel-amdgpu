@@ -445,7 +445,8 @@ struct clock_source *dce80_clock_source_create(
 	struct dc_context *ctx,
 	struct dc_bios *bios,
 	enum clock_source_id id,
-	const struct dce110_clk_src_reg_offsets *offsets)
+	const struct dce110_clk_src_reg_offsets *offsets,
+	bool dp_clk_src)
 {
 	struct dce110_clk_src *clk_src =
 		dm_alloc(sizeof(struct dce110_clk_src));
@@ -453,8 +454,10 @@ struct clock_source *dce80_clock_source_create(
 	if (!clk_src)
 		return NULL;
 
-	if (dce110_clk_src_construct(clk_src, ctx, bios, id, offsets))
+	if (dce110_clk_src_construct(clk_src, ctx, bios, id, offsets)) {
+		clk_src->base.dp_clk_src = dp_clk_src;
 		return &clk_src->base;
+	}
 
 	BREAK_TO_DEBUGGER();
 	return NULL;
@@ -756,23 +759,24 @@ static bool construct(
 	if (dal_adapter_service_get_firmware_info(as, &info) &&
 		info.external_clock_source_frequency_for_dp != 0) {
 		pool->base.dp_clock_source =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_EXTERNAL, NULL);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_EXTERNAL, NULL, true);
 
 		pool->base.clock_sources[0] =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL0, &dce80_clk_src_reg_offsets[0]);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL0, &dce80_clk_src_reg_offsets[0], false);
 		pool->base.clock_sources[1] =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL1, &dce80_clk_src_reg_offsets[1]);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL1, &dce80_clk_src_reg_offsets[1], false);
 		pool->base.clock_sources[2] =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL2, &dce80_clk_src_reg_offsets[2]);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL2, &dce80_clk_src_reg_offsets[2], false);
 		pool->base.clk_src_count = 3;
 
 	} else {
 		pool->base.dp_clock_source =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL0, &dce80_clk_src_reg_offsets[0]);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL0, &dce80_clk_src_reg_offsets[0], true);
+
 		pool->base.clock_sources[0] =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL1, &dce80_clk_src_reg_offsets[1]);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL1, &dce80_clk_src_reg_offsets[1], false);
 		pool->base.clock_sources[1] =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL2, &dce80_clk_src_reg_offsets[2]);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL2, &dce80_clk_src_reg_offsets[2], false);
 		pool->base.clk_src_count = 2;
 	}
 

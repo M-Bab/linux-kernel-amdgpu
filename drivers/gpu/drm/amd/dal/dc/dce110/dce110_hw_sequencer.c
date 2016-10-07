@@ -327,7 +327,7 @@ static void dce110_crtc_switch_to_clk_src(
 
 	pixel_rate_cntl_value = dm_read_reg(clk_src->ctx, addr);
 
-	if (clk_src->id == CLOCK_SOURCE_ID_EXTERNAL)
+	if (clk_src->dp_clk_src)
 		set_reg_field_value(pixel_rate_cntl_value, 1,
 			CRTC0_PIXEL_RATE_CNTL, DP_DTO0_ENABLE);
 	else {
