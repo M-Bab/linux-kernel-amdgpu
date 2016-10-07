@@ -1691,6 +1691,9 @@ static void update_pending_status(struct pipe_ctx *pipe_ctx)
 			pipe_ctx->mi->funcs->mem_input_is_flip_pending(
 					pipe_ctx->mi);
 
+	if (surface->status.is_flip_pending && !surface->public.visible)
+		pipe_ctx->mi->current_address = pipe_ctx->mi->request_address;
+
 	surface->status.current_address = pipe_ctx->mi->current_address;
 }
 

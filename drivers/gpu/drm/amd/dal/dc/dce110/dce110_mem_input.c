@@ -402,6 +402,9 @@ bool dce110_mem_input_program_surface_flip_and_addr(
 	}
 
 	mem_input->request_address = *address;
+	if (flip_immediate)
+		mem_input->current_address = *address;
+
 	return true;
 }
 
