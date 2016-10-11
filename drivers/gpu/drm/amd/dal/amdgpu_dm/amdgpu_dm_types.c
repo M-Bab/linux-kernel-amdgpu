@@ -3205,13 +3205,15 @@ void amdgpu_dm_add_sink_to_freesync_module(
 	if (!adev->dm.freesync_module)
 		return;
 	/*
-	 * restrict for now freesync only for dp and edp
+	 * if edid non zero restrict freesync only for dp and edp
 	 */
-	if (amdgpu_connector->dc_sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT
-	    || amdgpu_connector->dc_sink->sink_signal == SIGNAL_TYPE_EDP) {
-		edid_check_required = is_dp_capable_without_timing_msa(
-					adev->dm.dc,
-					amdgpu_connector);
+	if (edid) {
+		if (amdgpu_connector->dc_sink->sink_signal == SIGNAL_TYPE_DISPLAY_PORT
+			|| amdgpu_connector->dc_sink->sink_signal == SIGNAL_TYPE_EDP) {
+			edid_check_required = is_dp_capable_without_timing_msa(
+						adev->dm.dc,
+						amdgpu_connector);
+		}
 	}
 	val_capable = 0;
 	if (edid_check_required == true && (edid->version > 1 ||

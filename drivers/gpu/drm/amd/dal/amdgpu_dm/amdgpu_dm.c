@@ -826,12 +826,12 @@ void amdgpu_dm_update_connector_after_detect(
 			aconnector->edid =
 				(struct edid *) sink->dc_edid.raw_edid;
 
-			amdgpu_dm_add_sink_to_freesync_module(
-					connector, aconnector->edid);
 
 			drm_mode_connector_update_edid_property(connector,
 					aconnector->edid);
 		}
+		amdgpu_dm_add_sink_to_freesync_module(connector, aconnector->edid);
+
 	} else {
 		amdgpu_dm_remove_sink_from_freesync_module(connector);
 		drm_mode_connector_update_edid_property(connector, NULL);
