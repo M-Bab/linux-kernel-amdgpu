@@ -2464,6 +2464,7 @@ int amdgpu_dm_atomic_commit(
 
 	struct dc_target *commit_targets[MAX_TARGETS];
 	struct amdgpu_crtc *new_crtcs[MAX_TARGETS];
+	struct dc_target *new_target;
 
 	/* In this step all new fb would be pinned */
 
@@ -2524,7 +2525,7 @@ int amdgpu_dm_atomic_commit(
 		case DM_COMMIT_ACTION_DPMS_ON:
 		case DM_COMMIT_ACTION_SET: {
 			struct dm_connector_state *dm_state = NULL;
-			struct dc_target *new_target = NULL;
+			new_target = NULL;
 
 			if (aconnector)
 				dm_state = to_dm_connector_state(aconnector->base.state);
@@ -2572,11 +2573,6 @@ int amdgpu_dm_atomic_commit(
 			acrtc->enabled = true;
 			acrtc->hw_mode = crtc->state->mode;
 			crtc->hwmode = crtc->state->mode;
-			if (adev->dm.freesync_module)
-				for (j = 0; j < acrtc->target->stream_count; j++)
-					mod_freesync_add_stream(
-							adev->dm.freesync_module,
-							acrtc->target->streams[j]);
 			break;
 		}
 
@@ -2613,6 +2609,19 @@ int amdgpu_dm_atomic_commit(
 		if (acrtc->target) {
 			commit_targets[commit_targets_count] = acrtc->target;
 			++commit_targets_count;
+		}
+	}
+	/*
+	 * Add streams after required streams from new and replaced targets
+	 * are removed from freesync module
+	 */
+	if (adev->dm.freesync_module) {
+		for (i = 0; i < new_crtcs_count; i++) {
+			new_target = new_crtcs[i]->target;
+			for (j = 0; j < new_target->stream_count; j++)
+				mod_freesync_add_stream(
+						adev->dm.freesync_module,
+						new_target->streams[j]);
 		}
 	}
 
