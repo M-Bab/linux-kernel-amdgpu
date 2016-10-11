@@ -945,10 +945,8 @@ bool get_audio_clock_info(
 			else if (clock_info[index].pixel_clock_in_10khz ==
 					crtc_pixel_clock_in_10khz) {
 				/* match found */
-				if (audio_clock_info != NULL) {
-					*audio_clock_info = clock_info[index];
-					return true;
-				}
+				*audio_clock_info = clock_info[index];
+				return true;
 			}
 		}
 	}

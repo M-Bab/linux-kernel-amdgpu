@@ -90,7 +90,7 @@ enum dc_edid_status dm_helpers_parse_edid_caps(
 	 * stored in an array of length 13. */
 	for (i = 0; i < 4; i++) {
 		if (edid_buf->detailed_timings[i].data.other_data.type == 0xfc) {
-			while (edid_buf->detailed_timings[i].data.other_data.data.str.str[j] && j < 13) {
+			while (j < 13 && edid_buf->detailed_timings[i].data.other_data.data.str.str[j]) {
 				if (edid_buf->detailed_timings[i].data.other_data.data.str.str[j] == '\n')
 					break;
 

@@ -101,10 +101,6 @@ static bool construct(
 		break;
 
 	case FAMILY_KV:
-		if (ASIC_REV_IS_KALINDI(init->hw_internal_rev) ||
-			ASIC_REV_IS_BHAVANI(init->hw_internal_rev)) {
-		} else {
-		}
 		break;
 
 	case FAMILY_CZ:
