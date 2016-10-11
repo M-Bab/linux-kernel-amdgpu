@@ -829,6 +829,9 @@ const struct amd_ip_funcs vce_v3_0_ip_funcs = {
 };
 
 static const struct amdgpu_ring_funcs vce_v3_0_ring_phys_funcs = {
+	.type = AMDGPU_RING_TYPE_VCE,
+	.align_mask = 0xf,
+	.nop = VCE_CMD_NO_OP,
 	.get_rptr = vce_v3_0_ring_get_rptr,
 	.get_wptr = vce_v3_0_ring_get_wptr,
 	.set_wptr = vce_v3_0_ring_set_wptr,
