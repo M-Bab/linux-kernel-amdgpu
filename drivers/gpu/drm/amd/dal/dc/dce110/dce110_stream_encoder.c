@@ -59,7 +59,6 @@ static void dce110_update_generic_info_packet(
 	uint32_t packet_index,
 	const struct encoder_info_packet *info_packet)
 {
-	struct dc_context *ctx = enc110->base.ctx;
 	uint32_t regval;
 	/* choose which generic packet to use */
 	{
@@ -246,7 +245,6 @@ static void dce110_stream_encoder_hdmi_set_stream_attribute(
 	bool enable_audio)
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
 	struct bp_encoder_control cntl = {0};
 
 	cntl.action = ENCODER_CONTROL_SETUP;
@@ -348,9 +346,6 @@ static void dce110_stream_encoder_dvi_set_stream_attribute(
 	bool is_dual_link)
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t addr = REG(DIG_FE_CNTL);
-	uint32_t value = dm_read_reg(ctx, addr);
 	struct bp_encoder_control cntl = {0};
 
 	cntl.action = ENCODER_CONTROL_SETUP;
@@ -442,7 +437,6 @@ static void dce110_stream_encoder_update_hdmi_info_packets(
 	const struct encoder_info_frame *info_frame)
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
 
 	if (info_frame->avi.valid) {
 		const uint32_t *content =
@@ -482,9 +476,6 @@ static void dce110_stream_encoder_stop_hdmi_info_packets(
 	struct stream_encoder *enc)
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t addr = 0;
-	uint32_t value = 0;
 
 	/* stop generic packets 0 & 1 on HDMI */
 	REG_SET_6(HDMI_GENERIC_PACKET_CONTROL0, 0,
@@ -515,8 +506,6 @@ static void dce110_stream_encoder_update_dp_info_packets(
 	const struct encoder_info_frame *info_frame)
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t addr = REG(DP_SEC_CNTL);
 	uint32_t value = REG_READ(DP_SEC_CNTL);
 
 	if (info_frame->vsc.valid)
@@ -546,7 +535,6 @@ static void dce110_stream_encoder_stop_dp_info_packets(
 {
 	/* stop generic packets on DP */
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
 	uint32_t value = REG_READ(DP_SEC_CNTL);
 
 	REG_SET_7(DP_SEC_CNTL, 0,
@@ -571,7 +559,6 @@ static void dce110_stream_encoder_dp_blank(
 	struct stream_encoder *enc)
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
 	uint32_t value;
 	uint32_t retries = 0;
 	uint32_t max_retries = DP_BLANK_MAX_RETRY * 10;
@@ -631,7 +618,6 @@ static void dce110_stream_encoder_dp_unblank(
 	const struct encoder_unblank_param *param)
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
 
 	if (param->link_settings.link_rate != LINK_RATE_UNKNOWN) {
 		uint32_t n_vid = 0x8000;
@@ -1003,8 +989,6 @@ static void dce110_se_setup_hdmi_audio(
 
 	struct audio_clock_info audio_clock_info = {0};
 	uint32_t max_packets_per_line;
-	uint32_t addr = 0;
-	uint32_t value = 0;
 
 	/* For now still do calculation, although this field is ignored when
 	above HDMI_PACKET_GEN_VERSION set to 1 */
@@ -1086,8 +1070,6 @@ static void dce110_se_setup_dp_audio(
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
 
 	/* --- DP Audio packet configurations --- */
-	uint32_t addr = 0;
-	uint32_t value = 0;
 
 	/* ATP Configuration */
 	REG_SET(DP_SEC_AUD_N, 0,

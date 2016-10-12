@@ -106,8 +106,6 @@ static bool acquire_engine(
 				AUX_EN);
 
 	if (field == 0) {
-		uint8_t counter = 0;
-
 		set_reg_field_value(
 				value,
 				1,
@@ -154,16 +152,6 @@ static bool acquire_engine(
 			AUX_REG_RW_CNTL_STATUS);
 
 	return (field == SW_CAN_ACCESS_AUX);
-}
-
-static void configure(
-	struct aux_engine *engine,
-	union aux_config cfg)
-{
-	struct aux_engine_dce110 *aux110 = FROM_AUX_ENGINE(engine);
-
-	REG_UPDATE(AUX_CONTROL, AUX_IGNORE_HPD_DISCON,
-			(0 != cfg.bits.ALLOW_AUX_WHEN_HPD_LOW));
 }
 
 #define COMPOSE_AUX_SW_DATA_16_20(command, address) \

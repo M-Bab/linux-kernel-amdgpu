@@ -296,7 +296,6 @@ static void set_high_bit_rate_capable(
 	struct audio *audio,
 	bool capable)
 {
-	struct audio_dce110 *aud110 = DCE110_AUD(audio);
 	uint32_t value = 0;
 
 	/* set high bit rate audio capable*/
@@ -314,8 +313,6 @@ static void set_video_latency(
 	struct audio *audio,
 	int latency_in_ms)
 {
-	struct audio_dce110 *aud110 = DCE110_AUD(audio);
-
 	uint32_t value = 0;
 
 	if ((latency_in_ms < 0) || (latency_in_ms > 255))
@@ -356,8 +353,6 @@ static void set_audio_latency(
 
 void dce110_aud_az_enable(struct audio *audio)
 {
-	struct audio_dce110 *aud110 = DCE110_AUD(audio);
-
 	uint32_t value = AZ_REG_READ(AZALIA_F0_CODEC_PIN_CONTROL_HOT_PLUG_CONTROL);
 
 	if (get_reg_field_value(value,
@@ -372,8 +367,6 @@ void dce110_aud_az_enable(struct audio *audio)
 
 void dce110_aud_az_disable(struct audio *audio)
 {
-	struct audio_dce110 *aud110 = DCE110_AUD(audio);
-
 	uint32_t value;
 
 	value = AZ_REG_READ(AZALIA_F0_CODEC_PIN_CONTROL_HOT_PLUG_CONTROL);

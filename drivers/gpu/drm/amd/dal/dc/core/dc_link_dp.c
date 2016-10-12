@@ -1493,10 +1493,10 @@ static bool allow_hpd_rx_irq(const struct core_link *link)
 
 static bool handle_hpd_irq_psr_sink(const struct core_link *link)
 {
+	union dpcd_psr_configuration psr_configuration;
+
 	if (link->public.psr_caps.psr_version == 0)
 		return false;
-
-	union dpcd_psr_configuration psr_configuration;
 
 	dal_ddc_service_read_dpcd_data(
 					link->ddc,

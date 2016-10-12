@@ -290,7 +290,7 @@ static void set_dp_phy_pattern_symbol_error(
 	struct dce110_link_encoder *enc110)
 {
 	/* Disable PHY Bypass mode to setup the test pattern */
-	struct dc_context *ctx = enc110->base.ctx;
+	uint32_t value = 0x0;
 
 	enable_phy_bypass_mode(enc110, false);
 
@@ -299,7 +299,6 @@ static void set_dp_phy_pattern_symbol_error(
 		ASSERT(REG(DP_DPHY_INTERNAL_CTRL));
 		/*DCE 120 does not have this reg*/
 
-		uint32_t value = 0x0;
 		REG_WRITE(DP_DPHY_INTERNAL_CTRL, value);
 	}
 
@@ -786,8 +785,6 @@ static bool is_dig_enabled(const struct dce110_link_encoder *enc110)
 
 static void link_encoder_disable(struct dce110_link_encoder *enc110)
 {
-	struct dc_context *ctx = enc110->base.ctx;
-
 	/* reset training pattern */
 	REG_SET(DP_DPHY_TRAINING_PATTERN_SEL, 0,
 			DPHY_TRAINING_PATTERN_SEL, 0);
@@ -1801,7 +1798,6 @@ void dce110_link_encoder_init_dmcu_backlight_settings(
 	struct link_encoder *enc)
 {
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
 	uint32_t bl_pwm_cntl;
 	uint32_t pwmCntl;
 	uint32_t pwmCntl2;
@@ -2130,7 +2126,6 @@ void dce110_link_encoder_connect_dig_be_to_fe(
 	bool connect)
 {
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
 	uint32_t field;
 
 	if (engine != ENGINE_ID_UNKNOWN) {

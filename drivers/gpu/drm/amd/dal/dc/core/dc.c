@@ -1281,9 +1281,9 @@ bool dc_commit_surfaces_to_target(
 		struct dc_target *dc_target)
 {
 	struct dc_surface_update updates[MAX_SURFACES] = { 0 };
-	struct dc_flip_addrs flip_addr[MAX_SURFACES] = {{ 0 } };
-	struct dc_plane_info plane_info[MAX_SURFACES] = {{ 0 } };
-	struct dc_scaling_info scaling_info[MAX_SURFACES] = {{ 0 } };
+	struct dc_flip_addrs flip_addr[MAX_SURFACES] = { 0 };
+	struct dc_plane_info plane_info[MAX_SURFACES] = { 0 };
+	struct dc_scaling_info scaling_info[MAX_SURFACES] = { 0 };
 	int i;
 
 	if (!dc_pre_update_surfaces_to_target(

@@ -77,6 +77,8 @@ struct dc_stream_funcs {
 	bool (*setup_psr)(struct dc *dc, const struct dc_stream *stream);
 };
 
+struct link_training_settings;
+
 struct dc_link_funcs {
 	void (*set_drive_settings)(struct dc *dc,
 			struct link_training_settings *lt_settings);

@@ -103,8 +103,6 @@ static void disable_i2c_hw_engine(
 	struct i2c_hw_engine_dce110 *hw_engine)
 {
 	uint32_t value = 0;
-	struct dc_context *ctx = NULL;
-
 	value = REG_READ(SETUP);
 
 	set_reg_field_value(
