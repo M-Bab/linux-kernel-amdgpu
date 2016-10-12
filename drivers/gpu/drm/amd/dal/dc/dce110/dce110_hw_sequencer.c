@@ -491,7 +491,7 @@ static enum dc_status bios_parser_crtc_source_select(
 	crtc_source_select.sink_signal = pipe_ctx->stream->signal;
 	crtc_source_select.display_output_bit_depth = PANEL_8BIT_COLOR;
 
-	dcb = dal_adapter_service_get_bios_parser(sink->link->adapter_srv);
+	dcb = sink->ctx->dc_bios;
 
 	if (BP_RESULT_OK != dcb->funcs->crtc_source_select(
 		dcb,
@@ -500,15 +500,6 @@ static enum dc_status bios_parser_crtc_source_select(
 	}
 
 	return DC_OK;
-}
-
-
-static void update_bios_scratch_critical_state(struct adapter_service *as,
-		bool state)
-{
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
-
-	dcb->funcs->set_scratch_critical_state(dcb, state);
 }
 
 static void update_info_frame(struct pipe_ctx *pipe_ctx)
@@ -934,15 +925,10 @@ static void disable_vga_and_power_gate_all_controllers(
 {
 	int i;
 	struct timing_generator *tg;
-	struct dc_bios *dcb;
-	struct dc_context *ctx;
-
-	dcb = dal_adapter_service_get_bios_parser(
-			dc->res_pool->adapter_srv);
+	struct dc_context *ctx = dc->ctx;
 
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
 		tg = dc->res_pool->timing_generators[i];
-		ctx = dc->ctx;
 
 		tg->funcs->disable_vga(tg);
 
@@ -965,10 +951,6 @@ static void disable_vga_and_power_gate_all_controllers(
  */
 static void enable_accelerated_mode(struct core_dc *dc)
 {
-	struct dc_bios *dcb;
-
-	dcb = dal_adapter_service_get_bios_parser(dc->res_pool->adapter_srv);
-
 	power_down_all_hw_blocks(dc);
 
 	disable_vga_and_power_gate_all_controllers(dc);
@@ -1345,6 +1327,7 @@ static enum dc_status apply_ctx_to_hw(
 		struct core_dc *dc,
 		struct validate_context *context)
 {
+	struct dc_bios *dcb = dc->ctx->dc_bios;
 	enum dc_status status;
 	int i;
 	bool programmed_audio_dto = false;
@@ -1377,13 +1360,12 @@ static enum dc_status apply_ctx_to_hw(
 		return DC_OK;
 
 	/* Apply new context */
-	update_bios_scratch_critical_state(context->res_ctx.pool->adapter_srv, true);
+	dcb->funcs->set_scratch_critical_state(dcb, true);
 
 	for (i = 0; i < MAX_PIPES; i++) {
 		struct pipe_ctx *pipe_ctx_old =
 					&dc->current_context->res_ctx.pipe_ctx[i];
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
-		struct dc_bios *dcb;
 
 		if (pipe_ctx->stream == NULL || pipe_ctx->top_pipe)
 			continue;
@@ -1395,11 +1377,8 @@ static enum dc_status apply_ctx_to_hw(
 			continue;
 		}
 
-		dcb = dal_adapter_service_get_bios_parser(
-				context->res_ctx.pool->adapter_srv);
-
 		dc->hwss.enable_display_power_gating(
-				dc, i, dcb,
+				dc, i, dc->ctx->dc_bios,
 				PIPE_GATING_CONTROL_DISABLE);
 	}
 
@@ -1491,7 +1470,7 @@ static enum dc_status apply_ctx_to_hw(
 	/* TODO dc_set_clocks_and_clock_state(context); to save power */
 	set_clock_state(dc, context, &clocks_state, true);
 
-	update_bios_scratch_critical_state(context->res_ctx.pool->adapter_srv, false);
+	dcb->funcs->set_scratch_critical_state(dcb, false);
 
 	switch_dp_clock_sources(dc, &context->res_ctx);
 
@@ -1832,8 +1811,7 @@ static void dce110_power_on_pipe_if_needed(
 		struct validate_context *context)
 {
 	struct pipe_ctx *old_pipe_ctx = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(
-					context->res_ctx.pool->adapter_srv);
+	struct dc_bios *dcb = dc->ctx->dc_bios;
 	struct tg_color black_color = {0};
 
 	if (!old_pipe_ctx->stream && pipe_ctx->stream) {

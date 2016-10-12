@@ -733,7 +733,7 @@ bool dce110_timing_generator_v_construct(
 	tg110->base.funcs = &dce110_tg_v_funcs;
 
 	tg110->base.ctx = ctx;
-	tg110->base.bp = dal_adapter_service_get_bios_parser(as);
+	tg110->base.bp = ctx->dc_bios;
 
 	tg110->max_h_total = CRTC_H_TOTAL__CRTC_H_TOTAL_MASK + 1;
 	tg110->max_v_total = CRTC_V_TOTAL__CRTC_V_TOTAL_MASK + 1;

@@ -784,7 +784,7 @@ void dispclk_dce112_set_clock(
 {
 	struct bp_set_dce_clock_parameters dce_clk_params;
 	struct display_clock_dce112 *dc = DCLCK112_FROM_BASE(base);
-	struct dc_bios *bp = dal_adapter_service_get_bios_parser(base->as);
+	struct dc_bios *bp = base->ctx->dc_bios;
 
 	/* Prepare to program display clock*/
 	memset(&dce_clk_params, 0, sizeof(dce_clk_params));

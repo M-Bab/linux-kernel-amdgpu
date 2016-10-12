@@ -1096,39 +1096,40 @@ static bool construct(
 
 	pool->base.clock_sources[DCE112_CLK_SRC_PLL0] =
 			dce112_clock_source_create(
-		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL0,
-		&dce112_clk_src_reg_offsets[0], false);
+				ctx, ctx->dc_bios,
+				CLOCK_SOURCE_COMBO_PHY_PLL0,
+				&dce112_clk_src_reg_offsets[0], false);
 	pool->base.clock_sources[DCE112_CLK_SRC_PLL1] =
 			dce112_clock_source_create(
-		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL1,
-		&dce112_clk_src_reg_offsets[1], false);
+				ctx, ctx->dc_bios,
+				CLOCK_SOURCE_COMBO_PHY_PLL1,
+				&dce112_clk_src_reg_offsets[1], false);
 	pool->base.clock_sources[DCE112_CLK_SRC_PLL2] =
 			dce112_clock_source_create(
-		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL2,
-		&dce112_clk_src_reg_offsets[2], false);
+				ctx, ctx->dc_bios,
+				CLOCK_SOURCE_COMBO_PHY_PLL2,
+				&dce112_clk_src_reg_offsets[2], false);
 	pool->base.clock_sources[DCE112_CLK_SRC_PLL3] =
 			dce112_clock_source_create(
-		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL3,
-		&dce112_clk_src_reg_offsets[3], false);
+				ctx, ctx->dc_bios,
+				CLOCK_SOURCE_COMBO_PHY_PLL3,
+				&dce112_clk_src_reg_offsets[3], false);
 	pool->base.clock_sources[DCE112_CLK_SRC_PLL4] =
 			dce112_clock_source_create(
-		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL4,
-		&dce112_clk_src_reg_offsets[4], false);
+				ctx, ctx->dc_bios,
+				CLOCK_SOURCE_COMBO_PHY_PLL4,
+				&dce112_clk_src_reg_offsets[4], false);
 	pool->base.clock_sources[DCE112_CLK_SRC_PLL5] =
 			dce112_clock_source_create(
-		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
-		CLOCK_SOURCE_COMBO_PHY_PLL5,
-		&dce112_clk_src_reg_offsets[5], false);
+				ctx, ctx->dc_bios,
+				CLOCK_SOURCE_COMBO_PHY_PLL5,
+				&dce112_clk_src_reg_offsets[5], false);
 	pool->base.clk_src_count = DCE112_CLK_SRC_TOTAL;
 
 	pool->base.dp_clock_source =  dce112_clock_source_create(
-		ctx, dal_adapter_service_get_bios_parser(adapter_serv),
+		ctx, ctx->dc_bios,
 		CLOCK_SOURCE_ID_DP_DTO, &dce112_clk_src_reg_offsets[0], true);
+
 
 	for (i = 0; i < pool->base.clk_src_count; i++) {
 		if (pool->base.clock_sources[i] == NULL) {
@@ -1266,9 +1267,8 @@ static bool construct(
 		if (pool->base.stream_engines.u_all & 1 << i) {
 			pool->base.stream_enc[i] =
 				dce112_stream_encoder_create(
-					i, dc->ctx,
-					dal_adapter_service_get_bios_parser(
-						adapter_serv),
+					i, ctx,
+					ctx->dc_bios,
 					&stream_enc_regs[i]);
 			if (pool->base.stream_enc[i] == NULL) {
 				BREAK_TO_DEBUGGER();
@@ -1281,8 +1281,7 @@ static bool construct(
 	for (i = 0; i < num_virtual_links; i++) {
 		pool->base.stream_enc[pool->base.stream_enc_count] =
 			virtual_stream_encoder_create(
-				dc->ctx, dal_adapter_service_get_bios_parser(
-								adapter_serv));
+				ctx, ctx->dc_bios);
 		if (pool->base.stream_enc[pool->base.stream_enc_count] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create stream_encoder!\n");

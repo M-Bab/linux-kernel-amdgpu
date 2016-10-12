@@ -227,7 +227,7 @@ static void initialize_backlight_caps(
 	struct platform_info_params params;
 	bool custom_curve_present = false;
 	bool custom_min_max_present = false;
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	if (!(PM_GET_EXTENDED_BRIGHNESS_CAPS & as->platform_methods_mask)) {
 			dal_logger_write(as->ctx->logger,
@@ -541,7 +541,7 @@ static bool get_hpd_info(struct adapter_service *as,
 	struct graphics_object_id id,
 	struct graphics_object_hpd_info *info)
 {
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	return BP_RESULT_OK == dcb->funcs->get_hpd_info(dcb, id, info);
 }
@@ -681,7 +681,7 @@ static struct hw_ctx_adapter_service *create_hw_ctx(
 static void adapter_service_destruct(
 	struct adapter_service *as)
 {
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	dal_adapter_service_destroy_hw_ctx(&as->hw_ctx);
 	dal_i2caux_destroy(&as->i2caux);
@@ -928,7 +928,7 @@ struct graphics_object_id dal_adapter_service_get_src_obj(
 	uint32_t index)
 {
 	struct graphics_object_id src_object_id;
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	if (is_wireless_object(id))
 		src_object_id = wireless_get_src_obj_id(as, id, index);
@@ -952,7 +952,7 @@ bool dal_adapter_service_get_device_tag(
 		uint32_t device_tag_index,
 		struct connector_device_tag_info *info)
 {
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	if (BP_RESULT_OK == dcb->funcs->get_device_tag(dcb,
 			connector_object_id, device_tag_index, info))
@@ -965,7 +965,7 @@ bool dal_adapter_service_get_device_tag(
 bool dal_adapter_service_is_device_id_supported(struct adapter_service *as,
 		struct device_id id)
 {
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	return dcb->funcs->is_device_id_supported(dcb, id);
 }
@@ -981,7 +981,7 @@ uint8_t dal_adapter_service_get_clock_sources_num(
 	struct firmware_info fw_info;
 	uint32_t max_clk_src = 0;
 	uint32_t num = as->asic_cap->data[ASIC_DATA_CLOCKSOURCES_NUM];
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	/*
 	 * Check is system supports the use of the External clock source
@@ -1053,26 +1053,6 @@ bool dal_adapter_service_is_feature_supported(struct adapter_service *as,
 }
 
 /*
- * dal_adapter_service_get_i2c_info
- *
- * Get I2C information from BIOS
- */
-bool dal_adapter_service_get_i2c_info(
-	struct adapter_service *as,
-	struct graphics_object_id id,
-	struct graphics_object_i2c_info *i2c_info)
-{
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
-
-	if (!i2c_info) {
-		ASSERT_CRITICAL(false);
-		return false;
-	}
-
-	return BP_RESULT_OK == dcb->funcs->get_i2c_info(dcb, id, i2c_info);
-}
-
-/*
  * dal_adapter_service_obtain_ddc
  *
  * Obtain DDC
@@ -1083,8 +1063,9 @@ struct ddc *dal_adapter_service_obtain_ddc(
 {
 	struct graphics_object_i2c_info i2c_info;
 	struct gpio_ddc_hw_info hw_info;
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
-	if (!dal_adapter_service_get_i2c_info(as, id, &i2c_info))
+	if (BP_RESULT_OK != dcb->funcs->get_i2c_info(dcb, id, &i2c_info))
 		return NULL;
 
 	hw_info.ddc_channel = i2c_info.i2c_line;
@@ -1119,7 +1100,7 @@ struct irq *dal_adapter_service_obtain_hpd_irq(
 	struct graphics_object_id id)
 {
 	enum bp_result bp_result;
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 	struct graphics_object_hpd_info hpd_info;
 	struct gpio_pin_info pin_info;
 
@@ -1161,7 +1142,7 @@ uint32_t dal_adapter_service_get_ss_info_num(
 	struct adapter_service *as,
 	enum as_signal_type signal)
 {
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	return dcb->funcs->get_ss_entry_number(dcb, signal);
 }
@@ -1177,7 +1158,7 @@ bool dal_adapter_service_get_ss_info(
 	uint32_t idx,
 	struct spread_spectrum_info *info)
 {
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	enum bp_result bp_result = dcb->funcs->get_spread_spectrum_info(dcb,
 			signal, idx, info);
@@ -1270,7 +1251,7 @@ bool dal_adapter_service_get_firmware_info(
 	struct adapter_service *as,
 	struct firmware_info *info)
 {
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	return dcb->funcs->get_firmware_info(dcb, info) == BP_RESULT_OK;
 }
@@ -1392,7 +1373,7 @@ bool dal_adapter_service_get_embedded_panel_info(
 	struct embedded_panel_info *info)
 {
 	enum bp_result result;
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	if (info == NULL)
 		/*TODO: add DALASSERT_MSG here*/
@@ -1487,7 +1468,7 @@ bool dal_adapter_service_get_encoder_cap_info(
 {
 	struct bp_encoder_cap_info bp_cap_info = {0};
 	enum bp_result result;
-	struct dc_bios *dcb = dal_adapter_service_get_bios_parser(as);
+	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	if (NULL == info) {
 		ASSERT_CRITICAL(false);

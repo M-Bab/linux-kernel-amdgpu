@@ -150,8 +150,7 @@ static enum bp_result link_transmitter_control(
 	struct bp_transmitter_control *cntl)
 {
 	enum bp_result result;
-	struct dc_bios *bp = dal_adapter_service_get_bios_parser(
-					enc110->base.adapter_service);
+	struct dc_bios *bp = enc110->base.ctx->dc_bios;
 
 	result = bp->funcs->transmitter_control(bp, cntl);
 

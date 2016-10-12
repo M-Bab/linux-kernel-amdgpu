@@ -470,7 +470,7 @@ static void set_clock(
 {
 	struct bp_pixel_clock_parameters pxl_clk_params;
 	struct display_clock_dce80 *disp_clk = FROM_DISPLAY_CLOCK(dc);
-	struct dc_bios *bp = dal_adapter_service_get_bios_parser(dc->as);
+	struct dc_bios *bp = dc->ctx->dc_bios;
 
 	/* Prepare to program display clock*/
 	memset(&pxl_clk_params, 0, sizeof(pxl_clk_params));

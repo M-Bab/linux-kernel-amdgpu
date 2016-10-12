@@ -1131,7 +1131,7 @@ static bool construct(
 	pool->base.stream_engines.engine.ENGINE_ID_DIGE = 1;
 	pool->base.stream_engines.engine.ENGINE_ID_DIGF = 1;
 
-	bp = dal_adapter_service_get_bios_parser(as);
+	bp = ctx->dc_bios;
 
 	if (dal_adapter_service_get_firmware_info(as, &info) &&
 		info.external_clock_source_frequency_for_dp != 0) {
@@ -1275,8 +1275,8 @@ static bool construct(
 		/* TODO: rework fragile code*/
 		if (pool->base.stream_engines.u_all & 1 << i) {
 			pool->base.stream_enc[i] = dce110_stream_encoder_create(
-				i, dc->ctx,
-				dal_adapter_service_get_bios_parser(as),
+				i, ctx,
+				ctx->dc_bios,
 				&stream_enc_regs[i]);
 			if (pool->base.stream_enc[i] == NULL) {
 				BREAK_TO_DEBUGGER();
@@ -1289,8 +1289,8 @@ static bool construct(
 	for (i = 0; i < num_virtual_links; i++) {
 		pool->base.stream_enc[pool->base.stream_enc_count] =
 			virtual_stream_encoder_create(
-				dc->ctx,
-				dal_adapter_service_get_bios_parser(as));
+				ctx,
+				ctx->dc_bios);
 
 		if (pool->base.stream_enc[pool->base.stream_enc_count] == NULL) {
 			BREAK_TO_DEBUGGER();
