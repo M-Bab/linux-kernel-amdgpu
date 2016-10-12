@@ -28,26 +28,24 @@
 
 #include "gpio_types.h"
 
-struct irq;
-
 enum gpio_result dal_irq_open(
-	struct irq *irq);
+	struct gpio *irq);
 
 enum gpio_result dal_irq_get_value(
-	const struct irq *irq,
+	const struct gpio *irq,
 	uint32_t *value);
 
 enum dc_irq_source dal_irq_get_source(
-	const struct irq *irq);
+	const struct gpio *irq);
 
 enum dc_irq_source dal_irq_get_rx_source(
-	const struct irq *irq);
+	const struct gpio *irq);
 
 enum gpio_result dal_irq_setup_hpd_filter(
-	struct irq *irq,
+	struct gpio *irq,
 	struct gpio_hpd_config *config);
 
 void dal_irq_close(
-	struct irq *irq);
+	struct gpio *irq);
 
 #endif

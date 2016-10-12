@@ -91,8 +91,7 @@ static void destruct(struct core_link *link)
 		dc_sink_release(link->public.remote_sinks[i]);
 }
 
-static struct irq *get_hpd_gpio(
-		const struct core_link *link)
+static struct gpio *get_hpd_gpio(const struct core_link *link)
 {
 	enum bp_result bp_result;
 	struct dc_bios *dcb = link->ctx->dc_bios;
@@ -133,7 +132,7 @@ static bool program_hpd_filter(
 {
 	bool result = false;
 
-	struct irq *hpd;
+	struct gpio *hpd;
 
 	int delay_on_connect_in_ms = 0;
 	int delay_on_disconnect_in_ms = 0;
@@ -173,7 +172,7 @@ static bool program_hpd_filter(
 		return result;
 
 	/* Setup HPD filtering */
-	if (dal_irq_open(hpd) == GPIO_RESULT_OK) {
+	if (dal_gpio_open(hpd, GPIO_MODE_INTERRUPT) == GPIO_RESULT_OK) {
 		struct gpio_hpd_config config;
 
 		config.delay_on_connect = delay_on_connect_in_ms;
@@ -181,7 +180,7 @@ static bool program_hpd_filter(
 
 		dal_irq_setup_hpd_filter(hpd, &config);
 
-		dal_irq_close(hpd);
+		dal_gpio_close(hpd);
 
 		result = true;
 	} else {
@@ -189,7 +188,7 @@ static bool program_hpd_filter(
 	}
 
 	/* Release HPD handle */
-	dal_gpio_service_destroy_irq(&hpd);
+	dal_gpio_destroy_irq(&hpd);
 
 	return result;
 }
@@ -197,16 +196,16 @@ static bool program_hpd_filter(
 static bool detect_sink(struct core_link *link, enum dc_connection_type *type)
 {
 	uint32_t is_hpd_high = 0;
-	struct irq *hpd_pin;
+	struct gpio *hpd_pin;
 
 	/* todo: may need to lock gpio access */
 	hpd_pin = get_hpd_gpio(link);
 	if (hpd_pin == NULL)
 		goto hpd_gpio_failure;
 
-	dal_irq_open(hpd_pin);
-	dal_irq_get_value(hpd_pin, &is_hpd_high);
-	dal_irq_close(hpd_pin);
+	dal_gpio_open(hpd_pin, GPIO_MODE_INTERRUPT);
+	dal_gpio_get_value(hpd_pin, &is_hpd_high);
+	dal_gpio_close(hpd_pin);
 	dal_gpio_service_destroy_irq(&hpd_pin);
 
 	if (is_hpd_high) {
@@ -805,7 +804,7 @@ static enum hpd_source_id get_hpd_line(
 		struct core_link *link,
 		struct adapter_service *as)
 {
-	struct irq *hpd;
+	struct gpio *hpd;
 	enum hpd_source_id hpd_id = HPD_SOURCEID_UNKNOWN;
 
 	hpd = get_hpd_gpio(link);
@@ -835,7 +834,7 @@ static enum hpd_source_id get_hpd_line(
 		break;
 		}
 
-		dal_gpio_service_destroy_irq(&hpd);
+		dal_gpio_destroy_irq(&hpd);
 	}
 
 	return hpd_id;
@@ -954,7 +953,7 @@ static bool construct(
 {
 	uint8_t i;
 	struct adapter_service *as = init_params->adapter_srv;
-	struct irq *hpd_gpio = NULL;
+	struct gpio *hpd_gpio = NULL;
 	struct ddc_service_init_data ddc_service_init_data = { 0 };
 	struct dc_context *dc_ctx = init_params->ctx;
 	struct encoder_init_data enc_init_data = { 0 };
@@ -1022,7 +1021,7 @@ static bool construct(
 	}
 
 	if (hpd_gpio != NULL) {
-		dal_gpio_service_destroy_irq(&hpd_gpio);
+		dal_gpio_destroy_irq(&hpd_gpio);
 		hpd_gpio = NULL;
 	}
 
@@ -1124,7 +1123,7 @@ ddc_create_fail:
 create_fail:
 
 	if (hpd_gpio != NULL) {
-		dal_gpio_service_destroy_irq(&hpd_gpio);
+		dal_gpio_destroy_irq(&hpd_gpio);
 	}
 
 	return false;

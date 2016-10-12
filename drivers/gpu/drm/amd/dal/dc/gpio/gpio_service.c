@@ -195,7 +195,7 @@ void dal_gpio_service_destroy_ddc(
 	dal_gpio_destroy_ddc(ddc);
 }
 
-struct irq *dal_gpio_service_create_irq(
+struct gpio *dal_gpio_service_create_irq(
 	struct gpio_service *service,
 	uint32_t offset,
 	uint32_t mask)
@@ -211,7 +211,7 @@ struct irq *dal_gpio_service_create_irq(
 	return dal_gpio_create_irq(service, id, en);
 }
 
-struct irq *dal_gpio_service_create_irq_ex(
+struct gpio *dal_gpio_service_create_irq_ex(
 	struct gpio_service *service,
 	enum gpio_id id,
 	uint32_t en)
@@ -220,7 +220,7 @@ struct irq *dal_gpio_service_create_irq_ex(
 }
 
 void dal_gpio_service_destroy_irq(
-	struct irq **irq)
+	struct gpio **irq)
 {
 	dal_gpio_destroy_irq(irq);
 }

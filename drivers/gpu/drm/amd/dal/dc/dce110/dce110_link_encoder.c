@@ -549,8 +549,7 @@ static bool is_panel_powered_on(struct dce110_link_encoder *enc110)
 
 
 /* TODO duplicate of dc_link.c version */
-static struct irq *get_hpd_gpio(
-		const struct link_encoder *enc)
+static struct gpio *get_hpd_gpio(const struct link_encoder *enc)
 {
 	enum bp_result bp_result;
 	struct dc_bios *dcb = enc->ctx->dc_bios;
@@ -585,7 +584,7 @@ static void link_encoder_edp_wait_for_hpd_ready(
 	struct dc_context *ctx = enc110->base.ctx;
 	struct adapter_service *as = enc110->base.adapter_service;
 	struct graphics_object_id connector = enc110->base.connector;
-	struct irq *hpd;
+	struct gpio *hpd;
 	bool edp_hpd_high = false;
 	uint32_t time_elapsed = 0;
 	uint32_t timeout = power_up ?
@@ -615,14 +614,14 @@ static void link_encoder_edp_wait_for_hpd_ready(
 		return;
 	}
 
-	dal_irq_open(hpd);
+	dal_gpio_open(hpd, GPIO_MODE_INTERRUPT);
 
 	/* wait until timeout or panel detected */
 
 	do {
 		uint32_t detected = 0;
 
-		dal_irq_get_value(hpd, &detected);
+		dal_gpio_get_value(hpd, &detected);
 
 		if (!(detected ^ power_up)) {
 			edp_hpd_high = true;
@@ -634,7 +633,7 @@ static void link_encoder_edp_wait_for_hpd_ready(
 		time_elapsed += HPD_CHECK_INTERVAL;
 	} while (time_elapsed < timeout);
 
-	dal_irq_close(hpd);
+	dal_gpio_close(hpd);
 
 	dal_gpio_service_destroy_irq(&hpd);
 

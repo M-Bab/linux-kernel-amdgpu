@@ -62,20 +62,23 @@ struct ddc *dal_gpio_service_create_ddc(
 void dal_gpio_service_destroy_ddc(
 	struct ddc **ddc);
 
-struct irq *dal_gpio_service_create_irq(
+struct gpio *dal_gpio_service_create_irq(
 	struct gpio_service *service,
 	uint32_t offset,
 	uint32_t mask);
 
-struct irq *dal_gpio_service_create_irq_ex(
+struct gpio *dal_gpio_service_create_irq_ex(
 	struct gpio_service *service,
 	enum gpio_id id,
 	uint32_t en);
 
 void dal_gpio_service_destroy_irq(
-	struct irq **ptr);
+	struct gpio **ptr);
 
 void dal_gpio_service_destroy(
 	struct gpio_service **ptr);
+
+void dal_gpio_destroy_irq(
+	struct gpio **ptr);
 
 #endif

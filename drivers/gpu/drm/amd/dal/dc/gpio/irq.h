@@ -26,16 +26,9 @@
 #ifndef __DAL_IRQ_H__
 #define __DAL_IRQ_H__
 
-struct irq {
-	struct gpio *pin;
-};
-
-struct irq *dal_gpio_create_irq(
+struct gpio *dal_gpio_create_irq(
 	struct gpio_service *service,
 	enum gpio_id id,
 	uint32_t en);
-
-void dal_gpio_destroy_irq(
-	struct irq **ptr);
 
 #endif
