@@ -32,6 +32,11 @@
 #include "i2caux_interface.h"
 #include "dc_bios_types.h"
 
+#include "gpio_service_interface.h"
+
+/* TODO remove - only needed for gpio_service */
+#include "adapter/adapter_service.h"
+
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 #include "dce/dce_11_0_enum.h"
@@ -542,6 +547,33 @@ static bool is_panel_powered_on(struct dce110_link_encoder *enc110)
 	return ret == 1;
 }
 
+
+/* TODO duplicate of dc_link.c version */
+static struct irq *get_hpd_gpio(
+		const struct link_encoder *enc)
+{
+	enum bp_result bp_result;
+	struct dc_bios *dcb = enc->ctx->dc_bios;
+	struct graphics_object_hpd_info hpd_info;
+	struct gpio_pin_info pin_info;
+
+	if (!dcb->funcs->get_hpd_info(dcb, enc->connector, &hpd_info))
+		return NULL;
+
+	bp_result = dcb->funcs->get_gpio_pin_info(dcb,
+		hpd_info.hpd_int_gpio_uid, &pin_info);
+
+	if (bp_result != BP_RESULT_OK) {
+		ASSERT(bp_result == BP_RESULT_NORECORD);
+		return NULL;
+	}
+
+	return dal_gpio_service_create_irq(
+		enc->adapter_service->gpio_service,
+		pin_info.offset,
+		pin_info.mask);
+}
+
 /*
  * @brief
  * eDP only.
@@ -575,8 +607,8 @@ static void link_encoder_edp_wait_for_hpd_ready(
 	 * we need to wait until SENSE bit is high/low */
 
 	/* obtain HPD */
-
-	hpd = dal_adapter_service_obtain_hpd_irq(as, connector);
+	/* TODO what to do with this? */
+	hpd = get_hpd_gpio(&enc110->base);
 
 	if (!hpd) {
 		BREAK_TO_DEBUGGER();
@@ -604,7 +636,7 @@ static void link_encoder_edp_wait_for_hpd_ready(
 
 	dal_irq_close(hpd);
 
-	dal_adapter_service_release_irq(as, hpd);
+	dal_gpio_service_destroy_irq(&hpd);
 
 	if (false == edp_hpd_high) {
 		dal_logger_write(ctx->logger,

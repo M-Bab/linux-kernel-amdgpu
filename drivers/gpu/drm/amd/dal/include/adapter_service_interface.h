@@ -385,16 +385,6 @@ bool dal_adapter_service_get_feature_value(struct adapter_service *as,
 	void *data,
 	uint32_t size);
 
-/* Obtain HPD interrupt request */
-struct irq *dal_adapter_service_obtain_hpd_irq(
-	struct adapter_service *as,
-	struct graphics_object_id id);
-
-/* Release interrupt request */
-void dal_adapter_service_release_irq(
-	struct adapter_service *as,
-	struct irq *irq);
-
 /* Get SW I2C speed */
 uint32_t dal_adapter_service_get_sw_i2c_speed(struct adapter_service *as);
 

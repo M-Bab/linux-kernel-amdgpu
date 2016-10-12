@@ -533,20 +533,6 @@ static bool get_bool_value(
 }
 
 /*
- * get_hpd_info
- *
- * Get HPD information from BIOS
- */
-static bool get_hpd_info(struct adapter_service *as,
-	struct graphics_object_id id,
-	struct graphics_object_hpd_info *info)
-{
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	return BP_RESULT_OK == dcb->funcs->get_hpd_info(dcb, id, info);
-}
-
-/*
  * lookup_feature_entry
  *
  * Find the entry index of a given feature in feature table
@@ -1050,49 +1036,6 @@ bool dal_adapter_service_is_feature_supported(struct adapter_service *as,
 	dal_adapter_service_get_feature_value(as, feature_id, &data, sizeof(bool));
 
 	return data;
-}
-
-/*
- * dal_adapter_service_obtain_hpd_irq
- *
- * Obtain HPD interrupt request
- */
-struct irq *dal_adapter_service_obtain_hpd_irq(
-	struct adapter_service *as,
-	struct graphics_object_id id)
-{
-	enum bp_result bp_result;
-	struct dc_bios *dcb = as->ctx->dc_bios;
-	struct graphics_object_hpd_info hpd_info;
-	struct gpio_pin_info pin_info;
-
-	if (!get_hpd_info(as, id, &hpd_info))
-		return NULL;
-
-	bp_result = dcb->funcs->get_gpio_pin_info(dcb,
-		hpd_info.hpd_int_gpio_uid, &pin_info);
-
-	if (bp_result != BP_RESULT_OK) {
-		ASSERT(bp_result == BP_RESULT_NORECORD);
-		return NULL;
-	}
-
-	return dal_gpio_service_create_irq(
-		as->gpio_service,
-		pin_info.offset,
-		pin_info.mask);
-}
-
-/*
- * dal_adapter_service_release_irq
- *
- * Release interrupt request
- */
-void dal_adapter_service_release_irq(
-	struct adapter_service *as,
-	struct irq *irq)
-{
-	dal_gpio_service_destroy_irq(&irq);
 }
 
 /*

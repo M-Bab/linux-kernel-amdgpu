@@ -41,6 +41,10 @@
 #include "adapter/adapter_service.h"
 #include "include/asic_capability_interface.h"
 
+
+/* TODO remove - only needed for gpio_service */
+#include "adapter/adapter_service.h"
+
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_enum.h"
 #include "dce/dce_11_0_sh_mask.h"
@@ -85,6 +89,31 @@ static void destruct(struct core_link *link)
 
 	for (i = 0; i < link->public.sink_count; ++i)
 		dc_sink_release(link->public.remote_sinks[i]);
+}
+
+static struct irq *get_hpd_gpio(
+		const struct core_link *link)
+{
+	enum bp_result bp_result;
+	struct dc_bios *dcb = link->ctx->dc_bios;
+	struct graphics_object_hpd_info hpd_info;
+	struct gpio_pin_info pin_info;
+
+	if (!dcb->funcs->get_hpd_info(dcb, link->link_id, &hpd_info))
+		return NULL;
+
+	bp_result = dcb->funcs->get_gpio_pin_info(dcb,
+		hpd_info.hpd_int_gpio_uid, &pin_info);
+
+	if (bp_result != BP_RESULT_OK) {
+		ASSERT(bp_result == BP_RESULT_NORECORD);
+		return NULL;
+	}
+
+	return dal_gpio_service_create_irq(
+		link->adapter_srv->gpio_service,
+		pin_info.offset,
+		pin_info.mask);
 }
 
 /*
@@ -138,8 +167,7 @@ static bool program_hpd_filter(
 	}
 
 	/* Obtain HPD handle */
-	hpd = dal_adapter_service_obtain_hpd_irq(
-		link->adapter_srv, link->link_id);
+	hpd = get_hpd_gpio(link);
 
 	if (!hpd)
 		return result;
@@ -161,7 +189,7 @@ static bool program_hpd_filter(
 	}
 
 	/* Release HPD handle */
-	dal_adapter_service_release_irq(link->adapter_srv, hpd);
+	dal_gpio_service_destroy_irq(&hpd);
 
 	return result;
 }
@@ -172,18 +200,14 @@ static bool detect_sink(struct core_link *link, enum dc_connection_type *type)
 	struct irq *hpd_pin;
 
 	/* todo: may need to lock gpio access */
-	hpd_pin = dal_adapter_service_obtain_hpd_irq(
-			link->adapter_srv,
-			link->link_id);
+	hpd_pin = get_hpd_gpio(link);
 	if (hpd_pin == NULL)
 		goto hpd_gpio_failure;
 
 	dal_irq_open(hpd_pin);
 	dal_irq_get_value(hpd_pin, &is_hpd_high);
 	dal_irq_close(hpd_pin);
-	dal_adapter_service_release_irq(
-		link->adapter_srv,
-		hpd_pin);
+	dal_gpio_service_destroy_irq(&hpd_pin);
 
 	if (is_hpd_high) {
 		*type = dc_connection_single;
@@ -436,9 +460,6 @@ static enum signal_type dp_passive_dongle_detection(
 		struct display_sink_capability *sink_cap,
 		union audio_support *audio_support)
 {
-	/* TODO:These 2 functions should be protected for upstreaming purposes
-	 * in case hackers want to save 10 cents hdmi license fee
-	 */
 	dal_ddc_service_i2c_query_dp_dual_mode_adaptor(
 						ddc, sink_cap);
 	return decide_signal_from_strap_and_dongle_type(
@@ -787,7 +808,7 @@ static enum hpd_source_id get_hpd_line(
 	struct irq *hpd;
 	enum hpd_source_id hpd_id = HPD_SOURCEID_UNKNOWN;
 
-	hpd = dal_adapter_service_obtain_hpd_irq(as, link->link_id);
+	hpd = get_hpd_gpio(link);
 
 	if (hpd) {
 		switch (dal_irq_get_source(hpd)) {
@@ -814,7 +835,7 @@ static enum hpd_source_id get_hpd_line(
 		break;
 		}
 
-		dal_adapter_service_release_irq(as, hpd);
+		dal_gpio_service_destroy_irq(&hpd);
 	}
 
 	return hpd_id;
@@ -958,7 +979,7 @@ static bool construct(
 		goto create_fail;
 	}
 
-	hpd_gpio = dal_adapter_service_obtain_hpd_irq(as, link->link_id);
+	hpd_gpio = get_hpd_gpio(link);
 
 	if (hpd_gpio != NULL)
 		link->public.irq_source_hpd = dal_irq_get_source(hpd_gpio);
@@ -1001,9 +1022,7 @@ static bool construct(
 	}
 
 	if (hpd_gpio != NULL) {
-		dal_adapter_service_release_irq(
-			as, hpd_gpio);
-
+		dal_gpio_service_destroy_irq(&hpd_gpio);
 		hpd_gpio = NULL;
 	}
 
@@ -1105,8 +1124,7 @@ ddc_create_fail:
 create_fail:
 
 	if (hpd_gpio != NULL) {
-		dal_adapter_service_release_irq(
-			as, hpd_gpio);
+		dal_gpio_service_destroy_irq(&hpd_gpio);
 	}
 
 	return false;
