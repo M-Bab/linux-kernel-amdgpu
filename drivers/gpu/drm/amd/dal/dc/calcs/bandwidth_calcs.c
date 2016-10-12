@@ -1988,6 +1988,7 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		vbios.trc = bw_int_to_fixed(50);
 		vbios.dmifmc_urgent_latency = bw_int_to_fixed(4);
 		vbios.stutter_self_refresh_exit_latency = bw_frc_to_fixed(153, 10);
+		vbios.stutter_self_refresh_entry_latency = bw_int_to_fixed(0);
 		vbios.nbp_state_change_latency = bw_frc_to_fixed(19649, 1000);
 		vbios.mcifwrmc_urgent_latency = bw_int_to_fixed(10);
 		vbios.scatter_gather_enable = true;
@@ -2097,6 +2098,7 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		vbios.trc = bw_int_to_fixed(48);
 		vbios.dmifmc_urgent_latency = bw_int_to_fixed(3);
 		vbios.stutter_self_refresh_exit_latency = bw_int_to_fixed(5);
+		vbios.stutter_self_refresh_entry_latency = bw_int_to_fixed(0);
 		vbios.nbp_state_change_latency = bw_int_to_fixed(45);
 		vbios.mcifwrmc_urgent_latency = bw_int_to_fixed(10);
 		vbios.scatter_gather_enable = true;
@@ -2206,6 +2208,7 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		vbios.trc = bw_int_to_fixed(48);
 		vbios.dmifmc_urgent_latency = bw_int_to_fixed(3);
 		vbios.stutter_self_refresh_exit_latency = bw_int_to_fixed(5);
+		vbios.stutter_self_refresh_entry_latency = bw_int_to_fixed(0);
 		vbios.nbp_state_change_latency = bw_int_to_fixed(45);
 		vbios.mcifwrmc_urgent_latency = bw_int_to_fixed(10);
 		vbios.scatter_gather_enable = true;
