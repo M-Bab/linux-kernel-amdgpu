@@ -30,12 +30,17 @@
 
 #include "dce110/irq_service_dce110.h"
 
-	/*
-	 * TODO: implement DCE8.x IRQ service
-	 */
+
 #include "dce80/irq_service_dce80.h"
 
+
+#include "reg_helper.h"
 #include "irq_service.h"
+
+
+
+#define CTX \
+		irq_service->ctx
 
 bool dal_irq_service_construct(
 	struct irq_service *irq_service,
@@ -46,24 +51,6 @@ bool dal_irq_service_construct(
 
 	irq_service->ctx = init_data->ctx;
 	return true;
-}
-
-struct irq_service *dal_irq_service_create(
-	enum dce_version version,
-	struct irq_service_init_data *init_data)
-{
-	switch (version) {
-	case DCE_VERSION_8_0:
-		return dal_irq_service_dce80_create(init_data);
-	case DCE_VERSION_10_0:
-		return dal_irq_service_dce110_create(init_data);
-	case DCE_VERSION_11_2:
-		return dal_irq_service_dce110_create(init_data);
-	case DCE_VERSION_11_0:
-		return dal_irq_service_dce110_create(init_data);
-	default:
-		return NULL;
-	}
 }
 
 void dal_irq_service_destroy(struct irq_service **irq_service)

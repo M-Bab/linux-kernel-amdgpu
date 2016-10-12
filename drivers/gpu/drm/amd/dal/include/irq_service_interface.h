@@ -32,9 +32,7 @@ struct irq_service_init_data {
 	struct dc_context *ctx;
 };
 
-struct irq_service *dal_irq_service_create(
-	enum dce_version version,
-	struct irq_service_init_data *init_data);
+struct irq_service;
 
 void dal_irq_service_destroy(struct irq_service **irq_service);
 

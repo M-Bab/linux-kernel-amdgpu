@@ -32,6 +32,7 @@
 #include "include/irq_service_interface.h"
 #include "include/adapter_service_interface.h"
 #include "../virtual/virtual_stream_encoder.h"
+#include "irq/dce80/irq_service_dce80.h"
 #include "dce110/dce110_timing_generator.h"
 #include "dce110/dce110_mem_input.h"
 #include "dce110/dce110_resource.h"
@@ -853,9 +854,7 @@ static bool construct(
 		goto disp_clk_create_fail;
 	}
 
-	/* get static clock information for PPLIB or firmware, save
-	 * max_clock_state
-	 */
+
 	if (dm_pp_get_static_clocks(ctx, &static_clk_info)) {
 		enum clocks_state max_clocks_state =
 				dce80_resource_convert_clock_state_pp_to_dc(
@@ -865,17 +864,12 @@ static bool construct(
 				pool->base.display_clock, max_clocks_state);
 	}
 
-	{
-		struct irq_service_init_data init_data;
-		init_data.ctx = dc->ctx;
-		pool->base.irqs = dal_irq_service_create(
-				dal_adapter_service_get_dce_version(
-					pool->base.adapter_srv),
-				&init_data);
-		if (!pool->base.irqs)
-			goto irqs_create_fail;
+	struct irq_service_init_data init_data;
+	init_data.ctx = dc->ctx;
+	pool->base.irqs = dal_irq_service_dce80_create(&init_data);
+	if (!pool->base.irqs)
+		goto irqs_create_fail;
 
-	}
 
 	pool->base.scaler_filter = dal_scaler_filter_create(ctx);
 	if (pool->base.scaler_filter == NULL) {

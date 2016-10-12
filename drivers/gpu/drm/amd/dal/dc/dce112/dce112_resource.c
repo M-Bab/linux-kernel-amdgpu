@@ -37,6 +37,7 @@
 #include "dce112/dce112_mem_input.h"
 #include "dce112/dce112_link_encoder.h"
 #include "dce110/dce110_link_encoder.h"
+#include "irq/dce110/irq_service_dce110.h"
 #include "dce110/dce110_transform.h"
 #include "dce110/dce110_stream_encoder.h"
 #include "dce110/audio_dce110.h"
@@ -1148,6 +1149,7 @@ static bool construct(
 		goto disp_clk_create_fail;
 	}
 
+
 	/* get static clock information for PPLIB or firmware, save
 	 * max_clock_state
 	 */
@@ -1160,17 +1162,12 @@ static bool construct(
 				pool->base.display_clock, max_clocks_state);
 	}
 
-	{
-		struct irq_service_init_data init_data;
-		init_data.ctx = dc->ctx;
-		pool->base.irqs = dal_irq_service_create(
-				dal_adapter_service_get_dce_version(
-					pool->base.adapter_srv),
-				&init_data);
-		if (!pool->base.irqs)
-			goto irqs_create_fail;
+	struct irq_service_init_data init_data;
+	init_data.ctx = dc->ctx;
+	pool->base.irqs = dal_irq_service_dce110_create(&init_data);
+	if (!pool->base.irqs)
+		goto irqs_create_fail;
 
-	}
 
 	pool->base.scaler_filter = dal_scaler_filter_create(ctx);
 	if (pool->base.scaler_filter == NULL) {
