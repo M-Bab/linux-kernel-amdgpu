@@ -236,7 +236,7 @@ struct ddc *dal_gpio_create_ddc(
 		return NULL;
 	}
 
-	ddc->pin_data = dal_gpio_service_create_gpio_ex(
+	ddc->pin_data = dal_gpio_service_create_gpio(
 		service, GPIO_ID_DDC_DATA, en, GPIO_PIN_OUTPUT_STATE_DEFAULT);
 
 	if (!ddc->pin_data) {
@@ -244,7 +244,7 @@ struct ddc *dal_gpio_create_ddc(
 		goto failure_1;
 	}
 
-	ddc->pin_clock = dal_gpio_service_create_gpio_ex(
+	ddc->pin_clock = dal_gpio_service_create_gpio(
 		service, GPIO_ID_DDC_CLOCK, en, GPIO_PIN_OUTPUT_STATE_DEFAULT);
 
 	if (!ddc->pin_clock) {

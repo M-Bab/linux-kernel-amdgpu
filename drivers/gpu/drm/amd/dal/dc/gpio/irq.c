@@ -47,23 +47,6 @@
  * Post-requisites: headers required by this unit
  */
 
-/*
- * This unit
- */
-
-enum gpio_result dal_irq_open(
-	struct gpio *irq)
-{
-	return dal_gpio_open(irq, GPIO_MODE_INTERRUPT);
-}
-
-enum gpio_result dal_irq_get_value(
-	const struct gpio *irq,
-	uint32_t *value)
-{
-	return dal_gpio_get_value(irq, value);
-}
-
 enum dc_irq_source dal_irq_get_source(
 	const struct gpio *irq)
 {
@@ -110,12 +93,6 @@ enum gpio_result dal_irq_setup_hpd_filter(
 	return dal_gpio_set_config(irq, &config_data);
 }
 
-void dal_irq_close(
-	struct gpio *irq)
-{
-	dal_gpio_close(irq);
-}
-
 /*
  * @brief
  * Creation and destruction
@@ -137,7 +114,7 @@ struct gpio *dal_gpio_create_irq(
 		return NULL;
 	}
 
-	irq = dal_gpio_service_create_gpio_ex(
+	irq = dal_gpio_service_create_gpio(
 		service, id, en, GPIO_PIN_OUTPUT_STATE_DEFAULT);
 
 	if (irq)

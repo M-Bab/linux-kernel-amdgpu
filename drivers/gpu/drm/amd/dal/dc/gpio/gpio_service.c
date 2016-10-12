@@ -150,23 +150,6 @@ failure_1:
 
 struct gpio *dal_gpio_service_create_gpio(
 	struct gpio_service *service,
-	uint32_t offset,
-	uint32_t mask,
-	enum gpio_pin_output_state output_state)
-{
-	enum gpio_id id;
-	uint32_t en;
-
-	if (!service->translate.funcs->offset_to_id(offset, mask, &id, &en)) {
-		BREAK_TO_DEBUGGER();
-		return NULL;
-	}
-
-	return dal_gpio_create(service, id, en, output_state);
-}
-
-struct gpio *dal_gpio_service_create_gpio_ex(
-	struct gpio_service *service,
 	enum gpio_id id,
 	uint32_t en,
 	enum gpio_pin_output_state output_state)
@@ -208,14 +191,6 @@ struct gpio *dal_gpio_service_create_irq(
 		return NULL;
 	}
 
-	return dal_gpio_create_irq(service, id, en);
-}
-
-struct gpio *dal_gpio_service_create_irq_ex(
-	struct gpio_service *service,
-	enum gpio_id id,
-	uint32_t en)
-{
 	return dal_gpio_create_irq(service, id, en);
 }
 
