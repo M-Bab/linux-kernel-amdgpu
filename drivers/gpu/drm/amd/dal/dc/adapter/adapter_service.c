@@ -1053,44 +1053,6 @@ bool dal_adapter_service_is_feature_supported(struct adapter_service *as,
 }
 
 /*
- * dal_adapter_service_obtain_ddc
- *
- * Obtain DDC
- */
-struct ddc *dal_adapter_service_obtain_ddc(
-	struct adapter_service *as,
-	struct graphics_object_id id)
-{
-	struct graphics_object_i2c_info i2c_info;
-	struct gpio_ddc_hw_info hw_info;
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	if (BP_RESULT_OK != dcb->funcs->get_i2c_info(dcb, id, &i2c_info))
-		return NULL;
-
-	hw_info.ddc_channel = i2c_info.i2c_line;
-	hw_info.hw_supported = i2c_info.i2c_hw_assist;
-
-	return dal_gpio_service_create_ddc(
-		as->gpio_service,
-		i2c_info.gpio_info.clk_a_register_index,
-		1 << i2c_info.gpio_info.clk_a_shift,
-		&hw_info);
-}
-
-/*
- * dal_adapter_service_release_ddc
- *
- * Release DDC
- */
-void dal_adapter_service_release_ddc(
-	struct adapter_service *as,
-	struct ddc *ddc)
-{
-	dal_gpio_service_destroy_ddc(&ddc);
-}
-
-/*
  * dal_adapter_service_obtain_hpd_irq
  *
  * Obtain HPD interrupt request
@@ -1441,18 +1403,6 @@ bool dal_adapter_service_should_optimize(
 	}
 
 	return (supported_optimization & feature) != 0;
-}
-
-struct ddc *dal_adapter_service_obtain_ddc_from_i2c_info(
-	struct adapter_service *as,
-	struct graphics_object_i2c_info *info)
-{
-	struct gpio_ddc_hw_info hw_info = {
-		info->i2c_hw_assist,
-		info->i2c_line };
-	return dal_gpio_service_create_ddc(as->gpio_service,
-		info->gpio_info.clk_a_register_index,
-		(1 << info->gpio_info.clk_a_shift), &hw_info);
 }
 
 uint32_t dal_adapter_service_get_downscale_limit(

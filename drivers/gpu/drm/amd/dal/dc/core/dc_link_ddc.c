@@ -26,6 +26,7 @@
 #include "dm_services.h"
 #include "dm_helpers.h"
 #include "include/adapter_service_interface.h"
+#include "gpio_service_interface.h"
 #include "include/ddc_service_types.h"
 #include "include/grph_object_id.h"
 #include "include/dpcd_defs.h"
@@ -33,6 +34,9 @@
 #include "include/vector.h"
 #include "core_types.h"
 #include "dc_link_ddc.h"
+
+/* TODO remove - only needed for gpio_service */
+#include "adapter/adapter_service.h"
 
 #define AUX_POWER_UP_WA_DELAY 500
 #define I2C_OVER_AUX_DEFER_WA_DELAY 70
@@ -276,11 +280,27 @@ static bool construct(
 	enum connector_id connector_id =
 		dal_graphics_object_id_get_connector_id(init_data->id);
 
+	struct gpio_service *gpio_service = ddc_service->as->gpio_service;
+	struct graphics_object_i2c_info i2c_info;
+	struct gpio_ddc_hw_info hw_info;
+	struct dc_bios *dcb = ddc_service->ctx->dc_bios;
+
 	ddc_service->link = init_data->link;
 	ddc_service->ctx = init_data->ctx;
 	ddc_service->as = init_data->as;
-	ddc_service->ddc_pin = dal_adapter_service_obtain_ddc(
-			init_data->as, init_data->id);
+
+	if (BP_RESULT_OK != dcb->funcs->get_i2c_info(dcb, init_data->id, &i2c_info)) {
+		ddc_service->ddc_pin = NULL;
+	} else {
+		hw_info.ddc_channel = i2c_info.i2c_line;
+		hw_info.hw_supported = i2c_info.i2c_hw_assist;
+
+		ddc_service->ddc_pin = dal_gpio_service_create_ddc(
+			gpio_service,
+			i2c_info.gpio_info.clk_a_register_index,
+			1 << i2c_info.gpio_info.clk_a_shift,
+			&hw_info);
+	}
 
 	ddc_service->flags.EDID_QUERY_DONE_ONCE = false;
 
@@ -320,7 +340,7 @@ struct ddc_service *dal_ddc_service_create(
 static void destruct(struct ddc_service *ddc)
 {
 	if (ddc->ddc_pin)
-		dal_adapter_service_release_ddc(ddc->as, ddc->ddc_pin);
+		dal_gpio_service_destroy_ddc(&ddc->ddc_pin);;
 }
 
 void dal_ddc_service_destroy(struct ddc_service **ddc)

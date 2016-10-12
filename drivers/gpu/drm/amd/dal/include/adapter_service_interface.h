@@ -385,16 +385,6 @@ bool dal_adapter_service_get_feature_value(struct adapter_service *as,
 	void *data,
 	uint32_t size);
 
-/* Obtain DDC */
-struct ddc *dal_adapter_service_obtain_ddc(
-	struct adapter_service *as,
-	struct graphics_object_id id);
-
-/* Release DDC */
-void dal_adapter_service_release_ddc(
-	struct adapter_service *as,
-	struct ddc *ddc);
-
 /* Obtain HPD interrupt request */
 struct irq *dal_adapter_service_obtain_hpd_irq(
 	struct adapter_service *as,
@@ -466,10 +456,6 @@ bool dal_adapter_service_is_dfsbyass_dynamic(struct adapter_service *as);
 /* Reports whether driver settings allow requested optimization */
 bool dal_adapter_service_should_optimize(
 		struct adapter_service *as, enum optimization_feature feature);
-
-struct ddc *dal_adapter_service_obtain_ddc_from_i2c_info(
-	struct adapter_service *as,
-	struct graphics_object_i2c_info *info);
 
 uint32_t dal_adapter_service_get_downscale_limit(
 		struct adapter_service *as);

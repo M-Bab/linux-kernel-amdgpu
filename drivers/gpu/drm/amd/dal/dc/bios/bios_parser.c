@@ -29,6 +29,7 @@
 
 #include "dc_bios_types.h"
 #include "include/adapter_service_interface.h"
+#include "include/gpio_service_interface.h"
 #include "include/grph_object_ctrl_defs.h"
 #include "include/bios_parser_interface.h"
 #include "include/i2caux_interface.h"
@@ -41,6 +42,9 @@
 #include "bios_parser.h"
 #include "bios_parser_types_internal.h"
 #include "bios_parser_interface.h"
+
+/* TODO remove - only needed for gpio_service */
+#include "adapter/adapter_service.h"
 
 #define THREE_PERCENT_OF_10000 300
 
@@ -2924,8 +2928,13 @@ static bool i2c_read(
 	uint8_t offset[2] = { 0, 0 };
 	bool result = false;
 	struct i2c_command cmd;
+	struct gpio_ddc_hw_info hw_info = {
+		i2c_info->i2c_hw_assist,
+		i2c_info->i2c_line };
 
-	ddc = dal_adapter_service_obtain_ddc_from_i2c_info(as, i2c_info);
+	ddc = dal_gpio_service_create_ddc(as->gpio_service,
+		i2c_info->gpio_info.clk_a_register_index,
+		(1 << i2c_info->gpio_info.clk_a_shift), &hw_info);
 
 	if (!ddc)
 		return result;
@@ -2960,7 +2969,7 @@ static bool i2c_read(
 				&cmd);
 	}
 
-	dal_adapter_service_release_ddc(as, ddc);
+	dal_gpio_service_destroy_ddc(&ddc);
 
 	return result;
 }

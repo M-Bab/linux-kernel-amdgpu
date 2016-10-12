@@ -310,10 +310,12 @@ static bool is_dp_sink_present(struct core_link *link)
 		((connector_id == CONNECTOR_ID_DISPLAY_PORT) ||
 		(connector_id == CONNECTOR_ID_EDP));
 
-	ddc = dal_adapter_service_obtain_ddc(link->adapter_srv, link->link_id);
+	ddc = dal_ddc_service_get_ddc_pin(link->ddc);
 
-	if (!ddc)
+	if (!ddc) {
+		BREAK_TO_DEBUGGER();
 		return present;
+	}
 
 	/* Open GPIO and set it to I2C mode */
 	/* Note: this GpioMode_Input will be converted
@@ -322,7 +324,7 @@ static bool is_dp_sink_present(struct core_link *link)
 
 	if (GPIO_RESULT_OK != dal_ddc_open(
 		ddc, GPIO_MODE_INPUT, GPIO_DDC_CONFIG_TYPE_MODE_I2C)) {
-		dal_adapter_service_release_ddc(link->adapter_srv, ddc);
+		dal_gpio_service_destroy_ddc(&ddc);
 
 		return present;
 	}
@@ -341,8 +343,6 @@ static bool is_dp_sink_present(struct core_link *link)
 	present = (gpio_result == GPIO_RESULT_OK) && !(clock_pin || data_pin);
 
 	dal_ddc_close(ddc);
-
-	dal_adapter_service_release_ddc(link->adapter_srv, ddc);
 
 	return present;
 }
@@ -825,7 +825,7 @@ static enum channel_id get_ddc_line(struct core_link *link, struct adapter_servi
 	struct ddc *ddc;
 	enum channel_id channel = CHANNEL_ID_UNKNOWN;
 
-	ddc = dal_adapter_service_obtain_ddc(as, link->link_id);
+	ddc = dal_ddc_service_get_ddc_pin(link->ddc);
 
 	if (ddc) {
 		switch (dal_ddc_get_line(ddc)) {
@@ -857,8 +857,6 @@ static enum channel_id get_ddc_line(struct core_link *link, struct adapter_servi
 			BREAK_TO_DEBUGGER();
 			break;
 		}
-
-		dal_adapter_service_release_ddc(as, ddc);
 	}
 
 	return channel;
