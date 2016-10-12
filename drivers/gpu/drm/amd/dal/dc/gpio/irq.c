@@ -146,7 +146,6 @@ struct irq *dal_gpio_create_irq(
 
 	irq->pin = dal_gpio_service_create_gpio_ex(
 		service, id, en, GPIO_PIN_OUTPUT_STATE_DEFAULT);
-	irq->ctx = service->ctx;
 
 	if (irq->pin)
 		return irq;

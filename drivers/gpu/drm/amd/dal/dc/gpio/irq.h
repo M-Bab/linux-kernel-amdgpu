@@ -28,7 +28,6 @@
 
 struct irq {
 	struct gpio *pin;
-	struct dc_context *ctx;
 };
 
 struct irq *dal_gpio_create_irq(
