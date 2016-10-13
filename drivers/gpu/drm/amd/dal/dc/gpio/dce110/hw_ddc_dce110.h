@@ -26,14 +26,6 @@
 #ifndef __DAL_HW_DDC_DCE110_H__
 #define __DAL_HW_DDC_DCE110_H__
 
-struct hw_ddc_dce110 {
-	struct hw_ddc base;
-	uint32_t i2c_ddc_setup;
-};
-
-#define DDC_DCE110_FROM_BASE(ddc_base) \
-	container_of((HW_DDC_FROM_BASE(ddc_base)), struct hw_ddc_dce110, base)
-
 struct hw_gpio_pin *dal_hw_ddc_dce110_create(
 	struct dc_context *ctx,
 	enum gpio_id id,

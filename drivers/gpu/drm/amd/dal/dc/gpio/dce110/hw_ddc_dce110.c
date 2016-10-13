@@ -36,15 +36,15 @@
 
 
 static void destruct(
-	struct hw_ddc_dce110 *pin)
+	struct hw_ddc *pin)
 {
-	dal_hw_ddc_destruct(&pin->base);
+	dal_hw_ddc_destruct(pin);
 }
 
 static void destroy(
 	struct hw_gpio_pin **ptr)
 {
-	struct hw_ddc_dce110 *pin = DDC_DCE110_FROM_BASE(*ptr);
+	struct hw_ddc *pin = HW_DDC_FROM_BASE(*ptr);
 
 	destruct(pin);
 
@@ -454,7 +454,7 @@ static enum gpio_result set_config(
 	struct hw_gpio_pin *ptr,
 	const struct gpio_config_data *config_data)
 {
-	struct hw_ddc_dce110 *pin = DDC_DCE110_FROM_BASE(ptr);
+	struct hw_ddc *pin = HW_DDC_FROM_BASE(ptr);
 	struct hw_gpio *hw_gpio = NULL;
 	uint32_t addr;
 	uint32_t regval;
@@ -462,7 +462,7 @@ static enum gpio_result set_config(
 	uint32_t ddc_clk_pd_en = 0;
 	uint32_t aux_pad_mode = 0;
 
-	hw_gpio = &pin->base.base;
+	hw_gpio = &pin->base;
 
 	if (hw_gpio == NULL) {
 		ASSERT_CRITICAL(false);
@@ -640,7 +640,7 @@ static const struct hw_gpio_pin_funcs funcs = {
 };
 
 static bool construct(
-	struct hw_ddc_dce110 *pin,
+	struct hw_ddc *pin,
 	enum gpio_id id,
 	uint32_t en,
 	struct dc_context *ctx)
@@ -652,25 +652,25 @@ static bool construct(
 		return false;
 	}
 
-	if (!dal_hw_ddc_construct(&pin->base, id, en, ctx)) {
+	if (!dal_hw_ddc_construct(pin, id, en, ctx)) {
 		ASSERT_CRITICAL(false);
 		return false;
 	}
 
-	pin->base.base.base.funcs = &funcs;
+	pin->base.base.funcs = &funcs;
 
 	switch (id) {
 	case GPIO_ID_DDC_DATA:
 		init = hw_ddc_dce110_init_data + en;
 
-		pin->base.base.pin_reg = init->hw_gpio_data_reg;
+		pin->base.pin_reg = init->hw_gpio_data_reg;
 		pin->i2c_ddc_setup = init->i2c_ddc_setup;
 
 		return true;
 	case GPIO_ID_DDC_CLOCK:
 		init = hw_ddc_dce110_init_clock + en;
 
-		pin->base.base.pin_reg = init->hw_gpio_data_reg;
+		pin->base.pin_reg = init->hw_gpio_data_reg;
 		pin->i2c_ddc_setup = init->i2c_ddc_setup;
 
 		return true;
@@ -686,7 +686,7 @@ struct hw_gpio_pin *dal_hw_ddc_dce110_create(
 	enum gpio_id id,
 	uint32_t en)
 {
-	struct hw_ddc_dce110 *pin = dm_alloc(sizeof(struct hw_ddc_dce110));
+	struct hw_ddc *pin = dm_alloc(sizeof(struct hw_ddc));
 
 	if (!pin) {
 		ASSERT_CRITICAL(false);
@@ -694,7 +694,7 @@ struct hw_gpio_pin *dal_hw_ddc_dce110_create(
 	}
 
 	if (construct(pin, id, en, ctx))
-		return &pin->base.base.base;
+		return &pin->base.base;
 
 	ASSERT_CRITICAL(false);
 
