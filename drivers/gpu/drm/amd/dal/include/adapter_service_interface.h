@@ -28,7 +28,6 @@
 
 #include "grph_object_ctrl_defs.h"
 #include "gpio_interface.h"
-#include "ddc_interface.h"
 #include "bios_parser_interface.h"
 #include "adapter_service_types.h"
 #include "dal_types.h"

@@ -265,7 +265,7 @@ static bool get_hw_supported_ddc_line(
 		return false;
 	}
 
-	if (!dal_ddc_is_hw_supported(ddc))
+	if (!ddc->hw_info.hw_supported)
 		return false;
 
 	line_found = dal_ddc_get_line(ddc);

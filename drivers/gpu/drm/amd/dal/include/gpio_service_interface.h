@@ -28,7 +28,6 @@
 
 #include "gpio_types.h"
 #include "gpio_interface.h"
-#include "ddc_interface.h"
 #include "hw/gpio.h"
 
 struct gpio_service;
@@ -85,5 +84,47 @@ struct gpio *dal_gpio_create_irq(
 
 void dal_gpio_destroy_irq(
 	struct gpio **ptr);
+
+
+enum gpio_result dal_ddc_open(
+	struct ddc *ddc,
+	enum gpio_mode mode,
+	enum gpio_ddc_config_type config_type);
+
+enum gpio_result dal_ddc_get_clock(
+	const struct ddc *ddc,
+	uint32_t *value);
+
+enum gpio_result dal_ddc_set_clock(
+	const struct ddc *ddc,
+	uint32_t value);
+
+enum gpio_result dal_ddc_get_data(
+	const struct ddc *ddc,
+	uint32_t *value);
+
+enum gpio_result dal_ddc_set_data(
+	const struct ddc *ddc,
+	uint32_t value);
+
+enum gpio_result dal_ddc_change_mode(
+	struct ddc *ddc,
+	enum gpio_mode mode);
+
+bool dal_ddc_is_hw_supported(
+	const struct ddc *ddc);
+
+enum gpio_ddc_line dal_ddc_get_line(
+	const struct ddc *ddc);
+
+bool dal_ddc_check_line_aborted(
+	const struct ddc *ddc);
+
+enum gpio_result dal_ddc_set_config(
+	struct ddc *ddc,
+	enum gpio_ddc_config_type config_type);
+
+void dal_ddc_close(
+	struct ddc *ddc);
 
 #endif
