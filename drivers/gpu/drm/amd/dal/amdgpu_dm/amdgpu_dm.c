@@ -127,24 +127,16 @@ static int dm_wait_for_idle(void *handle)
 	return 0;
 }
 
-static int dm_check_soft_reset(void *handle)
+static bool dm_check_soft_reset(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-	if (amdgpu_display_is_display_hung(adev))
-		adev->ip_block_status[AMD_IP_BLOCK_TYPE_DCE].hang = true;
-	else
-		adev->ip_block_status[AMD_IP_BLOCK_TYPE_DCE].hang = false;
-
-	return 0;
+	return amdgpu_display_is_display_hung(adev);
 }
 
 static int dm_soft_reset(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-
-	if (!adev->ip_block_status[AMD_IP_BLOCK_TYPE_DCE].hang)
-		return 0;
 
 	/* XXX todo */
 	return 0;
