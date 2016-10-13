@@ -34,6 +34,13 @@
 
 struct pipe_ctx;
 
+enum bw_calcs_version {
+	BW_CALCS_VERSION_INVALID,
+	BW_CALCS_VERSION_CARRIZO,
+	BW_CALCS_VERSION_ELLESMERE,
+	BW_CALCS_VERSION_BAFFIN
+};
+
 /*******************************************************************************
  * There are three types of input into Calculations:
  * 1. per-DCE static values - these are "hardcoded" properties of the DCEIP
@@ -117,6 +124,7 @@ enum bw_defines {
 };
 
 struct bw_calcs_dceip {
+	enum bw_calcs_version version;
 	bool large_cursor;
 	uint32_t cursor_max_outstanding_group_num;
 	bool dmif_pipe_en_fbc_chunk_tracker;
@@ -466,13 +474,6 @@ struct bw_calcs_output {
 	uint32_t required_yclk;
 	uint32_t dispclk_khz;
 	int blackout_recovery_time_us;
-};
-
-enum bw_calcs_version {
-	BW_CALCS_VERSION_INVALID,
-	BW_CALCS_VERSION_CARRIZO,
-	BW_CALCS_VERSION_ELLESMERE,
-	BW_CALCS_VERSION_BAFFIN
 };
 
 /**
