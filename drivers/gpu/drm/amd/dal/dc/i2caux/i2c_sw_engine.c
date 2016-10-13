@@ -56,9 +56,9 @@ static inline bool read_bit_from_ddc(
 	uint32_t value = 0;
 
 	if (data_nor_clock)
-		dal_ddc_get_data(ddc, &value);
+		dal_gpio_get_value(ddc->pin_data, &value);
 	else
-		dal_ddc_get_clock(ddc, &value);
+		dal_gpio_get_value(ddc->pin_clock, &value);
 
 	return (value != 0);
 }
@@ -71,9 +71,9 @@ static inline void write_bit_to_ddc(
 	uint32_t value = bit ? 1 : 0;
 
 	if (data_nor_clock)
-		dal_ddc_set_data(ddc, value);
+		dal_gpio_set_value(ddc->pin_data, value);
 	else
-		dal_ddc_set_clock(ddc, value);
+		dal_gpio_set_value(ddc->pin_clock, value);
 }
 
 static bool wait_for_scl_high(
@@ -526,9 +526,8 @@ enum i2c_channel_operation_result dal_i2c_sw_engine_get_channel_status(
 	struct i2c_engine *engine,
 	uint8_t *returned_bytes)
 {
-	return dal_ddc_check_line_aborted(engine->base.ddc) ?
-		I2C_CHANNEL_OPERATION_FAILED :
-		I2C_CHANNEL_OPERATION_SUCCEEDED;
+	/* No arbitration with VBIOS is performed since DCE 6.0 */
+	return I2C_CHANNEL_OPERATION_SUCCEEDED;
 }
 
 void dal_i2c_sw_engine_destruct(

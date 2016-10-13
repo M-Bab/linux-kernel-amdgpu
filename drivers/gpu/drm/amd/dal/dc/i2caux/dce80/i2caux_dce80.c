@@ -118,7 +118,7 @@ static struct i2c_engine *acquire_i2c_hw_engine(
 	if (!ddc)
 		return NULL;
 
-	if (dal_ddc_is_hw_supported(ddc)) {
+	if (ddc->hw_info.hw_supported) {
 		enum gpio_ddc_line line = dal_ddc_get_line(ddc);
 
 		if (line < GPIO_DDC_LINE_COUNT) {

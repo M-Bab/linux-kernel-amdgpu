@@ -51,9 +51,6 @@ struct gpio *dal_gpio_service_create_irq(
 	uint32_t offset,
 	uint32_t mask);
 
-void dal_gpio_service_destroy_irq(
-	struct gpio **ptr);
-
 struct ddc *dal_gpio_create_ddc(
 	struct gpio_service *service,
 	uint32_t offset,
@@ -91,33 +88,11 @@ enum gpio_result dal_ddc_open(
 	enum gpio_mode mode,
 	enum gpio_ddc_config_type config_type);
 
-enum gpio_result dal_ddc_get_clock(
-	const struct ddc *ddc,
-	uint32_t *value);
-
-enum gpio_result dal_ddc_set_clock(
-	const struct ddc *ddc,
-	uint32_t value);
-
-enum gpio_result dal_ddc_get_data(
-	const struct ddc *ddc,
-	uint32_t *value);
-
-enum gpio_result dal_ddc_set_data(
-	const struct ddc *ddc,
-	uint32_t value);
-
 enum gpio_result dal_ddc_change_mode(
 	struct ddc *ddc,
 	enum gpio_mode mode);
 
-bool dal_ddc_is_hw_supported(
-	const struct ddc *ddc);
-
 enum gpio_ddc_line dal_ddc_get_line(
-	const struct ddc *ddc);
-
-bool dal_ddc_check_line_aborted(
 	const struct ddc *ddc);
 
 enum gpio_result dal_ddc_set_config(

@@ -155,12 +155,6 @@ struct gpio *dal_gpio_service_create_irq(
 	return dal_gpio_create_irq(service, id, en);
 }
 
-void dal_gpio_service_destroy_irq(
-	struct gpio **irq)
-{
-	dal_gpio_destroy_irq(irq);
-}
-
 void dal_gpio_service_destroy(
 	struct gpio_service **ptr)
 {
@@ -532,34 +526,6 @@ failure:
 	return result;
 }
 
-enum gpio_result dal_ddc_get_clock(
-	const struct ddc *ddc,
-	uint32_t *value)
-{
-	return dal_gpio_get_value(ddc->pin_clock, value);
-}
-
-enum gpio_result dal_ddc_set_clock(
-	const struct ddc *ddc,
-	uint32_t value)
-{
-	return dal_gpio_set_value(ddc->pin_clock, value);
-}
-
-enum gpio_result dal_ddc_get_data(
-	const struct ddc *ddc,
-	uint32_t *value)
-{
-	return dal_gpio_get_value(ddc->pin_data, value);
-}
-
-enum gpio_result dal_ddc_set_data(
-	const struct ddc *ddc,
-	uint32_t value)
-{
-	return dal_gpio_set_value(ddc->pin_data, value);
-}
-
 enum gpio_result dal_ddc_change_mode(
 	struct ddc *ddc,
 	enum gpio_mode mode)
@@ -592,24 +558,10 @@ failure:
 	return result;
 }
 
-bool dal_ddc_is_hw_supported(
-	const struct ddc *ddc)
-{
-	return ddc->hw_info.hw_supported;
-}
-
 enum gpio_ddc_line dal_ddc_get_line(
 	const struct ddc *ddc)
 {
 	return (enum gpio_ddc_line)dal_gpio_get_enum(ddc->pin_data);
-}
-
-bool dal_ddc_check_line_aborted(
-	const struct ddc *self)
-{
-	/* No arbitration with VBIOS is performed since DCE 6.0 */
-
-	return false;
 }
 
 enum gpio_result dal_ddc_set_config(

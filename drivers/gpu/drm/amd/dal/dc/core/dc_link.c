@@ -206,7 +206,7 @@ static bool detect_sink(struct core_link *link, enum dc_connection_type *type)
 	dal_gpio_open(hpd_pin, GPIO_MODE_INTERRUPT);
 	dal_gpio_get_value(hpd_pin, &is_hpd_high);
 	dal_gpio_close(hpd_pin);
-	dal_gpio_service_destroy_irq(&hpd_pin);
+	dal_gpio_destroy_irq(&hpd_pin);
 
 	if (is_hpd_high) {
 		*type = dc_connection_single;
@@ -355,13 +355,13 @@ static bool is_dp_sink_present(struct core_link *link)
 	/* Read GPIO: DP sink is present if both clock and data pins are zero */
 	/* [anaumov] in DAL2, there was no check for GPIO failure */
 
-	gpio_result = dal_ddc_get_clock(ddc, &clock_pin);
+	gpio_result = dal_gpio_get_value(ddc->pin_clock, &clock_pin);
 	ASSERT(gpio_result == GPIO_RESULT_OK);
 
 	if (gpio_result == GPIO_RESULT_OK)
 		if (link->link_enc->features.flags.bits.
 						DP_SINK_DETECT_POLL_DATA_PIN)
-			gpio_result = dal_ddc_get_data(ddc, &data_pin);
+			gpio_result = dal_gpio_get_value(ddc->pin_data, &data_pin);
 
 	present = (gpio_result == GPIO_RESULT_OK) && !(clock_pin || data_pin);
 

@@ -635,7 +635,7 @@ static void link_encoder_edp_wait_for_hpd_ready(
 
 	dal_gpio_close(hpd);
 
-	dal_gpio_service_destroy_irq(&hpd);
+	dal_gpio_destroy_irq(&hpd);
 
 	if (false == edp_hpd_high) {
 		dal_logger_write(ctx->logger,
