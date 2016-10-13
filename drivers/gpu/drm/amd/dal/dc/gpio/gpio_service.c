@@ -48,10 +48,6 @@
 #include "hw_gpio_pin.h"
 
 /*
- * This unit
- */
-
-/*
  * @brief
  * Public API.
  */

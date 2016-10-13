@@ -30,18 +30,9 @@
 #include "gpio_interface.h"
 #include "ddc_interface.h"
 #include "irq_interface.h"
+#include "hw/gpio.h"
 
 struct gpio_service;
-
-struct gpio {
-	struct gpio_service *service;
-	struct hw_gpio_pin *pin;
-	enum gpio_id id;
-	uint32_t en;
-	enum gpio_mode mode;
-	/* when GPIO comes from VBIOS, it has defined output state */
-	enum gpio_pin_output_state output_state;
-};
 
 struct gpio *dal_gpio_create(
 	struct gpio_service *service,
