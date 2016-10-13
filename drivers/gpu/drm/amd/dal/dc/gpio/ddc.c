@@ -36,13 +36,6 @@
 #include "hw_translate.h"
 #include "hw_factory.h"
 #include "gpio_service.h"
-#include "gpio.h"
-
-/*
- * Header of this unit
- */
-
-#include "ddc.h"
 
 /*
  * Post-requisites: headers required by this unit
@@ -236,7 +229,7 @@ struct ddc *dal_gpio_create_ddc(
 		return NULL;
 	}
 
-	ddc->pin_data = dal_gpio_service_create_gpio(
+	ddc->pin_data = dal_gpio_create(
 		service, GPIO_ID_DDC_DATA, en, GPIO_PIN_OUTPUT_STATE_DEFAULT);
 
 	if (!ddc->pin_data) {
@@ -244,7 +237,7 @@ struct ddc *dal_gpio_create_ddc(
 		goto failure_1;
 	}
 
-	ddc->pin_clock = dal_gpio_service_create_gpio(
+	ddc->pin_clock = dal_gpio_create(
 		service, GPIO_ID_DDC_CLOCK, en, GPIO_PIN_OUTPUT_STATE_DEFAULT);
 
 	if (!ddc->pin_clock) {
@@ -259,7 +252,7 @@ struct ddc *dal_gpio_create_ddc(
 	return ddc;
 
 failure_2:
-	dal_gpio_service_destroy_gpio(&ddc->pin_data);
+	dal_gpio_destroy(&ddc->pin_data);
 
 failure_1:
 	dm_free(ddc);
@@ -270,8 +263,8 @@ failure_1:
 static void destruct(struct ddc *ddc)
 {
 	dal_ddc_close(ddc);
-	dal_gpio_service_destroy_gpio(&ddc->pin_data);
-	dal_gpio_service_destroy_gpio(&ddc->pin_clock);
+	dal_gpio_destroy(&ddc->pin_data);
+	dal_gpio_destroy(&ddc->pin_clock);
 
 }
 

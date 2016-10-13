@@ -295,7 +295,7 @@ static bool construct(
 		hw_info.ddc_channel = i2c_info.i2c_line;
 		hw_info.hw_supported = i2c_info.i2c_hw_assist;
 
-		ddc_service->ddc_pin = dal_gpio_service_create_ddc(
+		ddc_service->ddc_pin = dal_gpio_create_ddc(
 			gpio_service,
 			i2c_info.gpio_info.clk_a_register_index,
 			1 << i2c_info.gpio_info.clk_a_shift,
@@ -340,7 +340,7 @@ struct ddc_service *dal_ddc_service_create(
 static void destruct(struct ddc_service *ddc)
 {
 	if (ddc->ddc_pin)
-		dal_gpio_service_destroy_ddc(&ddc->ddc_pin);;
+		dal_gpio_destroy_ddc(&ddc->ddc_pin);
 }
 
 void dal_ddc_service_destroy(struct ddc_service **ddc)

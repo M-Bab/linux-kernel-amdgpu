@@ -37,12 +37,6 @@
 #include "gpio_service.h"
 
 /*
- * Header of this unit
- */
-
-#include "gpio.h"
-
-/*
  * Post-requisites: headers required by this unit
  */
 

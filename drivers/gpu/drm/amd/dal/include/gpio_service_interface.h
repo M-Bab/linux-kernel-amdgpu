@@ -33,28 +33,29 @@
 
 struct gpio_service;
 
-struct gpio_service *dal_gpio_service_create(
-	enum dce_version dce_version_major,
-	enum dce_version dce_version_minor,
-	struct dc_context *ctx);
+struct gpio {
+	struct gpio_service *service;
+	struct hw_gpio_pin *pin;
+	enum gpio_id id;
+	uint32_t en;
+	enum gpio_mode mode;
+	/* when GPIO comes from VBIOS, it has defined output state */
+	enum gpio_pin_output_state output_state;
+};
 
-struct gpio *dal_gpio_service_create_gpio(
+struct gpio *dal_gpio_create(
 	struct gpio_service *service,
 	enum gpio_id id,
 	uint32_t en,
 	enum gpio_pin_output_state output_state);
 
-void dal_gpio_service_destroy_gpio(
-	struct gpio **gpio);
+void dal_gpio_destroy(
+	struct gpio **ptr);
 
-struct ddc *dal_gpio_service_create_ddc(
-	struct gpio_service *service,
-	uint32_t offset,
-	uint32_t mask,
-	struct gpio_ddc_hw_info *info);
-
-void dal_gpio_service_destroy_ddc(
-	struct ddc **ddc);
+struct gpio_service *dal_gpio_service_create(
+	enum dce_version dce_version_major,
+	enum dce_version dce_version_minor,
+	struct dc_context *ctx);
 
 struct gpio *dal_gpio_service_create_irq(
 	struct gpio_service *service,
@@ -64,8 +65,23 @@ struct gpio *dal_gpio_service_create_irq(
 void dal_gpio_service_destroy_irq(
 	struct gpio **ptr);
 
+struct ddc *dal_gpio_create_ddc(
+	struct gpio_service *service,
+	uint32_t offset,
+	uint32_t mask,
+	struct gpio_ddc_hw_info *info);
+
+
+void dal_gpio_destroy_ddc(
+	struct ddc **ddc);
+
 void dal_gpio_service_destroy(
 	struct gpio_service **ptr);
+
+struct gpio *dal_gpio_create_irq(
+	struct gpio_service *service,
+	enum gpio_id id,
+	uint32_t en);
 
 void dal_gpio_destroy_irq(
 	struct gpio **ptr);

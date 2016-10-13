@@ -35,13 +35,6 @@
 #include "hw_translate.h"
 #include "hw_factory.h"
 #include "gpio_service.h"
-#include "gpio.h"
-
-/*
- * Header of this unit
- */
-
-#include "irq.h"
 
 /*
  * Post-requisites: headers required by this unit
@@ -114,7 +107,7 @@ struct gpio *dal_gpio_create_irq(
 		return NULL;
 	}
 
-	irq = dal_gpio_service_create_gpio(
+	irq = dal_gpio_create(
 		service, id, en, GPIO_PIN_OUTPUT_STATE_DEFAULT);
 
 	if (irq)
@@ -127,7 +120,7 @@ struct gpio *dal_gpio_create_irq(
 static void destruct(struct gpio *irq)
 {
 	dal_gpio_close(irq);
-	dal_gpio_service_destroy_gpio(&irq);
+	dal_gpio_destroy(&irq);
 
 }
 

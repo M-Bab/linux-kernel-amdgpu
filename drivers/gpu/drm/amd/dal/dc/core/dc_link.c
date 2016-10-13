@@ -347,7 +347,7 @@ static bool is_dp_sink_present(struct core_link *link)
 
 	if (GPIO_RESULT_OK != dal_ddc_open(
 		ddc, GPIO_MODE_INPUT, GPIO_DDC_CONFIG_TYPE_MODE_I2C)) {
-		dal_gpio_service_destroy_ddc(&ddc);
+		dal_gpio_destroy_ddc(&ddc);
 
 		return present;
 	}

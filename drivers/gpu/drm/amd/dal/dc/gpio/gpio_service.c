@@ -46,9 +46,6 @@
  */
 
 #include "hw_gpio_pin.h"
-#include "gpio.h"
-#include "ddc.h"
-#include "irq.h"
 
 /*
  * This unit
@@ -146,36 +143,6 @@ failure_1:
 	dm_free(service);
 
 	return NULL;
-}
-
-struct gpio *dal_gpio_service_create_gpio(
-	struct gpio_service *service,
-	enum gpio_id id,
-	uint32_t en,
-	enum gpio_pin_output_state output_state)
-{
-	return dal_gpio_create(service, id, en, output_state);
-}
-
-void dal_gpio_service_destroy_gpio(
-	struct gpio **gpio)
-{
-	dal_gpio_destroy(gpio);
-}
-
-struct ddc *dal_gpio_service_create_ddc(
-	struct gpio_service *service,
-	uint32_t offset,
-	uint32_t mask,
-	struct gpio_ddc_hw_info *info)
-{
-	return dal_gpio_create_ddc(service, offset, mask, info);
-}
-
-void dal_gpio_service_destroy_ddc(
-	struct ddc **ddc)
-{
-	dal_gpio_destroy_ddc(ddc);
 }
 
 struct gpio *dal_gpio_service_create_irq(
