@@ -2685,10 +2685,9 @@ bool bw_calcs(struct dc_context *ctx,
 				urgent_watermark[9], bw_int_to_fixed(1000)));
 
 		if (dceip->version != BW_CALCS_VERSION_CARRIZO) {
-			((struct bw_calcs_vbios *)vbios)->low_sclk = mid4_sclk;
-			((struct bw_calcs_vbios *)vbios)->mid1_sclk = mid4_sclk;
-			((struct bw_calcs_vbios *)vbios)->mid2_sclk = mid4_sclk;
-			((struct bw_calcs_vbios *)vbios)->mid3_sclk = mid4_sclk;
+			((struct bw_calcs_vbios *)vbios)->low_sclk = mid3_sclk;
+			((struct bw_calcs_vbios *)vbios)->mid1_sclk = mid3_sclk;
+			((struct bw_calcs_vbios *)vbios)->mid2_sclk = mid3_sclk;
 			calculate_bandwidth(dceip, vbios, data);
 
 			calcs_output->nbp_state_change_wm_ns[0].b_mark =
@@ -2783,7 +2782,6 @@ bool bw_calcs(struct dc_context *ctx,
 			((struct bw_calcs_vbios *)vbios)->low_sclk = low_sclk;
 			((struct bw_calcs_vbios *)vbios)->mid1_sclk = mid1_sclk;
 			((struct bw_calcs_vbios *)vbios)->mid2_sclk = mid2_sclk;
-			((struct bw_calcs_vbios *)vbios)->mid3_sclk = mid3_sclk;
 			((struct bw_calcs_vbios *)vbios)->low_yclk = mid_yclk;
 			calculate_bandwidth(dceip, vbios, data);
 
@@ -2885,10 +2883,9 @@ bool bw_calcs(struct dc_context *ctx,
 			((struct bw_calcs_vbios *)vbios)->mid6_sclk = high_sclk;
 		} else {
 			((struct bw_calcs_vbios *)vbios)->low_yclk = mid_yclk;
-			((struct bw_calcs_vbios *)vbios)->low_sclk = mid4_sclk;
-			((struct bw_calcs_vbios *)vbios)->mid1_sclk = mid4_sclk;
-			((struct bw_calcs_vbios *)vbios)->mid2_sclk = mid4_sclk;
-			((struct bw_calcs_vbios *)vbios)->mid3_sclk = mid4_sclk;
+			((struct bw_calcs_vbios *)vbios)->low_sclk = mid3_sclk;
+			((struct bw_calcs_vbios *)vbios)->mid1_sclk = mid3_sclk;
+			((struct bw_calcs_vbios *)vbios)->mid2_sclk = mid3_sclk;
 		}
 
 		calculate_bandwidth(dceip, vbios, data);

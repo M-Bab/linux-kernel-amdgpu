@@ -963,7 +963,7 @@ static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 {
 	struct dm_pp_clock_levels_with_latency eng_clks = {0};
 	struct dm_pp_clock_levels_with_latency mem_clks = {0};
-	struct dm_pp_wm_sets_with_clock_ranges wm_clocks = {0};
+	struct dm_pp_wm_sets_with_clock_ranges clk_ranges = {0};
 
 	/*do system clock*/
 	dm_pp_get_clock_levels_by_type_with_latency(
@@ -994,13 +994,18 @@ static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 			DM_PP_CLOCK_TYPE_MEMORY_CLK,
 			&mem_clks);
 
+	/* we don't need to call PPLIB for validation clock since they
+	 * also give us the highest sclk and highest mclk (UMA clock).
+	 * ALSO always convert UMA clock (from PPLIB)  to YCLK (HW formula):
+	 * YCLK = UMACLK*m_memoryTypeMultiplier
+	 */
 	dc->bw_vbios.low_yclk = bw_frc_to_fixed(
 		mem_clks.data[0].clocks_in_khz * MEMORY_TYPE_MULTIPLIER, 1000);
 	dc->bw_vbios.mid_yclk = bw_frc_to_fixed(
-mem_clks.data[mem_clks.num_levels>>1].clocks_in_khz * MEMORY_TYPE_MULTIPLIER,
+		mem_clks.data[mem_clks.num_levels>>1].clocks_in_khz * MEMORY_TYPE_MULTIPLIER,
 		1000);
 	dc->bw_vbios.high_yclk = bw_frc_to_fixed(
-mem_clks.data[mem_clks.num_levels-1].clocks_in_khz * MEMORY_TYPE_MULTIPLIER,
+		mem_clks.data[mem_clks.num_levels-1].clocks_in_khz * MEMORY_TYPE_MULTIPLIER,
 		1000);
 
 	/* Now notify PPLib/SMU about which Watermarks sets they should select
@@ -1008,226 +1013,49 @@ mem_clks.data[mem_clks.num_levels-1].clocks_in_khz * MEMORY_TYPE_MULTIPLIER,
 	 * Memory clock member variables for Watermarks calculations for each
 	 * Watermark Set
 	 */
-
-	/* default expected case: engineClkInfoWithLatency.numLevels == 8
-	 * && memoryClkInfoWithLatency.numLevels == 3
-	 */
-	wm_clocks.num_wm_sets = 4;
-	wm_clocks.wm_clk_ranges[0].wm_set_id = WM_SET_A;
-	wm_clocks.wm_clk_ranges[0].wm_min_eng_clk_in_khz =
+	clk_ranges.num_wm_sets = 4;
+	clk_ranges.wm_clk_ranges[0].wm_set_id = WM_SET_A;
+	clk_ranges.wm_clk_ranges[0].wm_min_eng_clk_in_khz =
 			eng_clks.data[0].clocks_in_khz;
-	wm_clocks.wm_clk_ranges[0].wm_max_eng_clk_in_khz =
-			eng_clks.data[3].clocks_in_khz - 1;
-	wm_clocks.wm_clk_ranges[0].wm_min_memg_clk_in_khz =
+	clk_ranges.wm_clk_ranges[0].wm_max_eng_clk_in_khz =
+			eng_clks.data[eng_clks.num_levels*3/8].clocks_in_khz - 1;
+	clk_ranges.wm_clk_ranges[0].wm_min_memg_clk_in_khz =
 			mem_clks.data[0].clocks_in_khz;
-	wm_clocks.wm_clk_ranges[0].wm_max_mem_clk_in_khz =
-			mem_clks.data[1].clocks_in_khz - 1;
+	clk_ranges.wm_clk_ranges[0].wm_max_mem_clk_in_khz =
+			mem_clks.data[mem_clks.num_levels>>1].clocks_in_khz - 1;
 
-	/* TODO  TODO TODO  : below is for DWB. Will be-revisted later */
-	/* this GFX E clock is used for Watermark Set A and DWB Watermark
-	 * Set B calculations
-	 */
-	/* m_wmSetClocks.wmSetEngineClocks[WMSetA].clockInKHz =
-	 * m_wmDWBSetBEngineClock = eng_clks.data[0].clocks_in_khz;
-	 */
-	/* this M clock is used for Watermark Set A and DWB Watermark Set B
-	 * calculations
-	 */
-	/* m_wmSetClocks.wmSetMemoryClocks[WMSetA].clockInKHz =
-	 * m_wmDWBSetBMemoryClock = mem_clks.data[0].clocks_in_khz;
-	 */
-	/* this GFX E clock is used for Watermark Set A and DWB Watermark Set
-	 *B calculations
-	 */
-	/* m_wmSetClocks.wmSetEngineClocks[WMSetA].latencyInUs =
-	 * eng_clks.data[0].latency_in_us;
-	 */
-	/* this M clock is used for Watermark Set A and DWB Watermark Set B
-	 * calculations
-	 */
-	/* m_wmSetClocks.wmSetMemoryClocks[WMSetA].latencyInUs =
-	 * mem_clks.data[0].latency_in_us;
-	 */
-
-	wm_clocks.wm_clk_ranges[1].wm_set_id = WM_SET_B;
-	wm_clocks.wm_clk_ranges[1].wm_min_eng_clk_in_khz =
-			eng_clks.data[3].clocks_in_khz;
+	clk_ranges.wm_clk_ranges[1].wm_set_id = WM_SET_B;
+	clk_ranges.wm_clk_ranges[1].wm_min_eng_clk_in_khz =
+			eng_clks.data[eng_clks.num_levels*3/8].clocks_in_khz;
 	/* 5 GHz instead of data[7].clockInKHz to cover Overdrive */
-	wm_clocks.wm_clk_ranges[1].wm_max_eng_clk_in_khz = 5000000;
-	wm_clocks.wm_clk_ranges[1].wm_min_memg_clk_in_khz =
+	clk_ranges.wm_clk_ranges[1].wm_max_eng_clk_in_khz = 5000000;
+	clk_ranges.wm_clk_ranges[1].wm_min_memg_clk_in_khz =
 			mem_clks.data[0].clocks_in_khz;
-	wm_clocks.wm_clk_ranges[1].wm_max_mem_clk_in_khz =
-			mem_clks.data[1].clocks_in_khz - 1;
+	clk_ranges.wm_clk_ranges[1].wm_max_mem_clk_in_khz =
+			mem_clks.data[mem_clks.num_levels>>1].clocks_in_khz - 1;
 
-	wm_clocks.wm_clk_ranges[2].wm_set_id = WM_SET_C;
-	wm_clocks.wm_clk_ranges[2].wm_min_eng_clk_in_khz =
+	clk_ranges.wm_clk_ranges[2].wm_set_id = WM_SET_C;
+	clk_ranges.wm_clk_ranges[2].wm_min_eng_clk_in_khz =
 			eng_clks.data[0].clocks_in_khz;
-	wm_clocks.wm_clk_ranges[2].wm_max_eng_clk_in_khz =
-			eng_clks.data[3].clocks_in_khz - 1;
-	wm_clocks.wm_clk_ranges[2].wm_min_memg_clk_in_khz =
-			mem_clks.data[1].clocks_in_khz;
+	clk_ranges.wm_clk_ranges[2].wm_max_eng_clk_in_khz =
+			eng_clks.data[eng_clks.num_levels*3/8].clocks_in_khz - 1;
+	clk_ranges.wm_clk_ranges[2].wm_min_memg_clk_in_khz =
+			mem_clks.data[mem_clks.num_levels>>1].clocks_in_khz;
 	/* 5 GHz instead of data[2].clockInKHz to cover Overdrive */
-	wm_clocks.wm_clk_ranges[2].wm_max_mem_clk_in_khz = 5000000;
+	clk_ranges.wm_clk_ranges[2].wm_max_mem_clk_in_khz = 5000000;
 
-	wm_clocks.wm_clk_ranges[3].wm_set_id = WM_SET_D;
-	wm_clocks.wm_clk_ranges[3].wm_min_eng_clk_in_khz =
-			eng_clks.data[3].clocks_in_khz;
+	clk_ranges.wm_clk_ranges[3].wm_set_id = WM_SET_D;
+	clk_ranges.wm_clk_ranges[3].wm_min_eng_clk_in_khz =
+			eng_clks.data[eng_clks.num_levels*3/8].clocks_in_khz;
 	/* 5 GHz instead of data[7].clockInKHz to cover Overdrive */
-	wm_clocks.wm_clk_ranges[3].wm_max_eng_clk_in_khz = 5000000;
-	wm_clocks.wm_clk_ranges[3].wm_min_memg_clk_in_khz =
-			mem_clks.data[1].clocks_in_khz;
+	clk_ranges.wm_clk_ranges[3].wm_max_eng_clk_in_khz = 5000000;
+	clk_ranges.wm_clk_ranges[3].wm_min_memg_clk_in_khz =
+			mem_clks.data[mem_clks.num_levels>>1].clocks_in_khz;
 	/* 5 GHz instead of data[2].clockInKHz to cover Overdrive */
-	wm_clocks.wm_clk_ranges[3].wm_max_mem_clk_in_khz = 5000000;
-
-	/* need to adjust above entries if engineClkInfoWithLatency.numLevels
-	 * != 8 does not need to adjust if memoryClkInfoWithLatency.numLevels
-	 * != 3
-	 */
-	switch (eng_clks.num_levels) {
-	case 8:
-	case 7:
-	default:
-		break;
-
-	case 6:
-	case 5:
-	case 4:
-		wm_clocks.wm_clk_ranges[0].wm_max_eng_clk_in_khz =
-				eng_clks.data[2].clocks_in_khz - 1;
-		wm_clocks.wm_clk_ranges[1].wm_min_eng_clk_in_khz =
-				eng_clks.data[2].clocks_in_khz;
-
-		/* this GFX E clock is used for Watermark Set B calculations
-		 * m_wmSetClocks.wmSetEngineClocks[WMSetB].clockInKHz =
-		 * eng_clks.data[2].clockInKHz;
-		 */
-
-		wm_clocks.wm_clk_ranges[2].wm_max_eng_clk_in_khz =
-				eng_clks.data[2].clocks_in_khz - 1;
-		wm_clocks.wm_clk_ranges[3].wm_min_eng_clk_in_khz =
-				eng_clks.data[2].clocks_in_khz;
-
-		/* this GFX E clock is used for Watermark Set D and DWB
-		 * Watermark Set A calculations
-		 * m_wmSetClocks.wmSetEngineClocks[WMSetD].clockInKHz =
-		 * m_wmDWBSetAEngineClock = eng_clks.data[2].clockInKHz;
-		 */
-		break;
-
-	case 3:
-	case 2:
-		wm_clocks.wm_clk_ranges[0].wm_max_eng_clk_in_khz =
-				eng_clks.data[1].clocks_in_khz - 1;
-		wm_clocks.wm_clk_ranges[1].wm_min_eng_clk_in_khz =
-				eng_clks.data[1].clocks_in_khz;
-
-		/* this GFX E clock is used for Watermark Set B calculations
-		 * m_wmSetClocks.wmSetEngineClocks[WMSetB].clockInKHz =
-		 * eng_clks.data[1].clockInKHz;
-		 */
-
-		wm_clocks.wm_clk_ranges[2].wm_max_eng_clk_in_khz =
-				eng_clks.data[1].clocks_in_khz - 1;
-		wm_clocks.wm_clk_ranges[3].wm_min_eng_clk_in_khz =
-				eng_clks.data[1].clocks_in_khz;
-
-		/* this GFX E clock is used for Watermark Set D and DWB
-		 * Watermark Set A calculations
-		 */
-		/* m_wmSetClocks.wmSetEngineClocks[WMSetD].clockInKHz =
-		 * m_wmDWBSetAEngineClock = eng_clks.data[1].clockInKHz;
-		 */
-		break;
-	}
-
-	/* use same memory clock and latency for all 4 watermark levels if we
-	 * only have one MCLK reported
-	 */
-	if (mem_clks.num_levels == 1) {
-		/* this M clock is used for Watermark Set D and DWB Watermark
-		 * Set A calculations
-		 */
-		/* m_wmSetClocks.wmSetMemoryClocks[WMSetA].clockInKHz  =
-		 * m_wmDWBSetBMemoryClock = 250000;
-		 */
-		/* this M clock is used for Watermark Set D and DWB Watermark
-		 * Set A calculations
-		 */
-		/* m_wmSetClocks.wmSetMemoryClocks[WMSetA].latencyInUs = 45; */
-
-		wm_clocks.wm_clk_ranges[WM_SET_A].wm_min_memg_clk_in_khz =
-				250000;
-		wm_clocks.wm_clk_ranges[WM_SET_A].wm_max_mem_clk_in_khz =
-				mem_clks.data[0].clocks_in_khz - 1;
-
-		/* this M clock is used for Watermark Set D and DWB Watermark
-		 * Set A calculations
-		 */
-		/* m_wmSetClocks.wmSetMemoryClocks[WMSetB].clockInKHz
-		 *  = 250000;
-		 */
-		/* this M clock is used for Watermark Set D and DWB Watermark
-		 * Set A calculations
-		 */
-		/* m_wmSetClocks.wmSetMemoryClocks[WMSetB].latencyInUs = 45; */
-
-		wm_clocks.wm_clk_ranges[WM_SET_B].wm_min_memg_clk_in_khz =
-				250000;
-		wm_clocks.wm_clk_ranges[WM_SET_B].wm_max_mem_clk_in_khz =
-				mem_clks.data[0].clocks_in_khz - 1;
-
-		/* this M clock is used for Watermark Set D and DWB Watermark
-		 * Set A calculations
-		 */
-		/* m_wmSetClocks.wmSetMemoryClocks[WMSetC].clockInKHz =
-		 * memoryClkInfoWithLatency.data[0].clockInKHz;
-		 */
-		/* this M clock is used for Watermark Set D and DWB Watermark
-		 * Set A calculations
-		 */
-		/* m_wmSetClocks.wmSetMemoryClocks[WMSetC].latencyInUs =
-		 * memoryClkInfoWithLatency.data[0].latencyInMicros;
-		 */
-
-		wm_clocks.wm_clk_ranges[WM_SET_C].wm_min_memg_clk_in_khz =
-				mem_clks.data[0].clocks_in_khz;
-		wm_clocks.wm_clk_ranges[WM_SET_C].wm_max_mem_clk_in_khz =
-				5000000;
-
-		/* this M clock is used for Watermark Set D and DWB Watermark
-		 * Set A calculations
-		 */
-		/* m_wmSetClocks.wmSetMemoryClocks[WMSetD].clockInKHz  =
-		 * m_wmDWBSetAMemoryClock =
-		 * memoryClkInfoWithLatency.data[0].clockInKHz;
-		 */
-		/* this M clock is used for Watermark Set D and DWB Watermark
-		 * Set A calculations
-		 */
-		/* m_wmSetClocks.wmSetMemoryClocks[WMSetD].latencyInUs =
-		 * memoryClkInfoWithLatency.data[0].latencyInMicros;
-		 */
-
-		wm_clocks.wm_clk_ranges[WM_SET_D].wm_min_memg_clk_in_khz =
-				mem_clks.data[0].clocks_in_khz;
-		wm_clocks.wm_clk_ranges[WM_SET_D].wm_max_mem_clk_in_khz =
-				5000000;
-	}
+	clk_ranges.wm_clk_ranges[3].wm_max_mem_clk_in_khz = 5000000;
 
 	/* Notify PP Lib/SMU which Watermarks to use for which clock ranges */
-	dm_pp_notify_wm_clock_changes(dc->ctx, &wm_clocks);
-
-	/* we don't need to call PPLIB for validation clock any more since they
-	 * also give us the highest sclk and highest mclk (UMA clock).
-	 * ALSO always convert UMA clock (from PPLIB)  to YCLK (HW formula):
-	 * YCLK = UMACLK*m_memoryTypeMultiplier
-	 */
-	/* m_validationMemoryClockInKHz  =
-	 * m_clockLevels.memoryClocksInKHz[m_clockLevels.numMemclkLevels - 1];
-	 */
-	/* m_validationEngineClockInKHz  =
-	 * m_clockLevels.engineClocksInKHz[m_clockLevels.numEngclkLevels - 1];
-	 */
+	dm_pp_notify_wm_clock_changes(dc->ctx, &clk_ranges);
 }
 
 
