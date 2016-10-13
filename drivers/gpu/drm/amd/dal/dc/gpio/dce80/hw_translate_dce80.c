@@ -31,21 +31,8 @@
 #include "include/gpio_types.h"
 #include "../hw_translate.h"
 
-/*
- * Header of this unit
- */
-
 #include "hw_translate_dce80.h"
 
-/*
- * Post-requisites: headers required by this unit
- */
-
-/*
- * This unit
- */
-
-#include "../hw_gpio_pin.h"
 #include "dce/dce_8_0_d.h"
 #include "dce/dce_8_0_sh_mask.h"
 #include "smu/smu_7_0_1_d.h"

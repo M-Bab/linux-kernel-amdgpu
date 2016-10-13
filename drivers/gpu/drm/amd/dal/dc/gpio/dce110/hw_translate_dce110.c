@@ -31,20 +31,7 @@
 #include "include/gpio_types.h"
 #include "../hw_translate.h"
 
-/*
- * Header of this unit
- */
 #include "hw_translate_dce110.h"
-
-/*
- * Post-requisites: headers required by this unit
- */
-
-/*
- * This unit
- */
-
-#include "../hw_gpio_pin.h"
 
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"

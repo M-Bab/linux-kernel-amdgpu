@@ -29,7 +29,6 @@
  * Pre-requisites: headers required by header of this unit
  */
 #include "include/gpio_types.h"
-#include "hw_gpio_pin.h"
 
 /*
  * Header of this unit
@@ -370,10 +369,11 @@ bool dal_hw_gpio_construct(
 	uint32_t en,
 	struct dc_context *ctx)
 {
-	struct hw_gpio_pin *base = &pin->base;
-
-	if (!dal_hw_gpio_pin_construct(base, id, en, ctx))
-		return false;
+	pin->base.ctx = ctx;
+	pin->base.id = id;
+	pin->base.en = en;
+	pin->base.mode = GPIO_MODE_UNKNOWN;
+	pin->base.opened = false;
 
 	pin->funcs = &func;
 
@@ -403,5 +403,5 @@ bool dal_hw_gpio_construct(
 void dal_hw_gpio_destruct(
 	struct hw_gpio *pin)
 {
-	dal_hw_gpio_pin_destruct(&pin->base);
+	ASSERT(!pin->base.opened);
 }

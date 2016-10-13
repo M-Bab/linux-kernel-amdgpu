@@ -45,7 +45,7 @@
  * Post-requisites: headers required by this unit
  */
 
-#include "hw_gpio_pin.h"
+#include "hw_gpio.h"
 
 /*
  * @brief

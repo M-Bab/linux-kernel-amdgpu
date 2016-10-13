@@ -44,6 +44,40 @@ enum gpio_result dal_hw_gpio_set_reg_value(
 uint32_t dal_hw_gpio_get_shift_from_mask(
 	uint32_t mask);
 
+
+struct hw_gpio_pin {
+	const struct hw_gpio_pin_funcs *funcs;
+	enum gpio_id id;
+	uint32_t en;
+	enum gpio_mode mode;
+	bool opened;
+	struct dc_context *ctx;
+};
+
+struct hw_gpio_pin_funcs {
+	void (*destroy)(
+		struct hw_gpio_pin **ptr);
+	bool (*open)(
+		struct hw_gpio_pin *pin,
+		enum gpio_mode mode,
+		void *options);
+	enum gpio_result (*get_value)(
+		const struct hw_gpio_pin *pin,
+		uint32_t *value);
+	enum gpio_result (*set_value)(
+		const struct hw_gpio_pin *pin,
+		uint32_t value);
+	enum gpio_result (*set_config)(
+		struct hw_gpio_pin *pin,
+		const struct gpio_config_data *config_data);
+	enum gpio_result (*change_mode)(
+		struct hw_gpio_pin *pin,
+		enum gpio_mode mode);
+	void (*close)(
+		struct hw_gpio_pin *pin);
+};
+
+
 struct hw_gpio;
 
 struct hw_gpio_funcs {

@@ -32,7 +32,6 @@
 #include "include/gpio_interface.h"
 #include "include/ddc_interface.h"
 #include "include/gpio_service_interface.h"
-#include "hw_gpio_pin.h"
 #include "hw_translate.h"
 #include "hw_factory.h"
 #include "gpio_service.h"
