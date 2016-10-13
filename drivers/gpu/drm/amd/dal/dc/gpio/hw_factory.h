@@ -48,10 +48,6 @@ struct hw_factory {
 			struct dc_context *ctx,
 			enum gpio_id id,
 			uint32_t en);
-		struct hw_gpio_pin *(*create_gpio_pad)(
-			struct dc_context *ctx,
-			enum gpio_id id,
-			uint32_t en);
 		struct hw_gpio_pin *(*create_sync)(
 			struct dc_context *ctx,
 			enum gpio_id id,

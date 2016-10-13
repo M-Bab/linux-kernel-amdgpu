@@ -45,7 +45,6 @@ static const struct hw_factory_funcs funcs = {
 	.create_ddc_clock = NULL,
 	.create_generic = NULL,
 	.create_hpd = NULL,
-	.create_gpio_pad = NULL,
 	.create_sync = NULL,
 	.create_gsl = NULL,
 };

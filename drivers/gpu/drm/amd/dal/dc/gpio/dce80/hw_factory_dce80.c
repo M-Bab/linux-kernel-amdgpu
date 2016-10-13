@@ -42,7 +42,6 @@
  */
 
 #include "../hw_gpio.h"
-#include "../hw_gpio_pad.h"
 #include "../hw_ddc.h"
 #include "hw_ddc_dce80.h"
 #include "../hw_hpd.h"
@@ -56,7 +55,6 @@ static const struct hw_factory_funcs funcs = {
 	.create_ddc_clock = dal_hw_ddc_dce80_create,
 	.create_generic = NULL,
 	.create_hpd = dal_hw_hpd_dce80_create,
-	.create_gpio_pad = NULL,
 	.create_sync = NULL,
 	.create_gsl = NULL,
 };

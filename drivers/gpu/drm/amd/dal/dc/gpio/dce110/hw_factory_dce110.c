@@ -50,7 +50,6 @@ static const struct hw_factory_funcs funcs = {
 	.create_ddc_clock = dal_hw_ddc_dce110_create,
 	.create_generic = NULL,
 	.create_hpd = dal_hw_hpd_dce110_create,
-	.create_gpio_pad = NULL,
 	.create_sync = NULL,
 	.create_gsl = NULL,
 };
