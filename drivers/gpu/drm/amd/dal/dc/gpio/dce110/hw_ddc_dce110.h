@@ -26,13 +26,9 @@
 #ifndef __DAL_HW_DDC_DCE110_H__
 #define __DAL_HW_DDC_DCE110_H__
 
-struct hw_ddc_dce110_addr {
-	uint32_t dc_i2c_ddc_setup;
-};
-
 struct hw_ddc_dce110 {
 	struct hw_ddc base;
-	struct hw_ddc_dce110_addr addr;
+	uint32_t i2c_ddc_setup;
 };
 
 #define DDC_DCE110_FROM_BASE(ddc_base) \

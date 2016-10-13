@@ -26,18 +26,9 @@
 #ifndef __DAL_HW_DDC_H__
 #define __DAL_HW_DDC_H__
 
-struct hw_ddc_mask {
-	uint32_t DC_GPIO_DDC_MASK_MASK;
-	uint32_t DC_GPIO_DDC_PD_EN_MASK;
-	uint32_t DC_GPIO_DDC_RECV_MASK;
-	uint32_t AUX_PAD_MODE_MASK;
-	uint32_t AUX_POL_MASK;
-	uint32_t DC_GPIO_DDCCLK_STR_MASK;
-};
-
 struct hw_ddc {
 	struct hw_gpio base;
-	struct hw_ddc_mask mask;
+	uint32_t i2c_ddc_setup;
 };
 
 #define HW_DDC_FROM_BASE(hw_gpio) \

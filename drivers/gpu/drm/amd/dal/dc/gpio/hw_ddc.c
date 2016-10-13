@@ -86,13 +86,6 @@ bool dal_hw_ddc_construct(
 	if (!dal_hw_gpio_construct(&pin->base, id, en, ctx))
 		return false;
 
-	pin->mask.DC_GPIO_DDC_MASK_MASK = 0;
-	pin->mask.DC_GPIO_DDC_PD_EN_MASK = 0;
-	pin->mask.DC_GPIO_DDC_RECV_MASK = 0;
-	pin->mask.AUX_PAD_MODE_MASK = 0;
-	pin->mask.AUX_POL_MASK = 0;
-	pin->mask.DC_GPIO_DDCCLK_STR_MASK = 0;
-
 	return true;
 }
 

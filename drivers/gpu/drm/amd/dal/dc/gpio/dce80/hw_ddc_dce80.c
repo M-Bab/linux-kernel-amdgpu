@@ -260,7 +260,7 @@ static enum gpio_result set_config(
 		if ((hw_gpio->base.en >= GPIO_DDC_LINE_DDC1) &&
 			(hw_gpio->base.en <= GPIO_DDC_LINE_DDC_VGA)) {
 			setup_i2c_polling(
-				ptr->ctx, pin->addr.dc_i2c_ddc_setup, 1, 0);
+				ptr->ctx, pin->i2c_ddc_setup, 1, 0);
 			return GPIO_RESULT_OK;
 		}
 	break;
@@ -268,7 +268,7 @@ static enum gpio_result set_config(
 		if ((hw_gpio->base.en >= GPIO_DDC_LINE_DDC1) &&
 			(hw_gpio->base.en <= GPIO_DDC_LINE_DDC_VGA)) {
 			setup_i2c_polling(
-				ptr->ctx, pin->addr.dc_i2c_ddc_setup, 1, 1);
+				ptr->ctx, pin->i2c_ddc_setup, 1, 1);
 			return GPIO_RESULT_OK;
 		}
 	break;
@@ -276,7 +276,7 @@ static enum gpio_result set_config(
 		if ((hw_gpio->base.en >= GPIO_DDC_LINE_DDC1) &&
 			(hw_gpio->base.en <= GPIO_DDC_LINE_DDC_VGA)) {
 			setup_i2c_polling(
-				ptr->ctx, pin->addr.dc_i2c_ddc_setup, 0, 0);
+				ptr->ctx, pin->i2c_ddc_setup, 0, 0);
 			return GPIO_RESULT_OK;
 		}
 	break;
@@ -289,8 +289,7 @@ static enum gpio_result set_config(
 
 struct hw_ddc_dce80_init {
 	struct hw_gpio_pin_reg hw_gpio_data_reg;
-	struct hw_ddc_mask hw_ddc_mask;
-	struct hw_ddc_dce80_addr hw_ddc_dce80_addr;
+	uint32_t i2c_ddc_setup;
 };
 
 static const struct hw_ddc_dce80_init
@@ -315,17 +314,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC1_Y__DC_GPIO_DDC1DATA_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC1_MASK__DC_GPIO_DDC1DATA_MASK_MASK,
-			DC_GPIO_DDC1_MASK__DC_GPIO_DDC1DATA_PD_EN_MASK,
-			DC_GPIO_DDC1_MASK__DC_GPIO_DDC1DATA_RECV_MASK,
-			DC_GPIO_DDC1_MASK__AUX_PAD1_MODE_MASK,
-			DC_GPIO_DDC1_MASK__AUX1_POL_MASK,
-			DC_GPIO_DDC1_MASK__DC_GPIO_DDC1CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC1_SETUP
-		}
+		mmDC_I2C_DDC1_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC2 */
 	{
@@ -347,17 +336,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC2_Y__DC_GPIO_DDC2DATA_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC2_MASK__DC_GPIO_DDC2DATA_MASK_MASK,
-			DC_GPIO_DDC2_MASK__DC_GPIO_DDC2DATA_PD_EN_MASK,
-			DC_GPIO_DDC2_MASK__DC_GPIO_DDC2DATA_RECV_MASK,
-			DC_GPIO_DDC2_MASK__AUX_PAD2_MODE_MASK,
-			DC_GPIO_DDC2_MASK__AUX2_POL_MASK,
-			DC_GPIO_DDC2_MASK__DC_GPIO_DDC2CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC2_SETUP
-		}
+		mmDC_I2C_DDC2_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC3 */
 	{
@@ -379,17 +358,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC3_Y__DC_GPIO_DDC3DATA_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC3_MASK__DC_GPIO_DDC3DATA_MASK_MASK,
-			DC_GPIO_DDC3_MASK__DC_GPIO_DDC3DATA_PD_EN_MASK,
-			DC_GPIO_DDC3_MASK__DC_GPIO_DDC3DATA_RECV_MASK,
-			DC_GPIO_DDC3_MASK__AUX_PAD3_MODE_MASK,
-			DC_GPIO_DDC3_MASK__AUX3_POL_MASK,
-			DC_GPIO_DDC3_MASK__DC_GPIO_DDC3CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC3_SETUP
-		}
+		mmDC_I2C_DDC3_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC4 */
 	{
@@ -411,17 +380,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC4_Y__DC_GPIO_DDC4DATA_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC4_MASK__DC_GPIO_DDC4DATA_MASK_MASK,
-			DC_GPIO_DDC4_MASK__DC_GPIO_DDC4DATA_PD_EN_MASK,
-			DC_GPIO_DDC4_MASK__DC_GPIO_DDC4DATA_RECV_MASK,
-			DC_GPIO_DDC4_MASK__AUX_PAD4_MODE_MASK,
-			DC_GPIO_DDC4_MASK__AUX4_POL_MASK,
-			DC_GPIO_DDC4_MASK__DC_GPIO_DDC4CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC4_SETUP
-		}
+		mmDC_I2C_DDC4_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC5 */
 	{
@@ -443,17 +402,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC5_Y__DC_GPIO_DDC5DATA_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC5_MASK__DC_GPIO_DDC5DATA_MASK_MASK,
-			DC_GPIO_DDC5_MASK__DC_GPIO_DDC5DATA_PD_EN_MASK,
-			DC_GPIO_DDC5_MASK__DC_GPIO_DDC5DATA_RECV_MASK,
-			DC_GPIO_DDC5_MASK__AUX_PAD5_MODE_MASK,
-			DC_GPIO_DDC5_MASK__AUX5_POL_MASK,
-			DC_GPIO_DDC5_MASK__DC_GPIO_DDC5CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC5_SETUP
-		}
+		mmDC_I2C_DDC5_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC6 */
 	{
@@ -475,17 +424,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC6_Y__DC_GPIO_DDC6DATA_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC6_MASK__DC_GPIO_DDC6DATA_MASK_MASK,
-			DC_GPIO_DDC6_MASK__DC_GPIO_DDC6DATA_PD_EN_MASK,
-			DC_GPIO_DDC6_MASK__DC_GPIO_DDC6DATA_RECV_MASK,
-			DC_GPIO_DDC6_MASK__AUX_PAD6_MODE_MASK,
-			DC_GPIO_DDC6_MASK__AUX6_POL_MASK,
-			DC_GPIO_DDC6_MASK__DC_GPIO_DDC6CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC6_SETUP
-		}
+		mmDC_I2C_DDC6_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC_VGA */
 	{
@@ -507,17 +446,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDCVGA_Y__DC_GPIO_DDCVGADATA_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDCVGA_MASK__DC_GPIO_DDCVGADATA_MASK_MASK,
-			DC_GPIO_DDCVGA_MASK__DC_GPIO_DDCVGADATA_PD_EN_MASK,
-			DC_GPIO_DDCVGA_MASK__DC_GPIO_DDCVGADATA_RECV_MASK,
-			DC_GPIO_DDCVGA_MASK__AUX_PADVGA_MODE_MASK,
-			DC_GPIO_DDCVGA_MASK__AUXVGA_POL_MASK,
-			DC_GPIO_DDCVGA_MASK__DC_GPIO_DDCVGACLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDCVGA_SETUP
-		}
+		mmDC_I2C_DDCVGA_SETUP
 	},
 	/* GPIO_DDC_LINE_I2CPAD */
 	{
@@ -539,17 +468,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_I2CPAD_Y__DC_GPIO_SDA_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_I2CPAD_MASK__DC_GPIO_SDA_MASK_MASK,
-			DC_GPIO_I2CPAD_MASK__DC_GPIO_SDA_PD_DIS_MASK,
-			DC_GPIO_I2CPAD_MASK__DC_GPIO_SDA_RECV_MASK,
-			0,
-			0,
-			0
-		},
-		{
-			0
-		}
+		0
 	}
 };
 
@@ -575,17 +494,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC1_Y__DC_GPIO_DDC1CLK_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC1_MASK__DC_GPIO_DDC1CLK_MASK_MASK,
-			DC_GPIO_DDC1_MASK__DC_GPIO_DDC1CLK_PD_EN_MASK,
-			DC_GPIO_DDC1_MASK__DC_GPIO_DDC1CLK_RECV_MASK,
-			DC_GPIO_DDC1_MASK__AUX_PAD1_MODE_MASK,
-			DC_GPIO_DDC1_MASK__AUX1_POL_MASK,
-			DC_GPIO_DDC1_MASK__DC_GPIO_DDC1CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC1_SETUP
-		}
+		mmDC_I2C_DDC1_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC2 */
 	{
@@ -607,17 +516,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC2_Y__DC_GPIO_DDC2CLK_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC2_MASK__DC_GPIO_DDC2CLK_MASK_MASK,
-			DC_GPIO_DDC2_MASK__DC_GPIO_DDC2CLK_PD_EN_MASK,
-			DC_GPIO_DDC2_MASK__DC_GPIO_DDC2CLK_RECV_MASK,
-			DC_GPIO_DDC2_MASK__AUX_PAD2_MODE_MASK,
-			DC_GPIO_DDC2_MASK__AUX2_POL_MASK,
-			DC_GPIO_DDC2_MASK__DC_GPIO_DDC2CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC2_SETUP
-		}
+		mmDC_I2C_DDC2_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC3 */
 	{
@@ -639,17 +538,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC3_Y__DC_GPIO_DDC3CLK_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC3_MASK__DC_GPIO_DDC3CLK_MASK_MASK,
-			DC_GPIO_DDC3_MASK__DC_GPIO_DDC3CLK_PD_EN_MASK,
-			DC_GPIO_DDC3_MASK__DC_GPIO_DDC3CLK_RECV_MASK,
-			DC_GPIO_DDC3_MASK__AUX_PAD3_MODE_MASK,
-			DC_GPIO_DDC3_MASK__AUX3_POL_MASK,
-			DC_GPIO_DDC3_MASK__DC_GPIO_DDC3CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC3_SETUP
-		}
+		mmDC_I2C_DDC3_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC4 */
 	{
@@ -671,17 +560,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC4_Y__DC_GPIO_DDC4CLK_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC4_MASK__DC_GPIO_DDC4CLK_MASK_MASK,
-			DC_GPIO_DDC4_MASK__DC_GPIO_DDC4CLK_PD_EN_MASK,
-			DC_GPIO_DDC4_MASK__DC_GPIO_DDC4CLK_RECV_MASK,
-			DC_GPIO_DDC4_MASK__AUX_PAD4_MODE_MASK,
-			DC_GPIO_DDC4_MASK__AUX4_POL_MASK,
-			DC_GPIO_DDC4_MASK__DC_GPIO_DDC4CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC4_SETUP
-		}
+		mmDC_I2C_DDC4_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC5 */
 	{
@@ -703,17 +582,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC5_Y__DC_GPIO_DDC5CLK_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC5_MASK__DC_GPIO_DDC5CLK_MASK_MASK,
-			DC_GPIO_DDC5_MASK__DC_GPIO_DDC5CLK_PD_EN_MASK,
-			DC_GPIO_DDC5_MASK__DC_GPIO_DDC5CLK_RECV_MASK,
-			DC_GPIO_DDC5_MASK__AUX_PAD5_MODE_MASK,
-			DC_GPIO_DDC5_MASK__AUX5_POL_MASK,
-			DC_GPIO_DDC5_MASK__DC_GPIO_DDC5CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC5_SETUP
-		}
+		mmDC_I2C_DDC5_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC6 */
 	{
@@ -735,17 +604,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDC6_Y__DC_GPIO_DDC6CLK_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDC6_MASK__DC_GPIO_DDC6CLK_MASK_MASK,
-			DC_GPIO_DDC6_MASK__DC_GPIO_DDC6CLK_PD_EN_MASK,
-			DC_GPIO_DDC6_MASK__DC_GPIO_DDC6CLK_RECV_MASK,
-			DC_GPIO_DDC6_MASK__AUX_PAD6_MODE_MASK,
-			DC_GPIO_DDC6_MASK__AUX6_POL_MASK,
-			DC_GPIO_DDC6_MASK__DC_GPIO_DDC6CLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDC6_SETUP
-		}
+		mmDC_I2C_DDC6_SETUP
 	},
 	/* GPIO_DDC_LINE_DDC_VGA */
 	{
@@ -767,17 +626,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_DDCVGA_Y__DC_GPIO_DDCVGACLK_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_DDCVGA_MASK__DC_GPIO_DDCVGACLK_MASK_MASK,
-			DC_GPIO_DDCVGA_MASK__DC_GPIO_DDCVGADATA_PD_EN_MASK,
-			DC_GPIO_DDCVGA_MASK__DC_GPIO_DDCVGACLK_RECV_MASK,
-			DC_GPIO_DDCVGA_MASK__AUX_PADVGA_MODE_MASK,
-			DC_GPIO_DDCVGA_MASK__AUXVGA_POL_MASK,
-			DC_GPIO_DDCVGA_MASK__DC_GPIO_DDCVGACLK_STR_MASK
-		},
-		{
-			mmDC_I2C_DDCVGA_SETUP
-		}
+		mmDC_I2C_DDCVGA_SETUP
 	},
 	/* GPIO_DDC_LINE_I2CPAD */
 	{
@@ -799,17 +648,7 @@ static const struct hw_ddc_dce80_init
 				DC_GPIO_I2CPAD_Y__DC_GPIO_SCL_Y_MASK
 			}
 		},
-		{
-			DC_GPIO_I2CPAD_MASK__DC_GPIO_SCL_MASK_MASK,
-			DC_GPIO_I2CPAD_MASK__DC_GPIO_SCL_PD_DIS_MASK,
-			DC_GPIO_I2CPAD_MASK__DC_GPIO_SCL_RECV_MASK,
-			0,
-			0,
-			0
-		},
-		{
-			0
-		}
+		0
 	}
 };
 
@@ -848,16 +687,14 @@ static bool construct(
 		init = hw_ddc_dce80_init_data + en;
 
 		pin->base.base.pin_reg = init->hw_gpio_data_reg;
-		pin->base.mask = init->hw_ddc_mask;
-		pin->addr = init->hw_ddc_dce80_addr;
+		pin->i2c_ddc_setup = init->i2c_ddc_setup;
 
 		return true;
 	case GPIO_ID_DDC_CLOCK:
 		init = hw_ddc_dce80_init_clock + en;
 
 		pin->base.base.pin_reg = init->hw_gpio_data_reg;
-		pin->base.mask = init->hw_ddc_mask;
-		pin->addr = init->hw_ddc_dce80_addr;
+		pin->i2c_ddc_setup = init->i2c_ddc_setup;
 
 		return true;
 	default:
