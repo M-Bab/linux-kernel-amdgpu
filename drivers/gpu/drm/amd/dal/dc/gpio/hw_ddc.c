@@ -76,21 +76,3 @@ bool dal_hw_ddc_open(
 
 	return dal_hw_gpio_open(ptr, mode, options);
 }
-
-bool dal_hw_ddc_construct(
-	struct hw_ddc *pin,
-	enum gpio_id id,
-	uint32_t en,
-	struct dc_context *ctx)
-{
-	if (!dal_hw_gpio_construct(&pin->base, id, en, ctx))
-		return false;
-
-	return true;
-}
-
-void dal_hw_ddc_destruct(
-	struct hw_ddc *pin)
-{
-	dal_hw_gpio_destruct(&pin->base);
-}

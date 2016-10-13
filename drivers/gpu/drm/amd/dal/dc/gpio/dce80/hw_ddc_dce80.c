@@ -37,7 +37,7 @@
 static void destruct(
 	struct hw_ddc *pin)
 {
-	dal_hw_ddc_destruct(pin);
+	dal_hw_gpio_destruct(&pin->base);
 }
 
 static void destroy(
@@ -651,7 +651,7 @@ static bool construct(
 		return false;
 	}
 
-	if (!dal_hw_ddc_construct(pin, id, en, ctx)) {
+	if (!dal_hw_gpio_construct(&pin->base, id, en, ctx)) {
 		ASSERT_CRITICAL(false);
 		return false;
 	}

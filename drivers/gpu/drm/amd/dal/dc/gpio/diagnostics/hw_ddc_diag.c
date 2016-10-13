@@ -38,7 +38,7 @@
 static void destruct(
 	struct hw_ddc *pin)
 {
-	dal_hw_ddc_destruct(pin);
+	dal_hw_gpio_destruct(&pin->base);
 }
 
 static void destroy(

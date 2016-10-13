@@ -34,18 +34,10 @@ struct hw_ddc {
 #define HW_DDC_FROM_BASE(hw_gpio) \
 	container_of((HW_GPIO_FROM_BASE(hw_gpio)), struct hw_ddc, base)
 
-bool dal_hw_ddc_construct(
-	struct hw_ddc *pin,
-	enum gpio_id id,
-	uint32_t en,
-	struct dc_context *ctx);
-
-void dal_hw_ddc_destruct(
-	struct hw_ddc *pin);
-
 bool dal_hw_ddc_open(
 	struct hw_gpio_pin *ptr,
 	enum gpio_mode mode,
 	void *options);
+
 
 #endif
