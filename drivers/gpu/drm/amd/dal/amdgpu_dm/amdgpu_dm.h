@@ -158,7 +158,7 @@ bool amdgpu_dm_release_dal_lock(struct amdgpu_display_manager *dm);
 /* Register "Backlight device" accessible by user-mode. */
 void amdgpu_dm_register_backlight_device(struct amdgpu_display_manager *dm);
 
-extern const struct amd_ip_funcs amdgpu_dm_funcs;
+extern const struct amdgpu_ip_block_version dm_ip_block;
 
 void amdgpu_dm_update_connector_after_detect(
 	struct amdgpu_connector *aconnector);

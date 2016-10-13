@@ -713,7 +713,7 @@ int amdgpu_dm_display_resume(struct amdgpu_device *adev )
 	return ret;
 }
 
-const struct amd_ip_funcs amdgpu_dm_funcs = {
+static const struct amd_ip_funcs amdgpu_dm_funcs = {
 	.name = "dm",
 	.early_init = dm_early_init,
 	.late_init = NULL,
@@ -729,6 +729,15 @@ const struct amd_ip_funcs amdgpu_dm_funcs = {
 	.soft_reset = dm_soft_reset,
 	.set_clockgating_state = dm_set_clockgating_state,
 	.set_powergating_state = dm_set_powergating_state,
+};
+
+const struct amdgpu_ip_block_version dm_ip_block =
+{
+	.type = AMD_IP_BLOCK_TYPE_DCE,
+	.major = 1,
+	.minor = 0,
+	.rev = 0,
+	.funcs = &amdgpu_dm_funcs,
 };
 
 /* TODO: it is temporary non-const, should fixed later */
