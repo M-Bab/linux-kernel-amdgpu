@@ -339,7 +339,8 @@ static void dm_dp_mst_hotplug(struct drm_dp_mst_topology_mgr *mgr)
 	drm_modeset_lock_all(dev);
 	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
 		aconnector = to_amdgpu_connector(connector);
-		if (aconnector->port && !aconnector->dc_sink) {
+		if (aconnector->port && aconnector->port->pdt != DP_PEER_DEVICE_NONE
+				&& !aconnector->dc_sink) {
 			/*
 			 * This is plug in case, where port has been created but
 			 * sink hasn't been created yet
