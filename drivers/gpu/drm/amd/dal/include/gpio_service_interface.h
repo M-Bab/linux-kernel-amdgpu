@@ -29,7 +29,6 @@
 #include "gpio_types.h"
 #include "gpio_interface.h"
 #include "ddc_interface.h"
-#include "irq_interface.h"
 #include "hw/gpio.h"
 
 struct gpio_service;
@@ -68,6 +67,16 @@ void dal_gpio_destroy_ddc(
 
 void dal_gpio_service_destroy(
 	struct gpio_service **ptr);
+
+enum dc_irq_source dal_irq_get_source(
+	const struct gpio *irq);
+
+enum dc_irq_source dal_irq_get_rx_source(
+	const struct gpio *irq);
+
+enum gpio_result dal_irq_setup_hpd_filter(
+	struct gpio *irq,
+	struct gpio_hpd_config *config);
 
 struct gpio *dal_gpio_create_irq(
 	struct gpio_service *service,

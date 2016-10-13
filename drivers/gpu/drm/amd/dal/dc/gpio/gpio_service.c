@@ -30,7 +30,6 @@
 #include "dm_services.h"
 #include "include/gpio_interface.h"
 #include "include/ddc_interface.h"
-#include "include/irq_interface.h"
 #include "include/gpio_service_interface.h"
 #include "hw_translate.h"
 #include "hw_factory.h"
@@ -319,4 +318,97 @@ void dal_gpio_service_close(
 
 		pin->funcs->destroy(ptr);
 	}
+}
+
+
+enum dc_irq_source dal_irq_get_source(
+	const struct gpio *irq)
+{
+	enum gpio_id id = dal_gpio_get_id(irq);
+
+	switch (id) {
+	case GPIO_ID_HPD:
+		return (enum dc_irq_source)(DC_IRQ_SOURCE_HPD1 +
+			dal_gpio_get_enum(irq));
+	case GPIO_ID_GPIO_PAD:
+		return (enum dc_irq_source)(DC_IRQ_SOURCE_GPIOPAD0 +
+			dal_gpio_get_enum(irq));
+	default:
+		return DC_IRQ_SOURCE_INVALID;
+	}
+}
+
+enum dc_irq_source dal_irq_get_rx_source(
+	const struct gpio *irq)
+{
+	enum gpio_id id = dal_gpio_get_id(irq);
+
+	switch (id) {
+	case GPIO_ID_HPD:
+		return (enum dc_irq_source)(DC_IRQ_SOURCE_HPD1RX +
+			dal_gpio_get_enum(irq));
+	default:
+		return DC_IRQ_SOURCE_INVALID;
+	}
+}
+
+enum gpio_result dal_irq_setup_hpd_filter(
+	struct gpio *irq,
+	struct gpio_hpd_config *config)
+{
+	struct gpio_config_data config_data;
+
+	if (!config)
+		return GPIO_RESULT_INVALID_DATA;
+
+	config_data.type = GPIO_CONFIG_TYPE_HPD;
+	config_data.config.hpd = *config;
+
+	return dal_gpio_set_config(irq, &config_data);
+}
+
+/*
+ * @brief
+ * Creation and destruction
+ */
+
+struct gpio *dal_gpio_create_irq(
+	struct gpio_service *service,
+	enum gpio_id id,
+	uint32_t en)
+{
+	struct gpio *irq;
+
+	switch (id) {
+	case GPIO_ID_HPD:
+	case GPIO_ID_GPIO_PAD:
+	break;
+	default:
+		ASSERT_CRITICAL(false);
+		return NULL;
+	}
+
+	irq = dal_gpio_create(
+		service, id, en, GPIO_PIN_OUTPUT_STATE_DEFAULT);
+
+	if (irq)
+		return irq;
+
+	ASSERT_CRITICAL(false);
+	return NULL;
+}
+
+void dal_gpio_destroy_irq(
+	struct gpio **irq)
+{
+	if (!irq || !*irq) {
+		ASSERT_CRITICAL(false);
+		return;
+	}
+
+	dal_gpio_close(*irq);
+	dal_gpio_destroy(irq);
+	dm_free(*irq);
+
+	*irq = NULL;
 }
