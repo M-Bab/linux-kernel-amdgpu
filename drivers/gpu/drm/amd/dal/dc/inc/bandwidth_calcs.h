@@ -130,7 +130,7 @@ struct bw_calcs_dceip {
 	bool dmif_pipe_en_fbc_chunk_tracker;
 	struct bw_fixed dmif_request_buffer_size;
 	uint32_t lines_interleaved_into_lb;
-	bool low_power_tiling_mode;
+	uint32_t low_power_tiling_mode;
 	uint32_t chunk_width;
 	uint32_t number_of_graphics_pipes;
 	uint32_t number_of_underlay_pipes;
