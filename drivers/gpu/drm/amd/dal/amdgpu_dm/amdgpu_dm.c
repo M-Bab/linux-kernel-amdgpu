@@ -136,8 +136,6 @@ static bool dm_check_soft_reset(void *handle)
 
 static int dm_soft_reset(void *handle)
 {
-	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-
 	/* XXX todo */
 	return 0;
 }
