@@ -34,6 +34,9 @@
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
+#include "../ddc_regs.h"
+
+/****************************** END END END new register headers */
 
 static void destruct(
 	struct hw_ddc *pin)

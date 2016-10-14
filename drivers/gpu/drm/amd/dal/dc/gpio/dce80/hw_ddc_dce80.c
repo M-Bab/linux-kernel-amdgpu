@@ -34,6 +34,8 @@
 #include "dce/dce_8_0_d.h"
 #include "dce/dce_8_0_sh_mask.h"
 
+#include "../ddc_regs.h"
+
 static void destruct(
 	struct hw_ddc *pin)
 {
