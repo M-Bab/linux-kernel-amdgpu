@@ -410,7 +410,7 @@ bool dm_pp_get_clock_levels_by_type_with_latency(
 	struct dm_pp_clock_levels_with_latency *clk_level_info)
 {
 	/* TODO: to be implemented */
-	return true;
+	return false;
 }
 
 bool dm_pp_get_clock_levels_by_type_with_voltage(
@@ -419,7 +419,7 @@ bool dm_pp_get_clock_levels_by_type_with_voltage(
 	struct dm_pp_clock_levels_with_voltage *clk_level_info)
 {
 	/* TODO: to be implemented */
-	return true;
+	return false;
 }
 
 bool dm_pp_notify_wm_clock_changes(
@@ -427,7 +427,7 @@ bool dm_pp_notify_wm_clock_changes(
 	struct dm_pp_wm_sets_with_clock_ranges *wm_with_clock_ranges)
 {
 	/* TODO: to be implemented */
-	return true;
+	return false;
 }
 
 bool dm_pp_apply_power_level_change_request(
@@ -435,7 +435,7 @@ bool dm_pp_apply_power_level_change_request(
 	struct dm_pp_power_level_change_request *level_change_req)
 {
 	/* TODO: to be implemented */
-	return true;
+	return false;
 }
 
 bool dm_pp_apply_clock_for_voltage_request(
@@ -443,7 +443,7 @@ bool dm_pp_apply_clock_for_voltage_request(
 	struct dm_pp_clock_for_voltage_req *clock_for_voltage_req)
 {
 	/* TODO: to be implemented */
-	return true;
+	return false;
 }
 
 bool dm_pp_get_static_clocks(
@@ -451,7 +451,7 @@ bool dm_pp_get_static_clocks(
 	struct dm_pp_static_clock_info *static_clk_info)
 {
 	/* TODO: to be implemented */
-	return true;
+	return false;
 }
 
 /**** end of power component interfaces ****/
