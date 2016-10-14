@@ -43,7 +43,7 @@
 #include "dce110/dce110_stream_encoder.h"
 #include "dce110/dce110_opp.h"
 #include "dce110/dce110_clock_source.h"
-#include "dce110/audio_dce110.h"
+#include "dce/dce_audio.h"
 #include "dce100/dce100_hw_sequencer.h"
 #include "dce/dce_10_0_d.h"
 #include "dce/dce_10_0_sh_mask.h"

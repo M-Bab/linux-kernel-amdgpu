@@ -24,7 +24,7 @@
  */
 
 #include "dm_services.h"
-#include "audio_dce110.h"
+#include "dce_audio.h"
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 

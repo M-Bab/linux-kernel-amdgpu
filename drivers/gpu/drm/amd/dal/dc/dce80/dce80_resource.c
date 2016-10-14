@@ -47,7 +47,7 @@
 #include "dce80/dce80_opp.h"
 #include "dce110/dce110_ipp.h"
 #include "dce110/dce110_clock_source.h"
-#include "dce110/audio_dce110.h"
+#include "dce/dce_audio.h"
 #include "dce80/dce80_hw_sequencer.h"
 
 #include "dce/dce_8_0_d.h"

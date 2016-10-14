@@ -2,7 +2,7 @@
 # Makefile for the 'controller' sub-component of DAL.
 # It provides the control and status of HW CRTC block.
 
-DCE110 = dce110_audio.o dce110_ipp.o dce110_ipp_cursor.o \
+DCE110 = dce110_ipp.o dce110_ipp_cursor.o \
 dce110_ipp_gamma.o dce110_link_encoder.o dce110_opp.o \
 dce110_opp_formatter.o dce110_opp_regamma.o dce110_stream_encoder.o \
 dce110_timing_generator.o dce110_transform.o dce110_transform_v.o \
