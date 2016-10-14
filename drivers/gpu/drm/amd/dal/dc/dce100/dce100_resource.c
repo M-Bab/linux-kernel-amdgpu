@@ -866,13 +866,13 @@ static bool construct(
 		dal_display_clock_store_max_clocks_state(
 				pool->base.display_clock, max_clocks_state);
 	}
-
-	struct irq_service_init_data init_data;
-	init_data.ctx = dc->ctx;
-	pool->base.irqs = dal_irq_service_dce110_create(&init_data);
-	if (!pool->base.irqs)
-		goto irqs_create_fail;
-
+	{
+		struct irq_service_init_data init_data;
+		init_data.ctx = dc->ctx;
+		pool->base.irqs = dal_irq_service_dce110_create(&init_data);
+		if (!pool->base.irqs)
+			goto irqs_create_fail;
+	}
 
 	/*************************************************
 	*  Resource + asic cap harcoding                *

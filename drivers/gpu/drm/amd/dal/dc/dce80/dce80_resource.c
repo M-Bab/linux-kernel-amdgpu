@@ -864,12 +864,13 @@ static bool construct(
 				pool->base.display_clock, max_clocks_state);
 	}
 
-	struct irq_service_init_data init_data;
-	init_data.ctx = dc->ctx;
-	pool->base.irqs = dal_irq_service_dce80_create(&init_data);
-	if (!pool->base.irqs)
-		goto irqs_create_fail;
-
+	{
+		struct irq_service_init_data init_data;
+		init_data.ctx = dc->ctx;
+		pool->base.irqs = dal_irq_service_dce80_create(&init_data);
+		if (!pool->base.irqs)
+			goto irqs_create_fail;
+	}
 
 	pool->base.scaler_filter = dal_scaler_filter_create(ctx);
 	if (pool->base.scaler_filter == NULL) {
