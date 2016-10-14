@@ -148,6 +148,8 @@ enum surface_pixel_format {
 	SURFACE_PIXEL_FORMAT_GRPH_ABGR2101010_XR_BIAS,
 	/*64 bpp */
 	SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616,
+	/*float*/
+	SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616F,
 	/*swaped & float*/
 	SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F,
 	/*grow graphics here if necessary */

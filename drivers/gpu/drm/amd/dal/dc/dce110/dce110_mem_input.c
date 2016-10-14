@@ -296,6 +296,7 @@ static void program_pixel_format(
 			break;
 		case SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616:
 		case SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F:
+		case SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616F:
 			set_reg_field_value(
 				value, 3, GRPH_CONTROL, GRPH_DEPTH);
 			set_reg_field_value(
@@ -309,7 +310,6 @@ static void program_pixel_format(
 			DCP_REG(mmGRPH_CONTROL),
 			value);
 
-		/*TODO [hwentlan] MOVE THIS TO CONTROLLER GAMMA!!!!!*/
 		value = dm_read_reg(
 			mem_input110->base.ctx,
 			DCP_REG(mmPRESCALE_GRPH_CONTROL));
