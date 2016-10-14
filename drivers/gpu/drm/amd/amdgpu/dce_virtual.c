@@ -660,18 +660,18 @@ static int dce_virtual_connector_encoder_init(struct amdgpu_device *adev,
 
 	/* add a new encoder */
 	encoder = kzalloc(sizeof(struct drm_encoder), GFP_KERNEL);
-	if (!encoder) {
-		kfree(connector);
+	if (!encoder)
 		return -ENOMEM;
-	}
 	encoder->possible_crtcs = 1 << index;
 	drm_encoder_init(adev->ddev, encoder, &dce_virtual_encoder_funcs,
 			 DRM_MODE_ENCODER_VIRTUAL, NULL);
 	drm_encoder_helper_add(encoder, &dce_virtual_encoder_helper_funcs);
 
 	connector = kzalloc(sizeof(struct drm_connector), GFP_KERNEL);
-	if (!connector)
+	if (!connector) {
+		kfree(encoder);
 		return -ENOMEM;
+	}
 
 	/* add a new connector */
 	drm_connector_init(adev->ddev, connector, &dce_virtual_connector_funcs,
