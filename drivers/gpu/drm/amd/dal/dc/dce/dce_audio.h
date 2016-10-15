@@ -65,7 +65,7 @@
 		SF(AZALIA_F0_CODEC_ENDPOINT_DATA, AZALIA_ENDPOINT_REG_DATA, mask_sh)
 
 
-struct dce110_audio_registers {
+struct dce_audio_registers {
 	uint32_t AZALIA_F0_CODEC_ENDPOINT_INDEX;
 	uint32_t AZALIA_F0_CODEC_ENDPOINT_DATA;
 
@@ -82,7 +82,7 @@ struct dce110_audio_registers {
 	uint32_t AUDIO_RATE_CAPABILITIES;
 };
 
-struct dce110_audio_shift {
+struct dce_audio_shift {
 	uint8_t AZALIA_ENDPOINT_REG_INDEX;
 	uint8_t AZALIA_ENDPOINT_REG_DATA;
 
@@ -98,7 +98,7 @@ struct dce110_audio_shift {
 	uint8_t DCCG_AUDIO_DTO1_PHASE;
 };
 
-struct dce110_aduio_mask {
+struct dce_aduio_mask {
 	uint32_t AZALIA_ENDPOINT_REG_INDEX;
 	uint32_t AZALIA_ENDPOINT_REG_DATA;
 
@@ -114,36 +114,33 @@ struct dce110_aduio_mask {
 	uint32_t DCCG_AUDIO_DTO1_PHASE;
 };
 
-struct audio_dce110 {
+struct dce_audio {
 	struct audio base;
-	const struct dce110_audio_registers *regs;
-	const struct dce110_audio_shift *shifts;
-	const struct dce110_aduio_mask *masks;
-
-	/* dce-specific members are following */
-	/* none */
+	const struct dce_audio_registers *regs;
+	const struct dce_audio_shift *shifts;
+	const struct dce_aduio_mask *masks;
 };
 
-struct audio *dce110_audio_create(
+struct audio *dce_audio_create(
 		struct dc_context *ctx,
 		unsigned int inst,
-		const struct dce110_audio_registers *reg,
-		const struct dce110_audio_shift *shifts,
-		const struct dce110_aduio_mask *masks);
+		const struct dce_audio_registers *reg,
+		const struct dce_audio_shift *shifts,
+		const struct dce_aduio_mask *masks);
 
-void dce110_aud_destroy(struct audio **audio);
+void dce_aud_destroy(struct audio **audio);
 
-void dce110_aud_hw_init(struct audio *audio);
+void dce_aud_hw_init(struct audio *audio);
 
-void dce110_aud_az_enable(struct audio *audio);
-void dce110_aud_az_disable(struct audio *audio);
+void dce_aud_az_enable(struct audio *audio);
+void dce_aud_az_disable(struct audio *audio);
 
-void dce110_aud_az_configure(struct audio *audio,
+void dce_aud_az_configure(struct audio *audio,
 	enum signal_type signal,
 	const struct audio_crtc_info *crtc_info,
 	const struct audio_info *audio_info);
 
-void dce110_aud_wall_dto_setup(struct audio *audio,
+void dce_aud_wall_dto_setup(struct audio *audio,
 	enum signal_type signal,
 	const struct audio_crtc_info *crtc_info,
 	const struct audio_pll_info *pll_info);

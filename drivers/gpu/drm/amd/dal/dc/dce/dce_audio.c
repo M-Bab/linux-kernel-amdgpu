@@ -28,20 +28,20 @@
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
-#define DCE110_AUD(audio)\
-	container_of(audio, struct audio_dce110, base)
+#define DCE_AUD(audio)\
+	container_of(audio, struct dce_audio, base)
 
 
 #include "reg_helper.h"
 
 #define CTX \
-	aud110->base.ctx
+	aud->base.ctx
 #define REG(reg)\
-	(aud110->regs->reg)
+	(aud->regs->reg)
 
 #undef FN
 #define FN(reg_name, field_name) \
-	aud110->shifts->field_name, aud110->masks->field_name
+	aud->shifts->field_name, aud->masks->field_name
 
 #define IX_REG(reg)\
 	ix ## reg
@@ -56,7 +56,7 @@ static void write_indirect_azalia_reg(struct audio *audio,
 	uint32_t reg_index,
 	uint32_t reg_data)
 {
-	struct audio_dce110 *aud110 = DCE110_AUD(audio);
+	struct dce_audio *aud = DCE_AUD(audio);
 
 	/* AZALIA_F0_CODEC_ENDPOINT_INDEX  endpoint index  */
 	REG_SET(AZALIA_F0_CODEC_ENDPOINT_INDEX, 0,
@@ -74,7 +74,7 @@ static void write_indirect_azalia_reg(struct audio *audio,
 
 static uint32_t read_indirect_azalia_reg(struct audio *audio, uint32_t reg_index)
 {
-	struct audio_dce110 *aud110 = DCE110_AUD(audio);
+	struct dce_audio *aud = DCE_AUD(audio);
 
 	uint32_t value = 0;
 
@@ -351,7 +351,7 @@ static void set_audio_latency(
 		value);
 }
 
-void dce110_aud_az_enable(struct audio *audio)
+void dce_aud_az_enable(struct audio *audio)
 {
 	uint32_t value = AZ_REG_READ(AZALIA_F0_CODEC_PIN_CONTROL_HOT_PLUG_CONTROL);
 
@@ -365,7 +365,7 @@ void dce110_aud_az_enable(struct audio *audio)
 	AZ_REG_WRITE(AZALIA_F0_CODEC_PIN_CONTROL_HOT_PLUG_CONTROL, value);
 }
 
-void dce110_aud_az_disable(struct audio *audio)
+void dce_aud_az_disable(struct audio *audio)
 {
 	uint32_t value;
 
@@ -378,13 +378,13 @@ void dce110_aud_az_disable(struct audio *audio)
 	AZ_REG_WRITE(AZALIA_F0_CODEC_PIN_CONTROL_HOT_PLUG_CONTROL, value);
 }
 
-void dce110_aud_az_configure(
+void dce_aud_az_configure(
 	struct audio *audio,
 	enum signal_type signal,
 	const struct audio_crtc_info *crtc_info,
 	const struct audio_info *audio_info)
 {
-	struct audio_dce110 *aud110 = DCE110_AUD(audio);
+	struct dce_audio *aud = DCE_AUD(audio);
 
 	uint32_t speakers = audio_info->flags.info.ALLSPEAKERS;
 	uint32_t value;
@@ -754,13 +754,13 @@ static bool get_azalia_clock_info_dp(
 	return true;
 }
 
-void dce110_aud_wall_dto_setup(
+void dce_aud_wall_dto_setup(
 	struct audio *audio,
 	enum signal_type signal,
 	const struct audio_crtc_info *crtc_info,
 	const struct audio_pll_info *pll_info)
 {
-	struct audio_dce110 *aud110 = DCE110_AUD(audio);
+	struct dce_audio *aud = DCE_AUD(audio);
 
 	struct azalia_clock_info clock_info = { 0 };
 
@@ -842,10 +842,10 @@ void dce110_aud_wall_dto_setup(
 }
 
 /* initialize HW state */
-void dce110_aud_hw_init(
+void dce_aud_hw_init(
 		struct audio *audio)
 {
-	struct audio_dce110 *aud110 = DCE110_AUD(audio);
+	struct dce_audio *aud = DCE_AUD(audio);
 
 	/* we only need to program the following registers once, so we only do
 	it for the inst 0*/
@@ -866,28 +866,28 @@ void dce110_aud_hw_init(
 }
 
 static const struct audio_funcs funcs = {
-	.hw_init = dce110_aud_hw_init,
-	.wall_dto_setup = dce110_aud_wall_dto_setup,
-	.az_enable = dce110_aud_az_enable,
-	.az_disable = dce110_aud_az_disable,
-	.az_configure = dce110_aud_az_configure,
+	.hw_init = dce_aud_hw_init,
+	.wall_dto_setup = dce_aud_wall_dto_setup,
+	.az_enable = dce_aud_az_enable,
+	.az_disable = dce_aud_az_disable,
+	.az_configure = dce_aud_az_configure,
 };
 
-void dce110_aud_destroy(struct audio **audio)
+void dce_aud_destroy(struct audio **audio)
 {
 	dm_free(*audio);
 	*audio = NULL;
 }
 
-struct audio *dce110_audio_create(
+struct audio *dce_audio_create(
 		struct dc_context *ctx,
 		unsigned int inst,
-		const struct dce110_audio_registers *reg,
-		const struct dce110_audio_shift *shifts,
-		const struct dce110_aduio_mask *masks
+		const struct dce_audio_registers *reg,
+		const struct dce_audio_shift *shifts,
+		const struct dce_aduio_mask *masks
 		)
 {
-	struct audio_dce110 *audio = dm_alloc(sizeof(*audio));
+	struct dce_audio *audio = dm_alloc(sizeof(*audio));
 
 	if (audio == NULL) {
 		ASSERT_CRITICAL(audio);

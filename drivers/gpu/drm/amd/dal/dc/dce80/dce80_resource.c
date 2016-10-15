@@ -292,7 +292,7 @@ static const struct dce110_stream_enc_registers stream_enc_regs[] = {
 	AUD_COMMON_REG_LIST(id)\
 }
 
-static const struct dce110_audio_registers audio_regs[] = {
+static const struct dce_audio_registers audio_regs[] = {
 	audio_regs(0),
 	audio_regs(1),
 	audio_regs(2),
@@ -302,11 +302,11 @@ static const struct dce110_audio_registers audio_regs[] = {
 	audio_regs(6),
 };
 
-static const struct dce110_audio_shift audio_shift = {
+static const struct dce_audio_shift audio_shift = {
 		AUD_COMMON_MASK_SH_LIST(__SHIFT)
 };
 
-static const struct dce110_aduio_mask audio_mask = {
+static const struct dce_aduio_mask audio_mask = {
 		AUD_COMMON_MASK_SH_LIST(_MASK)
 };
 
@@ -520,7 +520,7 @@ static void destruct(struct dce110_resource_pool *pool)
 
 	for (i = 0; i < pool->base.audio_count; i++)	{
 		if (pool->base.audios[i] != NULL) {
-			dce110_aud_destroy(&pool->base.audios[i]);
+			dce_aud_destroy(&pool->base.audios[i]);
 		}
 	}
 
@@ -932,7 +932,7 @@ static bool construct(
 			break;
 		}
 
-		pool->base.audios[i] = dce110_audio_create(
+		pool->base.audios[i] = dce_audio_create(
 				ctx, i, &audio_regs[i], &audio_shift, &audio_mask);
 
 		if (pool->base.audios[i] == NULL) {
@@ -985,7 +985,7 @@ stream_enc_create_fail:
 audio_create_fail:
 	for (i = 0; i < pool->base.pipe_count; i++) {
 		if (pool->base.audios[i] != NULL)
-			dce110_aud_destroy(&pool->base.audios[i]);
+			dce_aud_destroy(&pool->base.audios[i]);
 	}
 
 controller_create_fail:
