@@ -836,14 +836,14 @@ static bool construct(
 	if (pool->base.dp_clock_source == NULL) {
 		dm_error("DC: failed to create dp clock source!\n");
 		BREAK_TO_DEBUGGER();
-		goto clk_src_create_fail;
+		goto res_create_fail;
 	}
 
 	for (i = 0; i < pool->base.clk_src_count; i++) {
 		if (pool->base.clock_sources[i] == NULL) {
 			dm_error("DC: failed to create clock sources!\n");
 			BREAK_TO_DEBUGGER();
-			goto clk_src_create_fail;
+			goto res_create_fail;
 		}
 	}
 
@@ -851,7 +851,7 @@ static bool construct(
 	if (pool->base.display_clock == NULL) {
 		dm_error("DC: failed to create display clock!\n");
 		BREAK_TO_DEBUGGER();
-		goto disp_clk_create_fail;
+		goto res_create_fail;
 	}
 
 
@@ -869,14 +869,14 @@ static bool construct(
 		init_data.ctx = dc->ctx;
 		pool->base.irqs = dal_irq_service_dce80_create(&init_data);
 		if (!pool->base.irqs)
-			goto irqs_create_fail;
+			goto res_create_fail;
 	}
 
 	pool->base.scaler_filter = dal_scaler_filter_create(ctx);
 	if (pool->base.scaler_filter == NULL) {
 		BREAK_TO_DEBUGGER();
 		dm_error("DC: failed to create filter!\n");
-		goto filter_create_fail;
+		goto res_create_fail;
 	}
 
 	for (i = 0; i < pool->base.pipe_count; i++) {
@@ -885,7 +885,7 @@ static bool construct(
 		if (pool->base.timing_generators[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create tg!\n");
-			goto controller_create_fail;
+			goto res_create_fail;
 		}
 
 		pool->base.mis[i] = dce80_mem_input_create(ctx, as, i,
@@ -893,14 +893,14 @@ static bool construct(
 		if (pool->base.mis[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create memory input!\n");
-			goto controller_create_fail;
+			goto res_create_fail;
 		}
 
 		pool->base.ipps[i] = dce80_ipp_create(ctx, i, &ipp_reg_offsets[i]);
 		if (pool->base.ipps[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create input pixel processor!\n");
-			goto controller_create_fail;
+			goto res_create_fail;
 		}
 
 		pool->base.transforms[i] = dce80_transform_create(
@@ -908,7 +908,7 @@ static bool construct(
 		if (pool->base.transforms[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create transform!\n");
-			goto controller_create_fail;
+			goto res_create_fail;
 		}
 		pool->base.transforms[i]->funcs->transform_set_scaler_filter(
 				pool->base.transforms[i],
@@ -918,7 +918,7 @@ static bool construct(
 		if (pool->base.opps[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create output pixel processor!\n");
-			goto controller_create_fail;
+			goto res_create_fail;
 		}
 	}
 
@@ -938,7 +938,7 @@ static bool construct(
 		if (pool->base.audios[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create audio!\n");
-			goto audio_create_fail;
+			goto res_create_fail;
 		}
 		pool->base.audio_count++;
 	}
@@ -953,7 +953,7 @@ static bool construct(
 			if (pool->base.stream_enc[i] == NULL) {
 				BREAK_TO_DEBUGGER();
 				dm_error("DC: failed to create stream_encoder!\n");
-				goto stream_enc_create_fail;
+				goto res_create_fail;
 			}
 		}
 	}
@@ -965,63 +965,19 @@ static bool construct(
 		if (pool->base.stream_enc[pool->base.stream_enc_count] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create stream_encoder!\n");
-			goto stream_enc_create_fail;
+			goto res_create_fail;
 		}
 		pool->base.stream_enc_count++;
 	}
 
 	/* Create hardware sequencer */
 	if (!dce80_hw_sequencer_construct(dc))
-		goto stream_enc_create_fail;
+		goto res_create_fail;
 
 	return true;
 
-stream_enc_create_fail:
-	for (i = 0; i < pool->base.stream_enc_count; i++) {
-		if (pool->base.stream_enc[i] != NULL)
-			dm_free(DCE110STRENC_FROM_STRENC(pool->base.stream_enc[i]));
-	}
-
-audio_create_fail:
-	for (i = 0; i < pool->base.pipe_count; i++) {
-		if (pool->base.audios[i] != NULL)
-			dce_aud_destroy(&pool->base.audios[i]);
-	}
-
-controller_create_fail:
-	for (i = 0; i < pool->base.pipe_count; i++) {
-		if (pool->base.opps[i] != NULL)
-			dce80_opp_destroy(&pool->base.opps[i]);
-
-		if (pool->base.transforms[i] != NULL)
-			dce80_transform_destroy(&pool->base.transforms[i]);
-
-		if (pool->base.ipps[i] != NULL)
-			dce80_ipp_destroy(&pool->base.ipps[i]);
-
-		if (pool->base.mis[i] != NULL) {
-			dm_free(TO_DCE110_MEM_INPUT(pool->base.mis[i]));
-			pool->base.mis[i] = NULL;
-		}
-		if (pool->base.timing_generators[i] != NULL)	{
-			dm_free(DCE110TG_FROM_TG(pool->base.timing_generators[i]));
-			pool->base.timing_generators[i] = NULL;
-		}
-	}
-
-filter_create_fail:
-	dal_irq_service_destroy(&pool->base.irqs);
-
-irqs_create_fail:
-	dal_display_clock_destroy(&pool->base.display_clock);
-
-disp_clk_create_fail:
-clk_src_create_fail:
-	for (i = 0; i < pool->base.clk_src_count; i++) {
-		if (pool->base.clock_sources[i] != NULL)
-			dce80_clock_source_destroy(&pool->base.clock_sources[i]);
-	}
-
+res_create_fail:
+	destruct(pool);
 	return false;
 }
 
