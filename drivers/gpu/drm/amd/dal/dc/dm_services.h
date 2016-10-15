@@ -405,4 +405,10 @@ long dm_get_tgid(void);
 
 #endif /* CONFIG_DEBUG_KERNEL || CONFIG_DEBUG_DRIVER */
 
+
+#define DC_ERR(err_msg)  do { \
+	BREAK_TO_DEBUGGER(); \
+	dm_error(err_msg); \
+} while (0)
+
 #endif /* __DM_SERVICES_H__ */

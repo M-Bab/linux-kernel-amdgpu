@@ -31,7 +31,6 @@
 #include "resource.h"
 #include "include/irq_service_interface.h"
 #include "include/adapter_service_interface.h"
-#include "../virtual/virtual_stream_encoder.h"
 #include "dce110/dce110_resource.h"
 #include "dce110/dce110_timing_generator.h"
 #include "dce112/dce112_mem_input.h"
@@ -358,6 +357,21 @@ static const struct dce112_clk_src_reg_offsets dce112_clk_src_reg_offsets[] = {
 	{
 		.pixclk_resync_cntl  = mmPHYPLLF_PIXCLK_RESYNC_CNTL
 	}
+};
+
+static const struct resource_caps res_cap = {
+	.num_audio = 6,
+};
+
+static struct audio *create_audio(
+		struct dc_context *ctx, unsigned int inst)
+{
+	return dce_audio_create(ctx, inst,
+			&audio_regs[inst], &audio_shift, &audio_mask);
+}
+
+static const struct resource_create_funcs res_create_funcs = {
+	.create_audio = create_audio,
 };
 
 static struct timing_generator *dce112_timing_generator_create(
@@ -1104,7 +1118,6 @@ static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 	dm_pp_notify_wm_clock_changes(dc->ctx, &clk_ranges);
 }
 
-
 static bool construct(
 	struct adapter_service *adapter_serv,
 	uint8_t num_virtual_links,
@@ -1284,27 +1297,6 @@ static bool construct(
 		}
 	}
 
-	pool->base.audio_count = 0;
-	for (i = 0; i < pool->base.pipe_count; i++) {
-		struct graphics_object_id obj_id;
-
-		obj_id = dal_adapter_service_enum_audio_object(adapter_serv, i);
-		if (false == dal_graphics_object_id_is_valid(obj_id)) {
-			/* no more valid audio objects */
-			break;
-		}
-
-		pool->base.audios[i] = dce_audio_create(
-			ctx, i, &audio_regs[i], &audio_shift, &audio_mask);
-
-		if (pool->base.audios[i] == NULL) {
-			BREAK_TO_DEBUGGER();
-			dm_error("DC: failed to create audio!\n");
-			goto res_create_fail;
-		}
-		pool->base.audio_count++;
-	}
-
 	for (i = 0; i < pool->base.stream_enc_count; i++) {
 		/* TODO: rework fragile code*/
 		if (pool->base.stream_engines.u_all & 1 << i) {
@@ -1321,17 +1313,9 @@ static bool construct(
 		}
 	}
 
-	for (i = 0; i < num_virtual_links; i++) {
-		pool->base.stream_enc[pool->base.stream_enc_count] =
-			virtual_stream_encoder_create(
-				ctx, ctx->dc_bios);
-		if (pool->base.stream_enc[pool->base.stream_enc_count] == NULL) {
-			BREAK_TO_DEBUGGER();
-			dm_error("DC: failed to create stream_encoder!\n");
-			goto res_create_fail;
-		}
-		pool->base.stream_enc_count++;
-	}
+	if (!resource_construct(adapter_serv, num_virtual_links, dc,
+			&pool->base, &res_cap, &res_create_funcs))
+		goto res_create_fail;
 
 	/* Create hardware sequencer */
 	if (!dce112_hw_sequencer_construct(dc))

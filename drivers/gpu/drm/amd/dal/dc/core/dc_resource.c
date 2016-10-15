@@ -34,6 +34,8 @@
 #include "set_mode_types.h"
 #include "adapter_service_interface.h"
 
+#include "virtual/virtual_stream_encoder.h"
+
 #include "dce80/dce80_resource.h"
 #include "dce100/dce100_resource.h"
 #include "dce110/dce110_resource.h"
@@ -96,6 +98,52 @@ struct resource_pool *dc_create_resource_pool(struct adapter_service *adapter_se
 
 	return false;
 }
+
+
+bool resource_construct(
+	struct adapter_service *adapter_serv,
+	unsigned int num_virtual_links,
+	struct core_dc *dc,
+	struct resource_pool *pool,
+	const struct resource_caps *caps,
+	const struct resource_create_funcs *create_funcs)
+{
+	struct dc_context *ctx = dc->ctx;
+	int i;
+
+	pool->audio_count = 0;
+	for (i = 0; i < pool->pipe_count && i < caps->num_audio; i++) {
+		struct graphics_object_id obj_id;
+
+		obj_id = dal_adapter_service_enum_audio_object(adapter_serv, i);
+		if (false == dal_graphics_object_id_is_valid(obj_id)) {
+			/* no more valid audio objects */
+			break;
+		}
+
+		pool->audios[i] = create_funcs->create_audio(ctx, i);
+
+		if (pool->audios[i] == NULL) {
+			DC_ERR("DC: failed to create audio!\n");
+			return false;
+		}
+		pool->audio_count++;
+	}
+
+	for (i = 0; i < num_virtual_links; i++) {
+		pool->stream_enc[pool->stream_enc_count] =
+			virtual_stream_encoder_create(
+					ctx, ctx->dc_bios);
+		if (pool->stream_enc[pool->stream_enc_count] == NULL) {
+			DC_ERR("DC: failed to create stream_encoder!\n");
+			return false;
+		}
+		pool->stream_enc_count++;
+	}
+
+	return true;
+}
+
 
 void resource_unreference_clock_source(
 		struct resource_context *res_ctx,
