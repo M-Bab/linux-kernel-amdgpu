@@ -246,22 +246,10 @@ static bool power_up(
 	return true;
 }
 
-static void update_audio_connectivity(
-	struct hw_ctx_adapter_service *hw_ctx,
-	uint32_t number_of_audio_capable_display_path,
-	uint32_t number_of_controllers)
-{
-	/* this one should be empty on DCE110 */
-}
-
 static const struct hw_ctx_adapter_service_funcs funcs = {
 	.destroy = destroy,
 	.power_up = power_up,
-	.enum_fake_path_resource = NULL,
-	.enum_stereo_sync_object = NULL,
-	.enum_sync_output_object = NULL,
 	.enum_audio_object = enum_audio_object,
-	.update_audio_connectivity = update_audio_connectivity
 };
 
 static bool construct(

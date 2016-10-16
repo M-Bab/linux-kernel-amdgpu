@@ -49,27 +49,6 @@ static bool power_up(
 	return true;
 }
 
-static struct graphics_object_id enum_fake_path_resource(
-	const struct hw_ctx_adapter_service *hw_ctx,
-	uint32_t index)
-{
-	return invalid_go;
-}
-
-static struct graphics_object_id enum_stereo_sync_object(
-	const struct hw_ctx_adapter_service *hw_ctx,
-	uint32_t index)
-{
-	return invalid_go;
-}
-
-static struct graphics_object_id enum_sync_output_object(
-	const struct hw_ctx_adapter_service *hw_ctx,
-	uint32_t index)
-{
-	return invalid_go;
-}
-
 static struct graphics_object_id enum_audio_object(
 	const struct hw_ctx_adapter_service *hw_ctx,
 	uint32_t index)
@@ -77,21 +56,10 @@ static struct graphics_object_id enum_audio_object(
 	return invalid_go;
 }
 
-static void update_audio_connectivity(
-	struct hw_ctx_adapter_service *hw_ctx,
-	uint32_t number_of_audio_capable_display_path,
-	uint32_t number_of_controllers)
-{
-}
-
 static const struct hw_ctx_adapter_service_funcs funcs = {
 	destroy,
 	power_up,
-	enum_fake_path_resource,
-	enum_stereo_sync_object,
-	enum_sync_output_object,
 	enum_audio_object,
-	update_audio_connectivity
 };
 
 static bool construct(

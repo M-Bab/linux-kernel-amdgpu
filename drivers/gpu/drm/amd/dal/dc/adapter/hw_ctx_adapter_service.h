@@ -42,26 +42,10 @@ struct hw_ctx_adapter_service_funcs {
 	 * and caches relevant data from HW registers */
 	bool (*power_up)(
 		struct hw_ctx_adapter_service *hw_ctx);
-	/* Enumerate fake path resources */
-	struct graphics_object_id (*enum_fake_path_resource)(
-		const struct hw_ctx_adapter_service *hw_ctx,
-		uint32_t index);
-	/* Enumerate stereo sync objects */
-	struct graphics_object_id (*enum_stereo_sync_object)(
-		const struct hw_ctx_adapter_service *hw_ctx,
-		uint32_t index);
-	/* Enumerate (H/V) sync output objects */
-	struct graphics_object_id (*enum_sync_output_object)(
-		const struct hw_ctx_adapter_service *hw_ctx,
-		uint32_t index);
 	/* Enumerate audio objects */
 	struct graphics_object_id (*enum_audio_object)(
 		const struct hw_ctx_adapter_service *hw_ctx,
 		uint32_t index);
-	void (*update_audio_connectivity)(
-		struct hw_ctx_adapter_service *hw_ctx,
-		uint32_t number_of_audio_capable_display_path,
-		uint32_t number_of_controllers);
 };
 
 struct hw_ctx_adapter_service {

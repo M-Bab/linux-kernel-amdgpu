@@ -189,38 +189,6 @@ static bool power_up(
 	return true;
 }
 
-static struct graphics_object_id enum_fake_path_resource(
-	const struct hw_ctx_adapter_service *hw_ctx,
-	uint32_t index)
-{
-	if (index == 0)
-		return dal_graphics_object_id_init(
-			CONNECTOR_ID_VGA,
-			ENUM_ID_1,
-			OBJECT_TYPE_CONNECTOR);
-	else if (index == 1)
-		return dal_graphics_object_id_init(
-			ENCODER_ID_INTERNAL_KLDSCP_DAC1,
-			ENUM_ID_1,
-			OBJECT_TYPE_ENCODER);
-	else
-		return invalid_go;
-}
-
-static struct graphics_object_id enum_stereo_sync_object(
-	const struct hw_ctx_adapter_service *hw_ctx,
-	uint32_t index)
-{
-	return invalid_go;
-}
-
-static struct graphics_object_id enum_sync_output_object(
-	const struct hw_ctx_adapter_service *hw_ctx,
-	uint32_t index)
-{
-	return invalid_go;
-}
-
 static struct graphics_object_id enum_audio_object(
 	const struct hw_ctx_adapter_service *hw_ctx,
 	uint32_t index)
@@ -237,51 +205,10 @@ static struct graphics_object_id enum_audio_object(
 			OBJECT_TYPE_AUDIO);
 }
 
-static void update_audio_connectivity(
-	struct hw_ctx_adapter_service *hw_ctx,
-	uint32_t number_of_audio_capable_display_path,
-	uint32_t number_of_controllers)
-{
-	uint32_t number_of_connected_audio_endpoints =
-		FROM_HW_CTX(hw_ctx)->number_of_connected_audio_endpoints;
-
-	uint32_t co_func_audio_endpoint = number_of_connected_audio_endpoints;
-	struct dc_context *ctx = hw_ctx->ctx;
-
-	if (co_func_audio_endpoint > number_of_audio_capable_display_path)
-		co_func_audio_endpoint = number_of_audio_capable_display_path;
-
-	if (co_func_audio_endpoint > number_of_controllers)
-		co_func_audio_endpoint = number_of_controllers;
-
-	if (co_func_audio_endpoint < number_of_connected_audio_endpoints) {
-		const uint32_t addr = mmCC_RCU_DC_AUDIO_PORT_CONNECTIVITY;
-
-		uint32_t value;
-
-		value = dm_read_reg(ctx, addr);
-
-		set_reg_field_value(value,
-				7 - co_func_audio_endpoint,
-				CC_RCU_DC_AUDIO_PORT_CONNECTIVITY,
-				PORT_CONNECTIVITY);
-		set_reg_field_value(value,
-				1,
-				CC_RCU_DC_AUDIO_PORT_CONNECTIVITY,
-				PORT_CONNECTIVITY_OVERRIDE_ENABLE);
-
-		dm_write_reg(ctx, addr, value);
-	}
-}
-
 static const struct hw_ctx_adapter_service_funcs funcs = {
 	destroy,
 	power_up,
-	enum_fake_path_resource,
-	enum_stereo_sync_object,
-	enum_sync_output_object,
 	enum_audio_object,
-	update_audio_connectivity
 };
 
 static bool construct(
