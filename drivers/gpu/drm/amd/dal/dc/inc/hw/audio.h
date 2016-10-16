@@ -32,6 +32,8 @@ struct audio;
 
 struct audio_funcs {
 
+	bool (*endpoint_valid)(struct audio *audio);
+
 	void (*hw_init)(struct audio *audio);
 
 	void (*az_enable)(struct audio *audio);
@@ -47,6 +49,8 @@ struct audio_funcs {
 		enum signal_type signal,
 		const struct audio_crtc_info *crtc_info,
 		const struct audio_pll_info *pll_info);
+
+	void (*destroy)(struct audio **audio);
 };
 
 struct audio {

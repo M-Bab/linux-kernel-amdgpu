@@ -100,8 +100,41 @@ struct resource_pool *dc_create_resource_pool(struct adapter_service *adapter_se
 }
 
 
+static void update_num_audio(
+	const struct resource_straps *straps,
+	unsigned int *num_audio,
+	struct audio_support *aud_support)
+{
+	/* dal_adapter_service_hw_ctx_get_audio_support */
+	bool dp_audio = false;
+	bool hdmi_audio_on_dongle = false;
+	bool hdmi_audio_native = false;
+
+	if (straps->hdmi_disable == 0) {
+		aud_support->hdmi_audio_native = true;
+		aud_support->hdmi_audio_on_dongle = true;
+		aud_support->dp_audio = true;
+	} else {
+		if (straps->dc_pinstraps_audio & 0x2) {
+			aud_support->hdmi_audio_on_dongle = true;
+			aud_support->dp_audio = true;
+		} else {
+			aud_support->dp_audio = true;
+		}
+	}
+
+	switch (straps->audio_stream_number) {
+	case 0: /* multi streams supported */
+		break;
+	case 1: /* multi streams not supported */
+		*num_audio = 1;
+		break;
+	default:
+		DC_ERR("DC: unexpected audio fuse!\n");
+	};
+}
+
 bool resource_construct(
-	struct adapter_service *adapter_serv,
 	unsigned int num_virtual_links,
 	struct core_dc *dc,
 	struct resource_pool *pool,
@@ -110,23 +143,35 @@ bool resource_construct(
 {
 	struct dc_context *ctx = dc->ctx;
 	int i;
+	unsigned int num_audio = caps->num_audio;
+	struct resource_straps straps = {0};
 
+	if (!IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment))
+		create_funcs->read_dce_straps(dc->ctx, &straps);
+
+	/* find the total number of streams available via the
+	 * AZALIA_F0_CODEC_PIN_CONTROL_RESPONSE_CONFIGURATION_DEFAULT
+	 * registers (one for each pin) starting from pin 1
+	 * up to the max number of audio pins.
+	 * We stop on the first pin where
+	 * PORT_CONNECTIVITY == 1 (as instructed by HW team).
+	 */
 	pool->audio_count = 0;
-	for (i = 0; i < pool->pipe_count && i < caps->num_audio; i++) {
-		struct graphics_object_id obj_id;
+	update_num_audio(&straps, &num_audio, &pool->audio_support);
+	for (i = 0; i < pool->pipe_count && i < num_audio; i++) {
+		struct audio *aud = create_funcs->create_audio(ctx, i);
 
-		obj_id = dal_adapter_service_enum_audio_object(adapter_serv, i);
-		if (false == dal_graphics_object_id_is_valid(obj_id)) {
-			/* no more valid audio objects */
-			break;
-		}
-
-		pool->audios[i] = create_funcs->create_audio(ctx, i);
-
-		if (pool->audios[i] == NULL) {
+		if (aud == NULL) {
 			DC_ERR("DC: failed to create audio!\n");
 			return false;
 		}
+
+		if (!aud->funcs->endpoint_valid(aud)) {
+			aud->funcs->destroy(&aud);
+			break;
+		}
+
+		pool->audios[i] = aud;
 		pool->audio_count++;
 	}
 

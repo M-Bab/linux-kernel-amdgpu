@@ -389,10 +389,6 @@ uint32_t dal_adapter_service_get_sw_i2c_speed(struct adapter_service *as);
 /* Get HW I2C speed */
 uint32_t dal_adapter_service_get_hw_i2c_speed(struct adapter_service *as);
 
-/* Get information on audio support */
-union audio_support dal_adapter_service_get_audio_support(
-		struct adapter_service *as);
-
 /* Get I2C information from BIOS */
 bool dal_adapter_service_get_i2c_info(
 	struct adapter_service *as,
@@ -409,13 +405,6 @@ struct i2caux *dal_adapter_service_get_i2caux(
 
 struct dal_asic_runtime_flags dal_adapter_service_get_asic_runtime_flags(
 	struct adapter_service *as);
-
-bool dal_adapter_service_initialize_hw_data(
-	struct adapter_service *as);
-
-struct graphics_object_id dal_adapter_service_enum_audio_object(
-	struct adapter_service *as,
-	uint32_t index);
 
 bool dal_adapter_service_get_embedded_panel_info(
 	struct adapter_service *as,

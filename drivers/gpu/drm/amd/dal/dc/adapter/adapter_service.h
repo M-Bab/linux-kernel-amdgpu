@@ -47,7 +47,6 @@ struct adapter_service {
 	struct gpio_service *gpio_service;
 	struct i2caux *i2caux;
 	struct wireless_data wireless_data;
-	struct hw_ctx_adapter_service *hw_ctx;
 	struct integrated_info *integrated_info;
 	uint32_t platform_methods_mask;
 	uint32_t ac_level_percentage;

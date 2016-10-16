@@ -841,6 +841,22 @@ void dce_aud_wall_dto_setup(
 	}
 }
 
+bool dce_aud_endpoint_valid(
+		struct audio *audio)
+{
+	uint32_t value;
+	uint32_t port_connectivity;
+
+	value = AZ_REG_READ(
+			AZALIA_F0_CODEC_PIN_CONTROL_RESPONSE_CONFIGURATION_DEFAULT);
+
+	port_connectivity = get_reg_field_value(value,
+			AZALIA_F0_CODEC_PIN_CONTROL_RESPONSE_CONFIGURATION_DEFAULT,
+			PORT_CONNECTIVITY);
+
+	return !(port_connectivity == 1);
+}
+
 /* initialize HW state */
 void dce_aud_hw_init(
 		struct audio *audio)
@@ -866,11 +882,13 @@ void dce_aud_hw_init(
 }
 
 static const struct audio_funcs funcs = {
+	.endpoint_valid = dce_aud_endpoint_valid,
 	.hw_init = dce_aud_hw_init,
 	.wall_dto_setup = dce_aud_wall_dto_setup,
 	.az_enable = dce_aud_az_enable,
 	.az_disable = dce_aud_az_disable,
 	.az_configure = dce_aud_az_configure,
+	.destroy = dce_aud_destroy,
 };
 
 void dce_aud_destroy(struct audio **audio)

@@ -514,16 +514,6 @@ static bool construct(struct core_dc *dc,
 			dm_error("%s: create_as() failed!\n", __func__);
 			goto as_fail;
 		}
-
-		/* Initialize HW controlled by Adapter Service */
-		if (false == dal_adapter_service_initialize_hw_data(
-				as)) {
-			dm_error("%s: dal_adapter_service_initialize_hw_data()"\
-					"  failed!\n", __func__);
-			/* Note that AS exist, so have to destroy it.*/
-			goto as_fail;
-		}
-
 	}
 
 	dc->res_pool = dc_create_resource_pool(

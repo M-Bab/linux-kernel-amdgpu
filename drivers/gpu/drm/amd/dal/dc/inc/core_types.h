@@ -226,6 +226,12 @@ struct resource_funcs {
 			struct core_stream *stream);
 };
 
+struct audio_support{
+	bool dp_audio;
+	bool hdmi_audio_on_dongle;
+	bool hdmi_audio_native;
+};
+
 struct resource_pool {
 	struct scaler_filter * scaler_filter;
 
@@ -252,6 +258,7 @@ struct resource_pool {
 
 	struct audio *audios[MAX_PIPES];
 	unsigned int audio_count;
+	struct audio_support audio_support;
 
 	struct display_clock *display_clock;
 	struct adapter_service *adapter_srv;

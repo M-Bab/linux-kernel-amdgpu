@@ -49,6 +49,8 @@
 #include "dce/dce_audio.h"
 #include "dce80/dce80_hw_sequencer.h"
 
+#include "reg_helper.h"
+
 #include "dce/dce_8_0_d.h"
 #include "dce/dce_8_0_sh_mask.h"
 
@@ -328,7 +330,29 @@ static const struct resource_caps res_cap = {
 	.num_audio = 6,
 };
 
-struct audio *create_audio(
+#define CTX  ctx
+#define REG(reg) mm ## reg
+
+#ifndef mmCC_DC_HDMI_STRAPS
+#define mmCC_DC_HDMI_STRAPS 0x1918
+#define CC_DC_HDMI_STRAPS__HDMI_DISABLE_MASK 0x40
+#define CC_DC_HDMI_STRAPS__HDMI_DISABLE__SHIFT 0x6
+#define CC_DC_HDMI_STRAPS__AUDIO_STREAM_NUMBER_MASK 0x700
+#define CC_DC_HDMI_STRAPS__AUDIO_STREAM_NUMBER__SHIFT 0x8
+#endif
+
+static void read_dce_straps(
+	struct dc_context *ctx,
+	struct resource_straps *straps)
+{
+	REG_GET_2(CC_DC_HDMI_STRAPS,
+			HDMI_DISABLE, &straps->hdmi_disable,
+			AUDIO_STREAM_NUMBER, &straps->audio_stream_number);
+
+	REG_GET(DC_PINSTRAPS, DC_PINSTRAPS_AUDIO, &straps->dc_pinstraps_audio);
+}
+
+static struct audio *create_audio(
 		struct dc_context *ctx, unsigned int inst)
 {
 	return dce_audio_create(ctx, inst,
@@ -336,6 +360,7 @@ struct audio *create_audio(
 }
 
 static const struct resource_create_funcs res_create_funcs = {
+	.read_dce_straps = read_dce_straps,
 	.create_audio = create_audio,
 };
 
@@ -951,7 +976,7 @@ static bool construct(
 		}
 	}
 
-	if (!resource_construct(as, num_virtual_links, dc, &pool->base,
+	if (!resource_construct(num_virtual_links, dc, &pool->base,
 			&res_cap, &res_create_funcs))
 		goto res_create_fail;
 

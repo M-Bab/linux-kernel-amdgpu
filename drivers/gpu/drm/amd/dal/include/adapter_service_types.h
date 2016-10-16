@@ -59,13 +59,4 @@ union bandwidth_tuning_params {
 		/ sizeof(uint32_t)];
 };
 
-union audio_support {
-	struct {
-		uint32_t DP_AUDIO:1;
-		uint32_t HDMI_AUDIO_ON_DONGLE:1;
-		uint32_t HDMI_AUDIO_NATIVE:1;
-	} bits;
-	uint32_t raw;
-};
-
 #endif

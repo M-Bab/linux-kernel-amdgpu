@@ -399,11 +399,9 @@ static enum signal_type link_detect_sink(struct core_link *link)
 	case CONNECTOR_ID_HDMI_TYPE_A: {
 		/* check audio support:
 		 * if native HDMI is not supported, switch to DVI */
-		union audio_support audio_support =
-			dal_adapter_service_get_audio_support(
-				link->adapter_srv);
+		struct audio_support *aud_support = &link->dc->res_pool->audio_support;
 
-		if (!audio_support.bits.HDMI_AUDIO_NATIVE)
+		if (!aud_support->hdmi_audio_native)
 			if (link->link_id.id == CONNECTOR_ID_HDMI_TYPE_A)
 				result = SIGNAL_TYPE_DVI_SINGLE_LINK;
 	}
@@ -426,13 +424,13 @@ static enum signal_type link_detect_sink(struct core_link *link)
 
 static enum signal_type decide_signal_from_strap_and_dongle_type(
 		enum display_dongle_type dongle_type,
-		union audio_support *audio_support)
+		struct audio_support *audio_support)
 {
 	enum signal_type signal = SIGNAL_TYPE_NONE;
 
 	switch (dongle_type) {
 	case DISPLAY_DONGLE_DP_HDMI_DONGLE:
-		if (audio_support->bits.HDMI_AUDIO_ON_DONGLE)
+		if (audio_support->hdmi_audio_on_dongle)
 			signal =  SIGNAL_TYPE_HDMI_TYPE_A;
 		else
 			signal = SIGNAL_TYPE_DVI_SINGLE_LINK;
@@ -441,7 +439,7 @@ static enum signal_type decide_signal_from_strap_and_dongle_type(
 		signal = SIGNAL_TYPE_DVI_SINGLE_LINK;
 		break;
 	case DISPLAY_DONGLE_DP_HDMI_MISMATCHED_DONGLE:
-		if (audio_support->bits.HDMI_AUDIO_NATIVE)
+		if (audio_support->hdmi_audio_native)
 			signal =  SIGNAL_TYPE_HDMI_TYPE_A;
 		else
 			signal = SIGNAL_TYPE_DVI_SINGLE_LINK;
@@ -457,7 +455,7 @@ static enum signal_type decide_signal_from_strap_and_dongle_type(
 static enum signal_type dp_passive_dongle_detection(
 		struct ddc_service *ddc,
 		struct display_sink_capability *sink_cap,
-		union audio_support *audio_support)
+		struct audio_support *audio_support)
 {
 	dal_ddc_service_i2c_query_dp_dual_mode_adaptor(
 						ddc, sink_cap);
@@ -515,7 +513,7 @@ static void detect_dp(
 	struct core_link *link,
 	struct display_sink_capability *sink_caps,
 	bool *converter_disable_audio,
-	union audio_support *audio_support,
+	struct audio_support *audio_support,
 	bool boot)
 {
 	sink_caps->signal = link_detect_sink(link);
@@ -594,9 +592,7 @@ bool dc_link_detect(const struct dc_link *dc_link, bool boot)
 	struct display_sink_capability sink_caps = { 0 };
 	uint8_t i;
 	bool converter_disable_audio = false;
-	union audio_support audio_support =
-		dal_adapter_service_get_audio_support(
-			link->adapter_srv);
+	struct audio_support *aud_support = &link->dc->res_pool->audio_support;
 	enum dc_edid_status edid_status;
 	struct dc_context *dc_ctx = link->ctx;
 	struct dc_sink *dc_sink;
@@ -624,7 +620,7 @@ bool dc_link_detect(const struct dc_link *dc_link, bool boot)
 		switch (link->public.connector_signal) {
 		case SIGNAL_TYPE_HDMI_TYPE_A: {
 			sink_caps.transaction_type = DDC_TRANSACTION_TYPE_I2C;
-			if (audio_support.bits.HDMI_AUDIO_NATIVE)
+			if (aud_support->hdmi_audio_native)
 				sink_caps.signal = SIGNAL_TYPE_HDMI_TYPE_A;
 			else
 				sink_caps.signal = SIGNAL_TYPE_DVI_SINGLE_LINK;
@@ -656,7 +652,7 @@ bool dc_link_detect(const struct dc_link *dc_link, bool boot)
 				link,
 				&sink_caps,
 				&converter_disable_audio,
-				&audio_support, boot);
+				aud_support, boot);
 
 			/* Active dongle downstream unplug */
 			if (link->public.type == dc_connection_active_dongle

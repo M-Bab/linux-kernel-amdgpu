@@ -45,6 +45,9 @@
 #include "dce110/dce110_clock_source.h"
 #include "dce/dce_audio.h"
 #include "dce100/dce100_hw_sequencer.h"
+
+#include "reg_helper.h"
+
 #include "dce/dce_10_0_d.h"
 #include "dce/dce_10_0_sh_mask.h"
 
@@ -339,6 +342,44 @@ static const struct dce110_opp_reg_offsets dce100_opp_reg_offsets[] = {
 	.dcfe_offset = (mmCRTC5_DCFE_MEM_PWR_CTRL - DCFE_MEM_PWR_CTRL_REG_BASE),
 	.dcp_offset = (mmDCP5_GRPH_CONTROL - mmDCP0_GRPH_CONTROL),
 }
+};
+
+static const struct resource_caps res_cap = {
+	.num_audio = 6,
+};
+
+#define CTX  ctx
+#define REG(reg) mm ## reg
+
+#ifndef mmCC_DC_HDMI_STRAPS
+#define mmCC_DC_HDMI_STRAPS 0x1918
+#define CC_DC_HDMI_STRAPS__HDMI_DISABLE_MASK 0x40
+#define CC_DC_HDMI_STRAPS__HDMI_DISABLE__SHIFT 0x6
+#define CC_DC_HDMI_STRAPS__AUDIO_STREAM_NUMBER_MASK 0x700
+#define CC_DC_HDMI_STRAPS__AUDIO_STREAM_NUMBER__SHIFT 0x8
+#endif
+
+static void read_dce_straps(
+	struct dc_context *ctx,
+	struct resource_straps *straps)
+{
+	REG_GET_2(CC_DC_HDMI_STRAPS,
+			HDMI_DISABLE, &straps->hdmi_disable,
+			AUDIO_STREAM_NUMBER, &straps->audio_stream_number);
+
+	REG_GET(DC_PINSTRAPS, DC_PINSTRAPS_AUDIO, &straps->dc_pinstraps_audio);
+}
+
+static struct audio *create_audio(
+		struct dc_context *ctx, unsigned int inst)
+{
+	return dce_audio_create(ctx, inst,
+			&audio_regs[inst], &audio_shift, &audio_mask);
+}
+
+static const struct resource_create_funcs res_create_funcs = {
+	.read_dce_straps = read_dce_straps,
+	.create_audio = create_audio,
 };
 
 static struct timing_generator *dce100_timing_generator_create(
@@ -942,26 +983,6 @@ static bool construct(
 		}
 	}
 
-	pool->base.audio_count = 0;
-	for (i = 0; i < pool->base.pipe_count; i++) {
-		struct graphics_object_id obj_id;
-
-		obj_id = dal_adapter_service_enum_audio_object(as, i);
-		if (false == dal_graphics_object_id_is_valid(obj_id)) {
-			/* no more valid audio objects */
-			break;
-		}
-
-		pool->base.audios[i] = dce_audio_create(
-				ctx, i, &audio_regs[i], &audio_shift, &audio_mask);
-		if (pool->base.audios[i] == NULL) {
-			BREAK_TO_DEBUGGER();
-			dm_error("DC: failed to create DPPs!\n");
-			goto res_create_fail;
-		}
-		pool->base.audio_count++;
-	}
-
 	for (i = 0; i < pool->base.stream_enc_count; i++) {
 		/* TODO: rework fragile code*/
 		if (pool->base.stream_engines.u_all & 1 << i) {
@@ -977,18 +998,9 @@ static bool construct(
 		}
 	}
 
-	for (i = 0; i < num_virtual_links; i++) {
-		pool->base.stream_enc[pool->base.stream_enc_count] =
-			virtual_stream_encoder_create(
-				ctx,
-				ctx->dc_bios);
-		if (pool->base.stream_enc[pool->base.stream_enc_count] == NULL) {
-			BREAK_TO_DEBUGGER();
-			dm_error("DC: failed to create stream_encoder!\n");
-			goto res_create_fail;
-		}
-		pool->base.stream_enc_count++;
-	}
+	if (!resource_construct(num_virtual_links, dc, &pool->base,
+			&res_cap, &res_create_funcs))
+		goto res_create_fail;
 
 	/* Create hardware sequencer */
 	if (!dce100_hw_sequencer_construct(dc))

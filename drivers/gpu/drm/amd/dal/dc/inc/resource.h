@@ -40,13 +40,21 @@ struct resource_caps {
 	int num_audio;
 };
 
+struct resource_straps {
+	uint32_t hdmi_disable;
+	uint32_t dc_pinstraps_audio;
+	uint32_t audio_stream_number;
+};
+
 struct resource_create_funcs {
+	void (*read_dce_straps)(
+		struct dc_context *ctx, struct resource_straps *straps);
+
 	struct audio *(*create_audio)(
 			struct dc_context *ctx, unsigned int inst);
 };
 
 bool resource_construct(
-	struct adapter_service *adapter_serv,
 	unsigned int num_virtual_links,
 	struct core_dc *dc,
 	struct resource_pool *pool,

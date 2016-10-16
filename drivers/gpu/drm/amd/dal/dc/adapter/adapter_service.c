@@ -36,18 +36,9 @@
 
 #include "adapter_service.h"
 
-#include "hw_ctx_adapter_service.h"
 #include "wireless_data_source.h"
 
 #include "atom.h"
-
-#include "dce80/hw_ctx_adapter_service_dce80.h"
-
-#include "dce110/hw_ctx_adapter_service_dce110.h"
-
-#include "dce112/hw_ctx_adapter_service_dce112.h"
-
-#include "diagnostics/hw_ctx_adapter_service_diag.h"
 
 #define ABSOLUTE_BACKLIGHT_MAX 255
 #define DEFAULT_MIN_BACKLIGHT 12
@@ -632,34 +623,6 @@ static bool generate_feature_set(
 }
 
 /*
- * create_hw_ctx
- *
- * Create HW context for adapter service. This is DCE specific.
- */
-static struct hw_ctx_adapter_service *create_hw_ctx(
-	enum dce_version dce_version,
-	enum dce_environment dce_environment,
-	struct dc_context *ctx)
-{
-	if (IS_FPGA_MAXIMUS_DC(dce_environment))
-		return dal_adapter_service_create_hw_ctx_diag(ctx);
-
-	switch (dce_version) {
-	case DCE_VERSION_8_0:
-		return dal_adapter_service_create_hw_ctx_dce80(ctx);
-	case DCE_VERSION_10_0:
-		return dal_adapter_service_create_hw_ctx_dce110(ctx);
-	case DCE_VERSION_11_0:
-		return dal_adapter_service_create_hw_ctx_dce110(ctx);
-	case DCE_VERSION_11_2:
-		return dal_adapter_service_create_hw_ctx_dce112(ctx);
-	default:
-		ASSERT_CRITICAL(false);
-		return NULL;
-	}
-}
-
-/*
  * adapter_service_destruct
  *
  * Release memory of objects in adapter service
@@ -669,7 +632,6 @@ static void adapter_service_destruct(
 {
 	struct dc_bios *dcb = as->ctx->dc_bios;
 
-	dal_adapter_service_destroy_hw_ctx(&as->hw_ctx);
 	dal_i2caux_destroy(&as->i2caux);
 	dal_gpio_service_destroy(&as->gpio_service);
 	dal_asic_capability_destroy(&as->asic_cap);
@@ -755,17 +717,6 @@ static bool adapter_service_construct(
 		goto failed_to_create_i2caux;
 	}
 
-	/* Create Adapter Service HW Context*/
-	as->hw_ctx = create_hw_ctx(
-			dce_version,
-			as->dce_environment,
-			as->ctx);
-
-	if (!as->hw_ctx) {
-		ASSERT_CRITICAL(false);
-		goto failed_to_create_hw_ctx;
-	}
-
 	/* Integrated info is not provided on discrete ASIC. NULL is allowed */
 	if (dcb->funcs->create_integrated_info)
 		as->integrated_info = dcb->funcs->create_integrated_info(dcb);
@@ -783,9 +734,6 @@ static bool adapter_service_construct(
 	return true;
 
 failed_to_generate_features:
-	dal_adapter_service_destroy_hw_ctx(&as->hw_ctx);
-
-failed_to_create_hw_ctx:
 	dal_i2caux_destroy(&as->i2caux);
 
 failed_to_create_i2caux:
@@ -1162,17 +1110,6 @@ bool dal_adapter_service_get_firmware_info(
 }
 
 /*
- * dal_adapter_service_get_audio_support
- *
- * Get information on audio support
- */
-union audio_support dal_adapter_service_get_audio_support(
-	struct adapter_service *as)
-{
-	return dal_adapter_service_hw_ctx_get_audio_support(as->hw_ctx);
-}
-
-/*
  * dal_adapter_service_get_stream_engines_num
  *
  * Get number of stream engines
@@ -1258,19 +1195,6 @@ struct i2caux *dal_adapter_service_get_i2caux(
 	struct adapter_service *as)
 {
 	return as->i2caux;
-}
-
-bool dal_adapter_service_initialize_hw_data(
-	struct adapter_service *as)
-{
-	return as->hw_ctx->funcs->power_up(as->hw_ctx);
-}
-
-struct graphics_object_id dal_adapter_service_enum_audio_object(
-	struct adapter_service *as,
-	uint32_t index)
-{
-	return as->hw_ctx->funcs->enum_audio_object(as->hw_ctx, index);
 }
 
 bool dal_adapter_service_get_embedded_panel_info(
