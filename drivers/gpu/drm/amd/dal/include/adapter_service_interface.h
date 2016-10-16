@@ -331,9 +331,6 @@ void dal_adapter_service_destroy(
 enum dce_version dal_adapter_service_get_dce_version(
 	const struct adapter_service *as);
 
-enum dce_environment dal_adapter_service_get_dce_environment(
-	const struct adapter_service *as);
-
 /* Get firmware information from BIOS */
 bool dal_adapter_service_get_firmware_info(
 	struct adapter_service *as,
@@ -395,10 +392,6 @@ bool dal_adapter_service_get_i2c_info(
 	struct graphics_object_id id,
 	struct graphics_object_i2c_info *i2c_info);
 
-/* Get bios parser handler */
-struct dc_bios *dal_adapter_service_get_bios_parser(
-	struct adapter_service *as);
-
 /* Get i2c aux handler */
 struct i2caux *dal_adapter_service_get_i2caux(
 	struct adapter_service *as);
@@ -426,16 +419,9 @@ struct graphics_object_id dal_adapter_service_get_src_obj(
 	struct graphics_object_id id,
 	uint32_t index);
 
-
-/* Is this ASIC support dynamic DFSbypass switch */
-bool dal_adapter_service_is_dfsbyass_dynamic(struct adapter_service *as);
-
 /* Reports whether driver settings allow requested optimization */
 bool dal_adapter_service_should_optimize(
 		struct adapter_service *as, enum optimization_feature feature);
-
-uint32_t dal_adapter_service_get_downscale_limit(
-		struct adapter_service *as);
 
 bool dal_adapter_service_get_encoder_cap_info(
 		struct adapter_service *as,

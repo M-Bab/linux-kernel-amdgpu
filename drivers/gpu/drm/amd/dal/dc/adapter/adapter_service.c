@@ -827,12 +827,6 @@ enum dce_version dal_adapter_service_get_dce_version(
 	}
 }
 
-enum dce_environment dal_adapter_service_get_dce_environment(
-	const struct adapter_service *as)
-{
-	return as->dce_environment;
-}
-
 static bool is_wireless_object(struct graphics_object_id id)
 {
 	if ((id.type == OBJECT_TYPE_ENCODER &&
@@ -1176,17 +1170,6 @@ bool dal_adapter_service_get_feature_value(struct adapter_service *as,
 }
 
 /*
- * dal_adapter_service_get_bios_parser
- *
- * Get BIOS parser handler
- */
-struct dc_bios *dal_adapter_service_get_bios_parser(
-	struct adapter_service *as)
-{
-	return as->ctx->dc_bios;
-}
-
-/*
  * dal_adapter_service_get_i2caux
  *
  * Get i2c aux handler
@@ -1211,16 +1194,6 @@ bool dal_adapter_service_get_embedded_panel_info(
 	result = dcb->funcs->get_embedded_panel_info(dcb, info);
 
 	return result == BP_RESULT_OK;
-}
-
-/*
- * dal_adapter_service_is_dfsbyass_dynamic
- *
- *
- **/
-bool dal_adapter_service_is_dfsbyass_dynamic(struct adapter_service *as)
-{
-	return as->asic_cap->caps.DFSBYPASS_DYNAMIC_SUPPORT;
 }
 
 /*
@@ -1270,12 +1243,6 @@ bool dal_adapter_service_should_optimize(
 	}
 
 	return (supported_optimization & feature) != 0;
-}
-
-uint32_t dal_adapter_service_get_downscale_limit(
-		struct adapter_service *as)
-{
-	return as->asic_cap->data[ASIC_DATA_DOWNSCALE_LIMIT];
 }
 
 bool dal_adapter_service_get_encoder_cap_info(
