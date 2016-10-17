@@ -314,7 +314,7 @@ static const struct dce110_clk_src_reg_offsets dce110_clk_src_reg_offsets[] = {
 
 
 static const struct resource_caps res_cap = {
-	.num_audio = 4,
+	.num_audio = 3,
 };
 
 #define CTX  ctx
