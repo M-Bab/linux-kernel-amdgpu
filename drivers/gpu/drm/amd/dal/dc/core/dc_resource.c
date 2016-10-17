@@ -1710,10 +1710,8 @@ static void set_vsc_info_packet(struct core_stream *stream,
 {
 	unsigned int vscPacketRevision = 0;
 	unsigned int i;
-	bool psrPanelSupport = false;
 
 	if (stream->sink->link->public.psr_caps.psr_version != 0) {
-		psrPanelSupport = true;
 		vscPacketRevision = 2;
 	}
 

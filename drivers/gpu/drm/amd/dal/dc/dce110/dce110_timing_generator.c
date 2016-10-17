@@ -698,10 +698,53 @@ void dce110_timing_generator_set_test_pattern(
 	uint32_t value;
 	uint32_t addr;
 	struct dce110_timing_generator *tg110 = DCE110TG_FROM_TG(tg);
+	enum test_pattern_color_format bit_depth;
+	enum test_pattern_dyn_range dyn_range;
+	enum test_pattern_mode mode;
+	/* color ramp generator mixes 16-bits color */
+	uint32_t src_bpc = 16;
+	/* requested bpc */
+	uint32_t dst_bpc;
+	uint32_t index;
+	/* RGB values of the color bars.
+	 * Produce two RGB colors: RGB0 - white (all Fs)
+	 * and RGB1 - black (all 0s)
+	 * (three RGB components for two colors)
+	 */
+	uint16_t src_color[6] = {0xFFFF, 0xFFFF, 0xFFFF, 0x0000,
+						0x0000, 0x0000};
+	/* dest color (converted to the specified color format) */
+	uint16_t dst_color[6];
+	uint32_t inc_base;
 
-	/* TODO: add support for other test patterns */
-	switch (test_pattern) {
+	/* translate to bit depth */
+	switch (color_depth) {
+	case COLOR_DEPTH_666:
+		bit_depth = TEST_PATTERN_COLOR_FORMAT_BPC_6;
+	break;
+	case COLOR_DEPTH_888:
+		bit_depth = TEST_PATTERN_COLOR_FORMAT_BPC_8;
+	break;
+	case COLOR_DEPTH_101010:
+		bit_depth = TEST_PATTERN_COLOR_FORMAT_BPC_10;
+	break;
+	case COLOR_DEPTH_121212:
+		bit_depth = TEST_PATTERN_COLOR_FORMAT_BPC_12;
+	break;
 	default:
+		bit_depth = TEST_PATTERN_COLOR_FORMAT_BPC_8;
+	break;
+	}
+
+	switch (test_pattern) {
+	case CONTROLLER_DP_TEST_PATTERN_COLORSQUARES:
+	case CONTROLLER_DP_TEST_PATTERN_COLORSQUARES_CEA:
+	{
+		dyn_range = (test_pattern ==
+				CONTROLLER_DP_TEST_PATTERN_COLORSQUARES_CEA ?
+				TEST_PATTERN_DYN_RANGE_CEA :
+				TEST_PATTERN_DYN_RANGE_VESA);
+		mode = TEST_PATTERN_MODE_COLORSQUARES_RGB;
 		value = 0;
 		addr = CRTC_REG(mmCRTC_TEST_PATTERN_PARAMETERS);
 
@@ -729,24 +772,323 @@ void dce110_timing_generator_set_test_pattern(
 
 		set_reg_field_value(
 			value,
-			0,
+			mode,
 			CRTC_TEST_PATTERN_CONTROL,
 			CRTC_TEST_PATTERN_MODE);
 
 		set_reg_field_value(
 			value,
+			dyn_range,
+			CRTC_TEST_PATTERN_CONTROL,
+			CRTC_TEST_PATTERN_DYNAMIC_RANGE);
+		set_reg_field_value(
+			value,
+			bit_depth,
+			CRTC_TEST_PATTERN_CONTROL,
+			CRTC_TEST_PATTERN_COLOR_FORMAT);
+		dm_write_reg(ctx, addr, value);
+	}
+	break;
+
+	case CONTROLLER_DP_TEST_PATTERN_VERTICALBARS:
+	case CONTROLLER_DP_TEST_PATTERN_HORIZONTALBARS:
+	{
+		mode = (test_pattern ==
+			CONTROLLER_DP_TEST_PATTERN_VERTICALBARS ?
+			TEST_PATTERN_MODE_VERTICALBARS :
+			TEST_PATTERN_MODE_HORIZONTALBARS);
+
+		switch (bit_depth) {
+		case TEST_PATTERN_COLOR_FORMAT_BPC_6:
+			dst_bpc = 6;
+		break;
+		case TEST_PATTERN_COLOR_FORMAT_BPC_8:
+			dst_bpc = 8;
+		break;
+		case TEST_PATTERN_COLOR_FORMAT_BPC_10:
+			dst_bpc = 10;
+		break;
+		default:
+			dst_bpc = 8;
+		break;
+		}
+
+		/* adjust color to the required colorFormat */
+		for (index = 0; index < 6; index++) {
+			/* dst = 2^dstBpc * src / 2^srcBpc = src >>
+			 * (srcBpc - dstBpc);
+			 */
+			dst_color[index] =
+				src_color[index] >> (src_bpc - dst_bpc);
+		/* CRTC_TEST_PATTERN_DATA has 16 bits,
+		 * lowest 6 are hardwired to ZERO
+		 * color bits should be left aligned aligned to MSB
+		 * XXXXXXXXXX000000 for 10 bit,
+		 * XXXXXXXX00000000 for 8 bit and XXXXXX0000000000 for 6
+		 */
+			dst_color[index] <<= (16 - dst_bpc);
+		}
+
+		value = 0;
+		addr = CRTC_REG(mmCRTC_TEST_PATTERN_PARAMETERS);
+		dm_write_reg(ctx, addr, value);
+
+		/* We have to write the mask before data, similar to pipeline.
+		 * For example, for 8 bpc, if we want RGB0 to be magenta,
+		 * and RGB1 to be cyan,
+		 * we need to make 7 writes:
+		 * MASK   DATA
+		 * 000001 00000000 00000000                     set mask to R0
+		 * 000010 11111111 00000000     R0 255, 0xFF00, set mask to G0
+		 * 000100 00000000 00000000     G0 0,   0x0000, set mask to B0
+		 * 001000 11111111 00000000     B0 255, 0xFF00, set mask to R1
+		 * 010000 00000000 00000000     R1 0,   0x0000, set mask to G1
+		 * 100000 11111111 00000000     G1 255, 0xFF00, set mask to B1
+		 * 100000 11111111 00000000     B1 255, 0xFF00
+		 *
+		 * we will make a loop of 6 in which we prepare the mask,
+		 * then write, then prepare the color for next write.
+		 * first iteration will write mask only,
+		 * but each next iteration color prepared in
+		 * previous iteration will be written within new mask,
+		 * the last component will written separately,
+		 * mask is not changing between 6th and 7th write
+		 * and color will be prepared by last iteration
+		 */
+
+		/* write color, color values mask in CRTC_TEST_PATTERN_MASK
+		 * is B1, G1, R1, B0, G0, R0
+		 */
+		value = 0;
+		addr = CRTC_REG(mmCRTC_TEST_PATTERN_COLOR);
+		for (index = 0; index < 6; index++) {
+			/* prepare color mask, first write PATTERN_DATA
+			 * will have all zeros
+			 */
+			set_reg_field_value(
+				value,
+				(1 << index),
+				CRTC_TEST_PATTERN_COLOR,
+				CRTC_TEST_PATTERN_MASK);
+			/* write color component */
+			dm_write_reg(ctx, addr, value);
+			/* prepare next color component,
+			 * will be written in the next iteration
+			 */
+			set_reg_field_value(
+				value,
+				dst_color[index],
+				CRTC_TEST_PATTERN_COLOR,
+				CRTC_TEST_PATTERN_DATA);
+		}
+		/* write last color component,
+		 * it's been already prepared in the loop
+		 */
+		dm_write_reg(ctx, addr, value);
+
+		/* enable test pattern */
+		addr = CRTC_REG(mmCRTC_TEST_PATTERN_CONTROL);
+		value = 0;
+
+		set_reg_field_value(
+			value,
 			1,
+			CRTC_TEST_PATTERN_CONTROL,
+			CRTC_TEST_PATTERN_EN);
+
+		set_reg_field_value(
+			value,
+			mode,
+			CRTC_TEST_PATTERN_CONTROL,
+			CRTC_TEST_PATTERN_MODE);
+
+		set_reg_field_value(
+			value,
+			0,
+			CRTC_TEST_PATTERN_CONTROL,
+			CRTC_TEST_PATTERN_DYNAMIC_RANGE);
+
+		set_reg_field_value(
+			value,
+			bit_depth,
+			CRTC_TEST_PATTERN_CONTROL,
+			CRTC_TEST_PATTERN_COLOR_FORMAT);
+
+		dm_write_reg(ctx, addr, value);
+	}
+	break;
+
+	case CONTROLLER_DP_TEST_PATTERN_COLORRAMP:
+	{
+		mode = (bit_depth ==
+			TEST_PATTERN_COLOR_FORMAT_BPC_10 ?
+			TEST_PATTERN_MODE_DUALRAMP_RGB :
+			TEST_PATTERN_MODE_SINGLERAMP_RGB);
+
+		switch (bit_depth) {
+		case TEST_PATTERN_COLOR_FORMAT_BPC_6:
+			dst_bpc = 6;
+		break;
+		case TEST_PATTERN_COLOR_FORMAT_BPC_8:
+			dst_bpc = 8;
+		break;
+		case TEST_PATTERN_COLOR_FORMAT_BPC_10:
+			dst_bpc = 10;
+		break;
+		default:
+			dst_bpc = 8;
+		break;
+		}
+
+		/* increment for the first ramp for one color gradation
+		 * 1 gradation for 6-bit color is 2^10
+		 * gradations in 16-bit color
+		 */
+		inc_base = (src_bpc - dst_bpc);
+
+		value = 0;
+		addr = CRTC_REG(mmCRTC_TEST_PATTERN_PARAMETERS);
+
+		switch (bit_depth) {
+		case TEST_PATTERN_COLOR_FORMAT_BPC_6:
+		{
+			set_reg_field_value(
+				value,
+				inc_base,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_INC0);
+			set_reg_field_value(
+				value,
+				0,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_INC1);
+			set_reg_field_value(
+				value,
+				6,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_HRES);
+			set_reg_field_value(
+				value,
+				6,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_VRES);
+			set_reg_field_value(
+				value,
+				0,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_RAMP0_OFFSET);
+		}
+		break;
+		case TEST_PATTERN_COLOR_FORMAT_BPC_8:
+		{
+			set_reg_field_value(
+				value,
+				inc_base,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_INC0);
+			set_reg_field_value(
+				value,
+				0,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_INC1);
+			set_reg_field_value(
+				value,
+				8,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_HRES);
+			set_reg_field_value(
+				value,
+				6,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_VRES);
+			set_reg_field_value(
+				value,
+				0,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_RAMP0_OFFSET);
+		}
+		break;
+		case TEST_PATTERN_COLOR_FORMAT_BPC_10:
+		{
+			set_reg_field_value(
+				value,
+				inc_base,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_INC0);
+			set_reg_field_value(
+				value,
+				inc_base + 2,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_INC1);
+			set_reg_field_value(
+				value,
+				8,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_HRES);
+			set_reg_field_value(
+				value,
+				5,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_VRES);
+			set_reg_field_value(
+				value,
+				384 << 6,
+				CRTC_TEST_PATTERN_PARAMETERS,
+				CRTC_TEST_PATTERN_RAMP0_OFFSET);
+		}
+		break;
+		default:
+		break;
+		}
+		dm_write_reg(ctx, addr, value);
+
+		value = 0;
+		addr = CRTC_REG(mmCRTC_TEST_PATTERN_COLOR);
+		dm_write_reg(ctx, addr, value);
+
+		/* enable test pattern */
+		addr = CRTC_REG(mmCRTC_TEST_PATTERN_CONTROL);
+		value = 0;
+
+		set_reg_field_value(
+			value,
+			1,
+			CRTC_TEST_PATTERN_CONTROL,
+			CRTC_TEST_PATTERN_EN);
+
+		set_reg_field_value(
+			value,
+			mode,
+			CRTC_TEST_PATTERN_CONTROL,
+			CRTC_TEST_PATTERN_MODE);
+
+		set_reg_field_value(
+			value,
+			0,
 			CRTC_TEST_PATTERN_CONTROL,
 			CRTC_TEST_PATTERN_DYNAMIC_RANGE);
 		/* add color depth translation here */
 		set_reg_field_value(
 			value,
-			1,
+			bit_depth,
 			CRTC_TEST_PATTERN_CONTROL,
 			CRTC_TEST_PATTERN_COLOR_FORMAT);
+
 		dm_write_reg(ctx, addr, value);
-		break;
-	} /* switch() */
+	}
+	break;
+	case CONTROLLER_DP_TEST_PATTERN_VIDEOMODE:
+	{
+		value = 0;
+		dm_write_reg(ctx, CRTC_REG(mmCRTC_TEST_PATTERN_CONTROL), value);
+		dm_write_reg(ctx, CRTC_REG(mmCRTC_TEST_PATTERN_COLOR), value);
+		dm_write_reg(ctx, CRTC_REG(mmCRTC_TEST_PATTERN_PARAMETERS),
+				value);
+	}
+	break;
+	default:
+	break;
+	}
 }
 
 /**
@@ -1578,7 +1920,8 @@ static const struct timing_generator_funcs dce110_tg_funcs = {
 		.set_drr =
 				dce110_timing_generator_set_drr,
 		.set_static_screen_control =
-			dce110_timing_generator_set_static_screen_control
+			dce110_timing_generator_set_static_screen_control,
+		.set_test_pattern = dce110_timing_generator_set_test_pattern
 
 };
 

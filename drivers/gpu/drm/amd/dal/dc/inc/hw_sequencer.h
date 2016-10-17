@@ -115,6 +115,9 @@ struct hw_sequencer_funcs {
 
 	void (*disable_stream)(struct pipe_ctx *pipe_ctx);
 
+	void (*unblank_stream)(struct pipe_ctx *pipe_ctx,
+			struct dc_link_settings *link_settings);
+
 	void (*enable_fe_clock)(
 		struct dc_context *ctx, uint8_t controller_id, bool enable);
 

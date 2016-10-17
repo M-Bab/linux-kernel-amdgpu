@@ -47,6 +47,8 @@ static const struct opp_funcs funcs = {
 		.opp_set_regamma_mode = dce110_opp_set_regamma_mode,
 		.opp_destroy = dce110_opp_destroy,
 		.opp_program_fmt = dce110_opp_program_fmt,
+		.opp_program_bit_depth_reduction =
+				dce110_opp_program_bit_depth_reduction
 };
 
 bool dce110_opp_v_construct(struct dce110_opp *opp110,

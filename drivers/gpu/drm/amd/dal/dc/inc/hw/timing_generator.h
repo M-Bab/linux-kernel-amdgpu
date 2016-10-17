@@ -152,6 +152,11 @@ struct timing_generator_funcs {
 	void (*set_drr)(struct timing_generator *tg, const struct drr_params *params);
 	void (*set_static_screen_control)(struct timing_generator *tg,
 							uint32_t value);
+	void (*set_test_pattern)(
+		struct timing_generator *tg,
+		enum controller_dp_test_pattern test_pattern,
+		enum dc_color_depth color_depth);
+
 };
 
 #endif

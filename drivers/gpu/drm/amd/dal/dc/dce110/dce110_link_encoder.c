@@ -51,6 +51,14 @@
 #define ATOM_S2_CURRENT_BL_LEVEL_SHIFT  8
 #endif
 
+#ifndef HPD0_DC_HPD_CONTROL__DC_HPD_EN_MASK
+#define HPD0_DC_HPD_CONTROL__DC_HPD_EN_MASK  0x10000000L
+#endif
+
+#ifndef HPD0_DC_HPD_CONTROL__DC_HPD_EN__SHIFT
+#define HPD0_DC_HPD_CONTROL__DC_HPD_EN__SHIFT  0x1c
+#endif
+
 #define CTX \
 	enc110->base.ctx
 
@@ -59,6 +67,9 @@
 
 #define AUX_REG(reg)\
 	(enc110->aux_regs->reg)
+
+#define HPD_REG(reg)\
+	(enc110->hpd_regs->reg)
 
 /* For current ASICs pixel clock - 600MHz */
 #define MAX_ENCODER_CLK 600000
@@ -146,6 +157,8 @@ static const struct link_encoder_funcs dce110_lnk_enc_funcs = {
 	.backlight_control = dce110_link_encoder_edp_backlight_control,
 	.power_control = dce110_link_encoder_edp_power_control,
 	.connect_dig_be_to_fe = dce110_link_encoder_connect_dig_be_to_fe,
+	.enable_hpd = dce110_link_encoder_enable_hpd,
+	.disable_hpd = dce110_link_encoder_disable_hpd,
 	.destroy = dce110_link_encoder_destroy
 };
 
@@ -967,7 +980,8 @@ bool dce110_link_encoder_construct(
 	struct dce110_link_encoder *enc110,
 	const struct encoder_init_data *init_data,
 	const struct dce110_link_enc_registers *link_regs,
-	const struct dce110_link_enc_aux_registers *aux_regs)
+	const struct dce110_link_enc_aux_registers *aux_regs,
+	const struct dce110_link_enc_hpd_registers *hpd_regs)
 {
 	struct graphics_object_encoder_cap_info enc_cap_info = {0};
 	struct adapter_service *as = init_data->adapter_service;
@@ -1029,6 +1043,7 @@ bool dce110_link_encoder_construct(
 
 	enc110->link_regs = link_regs;
 	enc110->aux_regs = aux_regs;
+	enc110->hpd_regs = hpd_regs;
 
 	switch (enc110->base.transmitter) {
 	case TRANSMITTER_UNIPHY_A:
@@ -1655,8 +1670,6 @@ void dce110_link_encoder_set_lcd_backlight_level(
 
 	const uint32_t backlight_update_pending_max_retry = 1000;
 
-	uint32_t backlight;
-	uint32_t backlight_period;
 	uint32_t backlight_lock;
 
 	uint32_t i;
@@ -1669,8 +1682,6 @@ void dce110_link_encoder_set_lcd_backlight_level(
 	uint64_t active_duty_cycle;
 	uint32_t pwm_period_bitcnt;
 
-	backlight = REG_READ(BL_PWM_CNTL);
-	backlight_period = REG_READ(BL_PWM_PERIOD_CNTL);
 	backlight_lock = REG_READ(BL_PWM_GRP1_REG_LOCK);
 
 	/*
@@ -1833,7 +1844,6 @@ void dce110_link_encoder_init_dmcu_backlight_settings(
 	uint32_t pwmCntl;
 	uint32_t pwmCntl2;
 	uint32_t periodCntl;
-	uint32_t pwmSeqRefDiv;
 	uint32_t s2;
 	uint32_t value;
 
@@ -1869,8 +1879,6 @@ void dce110_link_encoder_init_dmcu_backlight_settings(
 				REG_READ(BL_PWM_CNTL2);
 		stored_backlight_registers.vBL_PWM_PERIOD_CNTL =
 				REG_READ(BL_PWM_PERIOD_CNTL);
-
-		pwmSeqRefDiv = REG_READ(LVTMA_PWRSEQ_REF_DIV);
 
 		REG_GET(LVTMA_PWRSEQ_REF_DIV, BL_PWM_REF_DIV,
 				&stored_backlight_registers.
@@ -1923,8 +1931,6 @@ static void get_dmcu_psr_state(struct link_encoder *enc, uint32_t *psr_state)
 	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
 	struct dc_context *ctx = enc110->base.ctx;
 
-	uint32_t powerStatus;
-
 	uint32_t count = 0;
 	uint32_t psrStateOffset = 0xf0;
 	uint32_t value;
@@ -1934,7 +1940,6 @@ static void get_dmcu_psr_state(struct link_encoder *enc, uint32_t *psr_state)
 
 	do {
 		dm_delay_in_microseconds(ctx, 2);
-		powerStatus = REG_READ(DCI_MEM_PWR_STATUS);
 		REG_GET(DCI_MEM_PWR_STATUS,
 					DMCU_IRAM_MEM_PWR_STATE, &value);
 	} while
@@ -2172,3 +2177,26 @@ void dce110_link_encoder_connect_dig_be_to_fe(
 	}
 }
 
+void dce110_link_encoder_enable_hpd(struct link_encoder *enc)
+{
+	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
+	struct dc_context *ctx = enc110->base.ctx;
+	uint32_t addr = HPD_REG(DC_HPD_CONTROL);
+	uint32_t hpd_enable = 0;
+	uint32_t value = dm_read_reg(ctx, addr);
+
+	get_reg_field_value(hpd_enable, DC_HPD_CONTROL, DC_HPD_EN);
+
+	if (hpd_enable == 0)
+		set_reg_field_value(value, 1, DC_HPD_CONTROL, DC_HPD_EN);
+}
+
+void dce110_link_encoder_disable_hpd(struct link_encoder *enc)
+{
+	struct dce110_link_encoder *enc110 = TO_DCE110_LINK_ENC(enc);
+	struct dc_context *ctx = enc110->base.ctx;
+	uint32_t addr = HPD_REG(DC_HPD_CONTROL);
+	uint32_t value = dm_read_reg(ctx, addr);
+
+	set_reg_field_value(value, 0, DC_HPD_CONTROL, DC_HPD_EN);
+}

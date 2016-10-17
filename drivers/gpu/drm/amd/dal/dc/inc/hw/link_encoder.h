@@ -257,6 +257,8 @@ struct link_encoder_funcs {
 	void (*connect_dig_be_to_fe)(struct link_encoder *enc,
 		enum engine_id engine,
 		bool connect);
+	void (*enable_hpd)(struct link_encoder *enc);
+	void (*disable_hpd)(struct link_encoder *enc);
 	void (*destroy)(struct link_encoder **enc);
 };
 

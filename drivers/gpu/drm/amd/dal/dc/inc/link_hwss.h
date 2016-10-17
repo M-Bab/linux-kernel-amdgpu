@@ -62,8 +62,12 @@ void dp_set_hw_lane_settings(
 
 void dp_set_hw_test_pattern(
 	struct core_link *link,
-	enum dp_test_pattern test_pattern);
+	enum dp_test_pattern test_pattern,
+	uint8_t *custom_pattern,
+	uint32_t custom_pattern_size);
 
 enum dp_panel_mode dp_get_panel_mode(struct core_link *link);
+
+void dp_retrain_link(struct core_link *link);
 
 #endif /* __DC_LINK_HWSS_H__ */

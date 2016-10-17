@@ -84,6 +84,16 @@
 #endif
 
 
+#ifndef mmHPD_DC_HPD_CONTROL
+	#define mmHPD_DC_HPD_CONTROL                            0x189A
+	#define mmHPD0_DC_HPD_CONTROL                           0x189A
+	#define mmHPD1_DC_HPD_CONTROL                           0x18A2
+	#define mmHPD2_DC_HPD_CONTROL                           0x18AA
+	#define mmHPD3_DC_HPD_CONTROL                           0x18B2
+	#define mmHPD4_DC_HPD_CONTROL                           0x18BA
+	#define mmHPD5_DC_HPD_CONTROL                           0x18C2
+#endif
+
 #define DCE11_DIG_FE_CNTL 0x4a00
 #define DCE11_DIG_BE_CNTL 0x4a47
 #define DCE11_DP_SEC 0x4ac3
@@ -256,6 +266,20 @@ static const struct dce110_link_enc_aux_registers link_enc_aux_regs[] = {
 	aux_regs(3),
 	aux_regs(4),
 	aux_regs(5)
+};
+
+#define hpd_regs(id)\
+[id] = {\
+	HPD_REG_LIST(id)\
+}
+
+static const struct dce110_link_enc_hpd_registers link_enc_hpd_regs[] = {
+		hpd_regs(0),
+		hpd_regs(1),
+		hpd_regs(2),
+		hpd_regs(3),
+		hpd_regs(4),
+		hpd_regs(5)
 };
 
 #define link_regs(id)\
@@ -482,7 +506,8 @@ struct link_encoder *dce80_link_encoder_create(
 			enc110,
 			enc_init_data,
 			&link_enc_regs[enc_init_data->transmitter],
-			&link_enc_aux_regs[enc_init_data->channel - 1]))
+			&link_enc_aux_regs[enc_init_data->channel - 1],
+			&link_enc_hpd_regs[enc_init_data->hpd_source]))
 		return &enc110->base;
 
 	BREAK_TO_DEBUGGER();

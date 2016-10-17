@@ -101,11 +101,14 @@ void dc_stream_release(const struct dc_stream *public)
 {
 	struct stream *stream = DC_STREAM_TO_STREAM(public);
 	struct core_stream *protected = DC_STREAM_TO_CORE(public);
-	stream->ref_count--;
 
-	if (stream->ref_count == 0) {
-		destruct(protected);
-		dm_free(stream);
+	if (public != NULL) {
+		stream->ref_count--;
+
+		if (stream->ref_count == 0) {
+			destruct(protected);
+			dm_free(stream);
+		}
 	}
 }
 

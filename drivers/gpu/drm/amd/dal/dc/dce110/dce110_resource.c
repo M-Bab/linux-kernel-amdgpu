@@ -214,6 +214,21 @@ static const struct dce110_link_enc_aux_registers link_enc_aux_regs[] = {
 		aux_regs(5)
 };
 
+#define hpd_regs(id)\
+[id] = {\
+	HPD_REG_LIST(id)\
+}
+
+static const struct dce110_link_enc_hpd_registers link_enc_hpd_regs[] = {
+		hpd_regs(0),
+		hpd_regs(1),
+		hpd_regs(2),
+		hpd_regs(3),
+		hpd_regs(4),
+		hpd_regs(5)
+};
+
+
 #define link_regs(id)\
 [id] = {\
 	LE_DCE110_REG_LIST(id)\
@@ -469,7 +484,8 @@ struct link_encoder *dce110_link_encoder_create(
 			enc110,
 			enc_init_data,
 			&link_enc_regs[enc_init_data->transmitter],
-			&link_enc_aux_regs[enc_init_data->channel - 1]))
+			&link_enc_aux_regs[enc_init_data->channel - 1],
+			&link_enc_hpd_regs[enc_init_data->hpd_source]))
 		return &enc110->base;
 
 	BREAK_TO_DEBUGGER();
@@ -1001,7 +1017,9 @@ static const struct resource_funcs dce110_res_pool_funcs = {
 	.validate_with_context = dce110_validate_with_context,
 	.validate_guaranteed = dce110_validate_guaranteed,
 	.validate_bandwidth = dce110_validate_bandwidth,
-	.acquire_idle_pipe_for_layer = dce110_acquire_idle_pipe_for_layer
+	.acquire_idle_pipe_for_layer = dce110_acquire_idle_pipe_for_layer,
+	.build_bit_depth_reduction_params =
+			dce110_resource_build_bit_depth_reduction_params
 };
 
 static void underlay_create(struct dc_context *ctx, struct resource_pool *pool)

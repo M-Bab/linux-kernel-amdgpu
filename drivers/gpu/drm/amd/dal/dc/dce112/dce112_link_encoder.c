@@ -162,6 +162,8 @@ static const struct link_encoder_funcs dce112_lnk_enc_funcs = {
 	.backlight_control = dce110_link_encoder_edp_backlight_control,
 	.power_control = dce110_link_encoder_edp_power_control,
 	.connect_dig_be_to_fe = dce110_link_encoder_connect_dig_be_to_fe,
+	.enable_hpd = dce110_link_encoder_enable_hpd,
+	.disable_hpd = dce110_link_encoder_disable_hpd,
 	.destroy = dce110_link_encoder_destroy
 };
 
@@ -169,13 +171,15 @@ bool dce112_link_encoder_construct(
 	struct dce110_link_encoder *enc110,
 	const struct encoder_init_data *init_data,
 	const struct dce110_link_enc_registers *link_regs,
-	const struct dce110_link_enc_aux_registers *aux_regs)
+	const struct dce110_link_enc_aux_registers *aux_regs,
+	const struct dce110_link_enc_hpd_registers *hpd_regs)
 {
 	dce110_link_encoder_construct(
 		enc110,
 		init_data,
 		link_regs,
-		aux_regs);
+		aux_regs,
+		hpd_regs);
 
 	enc110->base.funcs = &dce112_lnk_enc_funcs;
 

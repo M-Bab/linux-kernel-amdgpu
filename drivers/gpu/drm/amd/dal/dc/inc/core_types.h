@@ -221,9 +221,14 @@ struct resource_funcs {
 	struct validate_context *(*apply_clk_constraints)(
 					const struct core_dc *dc,
 					struct validate_context *context);
+
 	struct pipe_ctx *(*acquire_idle_pipe_for_layer)(
 			struct resource_context *res_ctx,
 			struct core_stream *stream);
+
+	void (*build_bit_depth_reduction_params)(
+			const struct core_stream *stream,
+			struct bit_depth_reduction_params *fmt_bit_depth);
 };
 
 struct audio_support{

@@ -306,6 +306,10 @@ struct opp_funcs {
 		enum dc_color_depth color_dpth,
 		enum signal_type signal);
 
+	void (*opp_program_bit_depth_reduction)(
+		struct output_pixel_processor *opp,
+		const struct bit_depth_reduction_params *params);
+
 	/* underlay related */
 	void (*opp_get_underlay_adjustment_range)(
 			struct output_pixel_processor *opp,

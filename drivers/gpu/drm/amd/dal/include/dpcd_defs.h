@@ -287,7 +287,8 @@ enum dpcd_test_bit_depth {
 };
 
 /* PHY (encoder) test patterns
-The order of test patterns follows DPCD register PHY_TEST_PATTERN (0x248) */
+The order of test patterns follows DPCD register PHY_TEST_PATTERN (0x248)
+*/
 enum dpcd_phy_test_patterns {
 	PHY_TEST_PATTERN_NONE = 0,
 	PHY_TEST_PATTERN_D10_2,
@@ -668,6 +669,74 @@ union training_aux_rd_interval {
 		uint8_t EXT_RECIEVER_CAP_FIELD_PRESENT:1;
 	} bits;
 	uint8_t raw;
+};
+
+/* Automated test structures */
+union test_request {
+	struct {
+	uint8_t LINK_TRAINING         :1;
+	uint8_t LINK_TEST_PATTRN      :1;
+	uint8_t EDID_REAT             :1;
+	uint8_t PHY_TEST_PATTERN      :1;
+	uint8_t AUDIO_TEST_PATTERN    :1;
+	uint8_t RESERVED              :1;
+	uint8_t TEST_STEREO_3D        :1;
+	} bits;
+	uint8_t raw;
+};
+
+union test_response {
+	struct {
+		uint8_t ACK         :1;
+		uint8_t NO_ACK      :1;
+		uint8_t RESERVED    :6;
+	} bits;
+	uint8_t raw;
+};
+
+union phy_test_pattern {
+	struct {
+		/* DpcdPhyTestPatterns. This field is 2 bits for DP1.1
+		 * and 3 bits for DP1.2.
+		 */
+		uint8_t PATTERN     :3;
+		/* BY speci, bit7:2 is 0 for DP1.1. */
+		uint8_t RESERVED    :5;
+	} bits;
+	uint8_t raw;
+};
+
+/* States of Compliance Test Specification (CTS DP1.2). */
+union compliance_test_state {
+	struct {
+		unsigned char STEREO_3D_RUNNING        : 1;
+		unsigned char SET_TEST_PATTERN_PENDING : 1;
+		unsigned char RESERVED                 : 6;
+	} bits;
+	unsigned char raw;
+};
+
+union link_test_pattern {
+	struct {
+		/* dpcd_link_test_patterns */
+		unsigned char PATTERN :2;
+		unsigned char RESERVED:6;
+	} bits;
+	unsigned char raw;
+};
+
+union test_misc {
+	struct dpcd_test_misc_bits {
+		unsigned char SYNC_CLOCK :1;
+		/* dpcd_test_color_format */
+		unsigned char CLR_FORMAT :2;
+		/* dpcd_test_dyn_range */
+		unsigned char DYN_RANGE  :1;
+		unsigned char YCBCR      :1;
+		/* dpcd_test_bit_depth */
+		unsigned char BPC        :3;
+	} bits;
+	unsigned char raw;
 };
 
 #endif /* __DAL_DPCD_DEFS_H__ */

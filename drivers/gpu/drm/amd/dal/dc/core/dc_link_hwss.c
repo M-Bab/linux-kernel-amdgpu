@@ -125,7 +125,7 @@ bool dp_set_hw_training_pattern(
 		break;
 	}
 
-	dp_set_hw_test_pattern(link, test_pattern);
+	dp_set_hw_test_pattern(link, test_pattern, NULL, 0);
 
 	return true;
 }
@@ -182,15 +182,35 @@ enum dp_panel_mode dp_get_panel_mode(struct core_link *link)
 
 void dp_set_hw_test_pattern(
 	struct core_link *link,
-	enum dp_test_pattern test_pattern)
+	enum dp_test_pattern test_pattern,
+	uint8_t *custom_pattern,
+	uint32_t custom_pattern_size)
 {
 	struct encoder_set_dp_phy_pattern_param pattern_param = {0};
 	struct link_encoder *encoder = link->link_enc;
 
 	pattern_param.dp_phy_pattern = test_pattern;
-	pattern_param.custom_pattern = NULL;
-	pattern_param.custom_pattern_size = 0;
+	pattern_param.custom_pattern = custom_pattern;
+	pattern_param.custom_pattern_size = custom_pattern_size;
 	pattern_param.dp_panel_mode = dp_get_panel_mode(link);
 
 	encoder->funcs->dp_set_phy_pattern(encoder, &pattern_param);
+}
+
+
+void dp_retrain_link(struct core_link *link)
+{
+	struct pipe_ctx *pipes = link->dc->current_context->res_ctx.pipe_ctx;
+	unsigned int i;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (pipes[i].stream_enc != NULL) {
+			dm_delay_in_microseconds(link->ctx, 100);
+			pipes->stream_enc->funcs->dp_blank(pipes[i].stream_enc);
+			link->dc->hwss.disable_stream(&pipes[i]);
+			link->dc->hwss.enable_stream(&pipes[i]);
+			link->dc->hwss.unblank_stream(&pipes[i],
+					&link->public.verified_link_cap);
+		}
+	}
 }

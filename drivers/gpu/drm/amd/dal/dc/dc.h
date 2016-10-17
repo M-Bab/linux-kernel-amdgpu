@@ -31,6 +31,7 @@
 #include "grph_object_defs.h"
 #include "logger_types.h"
 #include "gpio_types.h"
+#include "link_service_types.h"
 
 #define MAX_TARGETS 6
 #define MAX_SURFACES 6
@@ -87,6 +88,14 @@ struct dc_link_funcs {
 			bool skip_video_pattern);
 	void (*set_preferred_link_settings)(struct dc *dc,
 			struct dc_link_settings *link_setting);
+	void (*enable_hpd)(const struct dc_link *link);
+	void (*disable_hpd)(const struct dc_link *link);
+	void (*set_test_pattern)(
+			const struct dc_link *link,
+			enum dp_test_pattern test_pattern,
+			const struct link_training_settings *p_link_settings,
+			const unsigned char *p_custom_pattern,
+			unsigned int cust_pattern_size);
 };
 
 /* Structure to hold configuration flags set by dm at dc creation. */
@@ -475,6 +484,8 @@ struct dc_link {
 	uint8_t link_enc_hw_inst;
 
 	struct psr_caps psr_caps;
+	bool test_pattern_enabled;
+	union compliance_test_state compliance_test_state;
 };
 
 struct dpcd_caps {
@@ -567,6 +578,17 @@ bool dc_link_dp_perform_link_training(
 	struct dc_link *link,
 	const struct dc_link_settings *link_setting,
 	bool skip_video_pattern);
+
+void dc_link_dp_enable_hpd(const struct dc_link *link);
+
+void dc_link_dp_disable_hpd(const struct dc_link *link);
+
+bool dc_link_dp_set_test_pattern(
+	const struct dc_link *link,
+	enum dp_test_pattern test_pattern,
+	const struct link_training_settings *p_link_settings,
+	const unsigned char *p_custom_pattern,
+	unsigned int cust_pattern_size);
 
 /*******************************************************************************
  * Sink Interfaces - A sink corresponds to a display output device

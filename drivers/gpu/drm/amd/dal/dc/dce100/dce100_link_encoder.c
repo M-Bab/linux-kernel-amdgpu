@@ -68,13 +68,15 @@ bool dce100_link_encoder_construct(
 		struct dce110_link_encoder *enc110,
 		const struct encoder_init_data *init_data,
 		const struct dce110_link_enc_registers *link_regs,
-		const struct dce110_link_enc_aux_registers *aux_regs)
+		const struct dce110_link_enc_aux_registers *aux_regs,
+		const struct dce110_link_enc_hpd_registers *hpd_regs)
 {
 	dce110_link_encoder_construct(
 			enc110,
 			init_data,
 			link_regs,
-			aux_regs);
+			aux_regs,
+			hpd_regs);
 
 	enc110->base.funcs = &dce100_lnk_enc_funcs;
 

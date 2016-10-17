@@ -32,7 +32,6 @@
 
 #include "atom.h"
 #include "dce/dce_10_0_d.h"
-#include "smu/smu_8_0_d.h"
 #include "dce/dce_10_0_sh_mask.h"
 #include "dal_asic_id.h"
 

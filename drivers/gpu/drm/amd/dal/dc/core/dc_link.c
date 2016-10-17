@@ -1507,7 +1507,9 @@ bool dc_link_setup_psr(const struct dc_link *dc_link,
 
 	if (dc_link != NULL && dc_link->psr_caps.psr_version > 0) {
 		/* updateSinkPsrDpcdConfig*/
-		union dpcd_psr_configuration psr_configuration = {0};
+		union dpcd_psr_configuration psr_configuration;
+
+		memset(&psr_configuration, 0, sizeof(psr_configuration));
 
 		psr_configuration.bits.ENABLE                    = 1;
 		psr_configuration.bits.CRC_VERIFICATION          = 1;

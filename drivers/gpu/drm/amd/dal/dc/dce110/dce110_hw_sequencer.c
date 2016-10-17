@@ -2092,6 +2092,7 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.update_info_frame = update_info_frame,
 	.enable_stream = enable_stream,
 	.disable_stream = disable_stream,
+	.unblank_stream = unblank_stream,
 	.enable_display_pipe_clock_gating = enable_display_pipe_clock_gating,
 	.crtc_switch_to_clk_src = dce110_crtc_switch_to_clk_src,
 	.enable_display_power_gating = dce110_enable_display_power_gating,

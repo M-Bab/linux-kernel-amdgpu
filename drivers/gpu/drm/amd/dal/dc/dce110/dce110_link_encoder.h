@@ -35,6 +35,9 @@
 	SRI(AUX_CONTROL, DP_AUX, id), \
 	SRI(AUX_DPHY_RX_CONTROL0, DP_AUX, id)
 
+#define HPD_REG_LIST(id)\
+	SRI(DC_HPD_CONTROL, HPD, id)
+
 #define LE_COMMON_REG_LIST_BASE(id) \
 	SR(BL_PWM_CNTL), \
 	SR(BL_PWM_GRP1_REG_LOCK), \
@@ -74,7 +77,6 @@
 	SRI(DP_DPHY_FAST_TRAINING, DP, id), \
 	SRI(DP_SEC_CNTL1, DP, id)
 
-
 	#define LE_COMMON_REG_LIST(id)\
 		LE_COMMON_REG_LIST_BASE(id), \
 		SRI(DP_DPHY_BS_SR_SWAP_CNTL, DP, id), \
@@ -97,6 +99,10 @@
 struct dce110_link_enc_aux_registers {
 	uint32_t AUX_CONTROL;
 	uint32_t AUX_DPHY_RX_CONTROL0;
+};
+
+struct dce110_link_enc_hpd_registers {
+	uint32_t DC_HPD_CONTROL;
 };
 
 struct dce110_link_enc_registers {
@@ -152,6 +158,7 @@ struct dce110_link_encoder {
 	struct link_encoder base;
 	const struct dce110_link_enc_registers *link_regs;
 	const struct dce110_link_enc_aux_registers *aux_regs;
+	const struct dce110_link_enc_hpd_registers *hpd_regs;
 };
 
 /*******************************************************************
@@ -222,7 +229,8 @@ bool dce110_link_encoder_construct(
 	struct dce110_link_encoder *enc110,
 	const struct encoder_init_data *init_data,
 	const struct dce110_link_enc_registers *link_regs,
-	const struct dce110_link_enc_aux_registers *aux_regs);
+	const struct dce110_link_enc_aux_registers *aux_regs,
+	const struct dce110_link_enc_hpd_registers *hpd_regs);
 
 bool dce110_link_encoder_validate_dvi_output(
 	const struct dce110_link_encoder *enc110,
@@ -339,5 +347,9 @@ void dce110_link_encoder_connect_dig_be_to_fe(
 void dce110_link_encoder_set_dp_phy_pattern_training_pattern(
 	struct link_encoder *enc,
 	uint32_t index);
+
+void dce110_link_encoder_enable_hpd(struct link_encoder *enc);
+
+void dce110_link_encoder_disable_hpd(struct link_encoder *enc);
 
 #endif /* __DC_LINK_ENCODER__DCE110_H__ */
