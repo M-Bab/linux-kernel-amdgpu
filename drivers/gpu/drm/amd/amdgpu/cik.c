@@ -1910,7 +1910,7 @@ int cik_set_ip_blocks(struct amdgpu_device *adev)
 		amdgpu_ip_block_add(adev, &amdgpu_pp_ip_block);
 		if (adev->enable_virtual_display)
 			amdgpu_ip_block_add(adev, &dce_virtual_ip_block);
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
+#if defined(CONFIG_DRM_AMD_DAL)
 		else if (amdgpu_device_has_dal_support(adev))
 			amdgpu_ip_block_add(adev, &dm_ip_block);
 #endif
@@ -1928,7 +1928,7 @@ int cik_set_ip_blocks(struct amdgpu_device *adev)
 		amdgpu_ip_block_add(adev, &amdgpu_pp_ip_block);
 		if (adev->enable_virtual_display)
 			amdgpu_ip_block_add(adev, &dce_virtual_ip_block);
-#if defined(CONFIG_DRM_AMD_DAL_DCE8_0)
+#if defined(CONFIG_DRM_AMD_DAL)
 		else if (amdgpu_device_has_dal_support(adev))
 			amdgpu_ip_block_add(adev, &dm_ip_block);
 #endif
