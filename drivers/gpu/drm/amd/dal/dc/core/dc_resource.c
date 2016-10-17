@@ -105,11 +105,6 @@ static void update_num_audio(
 	unsigned int *num_audio,
 	struct audio_support *aud_support)
 {
-	/* dal_adapter_service_hw_ctx_get_audio_support */
-	bool dp_audio = false;
-	bool hdmi_audio_on_dongle = false;
-	bool hdmi_audio_native = false;
-
 	if (straps->hdmi_disable == 0) {
 		aud_support->hdmi_audio_native = true;
 		aud_support->hdmi_audio_on_dongle = true;
