@@ -556,7 +556,7 @@ static struct gpio *get_hpd_gpio(const struct link_encoder *enc)
 	struct graphics_object_hpd_info hpd_info;
 	struct gpio_pin_info pin_info;
 
-	if (!dcb->funcs->get_hpd_info(dcb, enc->connector, &hpd_info))
+	if (dcb->funcs->get_hpd_info(dcb, enc->connector, &hpd_info) != BP_RESULT_OK)
 		return NULL;
 
 	bp_result = dcb->funcs->get_gpio_pin_info(dcb,
