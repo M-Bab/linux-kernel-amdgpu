@@ -50,21 +50,52 @@ struct dc_caps {
 	uint32_t i2c_speed_in_khz;
 };
 
+
+struct dc_dcc_surface_param {
+	enum surface_pixel_format format;
+	struct dc_size surface_size;
+	enum dc_scan_direction scan;
+};
+
+struct dc_dcc_setting {
+	unsigned int max_compressed_blk_size;
+	unsigned int max_uncompressed_blk_size;
+	bool independent_64b_blks;
+};
+
+struct dc_surface_dcc_cap {
+	bool capable;
+	bool const_color_support;
+
+	union {
+		struct {
+			struct dc_dcc_setting rgb;
+		} grph;
+
+		struct {
+			struct dc_dcc_setting luma;
+			struct dc_dcc_setting chroma;
+		} video;
+	};
+};
+
 /* Forward declaration*/
 struct dc;
 struct dc_surface;
 struct validate_context;
 
+struct dc_cap_funcs {
+	int i;
+};
+
 struct dc_stream_funcs {
-	bool (*adjust_vmin_vmax)(
-			struct dc *dc,
+	bool (*adjust_vmin_vmax)(struct dc *dc,
 			const struct dc_stream **stream,
 			int num_streams,
 			int vmin,
 			int vmax);
 
-	void (*stream_update_scaling)(
-			const struct dc *dc,
+	void (*stream_update_scaling)(const struct dc *dc,
 			const struct dc_stream *dc_stream,
 			const struct rect *src,
 			const struct rect *dst);
@@ -106,10 +137,12 @@ struct dc_config {
 struct dc_debug {
 	bool surface_visual_confirm;
 	bool disable_stutter;
+	bool disable_dcc;
 };
 
 struct dc {
 	struct dc_caps caps;
+	struct dc_cap_funcs cap_funcs;
 	struct dc_stream_funcs stream_funcs;
 	struct dc_link_funcs link_funcs;
 	struct dc_config config;
@@ -189,8 +222,8 @@ struct dc_surface {
 
 	union plane_size plane_size;
 	union dc_tiling_info tiling_info;
+	struct dc_plane_dcc_param dcc;
 	enum dc_color_space color_space;
-	bool compressed;
 
 	enum surface_pixel_format format;
 	enum dc_rotation_angle rotation;

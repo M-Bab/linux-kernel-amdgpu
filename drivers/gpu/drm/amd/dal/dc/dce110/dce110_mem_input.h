@@ -128,7 +128,7 @@ bool  dce110_mem_input_program_surface_config(
 	union dc_tiling_info *tiling_info,
 	union plane_size *plane_size,
 	enum dc_rotation_angle rotation,
-	bool compressed);
+	struct dc_plane_dcc_param *dcc);
 
 /*
  * dce110_mem_input_program_pte_vm

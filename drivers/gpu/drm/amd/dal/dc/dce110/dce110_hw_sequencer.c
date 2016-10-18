@@ -1606,7 +1606,7 @@ static void set_plane_config(
 			&surface->public.tiling_info,
 			&surface->public.plane_size,
 			surface->public.rotation,
-			false);
+			NULL);
 
 	if (dc->public.config.gpu_vm_support)
 		mi->funcs->mem_input_program_pte_vm(

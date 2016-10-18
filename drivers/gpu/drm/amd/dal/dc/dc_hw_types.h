@@ -65,23 +65,38 @@ struct dc_plane_address {
 	union {
 		struct{
 			PHYSICAL_ADDRESS_LOC addr;
-			PHYSICAL_ADDRESS_LOC meta;
+			PHYSICAL_ADDRESS_LOC meta_addr;
+			union large_integer dcc_const_color;
 		} grph;
 
 		/*stereo*/
 		struct {
 			PHYSICAL_ADDRESS_LOC left_addr;
+			PHYSICAL_ADDRESS_LOC left_meta_addr;
+			union large_integer left_dcc_const_color;
+
 			PHYSICAL_ADDRESS_LOC right_addr;
+			PHYSICAL_ADDRESS_LOC right_meta_addr;
+			union large_integer right_dcc_const_color;
+
 		} grph_stereo;
 
 		/*video  progressive*/
 		struct {
-			PHYSICAL_ADDRESS_LOC meta_chroma;
-			PHYSICAL_ADDRESS_LOC meta_luma;
-			PHYSICAL_ADDRESS_LOC chroma_addr;
 			PHYSICAL_ADDRESS_LOC luma_addr;
+			PHYSICAL_ADDRESS_LOC luma_meta_addr;
+			union large_integer luma_dcc_const_color;
+
+			PHYSICAL_ADDRESS_LOC chroma_addr;
+			PHYSICAL_ADDRESS_LOC chroma_meta_addr;
+			union large_integer chroma_dcc_const_color;
 		} video_progressive;
 	};
+};
+
+struct dc_size {
+	uint32_t width;
+	uint32_t height;
 };
 
 struct rect {
@@ -126,6 +141,25 @@ union plane_size {
 		uint32_t chroma_pitch;
 		uint32_t meta_chroma_pitch;
 	} video;
+};
+
+struct dc_plane_dcc_param {
+	bool enable;
+
+	union {
+		struct {
+			uint32_t meta_pitch;
+			bool independent_64b_blks;
+		} grph;
+
+		struct {
+			uint32_t meta_pitch_l;
+			bool independent_64b_blks_l;
+
+			uint32_t meta_pitch_c;
+			bool independent_64b_blks_c;
+		} video;
+	};
 };
 
 /*Displayable pixel format in fb*/
@@ -296,6 +330,12 @@ enum dc_rotation_angle {
 	ROTATION_ANGLE_180,
 	ROTATION_ANGLE_270,
 	ROTATION_ANGLE_COUNT
+};
+
+enum dc_scan_direction {
+	SCAN_DIRECTION_UNKNOWN = 0,
+	SCAN_DIRECTION_HORIZONTAL = 1,  /* 0, 180 rotation */
+	SCAN_DIRECTION_VERTICAL = 2,    /* 90, 270 rotation */
 };
 
 struct dc_cursor_position {

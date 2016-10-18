@@ -80,7 +80,7 @@ struct mem_input_funcs {
 		union dc_tiling_info *tiling_info,
 		union plane_size *plane_size,
 		enum dc_rotation_angle rotation,
-		bool compressed);
+		struct dc_plane_dcc_param *dcc);
 
 	bool (*mem_input_is_flip_pending)(struct mem_input *mem_input);
 };
