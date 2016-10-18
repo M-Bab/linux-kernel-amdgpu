@@ -12,48 +12,40 @@ AMD_DAL_FILES += $(AMD_DAL_I2CAUX)
 ###############################################################################
 # DCE 8x family
 ###############################################################################
-ifdef CONFIG_DRM_AMD_DAL_DCE8_0
 I2CAUX_DCE80 = i2caux_dce80.o i2c_hw_engine_dce80.o \
 	i2c_sw_engine_dce80.o
 
 AMD_DAL_I2CAUX_DCE80 = $(addprefix $(AMDDALPATH)/dc/i2caux/dce80/,$(I2CAUX_DCE80))
 
 AMD_DAL_FILES += $(AMD_DAL_I2CAUX_DCE80)
-endif
 
 ###############################################################################
 # DCE 100 family
 ###############################################################################
-ifdef CONFIG_DRM_AMD_DAL_DCE10_0
 I2CAUX_DCE100 = i2caux_dce100.o
 
 AMD_DAL_I2CAUX_DCE100 = $(addprefix $(AMDDALPATH)/dc/i2caux/dce100/,$(I2CAUX_DCE100))
 
 AMD_DAL_FILES += $(AMD_DAL_I2CAUX_DCE100)
-endif
 
 ###############################################################################
 # DCE 110 family
 ###############################################################################
-ifdef CONFIG_DRM_AMD_DAL_DCE11_0
 I2CAUX_DCE110 = i2caux_dce110.o i2c_sw_engine_dce110.o i2c_hw_engine_dce110.o \
 	aux_engine_dce110.o
 
 AMD_DAL_I2CAUX_DCE110 = $(addprefix $(AMDDALPATH)/dc/i2caux/dce110/,$(I2CAUX_DCE110))
 
 AMD_DAL_FILES += $(AMD_DAL_I2CAUX_DCE110)
-endif
 
 ###############################################################################
 # DCE 112 family
 ###############################################################################
-ifdef CONFIG_DRM_AMD_DAL_DCE11_2
 I2CAUX_DCE112 = i2caux_dce112.o
 
 AMD_DAL_I2CAUX_DCE112 = $(addprefix $(AMDDALPATH)/dc/i2caux/dce112/,$(I2CAUX_DCE112))
 
 AMD_DAL_FILES += $(AMD_DAL_I2CAUX_DCE112)
-endif
 
 ###############################################################################
 # Diagnostics on FPGA

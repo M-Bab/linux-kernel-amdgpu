@@ -5,21 +5,10 @@
 DC_LIBS = adapter asic_capability basics bios calcs dce \
 gpio gpu i2caux irq virtual
 
-ifdef CONFIG_DRM_AMD_DAL_DCE11_2
 DC_LIBS += dce112
-endif
-
-ifdef CONFIG_DRM_AMD_DAL_DCE11_0
 DC_LIBS += dce110
-endif
-
-ifdef CONFIG_DRM_AMD_DAL_DCE10_0
 DC_LIBS += dce100
-endif
-
-ifdef CONFIG_DRM_AMD_DAL_DCE8_0
 DC_LIBS += dce80
-endif
 
 AMD_DC = $(addsuffix /Makefile, $(addprefix $(FULL_AMD_DAL_PATH)/dc/,$(DC_LIBS)))
 

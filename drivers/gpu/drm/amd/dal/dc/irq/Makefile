@@ -12,21 +12,17 @@ AMD_DAL_FILES += $(AMD_DAL_IRQ)
 ###############################################################################
 # DCE 8x
 ###############################################################################
-ifdef CONFIG_DRM_AMD_DAL_DCE8_0
 IRQ_DCE80 = irq_service_dce80.o
 
 AMD_DAL_IRQ_DCE80 = $(addprefix $(AMDDALPATH)/dc/irq/dce80/,$(IRQ_DCE80))
 
 AMD_DAL_FILES += $(AMD_DAL_IRQ_DCE80)
-endif
 
 ###############################################################################
 # DCE 11x
 ###############################################################################
-ifdef CONFIG_DRM_AMD_DAL_DCE11_0
 IRQ_DCE11 = irq_service_dce110.o
 
 AMD_DAL_IRQ_DCE11 = $(addprefix $(AMDDALPATH)/dc/irq/dce110/,$(IRQ_DCE11))
 
 AMD_DAL_FILES += $(AMD_DAL_IRQ_DCE11)
-endif
