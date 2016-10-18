@@ -4,7 +4,7 @@
 
 DCE110 = dce110_ipp.o dce110_ipp_cursor.o \
 dce110_ipp_gamma.o dce110_link_encoder.o dce110_opp.o \
-dce110_opp_formatter.o dce110_opp_regamma.o dce110_stream_encoder.o \
+dce110_opp_formatter.o dce110_opp_regamma.o \
 dce110_timing_generator.o dce110_transform.o dce110_transform_v.o \
 dce110_transform_gamut.o dce110_transform_scl.o dce110_opp_csc.o\
 dce110_compressor.o dce110_mem_input.o dce110_hw_sequencer.o \

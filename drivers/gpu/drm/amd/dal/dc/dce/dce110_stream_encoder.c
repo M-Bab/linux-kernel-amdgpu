@@ -44,6 +44,13 @@
 	#define HDMI_CONTROL__HDMI_DATA_SCRAMBLE_EN__SHIFT 0x1
 #endif
 
+#ifndef TMDS_CNTL__TMDS_PIXEL_ENCODING_MASK
+	#define TMDS_CNTL__TMDS_PIXEL_ENCODING_MASK       0x00000010L
+	#define TMDS_CNTL__TMDS_COLOR_FORMAT_MASK         0x00000300L
+	#define	TMDS_CNTL__TMDS_PIXEL_ENCODING__SHIFT     0x00000004
+	#define	TMDS_CNTL__TMDS_COLOR_FORMAT__SHIFT       0x00000008
+#endif
+
 enum {
 	DP_MST_UPDATE_MAX_RETRY = 50
 };
@@ -237,6 +244,35 @@ static void dce110_stream_encoder_dp_set_stream_attribute(
 
 }
 
+
+static void dce110_stream_encoder_set_stream_attribute_helper(
+		struct dce110_stream_encoder *enc110,
+		struct dc_crtc_timing *crtc_timing)
+{
+	if (enc110->regs->TMDS_CNTL) {
+		switch (crtc_timing->pixel_encoding) {
+		case PIXEL_ENCODING_YCBCR422:
+			REG_UPDATE(TMDS_CNTL, TMDS_PIXEL_ENCODING, 1);
+			break;
+		default:
+			REG_UPDATE(TMDS_CNTL, TMDS_PIXEL_ENCODING, 0);
+			break;
+		}
+		REG_UPDATE(TMDS_CNTL, TMDS_COLOR_FORMAT, 0);
+	} else if (enc110->regs->DIG_FE_CNTL) {
+		switch (crtc_timing->pixel_encoding) {
+		case PIXEL_ENCODING_YCBCR422:
+			REG_UPDATE(DIG_FE_CNTL, TMDS_PIXEL_ENCODING, 1);
+			break;
+		default:
+			REG_UPDATE(DIG_FE_CNTL, TMDS_PIXEL_ENCODING, 0);
+			break;
+		}
+		REG_UPDATE(DIG_FE_CNTL, TMDS_COLOR_FORMAT, 0);
+	}
+
+}
+
 /* setup stream encoder in hdmi mode */
 static void dce110_stream_encoder_hdmi_set_stream_attribute(
 	struct stream_encoder *enc,
@@ -258,16 +294,7 @@ static void dce110_stream_encoder_hdmi_set_stream_attribute(
 			enc110->base.bp, &cntl) != BP_RESULT_OK)
 		return;
 
-	switch (crtc_timing->pixel_encoding) {
-	case PIXEL_ENCODING_YCBCR422:
-		REG_UPDATE(DIG_FE_CNTL, TMDS_PIXEL_ENCODING, 1);
-		break;
-	default:
-		REG_UPDATE(DIG_FE_CNTL, TMDS_PIXEL_ENCODING, 0);
-		break;
-	}
-
-	REG_UPDATE(DIG_FE_CNTL, TMDS_COLOR_FORMAT, 0);
+	dce110_stream_encoder_set_stream_attribute_helper(enc110, crtc_timing);
 
 	/* setup HDMI engine */
 	REG_UPDATE_5(HDMI_CONTROL,
@@ -360,26 +387,9 @@ static void dce110_stream_encoder_dvi_set_stream_attribute(
 			enc110->base.bp, &cntl) != BP_RESULT_OK)
 		return;
 
-	switch (crtc_timing->pixel_encoding) {
-	case PIXEL_ENCODING_YCBCR422:
-		REG_UPDATE(DIG_FE_CNTL, TMDS_PIXEL_ENCODING, 1);
-		break;
-	default:
-		REG_UPDATE(DIG_FE_CNTL, TMDS_PIXEL_ENCODING, 0);
-		break;
-	}
-
-	switch (crtc_timing->display_color_depth) {
-	case COLOR_DEPTH_101010:
-		if (crtc_timing->pixel_encoding == PIXEL_ENCODING_RGB)
-			REG_UPDATE(DIG_FE_CNTL, TMDS_COLOR_FORMAT, 2);
-		else
-			REG_UPDATE(DIG_FE_CNTL, TMDS_COLOR_FORMAT, 0);
-		break;
-	default:
-			REG_UPDATE(DIG_FE_CNTL, TMDS_COLOR_FORMAT, 0);
-		break;
-	}
+	ASSERT(crtc_timing->pixel_encoding == PIXEL_ENCODING_RGB);
+	ASSERT(crtc_timing->display_color_depth == COLOR_DEPTH_888);
+	dce110_stream_encoder_set_stream_attribute_helper(enc110, crtc_timing);
 }
 
 static void dce110_stream_encoder_set_mst_bandwidth(

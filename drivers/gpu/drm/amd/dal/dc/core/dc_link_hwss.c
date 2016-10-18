@@ -10,7 +10,7 @@
 #include "dc_link_ddc.h"
 #include "dm_helpers.h"
 #include "dce110/dce110_link_encoder.h"
-#include "dce110/dce110_stream_encoder.h"
+#include "dce/dce110_stream_encoder.h"
 
 enum dc_status core_link_read_dpcd(
 	struct core_link* link,

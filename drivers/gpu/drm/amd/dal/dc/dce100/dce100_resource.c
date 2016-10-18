@@ -40,7 +40,7 @@
 #include "dce110/dce110_ipp.h"
 #include "dce110/dce110_transform.h"
 #include "dce100/dce100_link_encoder.h"
-#include "dce110/dce110_stream_encoder.h"
+#include "dce/dce110_stream_encoder.h"
 #include "dce110/dce110_opp.h"
 #include "dce110/dce110_clock_source.h"
 #include "dce/dce_audio.h"
@@ -291,6 +291,7 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 [id] = {\
 	SE_COMMON_REG_LIST_BASE(id),\
 	.AFMT_CNTL = 0,\
+	.TMDS_CNTL = 0,\
 }
 
 static const struct dce110_stream_enc_registers stream_enc_regs[] = {

@@ -5,7 +5,7 @@
 #   - register programming through common macros that look up register 
 #     offset/shift/mask stored in dce_hw struct
 
-DCE = dce_audio.o
+DCE = dce_audio.o dce110_stream_encoder.o
 
 AMD_DAL_DCE = $(addprefix $(AMDDALPATH)/dc/dce/,$(DCE))
 

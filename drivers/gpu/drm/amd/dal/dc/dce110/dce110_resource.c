@@ -41,7 +41,7 @@
 #include "dce110/dce110_ipp.h"
 #include "dce110/dce110_transform.h"
 #include "dce110/dce110_transform_v.h"
-#include "dce110/dce110_stream_encoder.h"
+#include "dce/dce110_stream_encoder.h"
 #include "dce110/dce110_opp.h"
 #include "dce110/dce110_opp_v.h"
 #include "dce110/dce110_clock_source.h"
@@ -246,7 +246,8 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 
 #define stream_enc_regs(id)\
 [id] = {\
-	SE_COMMON_REG_LIST(id)\
+	SE_COMMON_REG_LIST(id),\
+	.TMDS_CNTL = 0,\
 }
 
 static const struct dce110_stream_enc_registers stream_enc_regs[] = {

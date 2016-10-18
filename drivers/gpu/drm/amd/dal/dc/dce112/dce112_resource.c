@@ -38,7 +38,7 @@
 #include "dce110/dce110_link_encoder.h"
 #include "irq/dce110/irq_service_dce110.h"
 #include "dce110/dce110_transform.h"
-#include "dce110/dce110_stream_encoder.h"
+#include "dce/dce110_stream_encoder.h"
 #include "dce/dce_audio.h"
 #include "dce112/dce112_opp.h"
 #include "dce110/dce110_ipp.h"
@@ -283,7 +283,8 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 
 #define stream_enc_regs(id)\
 [id] = {\
-	SE_COMMON_REG_LIST(id)\
+	SE_COMMON_REG_LIST(id),\
+	.TMDS_CNTL = 0,\
 }
 
 static const struct dce110_stream_enc_registers stream_enc_regs[] = {

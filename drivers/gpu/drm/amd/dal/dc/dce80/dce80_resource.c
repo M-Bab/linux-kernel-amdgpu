@@ -41,8 +41,7 @@
 #include "dce80/dce80_mem_input.h"
 #include "dce80/dce80_ipp.h"
 #include "dce80/dce80_transform.h"
-#include "dce110/dce110_stream_encoder.h"
-#include "dce80/dce80_stream_encoder.h"
+#include "dce/dce110_stream_encoder.h"
 #include "dce80/dce80_opp.h"
 #include "dce110/dce110_ipp.h"
 #include "dce110/dce110_clock_source.h"
@@ -420,7 +419,7 @@ static struct stream_encoder *dce80_stream_encoder_create(
 	if (!enc110)
 		return NULL;
 
-	if (dce80_stream_encoder_construct(enc110, ctx, dcb, eng_id, regs))
+	if (dce110_stream_encoder_construct(enc110, ctx, dcb, eng_id, regs))
 		return &enc110->base;
 
 	BREAK_TO_DEBUGGER();
