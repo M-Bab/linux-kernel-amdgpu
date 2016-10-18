@@ -25,27 +25,43 @@
 
 #include "dm_services.h"
 
-/*
- * Pre-requisites: headers required by header of this unit
- */
 #include "include/gpio_types.h"
 #include "../hw_gpio.h"
 #include "../hw_hpd.h"
 
-/*
- * Header of this unit
- */
 #include "hw_hpd_dce110.h"
 
-/*
- * Post-requisites: headers required by this unit
- */
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
-/*
- * This unit
- */
+/* set field name */
+#define SF(reg_name, field_name, post_fix)\
+	.field_name = reg_name ## __ ## field_name ## post_fix
+
+#include "../hpd_regs.h"
+
+
+#define hpd_regs(id) \
+{\
+	HPD_REG_LIST(id)\
+}
+
+static const struct hpd_registers hpd_regs[] = {
+	hpd_regs(0),
+	hpd_regs(1),
+	hpd_regs(2),
+	hpd_regs(3),
+	hpd_regs(4),
+	hpd_regs(5)
+};
+
+static const struct hpd_sh_mask hpd_shift = {
+		HPD_MASK_SH_LIST(__SHIFT)
+};
+
+static const struct hpd_sh_mask hpd_mask = {
+		HPD_MASK_SH_LIST(_MASK)
+};
 
 static void destruct(
 	struct hw_hpd_dce110 *pin)

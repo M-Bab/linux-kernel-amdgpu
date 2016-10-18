@@ -26,7 +26,7 @@
 #ifndef DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_GPIO_DDC_REGS_H_
 #define DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_GPIO_DDC_REGS_H_
 
-
+#include "gpio_regs.h"
 
 /****************************** new register headers */
 /*** following in header */
@@ -96,21 +96,6 @@
 		SF(DC_GPIO_I2CPAD_MASK, DC_GPIO_SDA_PD_DIS, mask_sh),\
 		SF(DC_GPIO_I2CPAD_MASK, DC_GPIO_SCL_PD_DIS, mask_sh)
 
-
-struct gpio_registers {
-	uint32_t MASK_reg;
-	uint32_t MASK_mask;
-	uint32_t MASK_shift;
-	uint32_t A_reg;
-	uint32_t A_mask;
-	uint32_t A_shift;
-	uint32_t EN_reg;
-	uint32_t EN_mask;
-	uint32_t EN_shift;
-	uint32_t Y_reg;
-	uint32_t Y_mask;
-	uint32_t Y_shift;
-};
 
 struct ddc_registers {
 	struct gpio_registers gpio;

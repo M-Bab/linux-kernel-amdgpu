@@ -45,9 +45,41 @@
 #include "dce/dce_8_0_d.h"
 #include "dce/dce_8_0_sh_mask.h"
 
-/*
- * This unit
- */
+#include "../hpd_regs.h"
+
+#define HPD_REG_LIST_DCE8(id) \
+	HPD_GPIO_REG_LIST(id), \
+	.int_status = mmDC_HPD ## id ## _INT_STATUS,\
+	.toggle_filt_cntl = mmDC_HPD ## id ## _TOGGLE_FILT_CNTL
+
+#define HPD_MASK_SH_LIST_DCE8(mask_sh) \
+		.DC_HPD_SENSE_DELAYED = DC_HPD1_INT_STATUS__DC_HPD1_SENSE_DELAYED ## mask_sh,\
+		.DC_HPD_SENSE = DC_HPD1_INT_STATUS__DC_HPD1_SENSE ## mask_sh,\
+		.DC_HPD_CONNECT_INT_DELAY = DC_HPD1_TOGGLE_FILT_CNTL__DC_HPD1_CONNECT_INT_DELAY ## mask_sh,\
+		.DC_HPD_DISCONNECT_INT_DELAY = DC_HPD1_TOGGLE_FILT_CNTL__DC_HPD1_DISCONNECT_INT_DELAY ## mask_sh
+
+#define hpd_regs(id) \
+{\
+	HPD_REG_LIST_DCE8(id)\
+}
+
+static const struct hpd_registers hpd_regs[] = {
+	hpd_regs(1),
+	hpd_regs(2),
+	hpd_regs(3),
+	hpd_regs(4),
+	hpd_regs(5),
+	hpd_regs(6)
+};
+
+static const struct hpd_sh_mask hpd_shift = {
+		HPD_MASK_SH_LIST_DCE8(__SHIFT)
+};
+
+static const struct hpd_sh_mask hpd_mask = {
+		HPD_MASK_SH_LIST_DCE8(_MASK)
+};
+
 
 #define FROM_HW_HPD(ptr) \
 	container_of((ptr), struct hw_hpd_dce80, base)
