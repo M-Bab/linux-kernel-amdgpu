@@ -142,11 +142,13 @@ void dal_display_clock_set_clock(
 	struct display_clock *disp_clk,
 	uint32_t requested_clock_khz);
 uint32_t dal_display_clock_get_clock(struct display_clock *disp_clk);
-enum clocks_state dal_display_clock_get_min_clocks_state(
-	struct display_clock *disp_clk);
-enum clocks_state dal_display_clock_get_required_clocks_state(
+bool dal_display_clock_get_min_clocks_state(
 	struct display_clock *disp_clk,
-	struct state_dependent_clocks *req_clocks);
+	enum clocks_state *clocks_state);
+bool dal_display_clock_get_required_clocks_state(
+	struct display_clock *disp_clk,
+	struct state_dependent_clocks *req_clocks,
+	enum clocks_state *clocks_state);
 bool dal_display_clock_set_min_clocks_state(
 	struct display_clock *disp_clk,
 	enum clocks_state clocks_state);
@@ -173,9 +175,5 @@ uint32_t dal_display_clock_get_dfs_bypass_threshold(
 	struct display_clock *disp_clk);
 void dal_display_clock_invalid_clock_state(
 	struct display_clock *disp_clk);
-bool dal_display_clock_apply_clock_voltage_request(
-	struct display_clock *disp_clk,
-	enum dm_pp_clock_type clocks_type,
-	uint32_t clocks_in_khz);
 
 #endif /* __DISPLAY_CLOCK_INTERFACE_H__ */

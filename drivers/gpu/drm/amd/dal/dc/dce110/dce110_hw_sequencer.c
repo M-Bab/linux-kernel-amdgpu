@@ -1278,14 +1278,15 @@ static uint32_t get_max_pixel_clock_for_all_paths(
 	return max_pix_clk;
 }
 
-/* Find clock state based on clock requested. if clock value is 0, simply
+/*
+ * Find clock state based on clock requested. if clock value is 0, simply
  * set clock state as requested without finding clock state by clock value
  */
-static void set_clock_state(
+static void apply_min_clocks(
 	struct core_dc *dc,
 	struct validate_context *context,
 	enum clocks_state *clocks_state,
-	bool set_stsate_only)
+	bool pre_mode_set)
 {
 	struct state_dependent_clocks req_clocks = {0};
 	struct pipe_ctx *pipe_ctx;
@@ -1297,12 +1298,12 @@ static void set_clock_state(
 			break;
 	}
 
-	if (set_stsate_only) {
+	if (!pre_mode_set) {
 		/* set clock_state without verification */
-		dal_display_clock_set_min_clocks_state(
-				pipe_ctx->dis_clk, *clocks_state);
+		if (dal_display_clock_set_min_clocks_state(
+				pipe_ctx->dis_clk, *clocks_state))
+			return;
 
-		return;
 	}
 
 	/* get the required state based on state dependent clocks:
@@ -1313,13 +1314,12 @@ static void set_clock_state(
 	req_clocks.pixel_clk_khz = get_max_pixel_clock_for_all_paths(
 			dc, context, true);
 
-	*clocks_state =
-		dal_display_clock_get_required_clocks_state(
-				pipe_ctx->dis_clk, &req_clocks);
-
-
-	dal_display_clock_set_min_clocks_state(
+	if (dal_display_clock_get_required_clocks_state(
+				pipe_ctx->dis_clk, &req_clocks, clocks_state)) {
+		dal_display_clock_set_min_clocks_state(
 			pipe_ctx->dis_clk, *clocks_state);
+	} else {
+	}
 }
 
 /*TODO: const validate_context*/
@@ -1384,8 +1384,7 @@ static enum dc_status apply_ctx_to_hw(
 
 	set_safe_displaymarks(&context->res_ctx);
 	/*TODO: when pplib works*/
-	/* dc_set_clocks_and_clock_state(context); */
-	set_clock_state(dc, context, &clocks_state, false);
+	apply_min_clocks(dc, context, &clocks_state, true);
 
 	if (context->bw_results.dispclk_khz
 		> dc->current_context->bw_results.dispclk_khz)
@@ -1467,8 +1466,8 @@ static enum dc_status apply_ctx_to_hw(
 
 	dc->hwss.set_displaymarks(dc, context);
 
-	/* TODO dc_set_clocks_and_clock_state(context); to save power */
-	set_clock_state(dc, context, &clocks_state, true);
+	/* to save power */
+	apply_min_clocks(dc, context, &clocks_state, false);
 
 	dcb->funcs->set_scratch_critical_state(dcb, false);
 

@@ -117,24 +117,39 @@ uint32_t dal_display_clock_get_clock(struct display_clock *disp_clk)
 	return disp_clk->funcs->get_clock(disp_clk);
 }
 
-enum clocks_state dal_display_clock_get_min_clocks_state(
-	struct display_clock *disp_clk)
+bool dal_display_clock_get_min_clocks_state(
+	struct display_clock *disp_clk,
+	enum clocks_state *clocks_state)
 {
-	return disp_clk->funcs->get_min_clocks_state(disp_clk);
+	if (!disp_clk->funcs->get_min_clocks_state)
+		false;
+
+	*clocks_state = disp_clk->funcs->get_min_clocks_state(disp_clk);
+	return true;
 }
 
-enum clocks_state dal_display_clock_get_required_clocks_state(
+bool dal_display_clock_get_required_clocks_state(
 	struct display_clock *disp_clk,
-	struct state_dependent_clocks *req_clocks)
+	struct state_dependent_clocks *req_clocks,
+	enum clocks_state *clocks_state)
 {
-	return disp_clk->funcs->get_required_clocks_state(disp_clk, req_clocks);
+	if (!disp_clk->funcs->get_required_clocks_state)
+		return false;
+
+	*clocks_state = disp_clk->funcs->get_required_clocks_state(
+			disp_clk, req_clocks);
+	return true;
 }
 
 bool dal_display_clock_set_min_clocks_state(
 	struct display_clock *disp_clk,
 	enum clocks_state clocks_state)
 {
-	return disp_clk->funcs->set_min_clocks_state(disp_clk, clocks_state);
+	if (!disp_clk->funcs->set_min_clocks_state)
+		return false;
+
+	disp_clk->funcs->set_min_clocks_state(disp_clk, clocks_state);
+	return true;
 }
 
 uint32_t dal_display_clock_get_dp_ref_clk_frequency(
@@ -203,3 +218,4 @@ void dal_display_clock_invalid_clock_state(
 {
 	disp_clk->cur_min_clks_state = CLOCKS_STATE_INVALID;
 }
+

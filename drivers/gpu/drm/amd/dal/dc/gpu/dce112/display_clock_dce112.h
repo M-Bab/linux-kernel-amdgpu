@@ -47,6 +47,7 @@ struct display_clock_dce112 {
 	uint32_t dfs_bypass_disp_clk;
 	struct display_clock_state clock_state;
 	struct state_dependent_clocks *max_clks_by_state;
+
 };
 
 #define DCLCK112_FROM_BASE(dc_base) \
