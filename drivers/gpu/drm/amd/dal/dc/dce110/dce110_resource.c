@@ -1053,15 +1053,14 @@ static bool construct(
 	 *************************************************/
 
 	pool->base.pipe_count = 3;
-	pool->base.stream_enc_count = 3;
 	pool->base.underlay_pipe_index = 3;
 
 	if (ASIC_REV_IS_STONEY(asic_id.hw_internal_rev)) {
 		pool->base.pipe_count = 2;
-		pool->base.stream_enc_count = 2;
 		pool->base.underlay_pipe_index = 2;
 	}
 
+	pool->base.stream_enc_count = 3;
 	dc->public.caps.max_downscale_ratio = 150;
 	dc->public.caps.i2c_speed_in_khz = 100;
 
