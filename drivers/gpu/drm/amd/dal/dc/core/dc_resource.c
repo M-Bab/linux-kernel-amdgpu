@@ -170,6 +170,17 @@ bool resource_construct(
 		pool->audio_count++;
 	}
 
+
+	for (i = 0; i < pool->stream_enc_count; i++) {
+		/* TODO: rework fragile code*/
+		if (pool->stream_engines.u_all & 1 << i) {
+			pool->stream_enc[i] = create_funcs->create_stream_encoder(
+				i, ctx);
+			if (pool->stream_enc[i] == NULL)
+				DC_ERR("DC: failed to create stream_encoder!\n");
+		}
+	}
+
 	for (i = 0; i < num_virtual_links; i++) {
 		pool->stream_enc[pool->stream_enc_count] =
 			virtual_stream_encoder_create(

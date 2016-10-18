@@ -362,11 +362,6 @@ static struct audio *create_audio(
 			&audio_regs[inst], &audio_shift, &audio_mask);
 }
 
-static const struct resource_create_funcs res_create_funcs = {
-	.read_dce_straps = read_dce_straps,
-	.create_audio = create_audio,
-};
-
 static struct timing_generator *dce110_timing_generator_create(
 		struct adapter_service *as,
 		struct dc_context *ctx,
@@ -389,9 +384,7 @@ static struct timing_generator *dce110_timing_generator_create(
 
 static struct stream_encoder *dce110_stream_encoder_create(
 	enum engine_id eng_id,
-	struct dc_context *ctx,
-	struct dc_bios *bp,
-	const struct dce110_stream_enc_registers *regs)
+	struct dc_context *ctx)
 {
 	struct dce110_stream_encoder *enc110 =
 		dm_alloc(sizeof(struct dce110_stream_encoder));
@@ -399,13 +392,21 @@ static struct stream_encoder *dce110_stream_encoder_create(
 	if (!enc110)
 		return NULL;
 
-	if (dce110_stream_encoder_construct(enc110, ctx, bp, eng_id, regs))
+	if (dce110_stream_encoder_construct(
+			enc110, ctx, ctx->dc_bios, eng_id, &stream_enc_regs[eng_id]))
 		return &enc110->base;
 
 	BREAK_TO_DEBUGGER();
 	dm_free(enc110);
 	return NULL;
 }
+
+static const struct resource_create_funcs res_create_funcs = {
+	.read_dce_straps = read_dce_straps,
+	.create_audio = create_audio,
+	.create_stream_encoder = dce110_stream_encoder_create
+};
+
 
 static struct mem_input *dce110_mem_input_create(
 	struct dc_context *ctx,
@@ -1305,21 +1306,6 @@ static bool construct(
 	}
 
 	underlay_create(ctx, &pool->base);
-
-	for (i = 0; i < pool->base.stream_enc_count; i++) {
-		/* TODO: rework fragile code*/
-		if (pool->base.stream_engines.u_all & 1 << i) {
-			pool->base.stream_enc[i] = dce110_stream_encoder_create(
-				i, ctx,
-				ctx->dc_bios,
-				&stream_enc_regs[i]);
-			if (pool->base.stream_enc[i] == NULL) {
-				BREAK_TO_DEBUGGER();
-				dm_error("DC: failed to create stream_encoder!\n");
-				goto res_create_fail;
-			}
-		}
-	}
 
 	if (!resource_construct(num_virtual_links, dc, &pool->base,
 			&res_cap, &res_create_funcs))

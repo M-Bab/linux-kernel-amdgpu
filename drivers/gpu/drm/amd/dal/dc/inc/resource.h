@@ -52,6 +52,11 @@ struct resource_create_funcs {
 
 	struct audio *(*create_audio)(
 			struct dc_context *ctx, unsigned int inst);
+
+	struct stream_encoder *(*create_stream_encoder)(
+			enum engine_id eng_id,
+			struct dc_context *ctx);
+
 };
 
 bool resource_construct(
