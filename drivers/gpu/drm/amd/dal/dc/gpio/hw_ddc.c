@@ -25,25 +25,21 @@
 
 #include "dm_services.h"
 
-/*
- * Pre-requisites: headers required by header of this unit
- */
 #include "include/gpio_types.h"
 #include "hw_gpio.h"
-
-/*
- * Header of this unit
- */
-
 #include "hw_ddc.h"
 
-/*
- * Post-requisites: headers required by this unit
- */
+#include "reg_helper.h"
+#include "gpio_regs.h"
 
-/*
- * This unit
- */
+#undef FN
+#define FN(reg_name, field_name) \
+	gpio->regs->field_name ## _shift, gpio->regs->field_name ## _mask
+
+#define CTX \
+	gpio->base.ctx
+#define REG(reg)\
+	(gpio->regs->reg)
 
 #define FROM_HW_GPIO(ptr) \
 	container_of((ptr), struct hw_ddc, base)
@@ -57,7 +53,7 @@ bool dal_hw_ddc_open(
 	void *options)
 {
 	struct hw_ddc *pin = FROM_HW_GPIO_PIN(ptr);
-
+	struct hw_gpio *gpio = &pin->base;
 	uint32_t en;
 
 	if (!options) {
@@ -66,11 +62,7 @@ bool dal_hw_ddc_open(
 	}
 
 	/* get the EN bit before overwriting it */
-
-	dal_hw_gpio_get_reg_value(
-		ptr->ctx,
-		&pin->base.pin_reg.DC_GPIO_DATA_EN,
-		&en);
+	REG_GET(EN_reg, EN, &en);
 
 	((struct gpio_ddc_open_options *)options)->en_bit_present = (en != 0);
 

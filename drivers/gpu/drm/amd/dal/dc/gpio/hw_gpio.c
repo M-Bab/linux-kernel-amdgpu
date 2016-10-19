@@ -24,125 +24,40 @@
  */
 
 #include "dm_services.h"
-
-/*
- * Pre-requisites: headers required by header of this unit
- */
 #include "include/gpio_types.h"
-
-/*
- * Header of this unit
- */
-
 #include "hw_gpio.h"
 
-/*
- * Post-requisites: headers required by this unit
- */
+#include "reg_helper.h"
+#include "gpio_regs.h"
 
-/*
- * This unit
- */
+#undef FN
+#define FN(reg_name, field_name) \
+	gpio->regs->field_name ## _shift, gpio->regs->field_name ## _mask
 
-enum gpio_result dal_hw_gpio_get_reg_value(
-	struct dc_context *ctx,
-	const struct addr_mask *reg,
-	uint32_t *value)
-{
-	*value = dm_read_reg(ctx, reg->addr);
-
-	*value &= reg->mask;
-
-	return GPIO_RESULT_OK;
-}
-
-enum gpio_result dal_hw_gpio_set_reg_value(
-	struct dc_context *ctx,
-	const struct addr_mask *reg,
-	uint32_t value)
-{
-	uint32_t prev_value;
-
-	if ((value & reg->mask) != value) {
-		BREAK_TO_DEBUGGER();
-		return GPIO_RESULT_INVALID_DATA;
-	}
-
-	prev_value = dm_read_reg(ctx, reg->addr);
-
-	prev_value &= ~reg->mask;
-	prev_value |= (value & reg->mask);
-
-	dm_write_reg(ctx, reg->addr, prev_value);
-
-	return GPIO_RESULT_OK;
-}
-
-uint32_t dal_hw_gpio_get_shift_from_mask(
-	uint32_t mask)
-{
-	uint32_t result = 0;
-
-	if (!mask)
-		return 32;
-
-	do {
-		if ((1 << result) & mask)
-			break;
-
-		++result;
-	} while (result < 32);
-
-	return result;
-}
+#define CTX \
+	gpio->base.ctx
+#define REG(reg)\
+	(gpio->regs->reg)
 
 #define FROM_HW_GPIO_PIN(ptr) \
 	container_of((ptr), struct hw_gpio, base)
 
 static void store_registers(
-	struct hw_gpio *pin)
+	struct hw_gpio *gpio)
 {
-	dal_hw_gpio_get_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_MASK,
-		&pin->store.mask);
-	dal_hw_gpio_get_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_A,
-		&pin->store.a);
-	dal_hw_gpio_get_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_EN,
-		&pin->store.en);
-
-	if (pin->mux_supported)
-		dal_hw_gpio_get_reg_value(
-			pin->base.ctx,
-			&pin->mux_reg.GPIO_MUX_CONTROL,
-			&pin->store.mux);
+	REG_GET(MASK_reg, MASK, &gpio->store.mask);
+	REG_GET(A_reg, A, &gpio->store.a);
+	REG_GET(EN_reg, EN, &gpio->store.en);
+	/* TODO store GPIO_MUX_CONTROL if we ever use it */
 }
 
 static void restore_registers(
-	struct hw_gpio *pin)
+	struct hw_gpio *gpio)
 {
-	dal_hw_gpio_set_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_MASK,
-		pin->store.mask);
-	dal_hw_gpio_set_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_A,
-		pin->store.a);
-	dal_hw_gpio_set_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_EN,
-		pin->store.en);
-
-	if (pin->mux_supported)
-		dal_hw_gpio_set_reg_value(
-			pin->base.ctx,
-			&pin->mux_reg.GPIO_MUX_CONTROL,
-			pin->store.mux);
+	REG_UPDATE(MASK_reg, MASK, gpio->store.mask);
+	REG_UPDATE(A_reg, A, gpio->store.a);
+	REG_UPDATE(EN_reg, EN, gpio->store.en);
+	/* TODO restore GPIO_MUX_CONTROL if we ever use it */
 }
 
 bool dal_hw_gpio_open(
@@ -163,25 +78,17 @@ enum gpio_result dal_hw_gpio_get_value(
 	const struct hw_gpio_pin *ptr,
 	uint32_t *value)
 {
-	const struct hw_gpio *pin = FROM_HW_GPIO_PIN(ptr);
+	const struct hw_gpio *gpio = FROM_HW_GPIO_PIN(ptr);
 
-	enum gpio_result result;
+	enum gpio_result result = GPIO_RESULT_OK;
 
 	switch (ptr->mode) {
 	case GPIO_MODE_INPUT:
 	case GPIO_MODE_OUTPUT:
 	case GPIO_MODE_HARDWARE:
 	case GPIO_MODE_FAST_OUTPUT:
-		result = dal_hw_gpio_get_reg_value(
-			ptr->ctx,
-			&pin->pin_reg.DC_GPIO_DATA_Y,
-			value);
-		/* Clients does not know that the value
-		 * comes from register and is shifted. */
-		if (result == GPIO_RESULT_OK)
-			*value >>= dal_hw_gpio_get_shift_from_mask(
-				pin->pin_reg.DC_GPIO_DATA_Y.mask);
-	break;
+		REG_GET(Y_reg, Y, value);
+		break;
 	default:
 		result = GPIO_RESULT_NON_SPECIFIC_ERROR;
 	}
@@ -193,7 +100,7 @@ enum gpio_result dal_hw_gpio_set_value(
 	const struct hw_gpio_pin *ptr,
 	uint32_t value)
 {
-	struct hw_gpio *pin = FROM_HW_GPIO_PIN(ptr);
+	struct hw_gpio *gpio = FROM_HW_GPIO_PIN(ptr);
 
 	/* This is the public interface
 	 * where the input comes from client, not shifted yet
@@ -201,22 +108,15 @@ enum gpio_result dal_hw_gpio_set_value(
 
 	switch (ptr->mode) {
 	case GPIO_MODE_OUTPUT:
-		return dal_hw_gpio_set_reg_value(
-			ptr->ctx,
-			&pin->pin_reg.DC_GPIO_DATA_A,
-			value << dal_hw_gpio_get_shift_from_mask(
-				pin->pin_reg.DC_GPIO_DATA_A.mask));
+		REG_UPDATE(A_reg, A, value);
+		return GPIO_RESULT_OK;
 	case GPIO_MODE_FAST_OUTPUT:
 		/* We use (EN) to faster switch (used in DDC GPIO).
 		 * So (A) is grounded, output is driven by (EN = 0)
 		 * to pull the line down (output == 0) and (EN=1)
 		 * then output is tri-state */
-		return dal_hw_gpio_set_reg_value(
-			ptr->ctx,
-			&pin->pin_reg.DC_GPIO_DATA_EN,
-			pin->pin_reg.DC_GPIO_DATA_EN.mask &
-			~(value << dal_hw_gpio_get_shift_from_mask(
-				pin->pin_reg.DC_GPIO_DATA_EN.mask)));
+		REG_UPDATE(EN_reg, EN, ~value);
+		return GPIO_RESULT_OK;
 	default:
 		return GPIO_RESULT_NON_SPECIFIC_ERROR;
 	}
@@ -243,98 +143,41 @@ void dal_hw_gpio_close(
 }
 
 static enum gpio_result config_mode_input(
-	struct hw_gpio *pin)
+	struct hw_gpio *gpio)
 {
-	enum gpio_result result;
-
 	/* turn off output enable, act as input pin;
 	 * program the pin as GPIO, mask out signal driven by HW */
-
-	result = dal_hw_gpio_set_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_EN,
-		0);
-
-	if (result != GPIO_RESULT_OK)
-		return GPIO_RESULT_NON_SPECIFIC_ERROR;
-
-	result = dal_hw_gpio_set_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_MASK,
-		pin->pin_reg.DC_GPIO_DATA_MASK.mask);
-
-	if (result != GPIO_RESULT_OK)
-		return GPIO_RESULT_NON_SPECIFIC_ERROR;
-
+	REG_UPDATE(EN_reg, EN, 0);
+	REG_UPDATE(MASK_reg, MASK, 1);
 	return GPIO_RESULT_OK;
 }
 
 static enum gpio_result config_mode_output(
-	struct hw_gpio *pin)
+	struct hw_gpio *gpio)
 {
-	enum gpio_result result;
-
 	/* turn on output enable, act as output pin;
 	 * program the pin as GPIO, mask out signal driven by HW */
-
-	result = dal_hw_gpio_set_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_EN,
-		pin->pin_reg.DC_GPIO_DATA_EN.mask);
-
-	if (result != GPIO_RESULT_OK)
-		return GPIO_RESULT_NON_SPECIFIC_ERROR;
-
-	result = dal_hw_gpio_set_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_MASK,
-		pin->pin_reg.DC_GPIO_DATA_MASK.mask);
-
-	if (result != GPIO_RESULT_OK)
-		return GPIO_RESULT_NON_SPECIFIC_ERROR;
-
+	REG_UPDATE(EN_reg, EN, 1);
+	REG_UPDATE(MASK_reg, MASK, 1);
 	return GPIO_RESULT_OK;
 }
 
 static enum gpio_result config_mode_fast_output(
-	struct hw_gpio *pin)
+	struct hw_gpio *gpio)
 {
-	enum gpio_result result;
-
 	/* grounding the A register then use the EN register bit
 	 * will have faster effect on the rise time */
-
-	result = dal_hw_gpio_set_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_A, 0);
-
-	if (result != GPIO_RESULT_OK)
-		return GPIO_RESULT_NON_SPECIFIC_ERROR;
-
-	result = dal_hw_gpio_set_reg_value(
-		pin->base.ctx,
-		&pin->pin_reg.DC_GPIO_DATA_MASK,
-		pin->pin_reg.DC_GPIO_DATA_MASK.mask);
-
-	if (result != GPIO_RESULT_OK)
-		return GPIO_RESULT_NON_SPECIFIC_ERROR;
-
+	REG_UPDATE(A_reg, A, 0);
+	REG_UPDATE(MASK_reg, MASK, 1);
 	return GPIO_RESULT_OK;
 }
 
 static enum gpio_result config_mode_hardware(
-	struct hw_gpio *pin)
+	struct hw_gpio *gpio)
 {
 	/* program the pin as tri-state, pin is driven by HW */
 
-	enum gpio_result result =
-		dal_hw_gpio_set_reg_value(
-			pin->base.ctx,
-			&pin->pin_reg.DC_GPIO_DATA_MASK,
-			0);
-
-	if (result != GPIO_RESULT_OK)
-		return GPIO_RESULT_NON_SPECIFIC_ERROR;
+	REG_UPDATE(MASK_reg, MASK, 0);
 
 	return GPIO_RESULT_OK;
 }

@@ -33,20 +33,6 @@ struct addr_mask {
 	uint32_t mask;
 };
 
-enum gpio_result dal_hw_gpio_get_reg_value(
-	struct dc_context *ctx,
-	const struct addr_mask *reg,
-	uint32_t *value);
-
-enum gpio_result dal_hw_gpio_set_reg_value(
-	struct dc_context *ctx,
-	const struct addr_mask *reg,
-	uint32_t value);
-
-uint32_t dal_hw_gpio_get_shift_from_mask(
-	uint32_t mask);
-
-
 struct hw_gpio_pin {
 	const struct hw_gpio_pin_funcs *funcs;
 	enum gpio_id id;

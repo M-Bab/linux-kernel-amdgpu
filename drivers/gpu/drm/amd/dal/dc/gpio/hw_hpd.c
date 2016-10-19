@@ -25,42 +25,35 @@
 
 #include "dm_services.h"
 
-/*
- * Pre-requisites: headers required by header of this unit
- */
 #include "include/gpio_types.h"
 #include "hw_gpio.h"
-
-/*
- * Header of this unit
- */
-
 #include "hw_hpd.h"
 
-/*
- * Post-requisites: headers required by this unit
- */
+#include "reg_helper.h"
+#include "gpio_regs.h"
 
-/*
- * This unit
- */
+#undef FN
+#define FN(reg_name, field_name) \
+	gpio->regs->field_name ## _shift, gpio->regs->field_name ## _mask
+
+#define CTX \
+	gpio->base.ctx
+#define REG(reg)\
+	(gpio->regs->reg)
 
 static enum gpio_result config_mode(
-	struct hw_gpio *pin,
+	struct hw_gpio *gpio,
 	enum gpio_mode mode)
 {
 	if (mode == GPIO_MODE_INTERRUPT) {
 		/* Interrupt mode supported only by HPD (IrqGpio) pins. */
-		pin->base.mode = mode;
-
-		return dal_hw_gpio_set_reg_value(
-			pin->base.ctx,
-			&pin->pin_reg.DC_GPIO_DATA_MASK,
-			0);
+		gpio->base.mode = mode;
+		REG_UPDATE(MASK_reg, MASK, 0);
+		return GPIO_RESULT_OK;
 	} else
 		/* For any mode other than Interrupt,
 		 * act as normal GPIO. */
-		return dal_hw_gpio_config_mode(pin, mode);
+		return dal_hw_gpio_config_mode(gpio, mode);
 }
 
 const struct hw_gpio_funcs hw_hpd_func = {
