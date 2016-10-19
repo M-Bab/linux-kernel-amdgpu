@@ -598,36 +598,40 @@ void dal_logger_write(
 	const char *msg,
 	...)
 {
-
 	if (logger && dal_logger_should_log(logger, major, minor)) {
-
 		uint32_t size;
 		va_list args;
 		char buffer[DAL_LOGGER_BUFFER_MAX_LOG_LINE_SIZE];
 		struct log_entry entry;
 
 		va_start(args, msg);
-		dal_logger_open(logger, &entry, major, minor);
+
+		entry.major = LOG_MAJOR_COUNT;
+		entry.minor = 0;
+		entry.logger = logger;
+
+		entry.buf = buffer;
+
+		entry.buf_offset = 0;
+		entry.max_buf_bytes = DAL_LOGGER_BUFFER_MAX_SIZE * sizeof(char);
+
+		entry.major = major;
+		entry.minor = minor;
+
+		log_heading(&entry, major, minor);
 
 		size = dm_log_to_buffer(
 			buffer, DAL_LOGGER_BUFFER_MAX_LOG_LINE_SIZE, msg, args);
 
-		if (size > 0 && size <
-				DAL_LOGGER_BUFFER_MAX_LOG_LINE_SIZE - 1) {
+		entry.buf_offset += size;
 
-			if (buffer[size] == '\0')
-				size++; /* Add one for null terminator */
+		/* --Flush log_entry buffer-- */
+		/* print to kernel console */
+		log_to_debug_console(&entry);
+		/* log internally for dsat */
+		log_to_internal_buffer(&entry);
 
-			/* Concatenate onto end of entry buffer */
-			append_entry(&entry, buffer, size);
-		} else {
-			append_entry(&entry,
-				"LOG_ERROR, line too long or null\n", 35);
-		}
-
-		dal_logger_close(&entry);
 		va_end(args);
-
 	}
 }
 
