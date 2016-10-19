@@ -379,7 +379,7 @@ long reservation_object_wait_timeout_rcu(struct reservation_object *obj,
 {
 	struct fence *fence;
 	unsigned seq, shared_count, i = 0;
-	long ret = timeout;
+	long ret = timeout ? timeout : 1;
 
 retry:
 	fence = NULL;
