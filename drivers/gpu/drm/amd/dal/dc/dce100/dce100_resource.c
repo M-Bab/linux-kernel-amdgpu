@@ -361,6 +361,7 @@ static const struct dce110_opp_reg_offsets dce100_opp_reg_offsets[] = {
 
 static const struct resource_caps res_cap = {
 	.num_audio = 6,
+	.num_stream_encoder = 6
 };
 
 #define CTX  ctx
@@ -936,7 +937,6 @@ static bool construct(
 	*************************************************/
 	pool->base.underlay_pipe_index = -1;
 	pool->base.pipe_count = dal_adapter_service_get_func_controllers_num(as);
-	pool->base.stream_enc_count = dal_adapter_service_get_stream_engines_num(as);
 	pool->base.scaler_filter = dal_scaler_filter_create(ctx);
 	dc->public.caps.max_downscale_ratio = 200;
 	dc->public.caps.i2c_speed_in_khz = 40;

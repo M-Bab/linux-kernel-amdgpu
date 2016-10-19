@@ -307,8 +307,7 @@ static const struct dce_audio_registers audio_regs[] = {
 	audio_regs(2),
 	audio_regs(3),
 	audio_regs(4),
-	audio_regs(5),
-	audio_regs(6),
+	audio_regs(5)
 };
 
 static const struct dce_audio_shift audio_shift = {
@@ -378,6 +377,7 @@ static const struct dce112_clk_src_reg_offsets dce112_clk_src_reg_offsets[] = {
 
 static const struct resource_caps res_cap = {
 	.num_audio = 6,
+	.num_stream_encoder = 6
 };
 
 #define CTX  ctx
@@ -1179,8 +1179,6 @@ static bool construct(
 	pool->base.underlay_pipe_index = -1;
 	pool->base.pipe_count =
 		dal_adapter_service_get_func_controllers_num(adapter_serv);
-	pool->base.stream_enc_count =
-		dal_adapter_service_get_stream_engines_num(adapter_serv);
 	dc->public.caps.max_downscale_ratio = 200;
 	dc->public.caps.i2c_speed_in_khz = 100;
 

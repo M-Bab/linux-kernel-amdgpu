@@ -253,11 +253,7 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 static const struct dce110_stream_enc_registers stream_enc_regs[] = {
 	stream_enc_regs(0),
 	stream_enc_regs(1),
-	stream_enc_regs(2),
-	stream_enc_regs(3),
-	stream_enc_regs(4),
-	stream_enc_regs(5),
-	stream_enc_regs(6),
+	stream_enc_regs(2)
 };
 
 #define audio_regs(id)\
@@ -331,6 +327,7 @@ static const struct dce110_clk_src_reg_offsets dce110_clk_src_reg_offsets[] = {
 
 static const struct resource_caps res_cap = {
 	.num_audio = 3,
+	.num_stream_encoder = 3
 };
 
 #define CTX  ctx
