@@ -34,7 +34,49 @@
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
+#include "reg_helper.h"
+
 #include "../ddc_regs.h"
+
+
+#undef FN
+#define FN(reg_name, field_name) \
+	ddc->shifts->field_name, ddc->masks->field_name
+
+#define CTX \
+	ddc->base.base.ctx
+#define REG(reg)\
+	(ddc->regs->reg)
+
+static const struct ddc_registers ddc_data_regs[] = {
+	ddc_data_regs(1),
+	ddc_data_regs(2),
+	ddc_data_regs(3),
+	ddc_data_regs(4),
+	ddc_data_regs(5),
+	ddc_data_regs(6),
+	ddc_vga_data_regs,
+	ddc_i2c_data_regs
+};
+
+static const struct ddc_registers ddc_clk_regs[] = {
+	ddc_clk_regs(1),
+	ddc_clk_regs(2),
+	ddc_clk_regs(3),
+	ddc_clk_regs(4),
+	ddc_clk_regs(5),
+	ddc_clk_regs(6),
+	ddc_vga_clk_regs,
+	ddc_i2c_clk_regs
+};
+
+static const struct ddc_sh_mask ddc_shift = {
+		DDC_MASK_SH_LIST(__SHIFT)
+};
+
+static const struct ddc_sh_mask ddc_mask = {
+		DDC_MASK_SH_LIST(_MASK)
+};
 
 /****************************** END END END new register headers */
 
@@ -421,43 +463,11 @@ static const struct hw_ddc_dce110_init
 	}
 };
 
-static void setup_i2c_polling(
-	struct dc_context *ctx,
-	const uint32_t addr,
-	bool enable_detect,
-	bool detect_mode)
-{
-	uint32_t value;
-
-	value = dm_read_reg(ctx, addr);
-
-	set_reg_field_value(
-		value,
-		enable_detect,
-		DC_I2C_DDC1_SETUP,
-		DC_I2C_DDC1_ENABLE);
-
-	set_reg_field_value(
-		value,
-		enable_detect,
-		DC_I2C_DDC1_SETUP,
-		DC_I2C_DDC1_EDID_DETECT_ENABLE);
-
-	if (enable_detect)
-		set_reg_field_value(
-			value,
-			detect_mode,
-			DC_I2C_DDC1_SETUP,
-			DC_I2C_DDC1_EDID_DETECT_MODE);
-
-	dm_write_reg(ctx, addr, value);
-}
-
 static enum gpio_result set_config(
 	struct hw_gpio_pin *ptr,
 	const struct gpio_config_data *config_data)
 {
-	struct hw_ddc *pin = HW_DDC_FROM_BASE(ptr);
+	struct hw_ddc *ddc = HW_DDC_FROM_BASE(ptr);
 	struct hw_gpio *hw_gpio = NULL;
 	uint32_t addr;
 	uint32_t regval;
@@ -465,7 +475,7 @@ static enum gpio_result set_config(
 	uint32_t ddc_clk_pd_en = 0;
 	uint32_t aux_pad_mode = 0;
 
-	hw_gpio = &pin->base;
+	hw_gpio = &ddc->base;
 
 	if (hw_gpio == NULL) {
 		ASSERT_CRITICAL(false);
@@ -473,25 +483,21 @@ static enum gpio_result set_config(
 	}
 
 	/* switch dual mode GPIO to I2C/AUX mode */
+	addr = ddc->base.regs->MASK_reg;
 
-	addr = hw_gpio->pin_reg.DC_GPIO_DATA_MASK.addr;
+	regval = REG_READ(gpio.MASK_reg);
 
-	regval = dm_read_reg(ptr->ctx, addr);
-
-	ddc_data_pd_en = get_reg_field_value(
+	ddc_data_pd_en = get_reg_field_value_ex(
 			regval,
-			DC_GPIO_DDC1_MASK,
-			DC_GPIO_DDC1DATA_PD_EN);
+			FN(,DC_GPIO_DDC1DATA_PD_EN));
 
-	ddc_clk_pd_en = get_reg_field_value(
+	ddc_clk_pd_en = get_reg_field_value_ex(
 			regval,
-			DC_GPIO_DDC1_MASK,
-			DC_GPIO_DDC1CLK_PD_EN);
+			FN(,DC_GPIO_DDC1CLK_PD_EN));
 
-	aux_pad_mode = get_reg_field_value(
+	aux_pad_mode = get_reg_field_value_ex(
 			regval,
-			DC_GPIO_DDC1_MASK,
-			AUX_PAD1_MODE);
+			FN(,AUX_PAD1_MODE));
 
 	switch (config_data->config.ddc.type) {
 	case GPIO_DDC_CONFIG_TYPE_MODE_I2C:
@@ -501,19 +507,17 @@ static enum gpio_result set_config(
 		 * is required for detection of AUX mode */
 		if (hw_gpio->base.en != GPIO_DDC_LINE_VIP_PAD) {
 			if (!ddc_data_pd_en || !ddc_clk_pd_en) {
-				set_reg_field_value(
+				set_reg_field_value_ex(
 					regval,
 					1,
-					DC_GPIO_DDC1_MASK,
-					DC_GPIO_DDC1DATA_PD_EN);
+					FN(,DC_GPIO_DDC1DATA_PD_EN));
 
-				set_reg_field_value(
+				set_reg_field_value_ex(
 					regval,
 					1,
-					DC_GPIO_DDC1_MASK,
-					DC_GPIO_DDC1CLK_PD_EN);
+					FN(,DC_GPIO_DDC1CLK_PD_EN));
 
-				dm_write_reg(ptr->ctx, addr, regval);
+				REG_WRITE(gpio.MASK_reg, regval);
 
 				if (config_data->type ==
 					GPIO_CONFIG_TYPE_I2C_AUX_DUAL_MODE)
@@ -527,33 +531,22 @@ static enum gpio_result set_config(
 			uint32_t sda_pd_dis = 0;
 			uint32_t scl_pd_dis = 0;
 
-			sda_pd_dis = get_reg_field_value(
+			sda_pd_dis = get_reg_field_value_ex(
 					reg2,
-					DC_GPIO_I2CPAD_MASK,
-					DC_GPIO_SDA_PD_DIS);
+					FN(,DC_GPIO_SDA_PD_DIS));
 
-			scl_pd_dis = get_reg_field_value(
+			scl_pd_dis = get_reg_field_value_ex(
 					reg2,
-					DC_GPIO_I2CPAD_MASK,
-					DC_GPIO_SCL_PD_DIS);
+					FN(,DC_GPIO_SCL_PD_DIS));
 
-			if (sda_pd_dis) {
+			if (sda_pd_dis)
 				sda_pd_dis = 0;
 
-				dm_write_reg(ptr->ctx, addr, reg2);
-
-				if (config_data->type ==
-					GPIO_CONFIG_TYPE_I2C_AUX_DUAL_MODE)
-					/* should not affect normal I2C R/W */
-					/* [anaumov] in DAL2, there was
-					 * dc_service_delay_in_microseconds(2500); */
-					msleep(3);
-			}
-
-			if (!scl_pd_dis) {
+			if (!scl_pd_dis)
 				scl_pd_dis = 1;
 
-				dm_write_reg(ptr->ctx, addr, reg2);
+			if (sda_pd_dis || !scl_pd_dis) {
+				REG_WRITE(gpio.MASK_reg, reg2);
 
 				if (config_data->type ==
 					GPIO_CONFIG_TYPE_I2C_AUX_DUAL_MODE)
@@ -576,52 +569,48 @@ static enum gpio_result set_config(
 			/* set the I2C pad mode */
 			/* read the register again,
 			 * some bits may have been changed */
-			regval = dm_read_reg(ptr->ctx, addr);
-
-			set_reg_field_value(
-				regval,
-				0,
-				DC_GPIO_DDC1_MASK,
-				AUX_PAD1_MODE);
-
-			dm_write_reg(ptr->ctx, addr, regval);
+			REG_UPDATE(gpio.MASK_reg, AUX_PAD1_MODE, 1);
 		}
 
 		return GPIO_RESULT_OK;
 	case GPIO_DDC_CONFIG_TYPE_MODE_AUX:
 		/* set the AUX pad mode */
 		if (!aux_pad_mode) {
-			set_reg_field_value(
+			set_reg_field_value_ex(
 				regval,
 				1,
-				DC_GPIO_DDC1_MASK,
-				AUX_PAD1_MODE);
+				FN(,AUX_PAD1_MODE));
 
-			dm_write_reg(ptr->ctx, addr, regval);
+			REG_WRITE(gpio.MASK_reg, regval);
 		}
 
 		return GPIO_RESULT_OK;
 	case GPIO_DDC_CONFIG_TYPE_POLL_FOR_CONNECT:
 		if ((hw_gpio->base.en >= GPIO_DDC_LINE_DDC1) &&
 			(hw_gpio->base.en <= GPIO_DDC_LINE_DDC_VGA)) {
-			setup_i2c_polling(
-				ptr->ctx, pin->i2c_ddc_setup, 1, 0);
+			REG_UPDATE_3(ddc_setup,
+				DC_I2C_DDC1_ENABLE, 1,
+				DC_I2C_DDC1_EDID_DETECT_ENABLE, 1,
+				DC_I2C_DDC1_EDID_DETECT_MODE, 0);
 			return GPIO_RESULT_OK;
 		}
 	break;
 	case GPIO_DDC_CONFIG_TYPE_POLL_FOR_DISCONNECT:
 		if ((hw_gpio->base.en >= GPIO_DDC_LINE_DDC1) &&
 			(hw_gpio->base.en <= GPIO_DDC_LINE_DDC_VGA)) {
-			setup_i2c_polling(
-				ptr->ctx, pin->i2c_ddc_setup, 1, 1);
+			REG_UPDATE_3(ddc_setup,
+				DC_I2C_DDC1_ENABLE, 1,
+				DC_I2C_DDC1_EDID_DETECT_ENABLE, 1,
+				DC_I2C_DDC1_EDID_DETECT_MODE, 1);
 			return GPIO_RESULT_OK;
 		}
 	break;
 	case GPIO_DDC_CONFIG_TYPE_DISABLE_POLLING:
 		if ((hw_gpio->base.en >= GPIO_DDC_LINE_DDC1) &&
 			(hw_gpio->base.en <= GPIO_DDC_LINE_DDC_VGA)) {
-			setup_i2c_polling(
-				ptr->ctx, pin->i2c_ddc_setup, 0, 0);
+			REG_UPDATE_2(ddc_setup,
+				DC_I2C_DDC1_ENABLE, 0,
+				DC_I2C_DDC1_EDID_DETECT_ENABLE, 0);
 			return GPIO_RESULT_OK;
 		}
 	break;
@@ -643,7 +632,7 @@ static const struct hw_gpio_pin_funcs funcs = {
 };
 
 static bool construct(
-	struct hw_ddc *pin,
+	struct hw_ddc *ddc,
 	enum gpio_id id,
 	uint32_t en,
 	struct dc_context *ctx)
@@ -655,33 +644,41 @@ static bool construct(
 		return false;
 	}
 
-	if (!dal_hw_gpio_construct(&pin->base, id, en, ctx)) {
+	if (!dal_hw_gpio_construct(&ddc->base, id, en, ctx)) {
 		ASSERT_CRITICAL(false);
 		return false;
 	}
 
-	pin->base.base.funcs = &funcs;
+	ddc->base.base.funcs = &funcs;
 
 	switch (id) {
 	case GPIO_ID_DDC_DATA:
 		init = hw_ddc_dce110_init_data + en;
 
-		pin->base.pin_reg = init->hw_gpio_data_reg;
-		pin->i2c_ddc_setup = init->i2c_ddc_setup;
+		ddc->base.pin_reg = init->hw_gpio_data_reg;
+		ddc->i2c_ddc_setup = init->i2c_ddc_setup;
+		ddc->regs = &ddc_data_regs[en];
+		ddc->base.regs = &ddc_data_regs[en].gpio;
 
-		return true;
+		break;
 	case GPIO_ID_DDC_CLOCK:
 		init = hw_ddc_dce110_init_clock + en;
 
-		pin->base.pin_reg = init->hw_gpio_data_reg;
-		pin->i2c_ddc_setup = init->i2c_ddc_setup;
+		ddc->base.pin_reg = init->hw_gpio_data_reg;
+		ddc->i2c_ddc_setup = init->i2c_ddc_setup;
+		ddc->regs = &ddc_clk_regs[en];
+		ddc->base.regs = &ddc_clk_regs[en].gpio;
 
-		return true;
+		break;
 	default:
 		ASSERT_CRITICAL(false);
+		return false;
 	}
 
-	return false;
+	ddc->shifts = &ddc_shift;
+	ddc->masks = &ddc_mask;
+
+	return true;
 }
 
 struct hw_gpio_pin *dal_hw_ddc_dce110_create(

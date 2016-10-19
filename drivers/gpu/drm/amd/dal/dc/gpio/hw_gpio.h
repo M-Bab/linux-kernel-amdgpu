@@ -26,6 +26,8 @@
 #ifndef __DAL_HW_GPIO_H__
 #define __DAL_HW_GPIO_H__
 
+#include "gpio_regs.h"
+
 struct addr_mask {
 	uint32_t addr;
 	uint32_t mask;
@@ -122,6 +124,7 @@ struct hw_gpio {
 
 	/* GPIO MUX support */
 	bool mux_supported;
+	const struct gpio_registers *regs;
 };
 
 #define HW_GPIO_FROM_BASE(hw_gpio_pin) \

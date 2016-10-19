@@ -151,35 +151,4 @@ struct ddc_sh_mask {
 }
 
 
-static const struct ddc_registers ddc_data_regs[] = {
-	ddc_data_regs(1),
-	ddc_data_regs(2),
-	ddc_data_regs(3),
-	ddc_data_regs(4),
-	ddc_data_regs(5),
-	ddc_data_regs(6),
-	ddc_vga_data_regs,
-	ddc_i2c_data_regs
-};
-
-static const struct ddc_registers ddc_clk_regs[] = {
-	ddc_clk_regs(1),
-	ddc_clk_regs(2),
-	ddc_clk_regs(3),
-	ddc_clk_regs(4),
-	ddc_clk_regs(5),
-	ddc_clk_regs(6),
-	ddc_vga_clk_regs,
-	ddc_i2c_clk_regs
-};
-
-static const struct ddc_sh_mask ddc_shift = {
-		DDC_MASK_SH_LIST(__SHIFT)
-};
-
-static const struct ddc_sh_mask ddc_mask = {
-		DDC_MASK_SH_LIST(_MASK)
-};
-
-
 #endif /* DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_GPIO_DDC_REGS_H_ */
