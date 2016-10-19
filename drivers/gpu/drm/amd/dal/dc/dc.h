@@ -194,6 +194,7 @@ struct dc_surface {
 
 	enum surface_pixel_format format;
 	enum dc_rotation_angle rotation;
+	bool horizontal_mirror;
 	enum plane_stereo_format stereo_format;
 
 	const struct dc_gamma *gamma_correction;
