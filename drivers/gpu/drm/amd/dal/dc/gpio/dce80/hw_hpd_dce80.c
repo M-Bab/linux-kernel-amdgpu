@@ -25,26 +25,14 @@
 
 #include "dm_services.h"
 
-/*
- * Pre-requisites: headers required by header of this unit
- */
 #include "include/gpio_types.h"
 #include "../hw_gpio.h"
 #include "../hw_hpd.h"
 
-/*
- * Header of this unit
- */
-
 #include "hw_hpd_dce80.h"
-
-/*
- * Post-requisites: headers required by this unit
- */
 
 #include "dce/dce_8_0_d.h"
 #include "dce/dce_8_0_sh_mask.h"
-
 
 #include "reg_helper.h"
 #include "../hpd_regs.h"
@@ -91,199 +79,27 @@ static const struct hpd_sh_mask hpd_mask = {
 		HPD_MASK_SH_LIST_DCE8(_MASK)
 };
 
-
-#define FROM_HW_HPD(ptr) \
-	container_of((ptr), struct hw_hpd_dce80, base)
-
-#define FROM_HW_GPIO(ptr) \
-	FROM_HW_HPD(container_of((ptr), struct hw_hpd, base))
-
-#define FROM_HW_GPIO_PIN(ptr) \
-	FROM_HW_GPIO(container_of((ptr), struct hw_gpio, base))
-
 static void destruct(
-	struct hw_hpd_dce80 *pin)
+	struct hw_hpd *hpd)
 {
-	dal_hw_hpd_destruct(&pin->base);
+	dal_hw_hpd_destruct(hpd);
 }
 
 static void destroy(
 	struct hw_gpio_pin **ptr)
 {
-	struct hw_hpd_dce80 *pin = FROM_HW_GPIO_PIN(*ptr);
+	struct hw_hpd *hpd = HW_HPD_FROM_BASE(*ptr);
 
-	destruct(pin);
-
-	dm_free(pin);
-
+	destruct(hpd);
+	dm_free(hpd);
 	*ptr = NULL;
 }
-
-struct hw_gpio_generic_dce80_init {
-	struct hw_gpio_pin_reg hw_gpio_data_reg;
-	struct hw_hpd_dce80_addr addr;
-};
-
-static const struct hw_gpio_generic_dce80_init
-	hw_gpio_generic_dce80_init[GPIO_HPD_COUNT] = {
-	/* GPIO_HPD_1 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD1_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD1_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD1_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD1_Y_MASK
-			}
-		},
-		{
-			mmDC_HPD1_INT_STATUS,
-			mmDC_HPD1_TOGGLE_FILT_CNTL
-		}
-	},
-	/* GPIO_HPD_2 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD2_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD2_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD2_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD2_Y_MASK
-			}
-		},
-		{
-			mmDC_HPD2_INT_STATUS,
-			mmDC_HPD2_TOGGLE_FILT_CNTL
-		}
-	},
-	/* GPIO_HPD_3 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD3_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD3_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD3_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD3_Y_MASK
-			}
-		},
-		{
-			mmDC_HPD3_INT_STATUS,
-			mmDC_HPD3_TOGGLE_FILT_CNTL
-		}
-	},
-	/* GPIO_HPD_4 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD4_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD4_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD4_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD4_Y_MASK
-			}
-		},
-		{
-			mmDC_HPD4_INT_STATUS,
-			mmDC_HPD4_TOGGLE_FILT_CNTL
-		}
-	},
-	/* GPIO_HPD_5 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD5_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD5_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD5_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD5_Y_MASK
-			}
-		},
-		{
-			mmDC_HPD5_INT_STATUS,
-			mmDC_HPD5_TOGGLE_FILT_CNTL
-		}
-	},
-	/* GPIO_HPD_1 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD6_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD6_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD6_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD6_Y_MASK
-			}
-		},
-		{
-			mmDC_HPD6_INT_STATUS,
-			mmDC_HPD6_TOGGLE_FILT_CNTL
-		}
-	}
-};
 
 static enum gpio_result get_value(
 	const struct hw_gpio_pin *ptr,
 	uint32_t *value)
 {
-	struct hw_hpd_dce80 *pin = FROM_HW_GPIO_PIN(ptr);
-	struct hw_hpd *hpd = &pin->base;
+	struct hw_hpd *hpd = HW_HPD_FROM_BASE(ptr);
 	uint32_t hpd_delayed = 0;
 
 	/* in Interrupt mode we ask for SENSE bit */
@@ -306,8 +122,7 @@ static enum gpio_result set_config(
 	struct hw_gpio_pin *ptr,
 	const struct gpio_config_data *config_data)
 {
-	struct hw_hpd_dce80 *pin = FROM_HW_GPIO_PIN(ptr);
-	struct hw_hpd *hpd = &pin->base;
+	struct hw_hpd *hpd = HW_HPD_FROM_BASE(ptr);
 
 	if (!config_data)
 		return GPIO_RESULT_INVALID_DATA;
@@ -330,13 +145,11 @@ static const struct hw_gpio_pin_funcs funcs = {
 };
 
 static bool construct(
-	struct hw_hpd_dce80 *pin,
+	struct hw_hpd *hpd,
 	enum gpio_id id,
 	uint32_t en,
 	struct dc_context *ctx)
 {
-	const struct hw_gpio_generic_dce80_init *init;
-
 	if (id != GPIO_ID_HPD) {
 		BREAK_TO_DEBUGGER();
 		return false;
@@ -347,18 +160,18 @@ static bool construct(
 		return false;
 	}
 
-	if (!dal_hw_hpd_construct(&pin->base, id, en, ctx)) {
+	if (!dal_hw_hpd_construct(hpd, id, en, ctx)) {
 		BREAK_TO_DEBUGGER();
 		return false;
 	}
 
-	pin->base.base.base.funcs = &funcs;
+	hpd->base.base.funcs = &funcs;
 
-	init = hw_gpio_generic_dce80_init + en;
+	hpd->regs = &hpd_regs[en];
+	hpd->shifts = &hpd_shift;
+	hpd->masks = &hpd_mask;
 
-	pin->base.base.pin_reg = init->hw_gpio_data_reg;
-
-	pin->addr = init->addr;
+	hpd->base.regs = &hpd_regs[en].gpio;
 
 	return true;
 }
@@ -368,19 +181,19 @@ struct hw_gpio_pin *dal_hw_hpd_dce80_create(
 	enum gpio_id id,
 	uint32_t en)
 {
-	struct hw_hpd_dce80 *pin = dm_alloc(sizeof(struct hw_hpd_dce80));
+	struct hw_hpd *hpd = dm_alloc(sizeof(struct hw_hpd));
 
-	if (!pin) {
+	if (!hpd) {
 		BREAK_TO_DEBUGGER();
 		return NULL;
 	}
 
-	if (construct(pin, id, en, ctx))
-		return &pin->base.base.base;
+	if (construct(hpd, id, en, ctx))
+		return &hpd->base.base;
 
 	BREAK_TO_DEBUGGER();
 
-	dm_free(pin);
+	dm_free(hpd);
 
 	return NULL;
 }

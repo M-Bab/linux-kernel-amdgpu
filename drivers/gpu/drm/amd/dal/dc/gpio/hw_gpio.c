@@ -220,19 +220,6 @@ bool dal_hw_gpio_construct(
 
 	pin->funcs = &func;
 
-	pin->pin_reg.DC_GPIO_DATA_MASK.addr = 0;
-	pin->pin_reg.DC_GPIO_DATA_MASK.mask = 0;
-	pin->pin_reg.DC_GPIO_DATA_A.addr = 0;
-	pin->pin_reg.DC_GPIO_DATA_A.mask = 0;
-	pin->pin_reg.DC_GPIO_DATA_EN.addr = 0;
-	pin->pin_reg.DC_GPIO_DATA_EN.mask = 0;
-	pin->pin_reg.DC_GPIO_DATA_Y.addr = 0;
-	pin->pin_reg.DC_GPIO_DATA_Y.mask = 0;
-	pin->mux_reg.GPIO_MUX_CONTROL.addr = 0;
-	pin->mux_reg.GPIO_MUX_CONTROL.mask = 0;
-	pin->mux_reg.GPIO_MUX_STEREO_SEL.addr = 0;
-	pin->mux_reg.GPIO_MUX_STEREO_SEL.mask = 0;
-
 	pin->store.mask = 0;
 	pin->store.a = 0;
 	pin->store.en = 0;

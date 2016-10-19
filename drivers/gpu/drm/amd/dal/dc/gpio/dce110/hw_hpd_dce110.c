@@ -91,165 +91,6 @@ static void destroy(
 	*ptr = NULL;
 }
 
-struct hw_gpio_generic_dce110_init {
-	struct hw_gpio_pin_reg hw_gpio_data_reg;
-	struct hw_hpd_dce110_addr addr;
-};
-
-static const struct hw_gpio_generic_dce110_init
-	hw_gpio_generic_dce110_init[GPIO_HPD_COUNT] = {
-	/* GPIO_HPD_1 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD1_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD1_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD1_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD1_Y_MASK
-			}
-		},
-		{
-			mmHPD0_DC_HPD_INT_STATUS,
-			mmHPD0_DC_HPD_TOGGLE_FILT_CNTL
-		}
-	},
-	/* GPIO_HPD_2 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD2_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD2_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD2_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD2_Y_MASK
-			}
-		},
-		{
-			mmHPD1_DC_HPD_INT_STATUS,
-			mmHPD1_DC_HPD_TOGGLE_FILT_CNTL
-		}
-	},
-	/* GPIO_HPD_3 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD3_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD3_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD3_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD3_Y_MASK
-			}
-		},
-		{
-			mmHPD2_DC_HPD_INT_STATUS,
-			mmHPD2_DC_HPD_TOGGLE_FILT_CNTL
-		}
-	},
-	/* GPIO_HPD_4 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD4_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD4_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD4_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD4_Y_MASK
-			}
-		},
-		{
-			mmHPD3_DC_HPD_INT_STATUS,
-			mmHPD3_DC_HPD_TOGGLE_FILT_CNTL
-		}
-	},
-	/* GPIO_HPD_5 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD5_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD5_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD5_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD5_Y_MASK
-			}
-		},
-		{
-			mmHPD4_DC_HPD_INT_STATUS,
-			mmHPD4_DC_HPD_TOGGLE_FILT_CNTL
-		}
-	},
-	/* GPIO_HPD_6 */
-	{
-		{
-			{
-				mmDC_GPIO_HPD_MASK,
-				DC_GPIO_HPD_MASK__DC_GPIO_HPD6_MASK_MASK
-			},
-			{
-				mmDC_GPIO_HPD_A,
-				DC_GPIO_HPD_A__DC_GPIO_HPD6_A_MASK
-			},
-			{
-				mmDC_GPIO_HPD_EN,
-				DC_GPIO_HPD_EN__DC_GPIO_HPD6_EN_MASK
-			},
-			{
-				mmDC_GPIO_HPD_Y,
-				DC_GPIO_HPD_Y__DC_GPIO_HPD6_Y_MASK
-			}
-		},
-		{
-			mmHPD5_DC_HPD_INT_STATUS,
-			mmHPD5_DC_HPD_TOGGLE_FILT_CNTL
-		}
-	}
-};
-
 static enum gpio_result get_value(
 	const struct hw_gpio_pin *ptr,
 	uint32_t *value)
@@ -305,8 +146,6 @@ static bool construct(
 	uint32_t en,
 	struct dc_context *ctx)
 {
-	const struct hw_gpio_generic_dce110_init *init;
-
 	if (id != GPIO_ID_HPD) {
 		ASSERT_CRITICAL(false);
 		return false;
@@ -323,10 +162,6 @@ static bool construct(
 	}
 
 	hpd->base.base.funcs = &funcs;
-
-	init = hw_gpio_generic_dce110_init + en;
-
-	hpd->base.pin_reg = init->hw_gpio_data_reg;
 
 	hpd->regs = &hpd_regs[en];
 	hpd->shifts = &hpd_shift;

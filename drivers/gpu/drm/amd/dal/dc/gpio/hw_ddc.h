@@ -30,7 +30,6 @@
 
 struct hw_ddc {
 	struct hw_gpio base;
-	uint32_t i2c_ddc_setup;
 	const struct ddc_registers *regs;
 	const struct ddc_sh_mask *shifts;
 	const struct ddc_sh_mask *masks;

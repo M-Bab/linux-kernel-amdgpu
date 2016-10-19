@@ -97,8 +97,6 @@ struct hw_gpio_mux_reg {
 struct hw_gpio {
 	struct hw_gpio_pin base;
 	const struct hw_gpio_funcs *funcs;
-	struct hw_gpio_pin_reg pin_reg;
-	struct hw_gpio_mux_reg mux_reg;
 
 	/* variables to save register value */
 	struct {
