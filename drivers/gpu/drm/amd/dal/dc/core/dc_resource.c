@@ -141,8 +141,7 @@ bool resource_construct(
 	unsigned int num_audio = caps->num_audio;
 	struct resource_straps straps = {0};
 
-	if (!IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment))
-		create_funcs->read_dce_straps(dc->ctx, &straps);
+	create_funcs->read_dce_straps(dc->ctx, &straps);
 
 	/* find the total number of streams available via the
 	 * AZALIA_F0_CODEC_PIN_CONTROL_RESPONSE_CONFIGURATION_DEFAULT

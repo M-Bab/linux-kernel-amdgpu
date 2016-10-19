@@ -31,11 +31,15 @@
 #define DCE110STRENC_FROM_STRENC(stream_encoder)\
 	container_of(stream_encoder, struct dce110_stream_encoder, base)
 
+
+#define SE_COMMON_REG_LIST_DCE_BASE(id) \
+		SE_COMMON_REG_LIST_BASE(id),\
+		SRI(AFMT_AVI_INFO0, DIG, id), \
+		SRI(AFMT_AVI_INFO1, DIG, id), \
+		SRI(AFMT_AVI_INFO2, DIG, id), \
+		SRI(AFMT_AVI_INFO3, DIG, id)
+
 #define SE_COMMON_REG_LIST_BASE(id) \
-	SRI(AFMT_AVI_INFO0, DIG, id), \
-	SRI(AFMT_AVI_INFO1, DIG, id), \
-	SRI(AFMT_AVI_INFO2, DIG, id), \
-	SRI(AFMT_AVI_INFO3, DIG, id), \
 	SRI(AFMT_GENERIC_0, DIG, id), \
 	SRI(AFMT_GENERIC_1, DIG, id), \
 	SRI(AFMT_GENERIC_2, DIG, id), \
@@ -83,7 +87,7 @@
 	SRI(DP_SEC_TIMESTAMP, DP, id)
 
 #define SE_COMMON_REG_LIST(id)\
-	SE_COMMON_REG_LIST_BASE(id), \
+	SE_COMMON_REG_LIST_DCE_BASE(id), \
 	SRI(AFMT_CNTL, DIG, id)
 
 struct dce110_stream_enc_registers {

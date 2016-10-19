@@ -298,7 +298,7 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 
 #define stream_enc_regs(id)\
 [id] = {\
-	SE_COMMON_REG_LIST_BASE(id),\
+	SE_COMMON_REG_LIST_DCE_BASE(id),\
 	.AFMT_CNTL = 0,\
 }
 
