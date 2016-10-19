@@ -38,7 +38,17 @@
 #define SF(reg_name, field_name, post_fix)\
 	.field_name = reg_name ## __ ## field_name ## post_fix
 
+#include "reg_helper.h"
 #include "../hpd_regs.h"
+
+#undef FN
+#define FN(reg_name, field_name) \
+	hpd->shifts->field_name, hpd->masks->field_name
+
+#define CTX \
+	hpd->base.base.ctx
+#define REG(reg)\
+	(hpd->regs->reg)
 
 
 #define hpd_regs(id) \
@@ -245,27 +255,15 @@ static enum gpio_result get_value(
 	uint32_t *value)
 {
 	struct hw_hpd_dce110 *pin = HPD_DCE110_FROM_BASE(ptr);
+	struct hw_hpd *hpd = &pin->base;
+	uint32_t hpd_delayed = 0;
 
 	/* in Interrupt mode we ask for SENSE bit */
 
 	if (ptr->mode == GPIO_MODE_INTERRUPT) {
-		uint32_t regval;
-		uint32_t hpd_delayed = 0;
-		uint32_t hpd_sense = 0;
 
-		regval = dm_read_reg(
-				ptr->ctx,
-				pin->addr.DC_HPD_INT_STATUS);
-
-		hpd_delayed = get_reg_field_value(
-				regval,
-				DC_HPD_INT_STATUS,
-				DC_HPD_SENSE_DELAYED);
-
-		hpd_sense = get_reg_field_value(
-				regval,
-				DC_HPD_INT_STATUS,
-				DC_HPD_SENSE);
+		REG_GET(int_status,
+			DC_HPD_SENSE_DELAYED, &hpd_delayed);
 
 		*value = hpd_delayed;
 		return GPIO_RESULT_OK;
@@ -281,35 +279,14 @@ static enum gpio_result set_config(
 	const struct gpio_config_data *config_data)
 {
 	struct hw_hpd_dce110 *pin = HPD_DCE110_FROM_BASE(ptr);
+	struct hw_hpd *hpd = &pin->base;
 
 	if (!config_data)
 		return GPIO_RESULT_INVALID_DATA;
 
-	{
-		uint32_t value;
-
-		value = dm_read_reg(
-			ptr->ctx,
-			pin->addr.DC_HPD_TOGGLE_FILT_CNTL);
-
-		set_reg_field_value(
-			value,
-			config_data->config.hpd.delay_on_connect / 10,
-			DC_HPD_TOGGLE_FILT_CNTL,
-			DC_HPD_CONNECT_INT_DELAY);
-
-		set_reg_field_value(
-			value,
-			config_data->config.hpd.delay_on_disconnect / 10,
-			DC_HPD_TOGGLE_FILT_CNTL,
-			DC_HPD_DISCONNECT_INT_DELAY);
-
-		dm_write_reg(
-			ptr->ctx,
-			pin->addr.DC_HPD_TOGGLE_FILT_CNTL,
-			value);
-
-	}
+	REG_UPDATE_2(toggle_filt_cntl,
+		DC_HPD_CONNECT_INT_DELAY, config_data->config.hpd.delay_on_connect / 10,
+		DC_HPD_DISCONNECT_INT_DELAY, config_data->config.hpd.delay_on_disconnect / 10);
 
 	return GPIO_RESULT_OK;
 }
@@ -331,6 +308,7 @@ static bool construct(
 	struct dc_context *ctx)
 {
 	const struct hw_gpio_generic_dce110_init *init;
+	struct hw_hpd *hpd = &pin->base;
 
 	if (id != GPIO_ID_HPD) {
 		ASSERT_CRITICAL(false);
@@ -354,6 +332,12 @@ static bool construct(
 	pin->base.base.pin_reg = init->hw_gpio_data_reg;
 
 	pin->addr = init->addr;
+
+	hpd->regs = &hpd_regs[en];
+	hpd->shifts = &hpd_shift;
+	hpd->masks = &hpd_mask;
+
+	hpd->base.regs = &hpd_regs[en].gpio;
 
 	return true;
 }

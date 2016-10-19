@@ -45,7 +45,18 @@
 #include "dce/dce_8_0_d.h"
 #include "dce/dce_8_0_sh_mask.h"
 
+
+#include "reg_helper.h"
 #include "../hpd_regs.h"
+
+#undef FN
+#define FN(reg_name, field_name) \
+	hpd->shifts->field_name, hpd->masks->field_name
+
+#define CTX \
+	hpd->base.base.ctx
+#define REG(reg)\
+	(hpd->regs->reg)
 
 #define HPD_REG_LIST_DCE8(id) \
 	HPD_GPIO_REG_LIST(id), \
@@ -106,80 +117,6 @@ static void destroy(
 	dm_free(pin);
 
 	*ptr = NULL;
-}
-
-static enum gpio_result get_value(
-	const struct hw_gpio_pin *ptr,
-	uint32_t *value)
-{
-	struct hw_hpd_dce80 *pin = FROM_HW_GPIO_PIN(ptr);
-
-	/* in Interrupt mode we ask for SENSE bit */
-
-	if (ptr->mode == GPIO_MODE_INTERRUPT) {
-		uint32_t regval;
-		uint32_t hpd_delayed = 0;
-		uint32_t hpd_sense = 0;
-
-		regval = dm_read_reg(
-				ptr->ctx,
-				pin->addr.DC_HPD_INT_STATUS);
-
-		hpd_delayed = get_reg_field_value(
-				regval,
-				DC_HPD1_INT_STATUS,
-				DC_HPD1_SENSE_DELAYED);
-
-		hpd_sense = get_reg_field_value(
-				regval,
-				DC_HPD1_INT_STATUS,
-				DC_HPD1_SENSE);
-
-		*value = hpd_delayed;
-		return GPIO_RESULT_OK;
-	}
-
-	/* in any other modes, operate as normal GPIO */
-
-	return dal_hw_gpio_get_value(ptr, value);
-}
-
-static enum gpio_result set_config(
-	struct hw_gpio_pin *ptr,
-	const struct gpio_config_data *config_data)
-{
-	struct hw_hpd_dce80 *pin = FROM_HW_GPIO_PIN(ptr);
-
-	if (!config_data)
-		return GPIO_RESULT_INVALID_DATA;
-
-	{
-		uint32_t value;
-
-		value = dm_read_reg(
-			ptr->ctx,
-			pin->addr.DC_HPD_TOGGLE_FILT_CNTL);
-
-		set_reg_field_value(
-			value,
-			config_data->config.hpd.delay_on_connect / 10,
-			DC_HPD1_TOGGLE_FILT_CNTL,
-			DC_HPD1_CONNECT_INT_DELAY);
-
-		set_reg_field_value(
-			value,
-			config_data->config.hpd.delay_on_disconnect / 10,
-			DC_HPD1_TOGGLE_FILT_CNTL,
-			DC_HPD1_DISCONNECT_INT_DELAY);
-
-		dm_write_reg(
-			ptr->ctx,
-			pin->addr.DC_HPD_TOGGLE_FILT_CNTL,
-			value);
-
-	}
-
-	return GPIO_RESULT_OK;
 }
 
 struct hw_gpio_generic_dce80_init {
@@ -340,6 +277,47 @@ static const struct hw_gpio_generic_dce80_init
 		}
 	}
 };
+
+static enum gpio_result get_value(
+	const struct hw_gpio_pin *ptr,
+	uint32_t *value)
+{
+	struct hw_hpd_dce80 *pin = FROM_HW_GPIO_PIN(ptr);
+	struct hw_hpd *hpd = &pin->base;
+	uint32_t hpd_delayed = 0;
+
+	/* in Interrupt mode we ask for SENSE bit */
+
+	if (ptr->mode == GPIO_MODE_INTERRUPT) {
+
+		REG_GET(int_status,
+			DC_HPD_SENSE_DELAYED, &hpd_delayed);
+
+		*value = hpd_delayed;
+		return GPIO_RESULT_OK;
+	}
+
+	/* in any other modes, operate as normal GPIO */
+
+	return dal_hw_gpio_get_value(ptr, value);
+}
+
+static enum gpio_result set_config(
+	struct hw_gpio_pin *ptr,
+	const struct gpio_config_data *config_data)
+{
+	struct hw_hpd_dce80 *pin = FROM_HW_GPIO_PIN(ptr);
+	struct hw_hpd *hpd = &pin->base;
+
+	if (!config_data)
+		return GPIO_RESULT_INVALID_DATA;
+
+	REG_UPDATE_2(toggle_filt_cntl,
+		DC_HPD_CONNECT_INT_DELAY, config_data->config.hpd.delay_on_connect / 10,
+		DC_HPD_DISCONNECT_INT_DELAY, config_data->config.hpd.delay_on_disconnect / 10);
+
+	return GPIO_RESULT_OK;
+}
 
 static const struct hw_gpio_pin_funcs funcs = {
 	.destroy = destroy,

@@ -26,8 +26,13 @@
 #ifndef __DAL_HW_HPD_H__
 #define __DAL_HW_HPD_H__
 
+#include "hpd_regs.h"
+
 struct hw_hpd {
 	struct hw_gpio base;
+	const struct hpd_registers *regs;
+	const struct hpd_sh_mask *shifts;
+	const struct hpd_sh_mask *masks;
 };
 
 #define HW_HPD_FROM_BASE(hw_gpio) \
