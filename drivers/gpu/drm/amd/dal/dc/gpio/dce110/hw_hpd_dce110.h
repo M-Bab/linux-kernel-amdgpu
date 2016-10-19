@@ -31,14 +31,6 @@ struct hw_hpd_dce110_addr {
 	uint32_t DC_HPD_TOGGLE_FILT_CNTL;
 };
 
-struct hw_hpd_dce110 {
-	struct hw_hpd base;
-	struct hw_hpd_dce110_addr addr;
-};
-
-#define HPD_DCE110_FROM_BASE(hpd_base) \
-	container_of((HW_HPD_FROM_BASE(hpd_base)), struct hw_hpd_dce110, base)
-
 struct hw_gpio_pin *dal_hw_hpd_dce110_create(
 	struct dc_context *ctx,
 	enum gpio_id id,

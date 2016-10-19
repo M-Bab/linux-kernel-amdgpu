@@ -74,19 +74,19 @@ static const struct hpd_sh_mask hpd_mask = {
 };
 
 static void destruct(
-	struct hw_hpd_dce110 *pin)
+	struct hw_hpd *hpd)
 {
-	dal_hw_hpd_destruct(&pin->base);
+	dal_hw_hpd_destruct(hpd);
 }
 
 static void destroy(
 	struct hw_gpio_pin **ptr)
 {
-	struct hw_hpd_dce110 *pin = HPD_DCE110_FROM_BASE(*ptr);
+	struct hw_hpd *hpd = HW_HPD_FROM_BASE(*ptr);
 
-	destruct(pin);
+	destruct(hpd);
 
-	dm_free(pin);
+	dm_free(hpd);
 
 	*ptr = NULL;
 }
@@ -254,8 +254,7 @@ static enum gpio_result get_value(
 	const struct hw_gpio_pin *ptr,
 	uint32_t *value)
 {
-	struct hw_hpd_dce110 *pin = HPD_DCE110_FROM_BASE(ptr);
-	struct hw_hpd *hpd = &pin->base;
+	struct hw_hpd *hpd = HW_HPD_FROM_BASE(ptr);
 	uint32_t hpd_delayed = 0;
 
 	/* in Interrupt mode we ask for SENSE bit */
@@ -278,8 +277,7 @@ static enum gpio_result set_config(
 	struct hw_gpio_pin *ptr,
 	const struct gpio_config_data *config_data)
 {
-	struct hw_hpd_dce110 *pin = HPD_DCE110_FROM_BASE(ptr);
-	struct hw_hpd *hpd = &pin->base;
+	struct hw_hpd *hpd = HW_HPD_FROM_BASE(ptr);
 
 	if (!config_data)
 		return GPIO_RESULT_INVALID_DATA;
@@ -302,13 +300,12 @@ static const struct hw_gpio_pin_funcs funcs = {
 };
 
 static bool construct(
-	struct hw_hpd_dce110 *pin,
+	struct hw_hpd *hpd,
 	enum gpio_id id,
 	uint32_t en,
 	struct dc_context *ctx)
 {
 	const struct hw_gpio_generic_dce110_init *init;
-	struct hw_hpd *hpd = &pin->base;
 
 	if (id != GPIO_ID_HPD) {
 		ASSERT_CRITICAL(false);
@@ -320,18 +317,16 @@ static bool construct(
 		return false;
 	}
 
-	if (!dal_hw_hpd_construct(&pin->base, id, en, ctx)) {
+	if (!dal_hw_hpd_construct(hpd, id, en, ctx)) {
 		ASSERT_CRITICAL(false);
 		return false;
 	}
 
-	pin->base.base.base.funcs = &funcs;
+	hpd->base.base.funcs = &funcs;
 
 	init = hw_gpio_generic_dce110_init + en;
 
-	pin->base.base.pin_reg = init->hw_gpio_data_reg;
-
-	pin->addr = init->addr;
+	hpd->base.pin_reg = init->hw_gpio_data_reg;
 
 	hpd->regs = &hpd_regs[en];
 	hpd->shifts = &hpd_shift;
@@ -347,19 +342,19 @@ struct hw_gpio_pin *dal_hw_hpd_dce110_create(
 	enum gpio_id id,
 	uint32_t en)
 {
-	struct hw_hpd_dce110 *pin = dm_alloc(sizeof(struct hw_hpd_dce110));
+	struct hw_hpd *hpd = dm_alloc(sizeof(struct hw_hpd));
 
-	if (!pin) {
+	if (!hpd) {
 		ASSERT_CRITICAL(false);
 		return NULL;
 	}
 
-	if (construct(pin, id, en, ctx))
-		return &pin->base.base.base;
+	if (construct(hpd, id, en, ctx))
+		return &hpd->base.base;
 
 	ASSERT_CRITICAL(false);
 
-	dm_free(pin);
+	dm_free(hpd);
 
 	return NULL;
 }
