@@ -414,16 +414,16 @@ static bool get_fb_info(
 }
 static void fill_plane_attributes_from_fb(
 	struct dc_surface *surface,
-	const struct amdgpu_framebuffer *amdgpu_fb)
+	const struct amdgpu_framebuffer *amdgpu_fb, bool addReq)
 {
 	uint64_t tiling_flags;
-	uint64_t fb_location;
+	uint64_t fb_location = 0;
 	const struct drm_framebuffer *fb = &amdgpu_fb->base;
 
 	get_fb_info(
 		amdgpu_fb,
 		&tiling_flags,
-		&fb_location);
+		addReq == true ? &fb_location:NULL);
 
 	surface->address.type                = PLN_ADDR_TYPE_GRAPHICS;
 	surface->address.grph.addr.low_part  = lower_32_bits(fb_location);
@@ -542,7 +542,7 @@ static void fill_gamma_from_crtc(
 
 static void fill_plane_attributes(
 			struct dc_surface *surface,
-			struct drm_plane_state *state)
+			struct drm_plane_state *state, bool addrReq)
 {
 	const struct amdgpu_framebuffer *amdgpu_fb =
 		to_amdgpu_framebuffer(state->fb);
@@ -551,7 +551,8 @@ static void fill_plane_attributes(
 	fill_rects_from_plane_state(state, surface);
 	fill_plane_attributes_from_fb(
 		surface,
-		amdgpu_fb);
+		amdgpu_fb,
+		addrReq);
 
 	/* In case of gamma set, update gamma value */
 	if (crtc->mode.private_flags &
@@ -663,7 +664,7 @@ static void dm_dc_surface_commit(
 	}
 
 	/* Surface programming */
-	fill_plane_attributes(dc_surface, crtc->primary->state);
+	fill_plane_attributes(dc_surface, crtc->primary->state, true);
 	if (crtc->mode.private_flags &
 		AMDGPU_CRTC_MODE_PRIVATE_FLAGS_GAMMASET) {
 		/* reset trigger of gamma */
@@ -3136,7 +3137,8 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 				surface = dc_create_surface(dc);
 				fill_plane_attributes(
 					surface,
-					plane_state);
+					plane_state,
+					false);
 
 				add_val_sets_surface(
 							set,
