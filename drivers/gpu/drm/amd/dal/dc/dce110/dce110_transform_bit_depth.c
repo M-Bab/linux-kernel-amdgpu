@@ -566,9 +566,7 @@ int32_t dce110_transform_get_max_num_of_supported_lines(
 		break;
 
 	default:
-		dal_logger_write(xfm->ctx->logger,
-			LOG_MAJOR_WARNING,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
 			"%s: Invalid LB pixel depth",
 			__func__);
 		ASSERT_CRITICAL(false);
@@ -649,9 +647,7 @@ bool dce110_transform_get_current_pixel_storage_depth(
 		*depth = LB_PIXEL_DEPTH_36BPP;
 		break;
 	default:
-		dal_logger_write(xfm->ctx->logger,
-			LOG_MAJOR_WARNING,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
 			"%s: Invalid LB pixel depth",
 			__func__);
 		*depth = LB_PIXEL_DEPTH_30BPP;
@@ -762,9 +758,7 @@ bool dce110_transform_set_pixel_storage_depth(
 		if (!(xfm110->lb_pixel_depth_supported & depth)) {
 			/*we should use unsupported capabilities
 			 *  unless it is required by w/a*/
-			dal_logger_write(xfm->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_GPU,
+			dm_logger_write(xfm->ctx->logger, LOG_WARNING,
 				"%s: Capability not supported",
 				__func__);
 		}
@@ -829,9 +823,7 @@ bool dce110_transform_v_get_current_pixel_storage_depth(
 		*depth = LB_PIXEL_DEPTH_36BPP;
 		break;
 	default:
-		dal_logger_write(xfm->ctx->logger,
-			LOG_MAJOR_WARNING,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
 			"%s: Invalid LB pixel depth",
 			__func__);
 		*depth = LB_PIXEL_DEPTH_30BPP;
@@ -900,9 +892,7 @@ bool dce110_transform_v_set_pixel_storage_depth(
 		if (!(xfm110->lb_pixel_depth_supported & depth)) {
 			/*we should use unsupported capabilities
 			 *  unless it is required by w/a*/
-			dal_logger_write(xfm->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_GPU,
+			dm_logger_write(xfm->ctx->logger, LOG_WARNING,
 				"%s: Capability not supported",
 				__func__);
 		}

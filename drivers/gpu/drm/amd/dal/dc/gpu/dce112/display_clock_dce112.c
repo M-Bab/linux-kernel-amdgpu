@@ -125,9 +125,7 @@ bool dispclk_dce112_set_min_clocks_state(
 
 	if (clocks_state > dc->max_clks_state) {
 		/*Requested state exceeds max supported state.*/
-		dal_logger_write(base->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(base->ctx->logger, LOG_WARNING,
 				"Requested state exceeds max supported state");
 		return false;
 	} else if (clocks_state == base->cur_min_clks_state) {
@@ -151,9 +149,7 @@ bool dispclk_dce112_set_min_clocks_state(
 		break;
 	case CLOCKS_STATE_INVALID:
 	default:
-		dal_logger_write(base->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(base->ctx->logger, LOG_WARNING,
 				"Requested state invalid state");
 		return false;
 	}
@@ -275,9 +271,7 @@ uint32_t dispclk_dce112_get_validation_clock(struct display_clock *dc)
 	case CLOCKS_STATE_INVALID:
 	default:
 		/*Invalid Clocks State*/
-		dal_logger_write(dc->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(dc->ctx->logger, LOG_WARNING,
 				"Invalid clock state");
 		/* just return the display engine clock for
 		 * lowest supported state*/
@@ -438,9 +432,7 @@ static uint32_t calc_single_display_min_clks(
 	bool panning_allowed = false; /* TODO: receive this value from AS */
 
 	if (params == NULL) {
-		dal_logger_write(base->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(base->ctx->logger, LOG_WARNING,
 				"Invalid input parameter in %s",
 				__func__);
 		return 0;
@@ -460,9 +452,7 @@ static uint32_t calc_single_display_min_clks(
 			params->source_view.height,
 			params->dest_view.height);
 	} else {
-		dal_logger_write(base->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(base->ctx->logger, LOG_WARNING,
 				"Destination height or width is 0!\n");
 	}
 
@@ -754,9 +744,7 @@ enum clocks_state dispclk_dce112_get_required_clocks_state(
 
 	if (!req_clocks) {
 		/* NULL pointer*/
-		dal_logger_write(dc->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(dc->ctx->logger, LOG_WARNING,
 				"%s: Invalid parameter",
 				__func__);
 		return CLOCKS_STATE_INVALID;
@@ -876,9 +864,7 @@ bool dal_display_clock_dce112_construct(
 	dc112->dfs_bypass_disp_clk = 0;
 
 	if (!display_clock_integrated_info_construct(dc112, as))
-		dal_logger_write(dc_base->ctx->logger,
-			LOG_MAJOR_WARNING,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(dc_base->ctx->logger, LOG_WARNING,
 			"Cannot obtain VBIOS integrated info\n");
 
 	dc112->gpu_pll_ss_percentage = 0;

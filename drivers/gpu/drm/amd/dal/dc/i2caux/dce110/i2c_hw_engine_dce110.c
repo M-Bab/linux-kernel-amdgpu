@@ -898,10 +898,8 @@ bool i2c_hw_engine_dce110_construct(
 			XTAL_REF_DIV);
 
 	if (xtal_ref_div == 0) {
-		dal_logger_write(
-				hw_engine->base.base.base.ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_I2C_AUX,
+		dm_logger_write(
+				hw_engine->base.base.base.ctx->logger, LOG_WARNING,
 				"Invalid base timer divider\n",
 				__func__);
 		xtal_ref_div = 2;

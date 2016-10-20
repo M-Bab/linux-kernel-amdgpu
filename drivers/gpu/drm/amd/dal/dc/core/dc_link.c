@@ -58,8 +58,7 @@
 #endif
 
 #define LINK_INFO(...) \
-	dal_logger_write(dc_ctx->logger, \
-		LOG_MAJOR_HW_TRACE, LOG_MINOR_HW_TRACE_HOTPLUG, \
+	dm_logger_write(dc_ctx->logger, LOG_HW_HOTPLUG, \
 		__VA_ARGS__)
 
 /*******************************************************************************
@@ -499,9 +498,7 @@ static enum dc_edid_status read_edid(
 				&sink->public.edid_caps);
 		--edid_retry;
 		if (edid_status == EDID_BAD_CHECKSUM)
-			dal_logger_write(link->ctx->logger,
-					LOG_MAJOR_WARNING,
-					LOG_MINOR_DETECTION_EDID_PARSER,
+			dm_logger_write(link->ctx->logger, LOG_WARNING,
 					"Bad EDID checksum, retry remain: %d\n",
 					edid_retry);
 	} while (edid_status == EDID_BAD_CHECKSUM && edid_retry > 0);
@@ -705,15 +702,11 @@ bool dc_link_detect(const struct dc_link *dc_link, bool boot)
 
 		switch (edid_status) {
 		case EDID_BAD_CHECKSUM:
-			dal_logger_write(link->ctx->logger,
-				LOG_MAJOR_ERROR,
-				LOG_MINOR_DETECTION_EDID_PARSER,
+			dm_logger_write(link->ctx->logger, LOG_ERROR,
 				"EDID checksum invalid.\n");
 			break;
 		case EDID_NO_RESPONSE:
-			dal_logger_write(link->ctx->logger,
-				LOG_MAJOR_ERROR,
-				LOG_MINOR_DETECTION_EDID_PARSER,
+			dm_logger_write(link->ctx->logger, LOG_ERROR,
 				"No EDID read.\n");
 			return false;
 
@@ -734,9 +727,7 @@ bool dc_link_detect(const struct dc_link *dc_link, bool boot)
 					"%s: [Block %d] ", sink->public.edid_caps.display_name, i);
 		}
 
-		dal_logger_write(link->ctx->logger,
-			LOG_MAJOR_DETECTION,
-			LOG_MINOR_DETECTION_EDID_PARSER,
+		dm_logger_write(link->ctx->logger, LOG_DETECTION_EDID_PARSER,
 			"%s: "
 			"manufacturer_id = %X, "
 			"product_id = %X, "
@@ -757,9 +748,7 @@ bool dc_link_detect(const struct dc_link *dc_link, bool boot)
 			sink->public.edid_caps.audio_mode_count);
 
 		for (i = 0; i < sink->public.edid_caps.audio_mode_count; i++) {
-			dal_logger_write(link->ctx->logger,
-				LOG_MAJOR_DETECTION,
-				LOG_MINOR_DETECTION_EDID_PARSER,
+			dm_logger_write(link->ctx->logger, LOG_DETECTION_EDID_PARSER,
 				"%s: mode number = %d, "
 				"format_code = %d, "
 				"channel_count = %d, "
@@ -1010,8 +999,7 @@ static bool construct(
 		}
 		break;
 	default:
-		dal_logger_write(dc_ctx->logger,
-			LOG_MAJOR_WARNING, LOG_MINOR_TM_LINK_SRV,
+		dm_logger_write(dc_ctx->logger, LOG_WARNING,
 			"Unsupported Connector type:%d!\n", link->link_id.id);
 		goto create_fail;
 	}
@@ -1198,8 +1186,7 @@ static void dpcd_configure_panel_mode(
 			ASSERT(result == DDC_RESULT_SUCESSFULL);
 		}
 	}
-	dal_logger_write(link->ctx->logger, LOG_MAJOR_DETECTION,
-			LOG_MINOR_DETECTION_DP_CAPS,
+	dm_logger_write(link->ctx->logger, LOG_DETECTION_DP_CAPS,
 			"Link: %d eDP panel mode supported: %d "
 			"eDP panel mode enabled: %d \n",
 			link->public.link_index,
@@ -1430,8 +1417,7 @@ bool dc_link_set_backlight_level(const struct dc_link *dc_link, uint32_t level,
 	int i;
 	uint32_t dmcu_status;
 
-	dal_logger_write(ctx->logger, LOG_MAJOR_BACKLIGHT,
-			LOG_MINOR_BACKLIGHT_INTERFACE,
+	dm_logger_write(ctx->logger, LOG_BACKLIGHT,
 			"New Backlight level: %d (0x%X)\n", level, level);
 
 	dmcu_status = dm_read_reg(ctx, mmDMCU_STATUS);
@@ -1475,8 +1461,7 @@ bool dc_link_set_abm_level(const struct dc_link *dc_link, uint32_t level)
 	struct core_link *link = DC_LINK_TO_CORE(dc_link);
 	struct dc_context *ctx = link->ctx;
 
-	dal_logger_write(ctx->logger, LOG_MAJOR_BACKLIGHT,
-			LOG_MINOR_BACKLIGHT_INTERFACE,
+	dm_logger_write(ctx->logger, LOG_BACKLIGHT,
 			"New abm level: %d (0x%X)\n", level, level);
 
 	link->link_enc->funcs->set_dmcu_abm_level(link->link_enc, level);
@@ -1763,26 +1748,20 @@ static enum dc_status allocate_mst_payload(struct pipe_ctx *pipe_ctx)
 					link, pipe_ctx->stream_enc, &proposed_table);
 	}
 	else
-		dal_logger_write(link->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_DC,
+		dm_logger_write(link->ctx->logger, LOG_WARNING,
 				"Failed to update"
 				"MST allocation table for"
 				"pipe idx:%d\n",
 				pipe_ctx->pipe_idx);
 
-	dal_logger_write(link->ctx->logger,
-			LOG_MAJOR_MST,
-			LOG_MINOR_MST_PROGRAMMING,
+	dm_logger_write(link->ctx->logger, LOG_MST,
 			"%s  "
 			"stream_count: %d: \n ",
 			__func__,
 			link->mst_stream_alloc_table.stream_count);
 
 	for (i = 0; i < MAX_CONTROLLER_NUM; i++) {
-		dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_MST,
-		LOG_MINOR_MST_PROGRAMMING,
+		dm_logger_write(link->ctx->logger, LOG_MST,
 		"stream_enc[%d]: 0x%x      "
 		"stream[%d].vcp_id: %d      "
 		"stream[%d].slot_count: %d\n",
@@ -1859,9 +1838,7 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 				link, pipe_ctx->stream_enc, &proposed_table);
 		}
 		else {
-				dal_logger_write(link->ctx->logger,
-						LOG_MAJOR_WARNING,
-						LOG_MINOR_COMPONENT_DC,
+				dm_logger_write(link->ctx->logger, LOG_WARNING,
 						"Failed to update"
 						"MST allocation table for"
 						"pipe idx:%d\n",
@@ -1869,18 +1846,14 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 		}
 	}
 
-	dal_logger_write(link->ctx->logger,
-			LOG_MAJOR_MST,
-			LOG_MINOR_MST_PROGRAMMING,
+	dm_logger_write(link->ctx->logger, LOG_MST,
 			"%s"
 			"stream_count: %d: ",
 			__func__,
 			link->mst_stream_alloc_table.stream_count);
 
 	for (i = 0; i < MAX_CONTROLLER_NUM; i++) {
-		dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_MST,
-		LOG_MINOR_MST_PROGRAMMING,
+		dm_logger_write(link->ctx->logger, LOG_MST,
 		"stream_enc[%d]: 0x%x      "
 		"stream[%d].vcp_id: %d      "
 		"stream[%d].slot_count: %d\n",

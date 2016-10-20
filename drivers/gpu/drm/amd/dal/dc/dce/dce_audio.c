@@ -66,8 +66,7 @@ static void write_indirect_azalia_reg(struct audio *audio,
 	REG_SET(AZALIA_F0_CODEC_ENDPOINT_DATA, 0,
 			AZALIA_ENDPOINT_REG_DATA, reg_data);
 
-	dal_logger_write(CTX->logger,
-		LOG_MAJOR_HW_TRACE, LOG_MINOR_HW_TRACE_AUDIO,
+	dm_logger_write(CTX->logger, LOG_HW_AUDIO,
 		"AUDIO:write_indirect_azalia_reg: index: %u  data: %u\n",
 		reg_index, reg_data);
 }
@@ -85,8 +84,7 @@ static uint32_t read_indirect_azalia_reg(struct audio *audio, uint32_t reg_index
 	/* AZALIA_F0_CODEC_ENDPOINT_DATA  endpoint data  */
 	value = REG_READ(AZALIA_F0_CODEC_ENDPOINT_DATA);
 
-	dal_logger_write(CTX->logger,
-		LOG_MAJOR_HW_TRACE, LOG_MINOR_HW_TRACE_AUDIO,
+	dm_logger_write(CTX->logger, LOG_HW_AUDIO,
 		"AUDIO:read_indirect_azalia_reg: index: %u  data: %u\n",
 		reg_index, value);
 

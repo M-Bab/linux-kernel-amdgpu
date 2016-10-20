@@ -221,9 +221,7 @@ static void initialize_backlight_caps(
 	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	if (!(PM_GET_EXTENDED_BRIGHNESS_CAPS & as->platform_methods_mask)) {
-			dal_logger_write(as->ctx->logger,
-					LOG_MAJOR_BACKLIGHT,
-					LOG_MINOR_BACKLIGHT_BRIGHTESS_CAPS,
+			dm_logger_write(as->ctx->logger, LOG_BACKLIGHT,
 					"This method is not supported\n");
 			return;
 	}
@@ -362,16 +360,12 @@ static void log_overriden_features(
 	uint32_t value)
 {
 	if (bool_feature)
-		dal_logger_write(as->ctx->logger,
-			LOG_MAJOR_FEATURE_OVERRIDE,
-			LOG_MINOR_FEATURE_OVERRIDE,
+		dm_logger_write(as->ctx->logger, LOG_FEATURE_OVERRIDE,
 			"Overridden %s is %s now\n",
 			feature_name,
 			(value == 0) ? "disabled" : "enabled");
 	else
-		dal_logger_write(as->ctx->logger,
-			LOG_MAJOR_FEATURE_OVERRIDE,
-			LOG_MINOR_FEATURE_OVERRIDE,
+		dm_logger_write(as->ctx->logger, LOG_FEATURE_OVERRIDE,
 			"Overridden %s new value: %d\n",
 			feature_name,
 			value);

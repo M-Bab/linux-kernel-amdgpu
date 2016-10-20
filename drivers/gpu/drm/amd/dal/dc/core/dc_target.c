@@ -285,18 +285,16 @@ uint32_t dc_target_get_scanoutpos(
 
 void dc_target_log(
 	const struct dc_target *dc_target,
-	struct dal_logger *dal_logger,
-	enum log_major log_major,
-	enum log_minor log_minor)
+	struct dal_logger *dm_logger,
+	enum dc_log_type log_type)
 {
 	int i;
 
 	const struct core_target *core_target =
 			CONST_DC_TARGET_TO_CORE(dc_target);
 
-	dal_logger_write(dal_logger,
-			log_major,
-			log_minor,
+	dm_logger_write(dm_logger,
+			log_type,
 			"core_target 0x%x: stream_count=%d\n",
 			core_target,
 			core_target->public.stream_count);
@@ -305,9 +303,8 @@ void dc_target_log(
 		const struct core_stream *core_stream =
 			DC_STREAM_TO_CORE(core_target->public.streams[i]);
 
-		dal_logger_write(dal_logger,
-			log_major,
-			log_minor,
+		dm_logger_write(dm_logger,
+			log_type,
 			"core_stream 0x%x: src: %d, %d, %d, %d; dst: %d, %d, %d, %d;\n",
 			core_stream,
 			core_stream->public.src.x,
@@ -318,22 +315,19 @@ void dc_target_log(
 			core_stream->public.dst.y,
 			core_stream->public.dst.width,
 			core_stream->public.dst.height);
-		dal_logger_write(dal_logger,
-			log_major,
-			log_minor,
+		dm_logger_write(dm_logger,
+			log_type,
 			"\tpix_clk_khz: %d, h_total: %d, v_total: %d\n",
 			core_stream->public.timing.pix_clk_khz,
 			core_stream->public.timing.h_total,
 			core_stream->public.timing.v_total);
-		dal_logger_write(dal_logger,
-			log_major,
-			log_minor,
+		dm_logger_write(dm_logger,
+			log_type,
 			"\tsink name: %s, serial: %d\n",
 			core_stream->sink->public.edid_caps.display_name,
 			core_stream->sink->public.edid_caps.serial_number);
-		dal_logger_write(dal_logger,
-			log_major,
-			log_minor,
+		dm_logger_write(dm_logger,
+			log_type,
 			"\tlink: %d\n",
 			core_stream->sink->link->public.link_index);
 	}

@@ -123,9 +123,7 @@ static void dce80_link_encoder_enable_tmds_output(
 	result = link_transmitter_control(enc110, &cntl);
 
 	if (result != BP_RESULT_OK) {
-		dal_logger_write(ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_ENCODER,
+		dm_logger_write(ctx->logger, LOG_ERROR,
 			"%s: Failed to execute VBIOS command table!\n",
 			__func__);
 		BREAK_TO_DEBUGGER();
@@ -183,9 +181,7 @@ static void dce80_link_encoder_enable_dp_output(
 	result = link_transmitter_control(enc110, &cntl);
 
 	if (result != BP_RESULT_OK) {
-		dal_logger_write(ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_ENCODER,
+		dm_logger_write(ctx->logger, LOG_ERROR,
 			"%s: Failed to execute VBIOS command table!\n",
 			__func__);
 		BREAK_TO_DEBUGGER();
@@ -308,9 +304,7 @@ bool dce80_link_encoder_construct(
 		break;
 	}
 
-	dal_logger_write(init_data->ctx->logger,
-			LOG_MAJOR_I2C_AUX,
-			LOG_MINOR_I2C_AUX_CFG,
+	dm_logger_write(init_data->ctx->logger, LOG_I2C_AUX,
 			"Using channel: %s [%d]\n",
 			DECODE_CHANNEL_ID(init_data->channel),
 			init_data->channel);

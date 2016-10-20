@@ -591,9 +591,7 @@ bool dce80_transform_get_current_pixel_storage_depth(
 		*depth = LB_PIXEL_DEPTH_36BPP;
 		break;
 	default:
-		dal_logger_write(xfm->ctx->logger,
-			LOG_MAJOR_WARNING,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
 			"%s: Invalid LB pixel depth",
 			__func__);
 		*depth = LB_PIXEL_DEPTH_30BPP;
@@ -706,9 +704,7 @@ bool dce80_transform_set_pixel_storage_depth(
 		if (!(xfm80->lb_pixel_depth_supported & depth)) {
 			/*we should use unsupported capabilities
 			 *  unless it is required by w/a*/
-			dal_logger_write(xfm->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_GPU,
+			dm_logger_write(xfm->ctx->logger, LOG_WARNING,
 				"%s: Capability not supported",
 				__func__);
 		}

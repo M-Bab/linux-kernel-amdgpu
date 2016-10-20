@@ -342,9 +342,8 @@ void dc_target_retain(const struct dc_target *dc_target);
 void dc_target_release(const struct dc_target *dc_target);
 void dc_target_log(
 	const struct dc_target *dc_target,
-	struct dal_logger *dal_logger,
-	enum log_major log_major,
-	enum log_minor log_minor);
+	struct dal_logger *dc_logger,
+	enum dc_log_type log_type);
 
 uint8_t dc_get_current_target_count(const struct dc *dc);
 struct dc_target *dc_get_target_at_index(const struct dc *dc, uint8_t i);

@@ -35,7 +35,7 @@
  * Macro definitions
  *****************************************************************************/
 
-#define NOT_IMPLEMENTED() DAL_LOGGER_NOT_IMPL(LOG_MINOR_COMPONENT_GPU, \
+#define NOT_IMPLEMENTED() DAL_LOGGER_NOT_IMPL(\
 		"%s:%s()\n", __FILE__, __func__)
 
 /******************************************************************************

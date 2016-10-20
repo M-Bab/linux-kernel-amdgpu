@@ -422,9 +422,7 @@ static void program_pwl(
 		}
 
 		if (counter == max_tries) {
-			dal_logger_write(opp110->base.ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_CONTROLLER,
+			dm_logger_write(opp110->base.ctx->logger, LOG_WARNING,
 				"%s: regamma lut was not powered on "
 				"in a timely manner,"
 				" programming still proceeds\n",

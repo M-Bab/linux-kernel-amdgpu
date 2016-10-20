@@ -768,10 +768,8 @@ enum dc_status dce112_validate_bandwidth(
 {
 	enum dc_status result = DC_ERROR_UNEXPECTED;
 
-	dal_logger_write(
-		dc->ctx->logger,
-		LOG_MAJOR_BWM,
-		LOG_MINOR_BWM_REQUIRED_BANDWIDTH_CALCS,
+	dm_logger_write(
+		dc->ctx->logger, LOG_BANDWIDTH_CALCS,
 		"%s: start",
 		__func__);
 
@@ -787,21 +785,18 @@ enum dc_status dce112_validate_bandwidth(
 		result =  DC_OK;
 
 	if (result == DC_FAIL_BANDWIDTH_VALIDATE)
-		dal_logger_write(dc->ctx->logger,
-			LOG_MAJOR_BWM,
-			LOG_MINOR_BWM_MODE_VALIDATION,
+		dm_logger_write(dc->ctx->logger, LOG_BANDWIDTH_VALIDATION,
 			"%s: Bandwidth validation failed!",
 			__func__);
 
 	if (memcmp(&dc->current_context->bw_results,
 			&context->bw_results, sizeof(context->bw_results))) {
 		struct log_entry log_entry;
-		dal_logger_open(
+		dm_logger_open(
 			dc->ctx->logger,
 			&log_entry,
-			LOG_MAJOR_BWM,
-			LOG_MINOR_BWM_REQUIRED_BANDWIDTH_CALCS);
-		dal_logger_append(&log_entry, "%s: finish,\n"
+			LOG_BANDWIDTH_CALCS);
+		dm_logger_append(&log_entry, "%s: finish,\n"
 			"nbpMark_b: %d nbpMark_a: %d urgentMark_b: %d urgentMark_a: %d\n"
 			"stutMark_b: %d stutMark_a: %d\n",
 			__func__,
@@ -811,7 +806,7 @@ enum dc_status dce112_validate_bandwidth(
 			context->bw_results.urgent_wm_ns[0].a_mark,
 			context->bw_results.stutter_exit_wm_ns[0].b_mark,
 			context->bw_results.stutter_exit_wm_ns[0].a_mark);
-		dal_logger_append(&log_entry,
+		dm_logger_append(&log_entry,
 			"nbpMark_b: %d nbpMark_a: %d urgentMark_b: %d urgentMark_a: %d\n"
 			"stutMark_b: %d stutMark_a: %d\n",
 			context->bw_results.nbp_state_change_wm_ns[1].b_mark,
@@ -820,7 +815,7 @@ enum dc_status dce112_validate_bandwidth(
 			context->bw_results.urgent_wm_ns[1].a_mark,
 			context->bw_results.stutter_exit_wm_ns[1].b_mark,
 			context->bw_results.stutter_exit_wm_ns[1].a_mark);
-		dal_logger_append(&log_entry,
+		dm_logger_append(&log_entry,
 			"nbpMark_b: %d nbpMark_a: %d urgentMark_b: %d urgentMark_a: %d\n"
 			"stutMark_b: %d stutMark_a: %d stutter_mode_enable: %d\n",
 			context->bw_results.nbp_state_change_wm_ns[2].b_mark,
@@ -830,7 +825,7 @@ enum dc_status dce112_validate_bandwidth(
 			context->bw_results.stutter_exit_wm_ns[2].b_mark,
 			context->bw_results.stutter_exit_wm_ns[2].a_mark,
 			context->bw_results.stutter_mode_enable);
-		dal_logger_append(&log_entry,
+		dm_logger_append(&log_entry,
 			"cstate: %d pstate: %d nbpstate: %d sync: %d dispclk: %d\n"
 			"sclk: %d sclk_sleep: %d yclk: %d blackout_recovery_time_us: %d\n",
 			context->bw_results.cpuc_state_change_enable,
@@ -842,7 +837,7 @@ enum dc_status dce112_validate_bandwidth(
 			context->bw_results.required_sclk_deep_sleep,
 			context->bw_results.required_yclk,
 			context->bw_results.blackout_recovery_time_us);
-		dal_logger_close(&log_entry);
+		dm_logger_close(&log_entry);
 	}
 	return result;
 }

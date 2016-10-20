@@ -280,9 +280,7 @@ static uint32_t calculate_pixel_clock_pll_dividers(
 	uint32_t max_ref_divider;
 
 	if (pll_settings->adjusted_pix_clk == 0) {
-		dal_logger_write(calc_pll_cs->ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(calc_pll_cs->ctx->logger, LOG_ERROR,
 			"%s Bad requested pixel clock", __func__);
 		return MAX_PLL_CALC_ERROR;
 	}
@@ -343,17 +341,13 @@ static uint32_t calculate_pixel_clock_pll_dividers(
  *  ## SVS Wed 15 Jul 2009 */
 
 	if (min_post_divider > max_post_divider) {
-		dal_logger_write(calc_pll_cs->ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(calc_pll_cs->ctx->logger, LOG_ERROR,
 			"%s Post divider range is invalid", __func__);
 		return MAX_PLL_CALC_ERROR;
 	}
 
 	if (min_ref_divider > max_ref_divider) {
-		dal_logger_write(calc_pll_cs->ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(calc_pll_cs->ctx->logger, LOG_ERROR,
 			"%s Reference divider range is invalid", __func__);
 		return MAX_PLL_CALC_ERROR;
 	}
@@ -470,9 +464,7 @@ static uint32_t dce110_get_pix_clk_dividers(
 
 	if (pix_clk_params == NULL || pll_settings == NULL
 			|| pix_clk_params->requested_pix_clk == 0) {
-		dal_logger_write(clk_src->base.ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(clk_src->base.ctx->logger, LOG_ERROR,
 			"%s: Invalid parameters!!\n", __func__);
 		return pll_calc_error;
 	}
@@ -516,9 +508,7 @@ static uint32_t dce110_get_pix_clk_dividers(
 	if (!pll_adjust_pix_clk(clk_src, pix_clk_params, pll_settings)) {
 		/* Should never happen, ASSERT and fill up values to be able
 		 * to continue. */
-		dal_logger_write(clk_src->base.ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(clk_src->base.ctx->logger, LOG_ERROR,
 			"%s: Failed to adjust pixel clock!!", __func__);
 		pll_settings->actual_pix_clk =
 				pix_clk_params->requested_pix_clk;
@@ -840,16 +830,12 @@ static void get_ss_info_from_atombios(
 	uint32_t i;
 
 	if (ss_entries_num == NULL) {
-		dal_logger_write(clk_src->base.ctx->logger,
-			LOG_MAJOR_SYNC,
-			LOG_MINOR_SYNC_HW_CLOCK_ADJUST,
+		dm_logger_write(clk_src->base.ctx->logger, LOG_SYNC,
 			"Invalid entry !!!\n");
 		return;
 	}
 	if (spread_spectrum_data == NULL) {
-		dal_logger_write(clk_src->base.ctx->logger,
-			LOG_MAJOR_SYNC,
-			LOG_MINOR_SYNC_HW_CLOCK_ADJUST,
+		dm_logger_write(clk_src->base.ctx->logger, LOG_SYNC,
 			"Invalid array pointer!!!\n");
 		return;
 	}
@@ -892,9 +878,7 @@ static void get_ss_info_from_atombios(
 		++i, ++ss_info_cur, ++ss_data_cur) {
 
 		if (ss_info_cur->type.STEP_AND_DELAY_INFO != false) {
-			dal_logger_write(clk_src->base.ctx->logger,
-				LOG_MAJOR_SYNC,
-				LOG_MINOR_SYNC_HW_CLOCK_ADJUST,
+			dm_logger_write(clk_src->base.ctx->logger, LOG_SYNC,
 				"Invalid ATOMBIOS SS Table!!!\n");
 			goto out_free_data;
 		}
@@ -904,13 +888,9 @@ static void get_ss_info_from_atombios(
 		if (as_signal == AS_SIGNAL_TYPE_HDMI
 				&& ss_info_cur->spread_spectrum_percentage > 6){
 			/* invalid input, do nothing */
-			dal_logger_write(clk_src->base.ctx->logger,
-				LOG_MAJOR_SYNC,
-				LOG_MINOR_SYNC_HW_CLOCK_ADJUST,
+			dm_logger_write(clk_src->base.ctx->logger, LOG_SYNC,
 				"Invalid SS percentage ");
-			dal_logger_write(clk_src->base.ctx->logger,
-				LOG_MAJOR_SYNC,
-				LOG_MINOR_SYNC_HW_CLOCK_ADJUST,
+			dm_logger_write(clk_src->base.ctx->logger, LOG_SYNC,
 				"for HDMI in ATOMBIOS info Table!!!\n");
 			continue;
 		}
@@ -1022,16 +1002,12 @@ static bool calc_pll_max_vco_construct(
 	if (init_data->num_fract_fb_divider_decimal_point == 0 ||
 		init_data->num_fract_fb_divider_decimal_point_precision >
 				init_data->num_fract_fb_divider_decimal_point) {
-		dal_logger_write(calc_pll_cs->ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(calc_pll_cs->ctx->logger, LOG_ERROR,
 			"The dec point num or precision is incorrect!");
 		return false;
 	}
 	if (init_data->num_fract_fb_divider_decimal_point_precision == 0) {
-		dal_logger_write(calc_pll_cs->ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(calc_pll_cs->ctx->logger, LOG_ERROR,
 			"Incorrect fract feedback divider precision num!");
 		return false;
 	}

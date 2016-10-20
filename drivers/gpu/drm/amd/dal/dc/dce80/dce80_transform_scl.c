@@ -666,9 +666,7 @@ bool dce80_transform_set_scaler(
 			program_two_taps_filter(xfm80, false, true);
 
 			if (!program_multi_taps_filter(xfm80, data, false)) {
-				dal_logger_write(ctx->logger,
-					LOG_MAJOR_DCP,
-					LOG_MINOR_DCP_SCALER,
+				dm_logger_write(ctx->logger, LOG_SCALER,
 					"Failed vertical taps programming\n");
 				return false;
 			}
@@ -680,9 +678,7 @@ bool dce80_transform_set_scaler(
 			program_two_taps_filter(xfm80, false, false);
 
 			if (!program_multi_taps_filter(xfm80, data, true)) {
-				dal_logger_write(ctx->logger,
-					LOG_MAJOR_DCP,
-					LOG_MINOR_DCP_SCALER,
+				dm_logger_write(ctx->logger, LOG_SCALER,
 					"Failed horizontal taps programming\n");
 				return false;
 			}

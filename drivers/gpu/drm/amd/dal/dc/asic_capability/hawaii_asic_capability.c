@@ -94,9 +94,7 @@ void dal_hawaii_asic_capability_create(struct asic_capability *cap,
 		cap->data[ASIC_DATA_MEMORYTYPE_MULTIPLIER] = 4;
 		break;
 	default:
-		dal_logger_write(cap->ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_MASK_ALL,
+		dm_logger_write(cap->ctx->logger, LOG_ERROR,
 			"%s:Unrecognized memory type!", __func__);
 		cap->data[ASIC_DATA_MEMORYTYPE_MULTIPLIER] = 2;
 		break;

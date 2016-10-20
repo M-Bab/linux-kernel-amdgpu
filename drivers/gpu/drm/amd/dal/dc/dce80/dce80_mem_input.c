@@ -143,9 +143,7 @@ static void allocate_mem_input(
 	} while (retry_count > 0);
 
 	if (field == 0)
-		dal_logger_write(mi->ctx->logger,
-				LOG_MAJOR_ERROR,
-				LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(mi->ctx->logger, LOG_ERROR,
 				"%s: DMIF allocation failed",
 				__func__);
 

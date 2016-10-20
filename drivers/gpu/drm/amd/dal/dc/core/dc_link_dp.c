@@ -81,9 +81,7 @@ static void wait_for_training_aux_rd_interval(
 
 	udelay(default_wait_in_micro_secs);
 
-	dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_HW_TRACE,
-		LOG_MINOR_HW_TRACE_LINK_TRAINING,
+	dm_logger_write(link->ctx->logger, LOG_HW_LINK_TRAINING,
 		"%s:\n wait = %d\n",
 		__func__,
 		default_wait_in_micro_secs);
@@ -99,9 +97,7 @@ static void dpcd_set_training_pattern(
 		&dpcd_pattern.raw,
 		1);
 
-	dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_HW_TRACE,
-		LOG_MINOR_HW_TRACE_LINK_TRAINING,
+	dm_logger_write(link->ctx->logger, LOG_HW_LINK_TRAINING,
 		"%s\n %x pattern = %x\n",
 		__func__,
 		DPCD_ADDRESS_TRAINING_PATTERN_SET,
@@ -138,9 +134,7 @@ static void dpcd_set_link_settings(
 	core_link_write_dpcd(link, DPCD_ADDRESS_DOWNSPREAD_CNTL,
 	&downspread.raw, sizeof(downspread));
 
-	dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_HW_TRACE,
-		LOG_MINOR_HW_TRACE_LINK_TRAINING,
+	dm_logger_write(link->ctx->logger, LOG_HW_LINK_TRAINING,
 		"%s\n %x rate = %x\n %x lane = %x\n %x spread = %x\n",
 		__func__,
 		DPCD_ADDRESS_LINK_BW_SET,
@@ -175,9 +169,7 @@ static enum dpcd_training_patterns
 		break;
 	default:
 		ASSERT(0);
-		dal_logger_write(link->ctx->logger,
-			LOG_MAJOR_HW_TRACE,
-			LOG_MINOR_HW_TRACE_LINK_TRAINING,
+		dm_logger_write(link->ctx->logger, LOG_HW_LINK_TRAINING,
 			"%s: Invalid HW Training pattern: %d\n",
 			__func__, pattern);
 		break;
@@ -210,9 +202,7 @@ static void dpcd_set_lt_pattern_and_lane_settings(
 	dpcd_lt_buffer[DPCD_ADDRESS_TRAINING_PATTERN_SET - dpcd_base_lt_offset]
 		= dpcd_pattern.raw;
 
-	dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_HW_TRACE,
-		LOG_MINOR_HW_TRACE_LINK_TRAINING,
+	dm_logger_write(link->ctx->logger, LOG_HW_LINK_TRAINING,
 		"%s\n %x pattern = %x\n",
 		__func__,
 		DPCD_ADDRESS_TRAINING_PATTERN_SET,
@@ -247,9 +237,7 @@ static void dpcd_set_lt_pattern_and_lane_settings(
 		dpcd_lane,
 		size_in_bytes);
 
-	dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_HW_TRACE,
-		LOG_MINOR_HW_TRACE_LINK_TRAINING,
+	dm_logger_write(link->ctx->logger, LOG_HW_LINK_TRAINING,
 		"%s:\n %x VS set = %x  PE set = %x \
 		max VS Reached = %x  max PE Reached = %x\n",
 		__func__,
@@ -487,17 +475,13 @@ static void get_lane_status_and_drive_settings(
 
 	ln_status_updated->raw = dpcd_buf[2];
 
-	dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_HW_TRACE,
-		LOG_MINOR_HW_TRACE_LINK_TRAINING,
+	dm_logger_write(link->ctx->logger, LOG_HW_LINK_TRAINING,
 		"%s:\n%x Lane01Status = %x\n %x Lane23Status = %x\n ",
 		__func__,
 		DPCD_ADDRESS_LANE_01_STATUS, dpcd_buf[0],
 		DPCD_ADDRESS_LANE_23_STATUS, dpcd_buf[1]);
 
-	dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_HW_TRACE,
-		LOG_MINOR_HW_TRACE_LINK_TRAINING,
+	dm_logger_write(link->ctx->logger, LOG_HW_LINK_TRAINING,
 		"%s:\n %x Lane01AdjustRequest = %x\n %x Lane23AdjustRequest = %x\n",
 		__func__,
 		DPCD_ADDRESS_ADJUST_REQUEST_LANE0_1,
@@ -591,9 +575,7 @@ static void dpcd_set_lane_settings(
 	}
 	*/
 
-	dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_HW_TRACE,
-		LOG_MINOR_HW_TRACE_LINK_TRAINING,
+	dm_logger_write(link->ctx->logger, LOG_HW_LINK_TRAINING,
 		"%s\n %x VS set = %x  PE set = %x \
 		max VS Reached = %x  max PE Reached = %x\n",
 		__func__,
@@ -708,9 +690,7 @@ static bool perform_post_lt_adj_req_sequence(
 		}
 
 		if (!req_drv_setting_changed) {
-			dal_logger_write(link->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_LINK_SERVICE,
+			dm_logger_write(link->ctx->logger, LOG_WARNING,
 				"%s: Post Link Training Adjust Request Timed out\n",
 				__func__);
 
@@ -718,9 +698,7 @@ static bool perform_post_lt_adj_req_sequence(
 			return true;
 		}
 	}
-	dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_WARNING,
-		LOG_MINOR_COMPONENT_LINK_SERVICE,
+	dm_logger_write(link->ctx->logger, LOG_WARNING,
 		"%s: Post Link Training Adjust Request limit reached\n",
 		__func__);
 
@@ -912,9 +890,7 @@ static bool perform_clock_recovery_sequence(
 
 	if (retry_count >= LINK_TRAINING_MAX_CR_RETRY) {
 		ASSERT(0);
-		dal_logger_write(link->ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_LINK_SERVICE,
+		dm_logger_write(link->ctx->logger, LOG_ERROR,
 			"%s: Link Training Error, could not \
 			 get CR after %d tries. \
 			Possibly voltage swing issue", __func__,
@@ -1404,9 +1380,7 @@ static bool hpd_rx_irq_check_link_loss_status(
 
 	if (dpcd_result != DC_OK) {
 		irq_reg_rx_power_state = DP_PWR_STATE_D0;
-		dal_logger_write(link->ctx->logger,
-			LOG_MAJOR_HW_TRACE,
-			LOG_MINOR_HW_TRACE_HPD_IRQ,
+		dm_logger_write(link->ctx->logger, LOG_HW_HPD_IRQ,
 			"%s: DPCD read failed to obtain power state.\n",
 			__func__);
 	}
@@ -1444,9 +1418,7 @@ static bool hpd_rx_irq_check_link_loss_status(
 			!hpd_irq_dpcd_data->bytes.lane_status_updated.bits.
 			INTERLANE_ALIGN_DONE) {
 
-			dal_logger_write(link->ctx->logger,
-				LOG_MAJOR_HW_TRACE,
-				LOG_MINOR_HW_TRACE_HPD_IRQ,
+			dm_logger_write(link->ctx->logger, LOG_HW_HPD_IRQ,
 				"%s: Link Status changed.\n",
 				__func__);
 
@@ -1807,9 +1779,7 @@ bool dc_link_handle_hpd_rx_irq(const struct dc_link *dc_link)
 	 * PSR and device auto test, refer to function handle_sst_hpd_irq
 	 * in DAL2.1*/
 
-	dal_logger_write(link->ctx->logger,
-		LOG_MAJOR_HW_TRACE,
-		LOG_MINOR_HW_TRACE_HPD_IRQ,
+	dm_logger_write(link->ctx->logger, LOG_HW_HPD_IRQ,
 		"%s: Got short pulse HPD on link %d\n",
 		__func__, link->public.link_index);
 
@@ -1821,9 +1791,7 @@ bool dc_link_handle_hpd_rx_irq(const struct dc_link *dc_link)
 	result = read_hpd_rx_irq_data(link, &hpd_irq_dpcd_data);
 
 	if (result != DC_OK) {
-		dal_logger_write(link->ctx->logger,
-			LOG_MAJOR_HW_TRACE,
-			LOG_MINOR_HW_TRACE_HPD_IRQ,
+		dm_logger_write(link->ctx->logger, LOG_HW_HPD_IRQ,
 			"%s: DPCD read failed to obtain irq data\n",
 			__func__);
 		return false;
@@ -1839,9 +1807,7 @@ bool dc_link_handle_hpd_rx_irq(const struct dc_link *dc_link)
 	}
 
 	if (!allow_hpd_rx_irq(link)) {
-		dal_logger_write(link->ctx->logger,
-			LOG_MAJOR_HW_TRACE,
-			LOG_MINOR_HW_TRACE_HPD_IRQ,
+		dm_logger_write(link->ctx->logger, LOG_HW_HPD_IRQ,
 			"%s: skipping HPD handling on %d\n",
 			__func__, link->public.link_index);
 		return false;

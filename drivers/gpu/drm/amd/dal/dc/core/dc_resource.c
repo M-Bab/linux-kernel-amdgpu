@@ -559,9 +559,7 @@ bool resource_build_scaling_params(
 			pipe_ctx->xfm, &pipe_ctx->scl_data, &surface->scaling_quality);
 	}
 
-	dal_logger_write(pipe_ctx->stream->ctx->logger,
-				LOG_MAJOR_DCP,
-				LOG_MINOR_DCP_SCALER,
+	dm_logger_write(pipe_ctx->stream->ctx->logger, LOG_SCALER,
 				"%s: Viewport:\nheight:%d width:%d x:%d "
 				"y:%d\n dst_rect:\nheight:%d width:%d x:%d "
 				"y:%d\n",

@@ -184,8 +184,7 @@ static void program_formatter_reset_dig_resync_fifo(struct output_pixel_processo
 	}
 
 	if (counter == 0)
-		dal_logger_write(opp->ctx->logger, LOG_MAJOR_ERROR,
-				LOG_MINOR_COMPONENT_CONTROLLER,
+		dm_logger_write(opp->ctx->logger, LOG_ERROR,
 				"%s:opp program formattter reset dig resync info time out.\n",
 				__func__);
 }

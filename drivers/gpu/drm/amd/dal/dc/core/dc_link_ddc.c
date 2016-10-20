@@ -541,10 +541,8 @@ static uint8_t aux_read_edid_block(
 			&cmd);
 
 		if (false == result)
-			dal_logger_write(
-				ddc->ctx->logger,
-				LOG_MAJOR_ERROR,
-				LOG_MINOR_COMPONENT_DISPLAY_CAPABILITY_SERVICE,
+			dm_logger_write(
+				ddc->ctx->logger, LOG_ERROR,
 				"%s: Writing of EDID Segment (0x30) failed!\n",
 				__func__);
 	}

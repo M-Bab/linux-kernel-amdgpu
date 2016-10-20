@@ -651,9 +651,7 @@ static void link_encoder_edp_wait_for_hpd_ready(
 	dal_gpio_destroy_irq(&hpd);
 
 	if (false == edp_hpd_high) {
-		dal_logger_write(ctx->logger,
-				LOG_MAJOR_ERROR,
-				LOG_MINOR_HW_TRACE_RESUME_S3,
+		dm_logger_write(ctx->logger, LOG_ERROR,
 				"%s: wait timed out!\n", __func__);
 	}
 }
@@ -682,9 +680,7 @@ void dce110_link_encoder_edp_power_control(
 
 		/* Send VBIOS command to prompt eDP panel power */
 
-		dal_logger_write(ctx->logger,
-				LOG_MAJOR_HW_TRACE,
-				LOG_MINOR_HW_TRACE_RESUME_S3,
+		dm_logger_write(ctx->logger, LOG_HW_RESUME_S3,
 				"%s: Panel Power action: %s\n",
 				__func__, (power_up ? "On":"Off"));
 
@@ -701,16 +697,12 @@ void dce110_link_encoder_edp_power_control(
 
 		if (BP_RESULT_OK != bp_result) {
 
-			dal_logger_write(ctx->logger,
-					LOG_MAJOR_ERROR,
-					LOG_MINOR_HW_TRACE_RESUME_S3,
+			dm_logger_write(ctx->logger, LOG_ERROR,
 					"%s: Panel Power bp_result: %d\n",
 					__func__, bp_result);
 		}
 	} else {
-		dal_logger_write(ctx->logger,
-				LOG_MAJOR_HW_TRACE,
-				LOG_MINOR_HW_TRACE_RESUME_S3,
+		dm_logger_write(ctx->logger, LOG_HW_RESUME_S3,
 				"%s: Skipping Panel Power action: %s\n",
 				__func__, (power_up ? "On":"Off"));
 	}
@@ -770,18 +762,14 @@ void dce110_link_encoder_edp_backlight_control(
 	}
 
 	if (enable && is_panel_backlight_on(enc110)) {
-		dal_logger_write(ctx->logger,
-				LOG_MAJOR_HW_TRACE,
-				LOG_MINOR_HW_TRACE_RESUME_S3,
+		dm_logger_write(ctx->logger, LOG_HW_RESUME_S3,
 				"%s: panel already powered up. Do nothing.\n",
 				__func__);
 		return;
 	}
 
 	if (!enable && !is_panel_powered_on(enc110)) {
-		dal_logger_write(ctx->logger,
-				LOG_MAJOR_HW_TRACE,
-				LOG_MINOR_HW_TRACE_RESUME_S3,
+		dm_logger_write(ctx->logger, LOG_HW_RESUME_S3,
 				"%s: panel already powered down. Do nothing.\n",
 				__func__);
 		return;
@@ -789,9 +777,7 @@ void dce110_link_encoder_edp_backlight_control(
 
 	/* Send VBIOS command to control eDP panel backlight */
 
-	dal_logger_write(ctx->logger,
-			LOG_MAJOR_HW_TRACE,
-			LOG_MINOR_HW_TRACE_RESUME_S3,
+	dm_logger_write(ctx->logger, LOG_HW_RESUME_S3,
 			"%s: backlight action: %s\n",
 			__func__, (enable ? "On":"Off"));
 
@@ -1069,9 +1055,7 @@ bool dce110_link_encoder_construct(
 		enc110->base.preferred_engine = ENGINE_ID_UNKNOWN;
 	}
 
-	dal_logger_write(init_data->ctx->logger,
-			LOG_MAJOR_I2C_AUX,
-			LOG_MINOR_I2C_AUX_CFG,
+	dm_logger_write(init_data->ctx->logger, LOG_I2C_AUX,
 			"Using channel: %s [%d]\n",
 			DECODE_CHANNEL_ID(init_data->channel),
 			init_data->channel);
@@ -1160,9 +1144,7 @@ void dce110_link_encoder_hw_init(
 	result = link_transmitter_control(enc110, &cntl);
 
 	if (result != BP_RESULT_OK) {
-		dal_logger_write(ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_ENCODER,
+		dm_logger_write(ctx->logger, LOG_ERROR,
 			"%s: Failed to execute VBIOS command table!\n",
 			__func__);
 		BREAK_TO_DEBUGGER();
@@ -1270,9 +1252,7 @@ void dce110_link_encoder_enable_tmds_output(
 	result = link_transmitter_control(enc110, &cntl);
 
 	if (result != BP_RESULT_OK) {
-		dal_logger_write(ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_ENCODER,
+		dm_logger_write(ctx->logger, LOG_ERROR,
 			"%s: Failed to execute VBIOS command table!\n",
 			__func__);
 		BREAK_TO_DEBUGGER();
@@ -1313,9 +1293,7 @@ void dce110_link_encoder_enable_dp_output(
 	result = link_transmitter_control(enc110, &cntl);
 
 	if (result != BP_RESULT_OK) {
-		dal_logger_write(ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_ENCODER,
+		dm_logger_write(ctx->logger, LOG_ERROR,
 			"%s: Failed to execute VBIOS command table!\n",
 			__func__);
 		BREAK_TO_DEBUGGER();
@@ -1356,9 +1334,7 @@ void dce110_link_encoder_enable_dp_mst_output(
 	result = link_transmitter_control(enc110, &cntl);
 
 	if (result != BP_RESULT_OK) {
-		dal_logger_write(ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_ENCODER,
+		dm_logger_write(ctx->logger, LOG_ERROR,
 			"%s: Failed to execute VBIOS command table!\n",
 			__func__);
 		BREAK_TO_DEBUGGER();
@@ -1403,9 +1379,7 @@ void dce110_link_encoder_disable_output(
 	result = link_transmitter_control(enc110, &cntl);
 
 	if (result != BP_RESULT_OK) {
-		dal_logger_write(ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_ENCODER,
+		dm_logger_write(ctx->logger, LOG_ERROR,
 			"%s: Failed to execute VBIOS command table!\n",
 			__func__);
 		BREAK_TO_DEBUGGER();

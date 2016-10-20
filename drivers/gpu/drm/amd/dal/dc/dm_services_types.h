@@ -26,37 +26,7 @@
 #ifndef __DM_SERVICES_TYPES_H__
 #define __DM_SERVICES_TYPES_H__
 
-#if defined __KERNEL__
-
-#include <asm/byteorder.h>
-#include <linux/types.h>
-#include <drm/drmP.h>
-
-#include "cgs_linux.h"
-
-#if defined(__BIG_ENDIAN) && !defined(BIGENDIAN_CPU)
-#define BIGENDIAN_CPU
-#elif defined(__LITTLE_ENDIAN) && !defined(LITTLEENDIAN_CPU)
-#define LITTLEENDIAN_CPU
-#endif
-
-#undef READ
-#undef WRITE
-#undef FRAME_SIZE
-
-#define dm_output_to_console(fmt, ...) DRM_INFO(fmt, ##__VA_ARGS__)
-
-#define dm_error(fmt, ...) DRM_ERROR(fmt, ##__VA_ARGS__)
-
-#define dm_debug(fmt, ...) DRM_DEBUG_KMS(fmt, ##__VA_ARGS__)
-
-#define dm_vlog(fmt, args) vprintk(fmt, args)
-
-#define dm_min(x, y) min(x, y)
-#define dm_max(x, y) max(x, y)
-
-#endif
-
+#include "os_types.h"
 #include "dc_types.h"
 
 struct dm_pp_clock_range {

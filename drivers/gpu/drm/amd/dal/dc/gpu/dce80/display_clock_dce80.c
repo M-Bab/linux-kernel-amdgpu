@@ -587,9 +587,7 @@ static bool set_min_clocks_state(
 
 	if (clocks_state > disp_clk->max_clks_state) {
 		/*Requested state exceeds max supported state.*/
-		dal_logger_write(dc->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(dc->ctx->logger, LOG_WARNING,
 				"Requested state exceeds max supported state");
 		return false;
 	} else if (clocks_state == dc->cur_min_clks_state) {
@@ -613,9 +611,7 @@ static bool set_min_clocks_state(
 		break;
 	case CLOCKS_STATE_INVALID:
 	default:
-		dal_logger_write(dc->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(dc->ctx->logger, LOG_WARNING,
 				"Requested state invalid state");
 		return false;
 	}
@@ -897,9 +893,7 @@ static bool display_clock_construct(
 	display_clock_ss_construct(disp_clk, as);
 
 	if (!display_clock_integrated_info_construct(disp_clk, as)) {
-		dal_logger_write(dc_base->ctx->logger,
-			LOG_MAJOR_WARNING,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(dc_base->ctx->logger, LOG_WARNING,
 			"Cannot obtain VBIOS integrated info");
 	}
 

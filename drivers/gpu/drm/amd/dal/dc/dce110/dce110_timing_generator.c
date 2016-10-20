@@ -1844,8 +1844,7 @@ bool dce110_tg_set_blank(struct timing_generator *tg,
 		}
 
 		if (counter == 100) {
-			dal_logger_write(tg->ctx->logger, LOG_MAJOR_ERROR,
-					LOG_MINOR_COMPONENT_CONTROLLER,
+			dm_logger_write(tg->ctx->logger, LOG_ERROR,
 					"timing generator %d blank timing out.\n",
 					tg110->controller_id);
 			return false;

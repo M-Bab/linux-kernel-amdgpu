@@ -653,9 +653,7 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 
 	core_dc->public.config.gpu_vm_support = init_params->flags.gpu_vm_support;
 
-	dal_logger_write(core_dc->ctx->logger,
-			LOG_MAJOR_INTERFACE_TRACE,
-			LOG_MINOR_COMPONENT_DC,
+	dm_logger_write(core_dc->ctx->logger, LOG_DC,
 			"Display Core initialized\n");
 
 	return &core_dc->public;
@@ -733,9 +731,7 @@ bool dc_validate_resources(
 
 context_alloc_fail:
 	if (result != DC_OK) {
-		dal_logger_write(core_dc->ctx->logger,
-				LOG_MAJOR_WARNING,
-				LOG_MINOR_COMPONENT_TOPOLOGY_MANAGER,
+		dm_logger_write(core_dc->ctx->logger, LOG_WARNING,
 				"%s:resource validation failed, dc_status:%d\n",
 				__func__,
 				result);
@@ -765,9 +761,7 @@ bool dc_validate_guaranteed(
 
 context_alloc_fail:
 	if (result != DC_OK) {
-		dal_logger_write(core_dc->ctx->logger,
-			LOG_MAJOR_WARNING,
-			LOG_MINOR_COMPONENT_TOPOLOGY_MANAGER,
+		dm_logger_write(core_dc->ctx->logger, LOG_WARNING,
 			"%s:guaranteed validation failed, dc_status:%d\n",
 			__func__,
 			result);
@@ -1044,9 +1038,7 @@ bool dc_commit_targets(
 	if (false == targets_changed(core_dc, targets, target_count))
 		return DC_OK;
 
-	dal_logger_write(core_dc->ctx->logger,
-				LOG_MAJOR_INTERFACE_TRACE,
-				LOG_MINOR_COMPONENT_DC,
+	dm_logger_write(core_dc->ctx->logger, LOG_DC,
 				"%s: %d targets\n",
 				__func__,
 				target_count);
@@ -1056,8 +1048,7 @@ bool dc_commit_targets(
 
 		dc_target_log(target,
 				core_dc->ctx->logger,
-				LOG_MAJOR_INTERFACE_TRACE,
-				LOG_MINOR_COMPONENT_DC);
+				LOG_DC);
 
 		set[i].target = targets[i];
 		set[i].surface_count = 0;
@@ -1070,9 +1061,7 @@ bool dc_commit_targets(
 
 	result = core_dc->res_pool->funcs->validate_with_context(core_dc, set, target_count, context);
 	if (result != DC_OK){
-		dal_logger_write(core_dc->ctx->logger,
-					LOG_MAJOR_ERROR,
-					LOG_MINOR_COMPONENT_DC,
+		dm_logger_write(core_dc->ctx->logger, LOG_ERROR,
 					"%s: Context validation failed! dc_status:%d\n",
 					__func__,
 					result);
@@ -1196,9 +1185,7 @@ bool dc_pre_update_surfaces_to_target(
 
 	resource_validate_ctx_copy_construct(core_dc->current_context, context);
 
-	dal_logger_write(core_dc->ctx->logger,
-				LOG_MAJOR_INTERFACE_TRACE,
-				LOG_MINOR_COMPONENT_DC,
+	dm_logger_write(core_dc->ctx->logger, LOG_DC,
 				"%s: commit %d surfaces to target 0x%x\n",
 				__func__,
 				new_surface_count,

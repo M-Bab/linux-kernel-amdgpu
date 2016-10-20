@@ -58,9 +58,7 @@ uint32_t dce112_get_pix_clk_dividers(
 
 	if (pix_clk_params == NULL || pll_settings == NULL
 			|| pix_clk_params->requested_pix_clk == 0) {
-		dal_logger_write(cs->ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_COMPONENT_GPU,
+		dm_logger_write(cs->ctx->logger, LOG_ERROR,
 			"%s: Invalid parameters!!\n", __func__);
 		return 0;
 	}

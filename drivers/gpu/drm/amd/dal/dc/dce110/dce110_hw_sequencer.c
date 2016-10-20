@@ -1534,17 +1534,11 @@ static void set_plane_config(
 	struct resource_context *res_ctx)
 {
 	struct mem_input *mi = pipe_ctx->mi;
-	struct pipe_ctx *old_pipe = NULL;
 	struct dc_context *ctx = pipe_ctx->stream->ctx;
 	struct core_surface *surface = pipe_ctx->surface;
 	struct xfm_grph_csc_adjustment adjust;
 	struct out_csc_color_matrix tbl_entry;
 	unsigned int i;
-
-	if (dc->current_context)
-		old_pipe =
-			&dc->current_context->
-			res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
 
 	memset(&adjust, 0, sizeof(adjust));
 	memset(&tbl_entry, 0, sizeof(tbl_entry));
@@ -1963,9 +1957,7 @@ static void dce110_program_front_end_for_pipe(
 				&surface->public.tiling_info,
 				surface->public.rotation);
 
-	dal_logger_write(dc->ctx->logger,
-			LOG_MAJOR_INTERFACE_TRACE,
-			LOG_MINOR_COMPONENT_SURFACE,
+	dm_logger_write(dc->ctx->logger, LOG_SURFACE,
 			"Pipe:%d 0x%x: addr hi:0x%x, "
 			"addr low:0x%x, "
 			"src: %d, %d, %d,"
@@ -1988,9 +1980,7 @@ static void dce110_program_front_end_for_pipe(
 			pipe_ctx->surface->public.clip_rect.width,
 			pipe_ctx->surface->public.clip_rect.height);
 
-	dal_logger_write(dc->ctx->logger,
-			LOG_MAJOR_INTERFACE_TRACE,
-			LOG_MINOR_COMPONENT_SURFACE,
+	dm_logger_write(dc->ctx->logger, LOG_SURFACE,
 			"Pipe %d: width, height, x, y\n"
 			"viewport:%d, %d, %d, %d\n"
 			"recout:  %d, %d, %d, %d\n",

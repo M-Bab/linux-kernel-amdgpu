@@ -165,10 +165,8 @@ static void dce110_update_hdmi_info_packet(
 		break;
 	default:
 		/* invalid HW packet index */
-		dal_logger_write(
-			ctx->logger,
-			LOG_MAJOR_WARNING,
-			LOG_MINOR_COMPONENT_ENCODER,
+		dm_logger_write(
+			ctx->logger, LOG_WARNING,
 			"Invalid HW packet index: %s()\n",
 			__func__);
 		return;

@@ -118,9 +118,7 @@ static bool construct(
 	}
 
 	if (false == asic_supported) {
-		dal_logger_write(ctx->logger,
-			LOG_MAJOR_ERROR,
-			LOG_MINOR_MASK_ALL,
+		dm_logger_write(ctx->logger, LOG_ERROR,
 			"%s: ASIC not supported!\n", __func__);
 	}
 
