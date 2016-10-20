@@ -32,34 +32,6 @@
 #include "reg_helper.h"
 #include "gpio_regs.h"
 
-#undef FN
-#define FN(reg_name, field_name) \
-	gpio->regs->field_name ## _shift, gpio->regs->field_name ## _mask
-
-#define CTX \
-	gpio->base.ctx
-#define REG(reg)\
-	(gpio->regs->reg)
-
-static enum gpio_result config_mode(
-	struct hw_gpio *gpio,
-	enum gpio_mode mode)
-{
-	if (mode == GPIO_MODE_INTERRUPT) {
-		/* Interrupt mode supported only by HPD (IrqGpio) pins. */
-		gpio->base.mode = mode;
-		REG_UPDATE(MASK_reg, MASK, 0);
-		return GPIO_RESULT_OK;
-	} else
-		/* For any mode other than Interrupt,
-		 * act as normal GPIO. */
-		return dal_hw_gpio_config_mode(gpio, mode);
-}
-
-const struct hw_gpio_funcs hw_hpd_func = {
-	.config_mode = config_mode,
-};
-
 bool dal_hw_hpd_construct(
 	struct hw_hpd *pin,
 	enum gpio_id id,
@@ -68,7 +40,6 @@ bool dal_hw_hpd_construct(
 {
 	if (!dal_hw_gpio_construct(&pin->base, id, en, ctx))
 		return false;
-	pin->base.funcs = &hw_hpd_func;
 	return true;
 }
 

@@ -68,12 +68,6 @@ struct hw_gpio_pin_funcs {
 
 struct hw_gpio;
 
-struct hw_gpio_funcs {
-	enum gpio_result (*config_mode)(
-		struct hw_gpio *pin,
-		enum gpio_mode mode);
-};
-
 /* Register indices are represented by member variables
  * and are to be filled in by constructors of derived classes.
  * These members permit the use of common code
@@ -96,7 +90,6 @@ struct hw_gpio_mux_reg {
 
 struct hw_gpio {
 	struct hw_gpio_pin base;
-	const struct hw_gpio_funcs *funcs;
 
 	/* variables to save register value */
 	struct {

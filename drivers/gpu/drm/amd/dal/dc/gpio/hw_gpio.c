@@ -69,7 +69,7 @@ bool dal_hw_gpio_open(
 
 	store_registers(pin);
 
-	ptr->opened = (pin->funcs->config_mode(pin, mode) == GPIO_RESULT_OK);
+	ptr->opened = (dal_hw_gpio_config_mode(pin, mode) == GPIO_RESULT_OK);
 
 	return ptr->opened;
 }
@@ -128,7 +128,7 @@ enum gpio_result dal_hw_gpio_change_mode(
 {
 	struct hw_gpio *pin = FROM_HW_GPIO_PIN(ptr);
 
-	return pin->funcs->config_mode(pin, mode);
+	return dal_hw_gpio_config_mode(pin, mode);
 }
 
 void dal_hw_gpio_close(
@@ -142,69 +142,43 @@ void dal_hw_gpio_close(
 	ptr->opened = false;
 }
 
-static enum gpio_result config_mode_input(
-	struct hw_gpio *gpio)
-{
-	/* turn off output enable, act as input pin;
-	 * program the pin as GPIO, mask out signal driven by HW */
-	REG_UPDATE(EN_reg, EN, 0);
-	REG_UPDATE(MASK_reg, MASK, 1);
-	return GPIO_RESULT_OK;
-}
-
-static enum gpio_result config_mode_output(
-	struct hw_gpio *gpio)
-{
-	/* turn on output enable, act as output pin;
-	 * program the pin as GPIO, mask out signal driven by HW */
-	REG_UPDATE(EN_reg, EN, 1);
-	REG_UPDATE(MASK_reg, MASK, 1);
-	return GPIO_RESULT_OK;
-}
-
-static enum gpio_result config_mode_fast_output(
-	struct hw_gpio *gpio)
-{
-	/* grounding the A register then use the EN register bit
-	 * will have faster effect on the rise time */
-	REG_UPDATE(A_reg, A, 0);
-	REG_UPDATE(MASK_reg, MASK, 1);
-	return GPIO_RESULT_OK;
-}
-
-static enum gpio_result config_mode_hardware(
-	struct hw_gpio *gpio)
-{
-	/* program the pin as tri-state, pin is driven by HW */
-
-	REG_UPDATE(MASK_reg, MASK, 0);
-
-	return GPIO_RESULT_OK;
-}
-
 enum gpio_result dal_hw_gpio_config_mode(
-	struct hw_gpio *pin,
+	struct hw_gpio *gpio,
 	enum gpio_mode mode)
 {
-	pin->base.mode = mode;
+	gpio->base.mode = mode;
 
 	switch (mode) {
 	case GPIO_MODE_INPUT:
-		return config_mode_input(pin);
+		/* turn off output enable, act as input pin;
+		 * program the pin as GPIO, mask out signal driven by HW */
+		REG_UPDATE(EN_reg, EN, 0);
+		REG_UPDATE(MASK_reg, MASK, 1);
+		return GPIO_RESULT_OK;
 	case GPIO_MODE_OUTPUT:
-		return config_mode_output(pin);
+		/* turn on output enable, act as output pin;
+		 * program the pin as GPIO, mask out signal driven by HW */
+		REG_UPDATE(A_reg, A, 0);
+		REG_UPDATE(MASK_reg, MASK, 1);
+		return GPIO_RESULT_OK;
 	case GPIO_MODE_FAST_OUTPUT:
-		return config_mode_fast_output(pin);
+		/* grounding the A register then use the EN register bit
+		 * will have faster effect on the rise time */
+		REG_UPDATE(A_reg, A, 0);
+		REG_UPDATE(MASK_reg, MASK, 1);
+		return GPIO_RESULT_OK;
 	case GPIO_MODE_HARDWARE:
-		return config_mode_hardware(pin);
+		/* program the pin as tri-state, pin is driven by HW */
+		REG_UPDATE(MASK_reg, MASK, 0);
+		return GPIO_RESULT_OK;
+	case GPIO_MODE_INTERRUPT:
+		/* Interrupt mode supported only by HPD (IrqGpio) pins. */
+		REG_UPDATE(MASK_reg, MASK, 0);
+		return GPIO_RESULT_OK;
 	default:
 		return GPIO_RESULT_NON_SPECIFIC_ERROR;
 	}
 }
-
-const struct hw_gpio_funcs func = {
-	.config_mode = dal_hw_gpio_config_mode,
-};
 
 bool dal_hw_gpio_construct(
 	struct hw_gpio *pin,
@@ -217,8 +191,6 @@ bool dal_hw_gpio_construct(
 	pin->base.en = en;
 	pin->base.mode = GPIO_MODE_UNKNOWN;
 	pin->base.opened = false;
-
-	pin->funcs = &func;
 
 	pin->store.mask = 0;
 	pin->store.a = 0;
