@@ -141,44 +141,49 @@ bool resource_construct(
 	unsigned int num_audio = caps->num_audio;
 	struct resource_straps straps = {0};
 
-	create_funcs->read_dce_straps(dc->ctx, &straps);
+	if (create_funcs->read_dce_straps)
+		create_funcs->read_dce_straps(dc->ctx, &straps);
 
-	/* find the total number of streams available via the
-	 * AZALIA_F0_CODEC_PIN_CONTROL_RESPONSE_CONFIGURATION_DEFAULT
-	 * registers (one for each pin) starting from pin 1
-	 * up to the max number of audio pins.
-	 * We stop on the first pin where
-	 * PORT_CONNECTIVITY == 1 (as instructed by HW team).
-	 */
 	pool->audio_count = 0;
-	update_num_audio(&straps, &num_audio, &pool->audio_support);
-	for (i = 0; i < pool->pipe_count && i < num_audio; i++) {
-		struct audio *aud = create_funcs->create_audio(ctx, i);
+	if (create_funcs->create_audio) {
+		/* find the total number of streams available via the
+		 * AZALIA_F0_CODEC_PIN_CONTROL_RESPONSE_CONFIGURATION_DEFAULT
+		 * registers (one for each pin) starting from pin 1
+		 * up to the max number of audio pins.
+		 * We stop on the first pin where
+		 * PORT_CONNECTIVITY == 1 (as instructed by HW team).
+		 */
+		update_num_audio(&straps, &num_audio, &pool->audio_support);
+		for (i = 0; i < pool->pipe_count && i < num_audio; i++) {
+			struct audio *aud = create_funcs->create_audio(ctx, i);
 
-		if (aud == NULL) {
-			DC_ERR("DC: failed to create audio!\n");
-			return false;
+			if (aud == NULL) {
+				DC_ERR("DC: failed to create audio!\n");
+				return false;
+			}
+
+			if (!aud->funcs->endpoint_valid(aud)) {
+				aud->funcs->destroy(&aud);
+				break;
+			}
+
+			pool->audios[i] = aud;
+			pool->audio_count++;
 		}
-
-		if (!aud->funcs->endpoint_valid(aud)) {
-			aud->funcs->destroy(&aud);
-			break;
-		}
-
-		pool->audios[i] = aud;
-		pool->audio_count++;
 	}
 
 	pool->stream_enc_count = 0;
-	for (i = 0; i < caps->num_stream_encoder; i++) {
-		/* TODO: rework fragile code*/
-		if (pool->stream_engines.u_all & 1 << i) {
-			pool->stream_enc[i] = create_funcs->create_stream_encoder(
-				i, ctx);
-			if (pool->stream_enc[i] == NULL)
-				DC_ERR("DC: failed to create stream_encoder!\n");
+	if (create_funcs->create_stream_encoder) {
+		for (i = 0; i < caps->num_stream_encoder; i++) {
+			/* TODO: rework fragile code*/
+			if (pool->stream_engines.u_all & 1 << i) {
+				pool->stream_enc[i] = create_funcs->create_stream_encoder(
+					i, ctx);
+				if (pool->stream_enc[i] == NULL)
+					DC_ERR("DC: failed to create stream_encoder!\n");
+			}
+			pool->stream_enc_count++;
 		}
-		pool->stream_enc_count++;
 	}
 
 	for (i = 0; i < num_virtual_links; i++) {
