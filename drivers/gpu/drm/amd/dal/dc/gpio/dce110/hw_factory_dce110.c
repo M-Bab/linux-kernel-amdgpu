@@ -23,17 +23,9 @@
  *
  */
 
-/*
- * Pre-requisites: headers required by header of this unit
- */
-
 #include "dm_services.h"
 #include "include/gpio_types.h"
 #include "../hw_factory.h"
-
-/*
- * Header of this unit
- */
 
 #include "../hw_gpio.h"
 #include "../hw_ddc.h"
@@ -41,17 +33,59 @@
 
 #include "hw_factory_dce110.h"
 
-#include "hw_hpd_dce110.h"
 #include "hw_ddc_dce110.h"
 
-/* fucntion table */
+#include "dce/dce_11_0_d.h"
+#include "dce/dce_11_0_sh_mask.h"
+
+/* set field name */
+#define SF(reg_name, field_name, post_fix)\
+	.field_name = reg_name ## __ ## field_name ## post_fix
+
+#include "reg_helper.h"
+#include "../hpd_regs.h"
+
+#define hpd_regs(id) \
+{\
+	HPD_REG_LIST(id)\
+}
+
+static const struct hpd_registers hpd_regs[] = {
+	hpd_regs(0),
+	hpd_regs(1),
+	hpd_regs(2),
+	hpd_regs(3),
+	hpd_regs(4),
+	hpd_regs(5)
+};
+
+static const struct hpd_sh_mask hpd_shift = {
+		HPD_MASK_SH_LIST(__SHIFT)
+};
+
+static const struct hpd_sh_mask hpd_mask = {
+		HPD_MASK_SH_LIST(_MASK)
+};
+
+
+static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+{
+	struct hw_hpd *hpd = HW_HPD_FROM_BASE(pin);
+
+	hpd->regs = &hpd_regs[en];
+	hpd->shifts = &hpd_shift;
+	hpd->masks = &hpd_mask;
+	hpd->base.regs = &hpd_regs[en].gpio;
+}
+
 static const struct hw_factory_funcs funcs = {
 	.create_ddc_data = dal_hw_ddc_dce110_create,
 	.create_ddc_clock = dal_hw_ddc_dce110_create,
 	.create_generic = NULL,
-	.create_hpd = dal_hw_hpd_dce110_create,
+	.create_hpd = dal_hw_hpd_create,
 	.create_sync = NULL,
 	.create_gsl = NULL,
+	.define_hpd_registers = define_hpd_registers
 };
 
 /*

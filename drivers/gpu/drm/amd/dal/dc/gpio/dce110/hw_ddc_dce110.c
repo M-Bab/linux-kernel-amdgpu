@@ -38,6 +38,10 @@
 
 #include "../ddc_regs.h"
 
+ /* set field name */
+#define SF(reg_name, field_name, post_fix)\
+	.field_name = reg_name ## __ ## field_name ## post_fix
+
 
 #undef FN
 #define FN(reg_name, field_name) \

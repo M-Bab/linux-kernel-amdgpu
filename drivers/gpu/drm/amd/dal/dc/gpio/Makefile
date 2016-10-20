@@ -13,8 +13,7 @@ AMD_DAL_FILES += $(AMD_DAL_GPIO)
 # DCE 8x
 ###############################################################################
 # all DCE8.x are derived from DCE8.0
-GPIO_DCE80 = hw_translate_dce80.o hw_factory_dce80.o \
-	hw_ddc_dce80.o hw_hpd_dce80.o
+GPIO_DCE80 = hw_translate_dce80.o hw_factory_dce80.o hw_ddc_dce80.o
 
 AMD_DAL_GPIO_DCE80 = $(addprefix $(AMDDALPATH)/dc/gpio/dce80/,$(GPIO_DCE80))
 
@@ -23,8 +22,7 @@ AMD_DAL_FILES += $(AMD_DAL_GPIO_DCE80)
 ###############################################################################
 # DCE 11x
 ###############################################################################
-GPIO_DCE110 = hw_translate_dce110.o hw_factory_dce110.o hw_hpd_dce110.o \
-	hw_ddc_dce110.o
+GPIO_DCE110 = hw_translate_dce110.o hw_factory_dce110.o hw_ddc_dce110.o
 
 AMD_DAL_GPIO_DCE110 = $(addprefix $(AMDDALPATH)/dc/gpio/dce110/,$(GPIO_DCE110))
 
@@ -33,7 +31,7 @@ AMD_DAL_FILES += $(AMD_DAL_GPIO_DCE110)
 ###############################################################################
 # Diagnostics on FPGA
 ###############################################################################
-GPIO_DIAG_FPGA = hw_translate_diag.o hw_factory_diag.o hw_hpd_diag.o hw_ddc_diag.o
+GPIO_DIAG_FPGA = hw_translate_diag.o hw_factory_diag.o hw_ddc_diag.o
 
 AMD_DAL_GPIO_DIAG_FPGA = $(addprefix $(AMDDALPATH)/dc/gpio/diagnostics/,$(GPIO_DIAG_FPGA))
 

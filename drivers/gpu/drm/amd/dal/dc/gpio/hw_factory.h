@@ -27,6 +27,7 @@
 #define __DAL_HW_FACTORY_H__
 
 struct hw_gpio_pin;
+struct hw_hpd;
 
 struct hw_factory {
 	uint32_t number_of_pins[GPIO_ID_COUNT];
@@ -56,6 +57,9 @@ struct hw_factory {
 			struct dc_context *ctx,
 			enum gpio_id id,
 			uint32_t en);
+		void (*define_hpd_registers)(
+				struct hw_gpio_pin *pin,
+				uint32_t en);
 	} *funcs;
 };
 

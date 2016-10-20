@@ -23,40 +23,74 @@
  *
  */
 
-/*
- * Pre-requisites: headers required by header of this unit
- */
-
 #include "dm_services.h"
 #include "include/gpio_types.h"
 #include "../hw_factory.h"
 
-/*
- * Header of this unit
- */
-
 #include "hw_factory_dce80.h"
-
-/*
- * Post-requisites: headers required by this unit
- */
 
 #include "../hw_gpio.h"
 #include "../hw_ddc.h"
 #include "hw_ddc_dce80.h"
 #include "../hw_hpd.h"
-#include "hw_hpd_dce80.h"
 
-/*
- * This unit
- */
+#include "dce/dce_8_0_d.h"
+#include "dce/dce_8_0_sh_mask.h"
+
+#include "reg_helper.h"
+#include "../hpd_regs.h"
+
+#define HPD_REG_LIST_DCE8(id) \
+	HPD_GPIO_REG_LIST(id), \
+	.int_status = mmDC_HPD ## id ## _INT_STATUS,\
+	.toggle_filt_cntl = mmDC_HPD ## id ## _TOGGLE_FILT_CNTL
+
+#define HPD_MASK_SH_LIST_DCE8(mask_sh) \
+		.DC_HPD_SENSE_DELAYED = DC_HPD1_INT_STATUS__DC_HPD1_SENSE_DELAYED ## mask_sh,\
+		.DC_HPD_SENSE = DC_HPD1_INT_STATUS__DC_HPD1_SENSE ## mask_sh,\
+		.DC_HPD_CONNECT_INT_DELAY = DC_HPD1_TOGGLE_FILT_CNTL__DC_HPD1_CONNECT_INT_DELAY ## mask_sh,\
+		.DC_HPD_DISCONNECT_INT_DELAY = DC_HPD1_TOGGLE_FILT_CNTL__DC_HPD1_DISCONNECT_INT_DELAY ## mask_sh
+
+#define hpd_regs(id) \
+{\
+	HPD_REG_LIST_DCE8(id)\
+}
+
+static const struct hpd_registers hpd_regs[] = {
+	hpd_regs(1),
+	hpd_regs(2),
+	hpd_regs(3),
+	hpd_regs(4),
+	hpd_regs(5),
+	hpd_regs(6)
+};
+
+static const struct hpd_sh_mask hpd_shift = {
+		HPD_MASK_SH_LIST_DCE8(__SHIFT)
+};
+
+static const struct hpd_sh_mask hpd_mask = {
+		HPD_MASK_SH_LIST_DCE8(_MASK)
+};
+
+static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
+{
+	struct hw_hpd *hpd = HW_HPD_FROM_BASE(pin);
+
+	hpd->regs = &hpd_regs[en];
+	hpd->shifts = &hpd_shift;
+	hpd->masks = &hpd_mask;
+	hpd->base.regs = &hpd_regs[en].gpio;
+}
+
 static const struct hw_factory_funcs funcs = {
 	.create_ddc_data = dal_hw_ddc_dce80_create,
 	.create_ddc_clock = dal_hw_ddc_dce80_create,
 	.create_generic = NULL,
-	.create_hpd = dal_hw_hpd_dce80_create,
+	.create_hpd = dal_hw_hpd_create,
 	.create_sync = NULL,
 	.create_gsl = NULL,
+	.define_hpd_registers = define_hpd_registers
 };
 
 void dal_hw_factory_dce80_init(

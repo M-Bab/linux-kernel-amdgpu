@@ -257,6 +257,7 @@ enum gpio_result dal_gpio_service_open(
 	case GPIO_ID_HPD:
 		pin = service->factory.funcs->create_hpd(
 			service->ctx, id, en);
+		service->factory.funcs->define_hpd_registers(pin, en);
 	break;
 	case GPIO_ID_SYNC:
 		pin = service->factory.funcs->create_sync(

@@ -38,13 +38,9 @@ struct hw_hpd {
 #define HW_HPD_FROM_BASE(hw_gpio) \
 	container_of((HW_GPIO_FROM_BASE(hw_gpio)), struct hw_hpd, base)
 
-bool dal_hw_hpd_construct(
-	struct hw_hpd *pin,
+struct hw_gpio_pin *dal_hw_hpd_create(
+	struct dc_context *ctx,
 	enum gpio_id id,
-	uint32_t en,
-	struct dc_context *ctx);
-
-void dal_hw_hpd_destruct(
-	struct hw_hpd *pin);
+	uint32_t en);
 
 #endif

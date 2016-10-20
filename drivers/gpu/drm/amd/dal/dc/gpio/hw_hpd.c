@@ -30,9 +30,18 @@
 #include "hw_hpd.h"
 
 #include "reg_helper.h"
-#include "gpio_regs.h"
+#include "hpd_regs.h"
 
-bool dal_hw_hpd_construct(
+#undef FN
+#define FN(reg_name, field_name) \
+	hpd->shifts->field_name, hpd->masks->field_name
+
+#define CTX \
+	hpd->base.base.ctx
+#define REG(reg)\
+	(hpd->regs->reg)
+
+static bool dal_hw_hpd_construct(
 	struct hw_hpd *pin,
 	enum gpio_id id,
 	uint32_t en,
@@ -43,8 +52,124 @@ bool dal_hw_hpd_construct(
 	return true;
 }
 
-void dal_hw_hpd_destruct(
+static void dal_hw_hpd_destruct(
 	struct hw_hpd *pin)
 {
 	dal_hw_gpio_destruct(&pin->base);
+}
+
+
+static void destruct(
+	struct hw_hpd *hpd)
+{
+	dal_hw_hpd_destruct(hpd);
+}
+
+static void destroy(
+	struct hw_gpio_pin **ptr)
+{
+	struct hw_hpd *hpd = HW_HPD_FROM_BASE(*ptr);
+
+	destruct(hpd);
+
+	dm_free(hpd);
+
+	*ptr = NULL;
+}
+
+static enum gpio_result get_value(
+	const struct hw_gpio_pin *ptr,
+	uint32_t *value)
+{
+	struct hw_hpd *hpd = HW_HPD_FROM_BASE(ptr);
+	uint32_t hpd_delayed = 0;
+
+	/* in Interrupt mode we ask for SENSE bit */
+
+	if (ptr->mode == GPIO_MODE_INTERRUPT) {
+
+		REG_GET(int_status,
+			DC_HPD_SENSE_DELAYED, &hpd_delayed);
+
+		*value = hpd_delayed;
+		return GPIO_RESULT_OK;
+	}
+
+	/* in any other modes, operate as normal GPIO */
+
+	return dal_hw_gpio_get_value(ptr, value);
+}
+
+static enum gpio_result set_config(
+	struct hw_gpio_pin *ptr,
+	const struct gpio_config_data *config_data)
+{
+	struct hw_hpd *hpd = HW_HPD_FROM_BASE(ptr);
+
+	if (!config_data)
+		return GPIO_RESULT_INVALID_DATA;
+
+	REG_UPDATE_2(toggle_filt_cntl,
+		DC_HPD_CONNECT_INT_DELAY, config_data->config.hpd.delay_on_connect / 10,
+		DC_HPD_DISCONNECT_INT_DELAY, config_data->config.hpd.delay_on_disconnect / 10);
+
+	return GPIO_RESULT_OK;
+}
+
+static const struct hw_gpio_pin_funcs funcs = {
+	.destroy = destroy,
+	.open = dal_hw_gpio_open,
+	.get_value = get_value,
+	.set_value = dal_hw_gpio_set_value,
+	.set_config = set_config,
+	.change_mode = dal_hw_gpio_change_mode,
+	.close = dal_hw_gpio_close,
+};
+
+static bool construct(
+	struct hw_hpd *hpd,
+	enum gpio_id id,
+	uint32_t en,
+	struct dc_context *ctx)
+{
+	if (id != GPIO_ID_HPD) {
+		ASSERT_CRITICAL(false);
+		return false;
+	}
+
+	if ((en < GPIO_HPD_MIN) || (en > GPIO_HPD_MAX)) {
+		ASSERT_CRITICAL(false);
+		return false;
+	}
+
+	if (!dal_hw_hpd_construct(hpd, id, en, ctx)) {
+		ASSERT_CRITICAL(false);
+		return false;
+	}
+
+	hpd->base.base.funcs = &funcs;
+
+	return true;
+}
+
+struct hw_gpio_pin *dal_hw_hpd_create(
+	struct dc_context *ctx,
+	enum gpio_id id,
+	uint32_t en)
+{
+	struct hw_hpd *hpd = dm_alloc(sizeof(struct hw_hpd));
+
+	if (!hpd) {
+		ASSERT_CRITICAL(false);
+		return NULL;
+	}
+
+	if (construct(hpd, id, en, ctx))
+		return &hpd->base.base;
+
+	ASSERT_CRITICAL(false);
+
+	dm_free(hpd);
+
+	return NULL;
 }

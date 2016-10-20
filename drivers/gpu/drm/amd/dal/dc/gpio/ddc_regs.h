@@ -82,10 +82,6 @@
 	DDC_GPIO_I2C_REG_LIST(cd),\
 	.ddc_setup = 0
 
- /* set field name */
-#define SF(reg_name, field_name, post_fix)\
-	.field_name = reg_name ## __ ## field_name ## post_fix
-
 #define DDC_MASK_SH_LIST(mask_sh) \
 		SF(DC_I2C_DDC1_SETUP, DC_I2C_DDC1_ENABLE, mask_sh),\
 		SF(DC_I2C_DDC1_SETUP, DC_I2C_DDC1_EDID_DETECT_ENABLE, mask_sh),\
