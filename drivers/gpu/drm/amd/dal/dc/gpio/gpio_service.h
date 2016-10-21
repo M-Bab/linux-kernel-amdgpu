@@ -47,7 +47,6 @@ enum gpio_result dal_gpio_service_open(
 	enum gpio_id id,
 	uint32_t en,
 	enum gpio_mode mode,
-	void *options,
 	struct hw_gpio_pin **ptr);
 
 void dal_gpio_service_close(

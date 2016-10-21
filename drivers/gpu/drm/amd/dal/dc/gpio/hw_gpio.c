@@ -39,9 +39,6 @@
 #define REG(reg)\
 	(gpio->regs->reg)
 
-#define FROM_HW_GPIO_PIN(ptr) \
-	container_of((ptr), struct hw_gpio, base)
-
 static void store_registers(
 	struct hw_gpio *gpio)
 {
@@ -62,8 +59,7 @@ static void restore_registers(
 
 bool dal_hw_gpio_open(
 	struct hw_gpio_pin *ptr,
-	enum gpio_mode mode,
-	void *options)
+	enum gpio_mode mode)
 {
 	struct hw_gpio *pin = FROM_HW_GPIO_PIN(ptr);
 

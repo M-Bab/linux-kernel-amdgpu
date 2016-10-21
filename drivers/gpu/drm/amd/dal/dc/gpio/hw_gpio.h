@@ -28,6 +28,9 @@
 
 #include "gpio_regs.h"
 
+#define FROM_HW_GPIO_PIN(ptr) \
+	container_of((ptr), struct hw_gpio, base)
+
 struct addr_mask {
 	uint32_t addr;
 	uint32_t mask;
@@ -47,8 +50,7 @@ struct hw_gpio_pin_funcs {
 		struct hw_gpio_pin **ptr);
 	bool (*open)(
 		struct hw_gpio_pin *pin,
-		enum gpio_mode mode,
-		void *options);
+		enum gpio_mode mode);
 	enum gpio_result (*get_value)(
 		const struct hw_gpio_pin *pin,
 		uint32_t *value);
@@ -115,8 +117,7 @@ bool dal_hw_gpio_construct(
 
 bool dal_hw_gpio_open(
 	struct hw_gpio_pin *pin,
-	enum gpio_mode mode,
-	void *options);
+	enum gpio_mode mode);
 
 enum gpio_result dal_hw_gpio_get_value(
 	const struct hw_gpio_pin *pin,

@@ -260,7 +260,7 @@ static enum gpio_result set_config(
 
 static const struct hw_gpio_pin_funcs funcs = {
 	.destroy = destroy,
-	.open = dal_hw_ddc_open,
+	.open = dal_hw_gpio_open,
 	.get_value = dal_hw_gpio_get_value,
 	.set_value = dal_hw_gpio_set_value,
 	.set_config = set_config,

@@ -226,7 +226,6 @@ enum gpio_result dal_gpio_service_open(
 	enum gpio_id id,
 	uint32_t en,
 	enum gpio_mode mode,
-	void *options,
 	struct hw_gpio_pin **ptr)
 {
 	struct hw_gpio_pin *pin;
@@ -277,7 +276,7 @@ enum gpio_result dal_gpio_service_open(
 		return GPIO_RESULT_NON_SPECIFIC_ERROR;
 	}
 
-	if (!pin->funcs->open(pin, mode, options)) {
+	if (!pin->funcs->open(pin, mode)) {
 		ASSERT_CRITICAL(false);
 		dal_gpio_service_close(service, &pin);
 		return GPIO_RESULT_OPEN_FAILED;
@@ -477,18 +476,18 @@ enum gpio_result dal_ddc_open(
 {
 	enum gpio_result result;
 
-	struct gpio_ddc_open_options data_options;
-	struct gpio_ddc_open_options clock_options;
 	struct gpio_config_data config_data;
+	struct hw_gpio *hw_data;
+	struct hw_gpio *hw_clock;
 
-	result = dal_gpio_open_ex(ddc->pin_data, mode, &data_options);
+	result = dal_gpio_open_ex(ddc->pin_data, mode);
 
 	if (result != GPIO_RESULT_OK) {
 		BREAK_TO_DEBUGGER();
 		return result;
 	}
 
-	result = dal_gpio_open_ex(ddc->pin_clock, mode, &clock_options);
+	result = dal_gpio_open_ex(ddc->pin_clock, mode);
 
 	if (result != GPIO_RESULT_OK) {
 		BREAK_TO_DEBUGGER();
@@ -507,10 +506,12 @@ enum gpio_result dal_ddc_open(
 		config_data.type = GPIO_CONFIG_TYPE_DDC;
 
 	config_data.config.ddc.type = config_type;
-	config_data.config.ddc.data_en_bit_present =
-		data_options.en_bit_present;
-	config_data.config.ddc.clock_en_bit_present =
-		clock_options.en_bit_present;
+
+	hw_data = FROM_HW_GPIO_PIN(ddc->pin_data->pin);
+	hw_clock = FROM_HW_GPIO_PIN(ddc->pin_clock->pin);
+
+	config_data.config.ddc.data_en_bit_present = hw_data->store.en != 0;
+	config_data.config.ddc.clock_en_bit_present = hw_clock->store.en != 0;
 
 	result = dal_gpio_set_config(ddc->pin_data, &config_data);
 

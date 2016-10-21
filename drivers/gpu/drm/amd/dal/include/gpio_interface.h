@@ -38,8 +38,7 @@ enum gpio_result dal_gpio_open(
 
 enum gpio_result dal_gpio_open_ex(
 	struct gpio *gpio,
-	enum gpio_mode mode,
-	void *options);
+	enum gpio_mode mode);
 
 /* Get high or low from the pin */
 enum gpio_result dal_gpio_get_value(

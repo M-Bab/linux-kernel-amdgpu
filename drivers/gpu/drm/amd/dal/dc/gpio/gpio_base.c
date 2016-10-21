@@ -53,13 +53,12 @@ enum gpio_result dal_gpio_open(
 	struct gpio *gpio,
 	enum gpio_mode mode)
 {
-	return dal_gpio_open_ex(gpio, mode, NULL);
+	return dal_gpio_open_ex(gpio, mode);
 }
 
 enum gpio_result dal_gpio_open_ex(
 	struct gpio *gpio,
-	enum gpio_mode mode,
-	void *options)
+	enum gpio_mode mode)
 {
 	if (gpio->pin) {
 		ASSERT_CRITICAL(false);
@@ -69,7 +68,7 @@ enum gpio_result dal_gpio_open_ex(
 	gpio->mode = mode;
 
 	return dal_gpio_service_open(
-		gpio->service, gpio->id, gpio->en, mode, options, &gpio->pin);
+		gpio->service, gpio->id, gpio->en, mode, &gpio->pin);
 }
 
 enum gpio_result dal_gpio_get_value(
