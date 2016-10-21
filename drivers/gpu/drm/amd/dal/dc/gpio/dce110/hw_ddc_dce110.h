@@ -31,4 +31,8 @@ struct hw_gpio_pin *dal_hw_ddc_dce110_create(
 	enum gpio_id id,
 	uint32_t en);
 
+void define_ddc_dce110_registers(
+		struct hw_gpio_pin *pin,
+		uint32_t en);
+
 #endif

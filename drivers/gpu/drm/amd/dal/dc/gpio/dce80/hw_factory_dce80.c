@@ -90,7 +90,8 @@ static const struct hw_factory_funcs funcs = {
 	.create_hpd = dal_hw_hpd_create,
 	.create_sync = NULL,
 	.create_gsl = NULL,
-	.define_hpd_registers = define_hpd_registers
+	.define_hpd_registers = define_hpd_registers,
+	.define_ddc_registers = define_ddc_dce80_registers
 };
 
 void dal_hw_factory_dce80_init(

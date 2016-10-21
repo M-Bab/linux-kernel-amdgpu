@@ -268,6 +268,31 @@ static const struct hw_gpio_pin_funcs funcs = {
 	.close = dal_hw_gpio_close,
 };
 
+void define_ddc_dce110_registers(
+		struct hw_gpio_pin *pin,
+		uint32_t en)
+{
+	struct hw_ddc *ddc = HW_DDC_FROM_BASE(pin);
+
+	switch (pin->id) {
+	case GPIO_ID_DDC_DATA:
+		ddc->regs = &ddc_data_regs[en];
+		ddc->base.regs = &ddc_data_regs[en].gpio;
+		break;
+	case GPIO_ID_DDC_CLOCK:
+		ddc->regs = &ddc_clk_regs[en];
+		ddc->base.regs = &ddc_clk_regs[en].gpio;
+		break;
+	default:
+		ASSERT_CRITICAL(false);
+		return;
+	}
+
+	ddc->shifts = &ddc_shift;
+	ddc->masks = &ddc_mask;
+
+}
+
 static bool construct(
 	struct hw_ddc *ddc,
 	enum gpio_id id,
@@ -285,23 +310,6 @@ static bool construct(
 	}
 
 	ddc->base.base.funcs = &funcs;
-
-	switch (id) {
-	case GPIO_ID_DDC_DATA:
-		ddc->regs = &ddc_data_regs[en];
-		ddc->base.regs = &ddc_data_regs[en].gpio;
-		break;
-	case GPIO_ID_DDC_CLOCK:
-		ddc->regs = &ddc_clk_regs[en];
-		ddc->base.regs = &ddc_clk_regs[en].gpio;
-		break;
-	default:
-		ASSERT_CRITICAL(false);
-		return false;
-	}
-
-	ddc->shifts = &ddc_shift;
-	ddc->masks = &ddc_mask;
 
 	return true;
 }

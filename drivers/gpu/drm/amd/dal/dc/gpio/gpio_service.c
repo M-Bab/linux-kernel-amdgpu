@@ -244,10 +244,12 @@ enum gpio_result dal_gpio_service_open(
 	case GPIO_ID_DDC_DATA:
 		pin = service->factory.funcs->create_ddc_data(
 			service->ctx, id, en);
+		service->factory.funcs->define_ddc_registers(pin, en);
 	break;
 	case GPIO_ID_DDC_CLOCK:
 		pin = service->factory.funcs->create_ddc_clock(
 			service->ctx, id, en);
+		service->factory.funcs->define_ddc_registers(pin, en);
 	break;
 	case GPIO_ID_GENERIC:
 		pin = service->factory.funcs->create_generic(
