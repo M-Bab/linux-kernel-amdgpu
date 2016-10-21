@@ -23,10 +23,10 @@
  *
  */
 
+
 #include "dm_services.h"
 #include "dc_bios_types.h"
-#include "dce110_stream_encoder.h"
-
+#include "dce_stream_encoder.h"
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 #include "dce/dce_11_0_enum.h"

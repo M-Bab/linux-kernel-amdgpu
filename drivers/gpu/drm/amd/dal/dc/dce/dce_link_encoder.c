@@ -23,12 +23,13 @@
  *
  */
 
+
+
 #include "dm_services.h"
 #include "core_types.h"
 #include "link_encoder.h"
+#include "dce_link_encoder.h"
 #include "stream_encoder.h"
-#include "dce110_link_encoder.h"
-
 #include "i2caux_interface.h"
 #include "dc_bios_types.h"
 
@@ -907,7 +908,8 @@ static bool dce110_link_encoder_validate_hdmi_output(
 		return false;
 
 	/* DCE11 HW does not support 420 */
-	if (crtc_timing->pixel_encoding == PIXEL_ENCODING_YCBCR420)
+	if (!enc110->base.features.ycbcr420_supported &&
+			crtc_timing->pixel_encoding == PIXEL_ENCODING_YCBCR420)
 		return false;
 
 	return true;
@@ -993,8 +995,6 @@ bool dce110_link_encoder_construct(
 	enc110->base.features.max_pixel_clock =
 			MAX_ENCODER_CLK;
 
-	enc110->base.features.max_hdmi_pixel_clock =
-			DCE11_UNIPHY_MAX_PIXEL_CLK_IN_KHZ;
 	enc110->base.features.max_deep_color = COLOR_DEPTH_121212;
 	enc110->base.features.max_hdmi_deep_color = COLOR_DEPTH_121212;
 

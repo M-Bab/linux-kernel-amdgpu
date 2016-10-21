@@ -1,5 +1,6 @@
 /* Copyright 2015 Advanced Micro Devices, Inc. */
 
+
 #include "dm_services.h"
 #include "dc.h"
 #include "inc/core_dc.h"
@@ -9,8 +10,8 @@
 #include "hw_sequencer.h"
 #include "dc_link_ddc.h"
 #include "dm_helpers.h"
-#include "dce110/dce110_link_encoder.h"
-#include "dce/dce110_stream_encoder.h"
+#include "dce/dce_link_encoder.h"
+#include "dce/dce_stream_encoder.h"
 
 enum dc_status core_link_read_dpcd(
 	struct core_link* link,

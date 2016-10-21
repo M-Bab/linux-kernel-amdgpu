@@ -30,18 +30,19 @@
 
 #include "resource.h"
 #include "dce110/dce110_resource.h"
+
 #include "include/irq_service_interface.h"
 #include "dce/dce_audio.h"
 #include "dce110/dce110_timing_generator.h"
 #include "irq/dce110/irq_service_dce110.h"
 #include "dce110/dce110_timing_generator_v.h"
-#include "dce110/dce110_link_encoder.h"
+#include "dce/dce_link_encoder.h"
+#include "dce/dce_stream_encoder.h"
 #include "dce110/dce110_mem_input.h"
 #include "dce110/dce110_mem_input_v.h"
 #include "dce110/dce110_ipp.h"
 #include "dce110/dce110_transform.h"
 #include "dce110/dce110_transform_v.h"
-#include "dce/dce110_stream_encoder.h"
 #include "dce110/dce110_opp.h"
 #include "dce110/dce110_opp_v.h"
 #include "dce110/dce110_clock_source.h"
@@ -495,8 +496,12 @@ struct link_encoder *dce110_link_encoder_create(
 			enc_init_data,
 			&link_enc_regs[enc_init_data->transmitter],
 			&link_enc_aux_regs[enc_init_data->channel - 1],
-			&link_enc_hpd_regs[enc_init_data->hpd_source]))
+			&link_enc_hpd_regs[enc_init_data->hpd_source])) {
+
+		enc110->base.features.ycbcr420_supported = false;
+		enc110->base.features.max_hdmi_pixel_clock = 594000;
 		return &enc110->base;
+	}
 
 	BREAK_TO_DEBUGGER();
 	dm_free(enc110);

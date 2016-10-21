@@ -2,7 +2,7 @@
 # Makefile for the 'controller' sub-component of DAL.
 # It provides the control and status of HW CRTC block.
 
-DCE80 = dce80_ipp.o dce80_ipp_gamma.o dce80_link_encoder.o dce80_opp.o \
+DCE80 = dce80_ipp.o dce80_ipp_gamma.o dce80_opp.o \
 	dce80_opp_formatter.o dce80_opp_regamma.o \
 	dce80_timing_generator.o dce80_transform.o dce80_transform_gamut.o \
 	dce80_transform_scl.o dce80_opp_csc.o\

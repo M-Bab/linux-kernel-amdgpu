@@ -64,6 +64,7 @@ struct encoder_feature_support {
 	/* maximum supported clock */
 	unsigned int max_pixel_clock;
 	unsigned int max_hdmi_pixel_clock;
+	bool ycbcr420_supported;
 };
 
 enum physical_phy_id {
