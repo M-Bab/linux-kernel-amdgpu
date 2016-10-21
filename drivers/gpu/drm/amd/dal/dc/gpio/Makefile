@@ -31,7 +31,7 @@ AMD_DAL_FILES += $(AMD_DAL_GPIO_DCE110)
 ###############################################################################
 # Diagnostics on FPGA
 ###############################################################################
-GPIO_DIAG_FPGA = hw_translate_diag.o hw_factory_diag.o hw_ddc_diag.o
+GPIO_DIAG_FPGA = hw_translate_diag.o hw_factory_diag.o
 
 AMD_DAL_GPIO_DIAG_FPGA = $(addprefix $(AMDDALPATH)/dc/gpio/diagnostics/,$(GPIO_DIAG_FPGA))
 
