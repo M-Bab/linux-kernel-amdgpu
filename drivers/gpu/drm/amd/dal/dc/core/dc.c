@@ -976,7 +976,7 @@ static int determine_sclk_from_bounding_box(
 }
 
 void pplib_apply_display_requirements(
-	const struct core_dc *dc,
+	struct core_dc *dc,
 	const struct validate_context *context,
 	struct dm_pp_display_configuration *pp_display_cfg)
 {
@@ -1021,7 +1021,12 @@ void pplib_apply_display_requirements(
 							/ timing->pix_clk_khz;
 	}
 
-	dm_pp_apply_display_requirements(dc->ctx, pp_display_cfg);
+	if (memcmp(&dc->prev_display_config, pp_display_cfg, sizeof(
+			struct dm_pp_display_configuration)) !=  0)
+		dm_pp_apply_display_requirements(dc->ctx, pp_display_cfg);
+
+	dc->prev_display_config = *pp_display_cfg;
+
 }
 
 bool dc_commit_targets(

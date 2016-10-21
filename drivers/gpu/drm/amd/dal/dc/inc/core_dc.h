@@ -39,6 +39,11 @@ struct core_dc {
 
 	/* HW functions */
 	struct hw_sequencer_funcs hwss;
+
+	/* temp store of dm_pp_display_configuration
+	 * to compare to see if display config changed
+	 */
+	struct dm_pp_display_configuration prev_display_config;
 };
 
 #endif /* __CORE_DC_H__ */
