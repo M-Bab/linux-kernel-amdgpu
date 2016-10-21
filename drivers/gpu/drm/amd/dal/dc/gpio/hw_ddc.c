@@ -173,12 +173,7 @@ static enum gpio_result set_config(
 	case GPIO_DDC_CONFIG_TYPE_MODE_AUX:
 		/* set the AUX pad mode */
 		if (!aux_pad_mode) {
-			set_reg_field_value_ex(
-				regval,
-				1,
-				FN(,AUX_PAD1_MODE));
-
-			REG_WRITE(gpio.MASK_reg, regval);
+			REG_UPDATE(gpio.MASK_reg, AUX_PAD1_MODE, 1);
 		}
 
 		return GPIO_RESULT_OK;
