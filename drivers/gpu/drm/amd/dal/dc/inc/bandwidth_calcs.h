@@ -37,8 +37,8 @@ struct pipe_ctx;
 enum bw_calcs_version {
 	BW_CALCS_VERSION_INVALID,
 	BW_CALCS_VERSION_CARRIZO,
-	BW_CALCS_VERSION_ELLESMERE,
-	BW_CALCS_VERSION_BAFFIN
+	BW_CALCS_VERSION_POLARIS10,
+	BW_CALCS_VERSION_POLARIS11,
 };
 
 /*******************************************************************************

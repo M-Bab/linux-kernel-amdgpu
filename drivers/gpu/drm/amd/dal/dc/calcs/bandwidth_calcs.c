@@ -2074,7 +2074,7 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		dceip.scatter_gather_pte_request_rows_in_tiling_mode = 2;
 		dceip.mcifwr_all_surfaces_burst_time = bw_int_to_fixed(0); /* todo: this is a bug*/
 		break;
-	case BW_CALCS_VERSION_ELLESMERE:
+	case BW_CALCS_VERSION_POLARIS10:
 		vbios.memory_type = bw_def_gddr5;
 		vbios.dram_channel_width_in_bits = 32;
 		vbios.number_of_dram_channels = 8;
@@ -2184,7 +2184,7 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		dceip.scatter_gather_pte_request_rows_in_tiling_mode = 2;
 		dceip.mcifwr_all_surfaces_burst_time = bw_int_to_fixed(0);
 		break;
-	case BW_CALCS_VERSION_BAFFIN:
+	case BW_CALCS_VERSION_POLARIS11:
 		vbios.memory_type = bw_def_gddr5;
 		vbios.dram_channel_width_in_bits = 32;
 		vbios.number_of_dram_channels = 4;
