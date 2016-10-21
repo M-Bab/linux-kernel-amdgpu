@@ -26,11 +26,6 @@
 #ifndef __DAL_HW_DDC_DCE110_H__
 #define __DAL_HW_DDC_DCE110_H__
 
-struct hw_gpio_pin *dal_hw_ddc_dce110_create(
-	struct dc_context *ctx,
-	enum gpio_id id,
-	uint32_t en);
-
 void define_ddc_dce110_registers(
 		struct hw_gpio_pin *pin,
 		uint32_t en);

@@ -79,8 +79,8 @@ static void define_hpd_registers(struct hw_gpio_pin *pin, uint32_t en)
 }
 
 static const struct hw_factory_funcs funcs = {
-	.create_ddc_data = dal_hw_ddc_dce110_create,
-	.create_ddc_clock = dal_hw_ddc_dce110_create,
+	.create_ddc_data = dal_hw_ddc_create,
+	.create_ddc_clock = dal_hw_ddc_create,
 	.create_generic = NULL,
 	.create_hpd = dal_hw_hpd_create,
 	.create_sync = NULL,
