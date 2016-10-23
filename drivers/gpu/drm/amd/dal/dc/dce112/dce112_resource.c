@@ -375,9 +375,18 @@ static const struct dce112_clk_src_reg_offsets dce112_clk_src_reg_offsets[] = {
 	}
 };
 
-static const struct resource_caps res_cap = {
-	.num_audio = 6,
-	.num_stream_encoder = 6
+static const struct resource_caps polaris_10_resource_cap = {
+		.num_timing_generator = 6,
+		.num_audio = 6,
+		.num_stream_encoder = 6,
+		.num_pll = 8, /* why 8? 6 combo PHY PLL + 2 regular PLLs? */
+};
+
+static const struct resource_caps polaris_11_resource_cap = {
+		.num_timing_generator = 5,
+		.num_audio = 5,
+		.num_stream_encoder = 5,
+		.num_pll = 8, /* why 8? 6 combo PHY PLL + 2 regular PLLs? */
 };
 
 #define CTX  ctx
@@ -1155,6 +1164,15 @@ static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 	dm_pp_notify_wm_clock_changes(dc->ctx, &clk_ranges);
 }
 
+const struct resource_caps *dce112_resource_cap(
+	struct hw_asic_id *asic_id)
+{
+	if (ASIC_REV_IS_POLARIS11_M(asic_id->hw_internal_rev))
+		return &polaris_11_resource_cap;
+	else
+		return &polaris_10_resource_cap;
+}
+
 static bool construct(
 	struct adapter_service *adapter_serv,
 	uint8_t num_virtual_links,
@@ -1166,14 +1184,14 @@ static bool construct(
 	struct dm_pp_static_clock_info static_clk_info = {0};
 
 	pool->base.adapter_srv = adapter_serv;
+	pool->base.res_cap = dce112_resource_cap(&dc->asic_id);
 	pool->base.funcs = &dce112_res_pool_funcs;
 
 	/*************************************************
 	 *  Resource + asic cap harcoding                *
 	 *************************************************/
 	pool->base.underlay_pipe_index = -1;
-	pool->base.pipe_count =
-		dal_adapter_service_get_func_controllers_num(adapter_serv);
+	pool->base.pipe_count = pool->base.res_cap->num_timing_generator;
 	dc->public.caps.max_downscale_ratio = 200;
 	dc->public.caps.i2c_speed_in_khz = 100;
 
@@ -1332,8 +1350,8 @@ static bool construct(
 		}
 	}
 
-	if (!resource_construct(num_virtual_links, dc,
-			&pool->base, &res_cap, &res_create_funcs))
+	if (!resource_construct(num_virtual_links, dc, &pool->base,
+			  &res_create_funcs))
 		goto res_create_fail;
 
 	/* Create hardware sequencer */

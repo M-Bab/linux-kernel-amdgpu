@@ -145,18 +145,8 @@ enum adapter_feature_id {
 	FEATURE_SET_06_START = FEATURE_DCP_PROGRAMMING_WA,
 	FEATURE_SET_06_END = FEATURE_SET_06_START + 31,
 
-	/* UInt set, 1 entry: Maximum co-functional non-DP displays */
-	FEATURE_MAX_COFUNC_NON_DP_DISPLAYS = FEATURE_SET_06_END + 1,
-	FEATURE_SET_07_START = FEATURE_MAX_COFUNC_NON_DP_DISPLAYS,
-	FEATURE_SET_07_END = FEATURE_SET_07_START + 31,
-
-	/* UInt set, 1 entry: Number of supported HDMI connection */
-	FEATURE_SUPPORTED_HDMI_CONNECTION_NUM = FEATURE_SET_07_END + 1,
-	FEATURE_SET_08_START = FEATURE_SUPPORTED_HDMI_CONNECTION_NUM,
-	FEATURE_SET_08_END = FEATURE_SET_08_START + 31,
-
 	/* UInt set, 1 entry: Maximum number of controllers */
-	FEATURE_MAX_CONTROLLER_NUM = FEATURE_SET_08_END + 1,
+	FEATURE_MAX_CONTROLLER_NUM = FEATURE_SET_06_END + 1,
 	FEATURE_SET_09_START = FEATURE_MAX_CONTROLLER_NUM,
 	FEATURE_SET_09_END = FEATURE_SET_09_START + 31,
 
@@ -335,14 +325,6 @@ enum dce_version dal_adapter_service_get_dce_version(
 bool dal_adapter_service_get_firmware_info(
 	struct adapter_service *as,
 	struct firmware_info *info);
-
-/* Get number of controllers */
-uint8_t dal_adapter_service_get_func_controllers_num(
-	struct adapter_service *as);
-
-/* Get number of stream engines */
-uint8_t dal_adapter_service_get_stream_engines_num(
-	struct adapter_service *as);
 
 /* Get number of spread spectrum entries from BIOS */
 uint32_t dal_adapter_service_get_ss_info_num(

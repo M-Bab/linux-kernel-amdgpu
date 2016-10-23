@@ -47,23 +47,6 @@ void polaris10_asic_capability_create(struct asic_capability *cap,
 {
 	uint32_t e_fuse_setting;
 	/* ASIC data */
-	if (ASIC_REV_IS_POLARIS11_M(init->hw_internal_rev)) {
-		cap->data[ASIC_DATA_CONTROLLERS_NUM] = 5;
-		cap->data[ASIC_DATA_FUNCTIONAL_CONTROLLERS_NUM] = 5;
-		cap->data[ASIC_DATA_LINEBUFFER_NUM] = 5;
-		cap->data[ASIC_DATA_DIGFE_NUM] = 5;
-		cap->data[ASIC_DATA_CLOCKSOURCES_NUM] = 7;
-		cap->data[ASIC_DATA_MAX_COFUNC_NONDP_DISPLAYS] = 5;
-		cap->data[ASIC_DATA_SUPPORTED_HDMI_CONNECTION_NUM] = 5;
-	} else {
-		cap->data[ASIC_DATA_CONTROLLERS_NUM] = 6;
-		cap->data[ASIC_DATA_FUNCTIONAL_CONTROLLERS_NUM] = 6;
-		cap->data[ASIC_DATA_LINEBUFFER_NUM] = 6;
-		cap->data[ASIC_DATA_DIGFE_NUM] = 6;
-		cap->data[ASIC_DATA_CLOCKSOURCES_NUM] = 8;
-		cap->data[ASIC_DATA_MAX_COFUNC_NONDP_DISPLAYS] = 6;
-		cap->data[ASIC_DATA_SUPPORTED_HDMI_CONNECTION_NUM] = 6;
-	}
 
 	cap->data[ASIC_DATA_PATH_NUM_PER_DPMST_CONNECTOR] = 4;
 	cap->data[ASIC_DATA_DCE_VERSION] = 0x112; /* DCE 11 */
@@ -76,7 +59,6 @@ void polaris10_asic_capability_create(struct asic_capability *cap,
 
 	cap->data[ASIC_DATA_MEMORYTYPE_MULTIPLIER] = 4;
 	cap->data[ASIC_DATA_DEFAULT_I2C_SPEED_IN_KHZ] = 100;
-	cap->data[ASIC_DATA_NUM_OF_VIDEO_PLANES] = 0;
 
 	cap->data[ASIC_DATA_MIN_DISPCLK_FOR_UNDERSCAN] = 300000;
 

@@ -109,10 +109,8 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_NO_HPD_LOW_POLLING_VCC_OFF, false, true},
 	{FEATURE_ENABLE_DFS_BYPASS, false, true},
 	{FEATURE_WIRELESS_FULL_TIMING_ADJUSTMENT, false, true},
-	{FEATURE_MAX_COFUNC_NON_DP_DISPLAYS, 2, false},
 	{FEATURE_WIRELESS_LIMIT_720P, false, true},
 	{FEATURE_MODIFY_TIMINGS_FOR_WIRELESS, false, true},
-	{FEATURE_SUPPORTED_HDMI_CONNECTION_NUM, 0, false},
 	{FEATURE_DETECT_REQUIRE_HPD_HIGH, false, true},
 	{FEATURE_NO_HPD_LOW_POLLING_VCC_OFF, false, true},
 	{FEATURE_LB_HIGH_RESOLUTION, false, true},
@@ -453,10 +451,6 @@ static bool get_feature_value_from_data_sources(
 	}
 
 	switch (feature_entry_table[idx].feature_id) {
-	case FEATURE_MAX_COFUNC_NON_DP_DISPLAYS:
-		*data = as->asic_cap->data[ASIC_DATA_MAX_COFUNC_NONDP_DISPLAYS];
-		break;
-
 	case FEATURE_WIRELESS_LIMIT_720P:
 		*data = as->asic_cap->caps.WIRELESS_LIMIT_TO_720P;
 		break;
@@ -467,11 +461,6 @@ static bool get_feature_value_from_data_sources(
 
 	case FEATURE_MODIFY_TIMINGS_FOR_WIRELESS:
 		*data = as->asic_cap->caps.WIRELESS_TIMING_ADJUSTMENT;
-		break;
-
-	case FEATURE_SUPPORTED_HDMI_CONNECTION_NUM:
-		*data =
-		as->asic_cap->data[ASIC_DATA_SUPPORTED_HDMI_CONNECTION_NUM];
 		break;
 
 	case FEATURE_DETECT_REQUIRE_HPD_HIGH:
@@ -893,72 +882,6 @@ bool dal_adapter_service_is_device_id_supported(struct adapter_service *as,
 }
 
 /*
- * dal_adapter_service_get_clock_sources_num
- *
- * Get number of clock sources
- */
-uint8_t dal_adapter_service_get_clock_sources_num(
-	struct adapter_service *as)
-{
-	struct firmware_info fw_info;
-	uint32_t max_clk_src = 0;
-	uint32_t num = as->asic_cap->data[ASIC_DATA_CLOCKSOURCES_NUM];
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	/*
-	 * Check is system supports the use of the External clock source
-	 * as a clock source for DP
-	 */
-	enum bp_result bp_result = dcb->funcs->get_firmware_info(dcb, &fw_info);
-
-	if (BP_RESULT_OK == bp_result &&
-			fw_info.external_clock_source_frequency_for_dp != 0)
-		++num;
-
-	/*
-	 * Add clock source for wireless if supported
-	 */
-	num += (uint32_t)wireless_get_clocks_num(as);
-
-	/* Check the "max number of clock sources" feature */
-	if (dal_adapter_service_get_feature_value(as,
-			FEATURE_MAX_CLOCK_SOURCE_NUM,
-			&max_clk_src,
-			sizeof(uint32_t)))
-		if ((max_clk_src != 0) && (max_clk_src < num))
-			num = max_clk_src;
-
-	return num;
-}
-
-/*
- * dal_adapter_service_get_func_controllers_num
- *
- * Get number of controllers
- */
-uint8_t dal_adapter_service_get_func_controllers_num(
-	struct adapter_service *as)
-{
-	uint32_t result =
-		as->asic_cap->data[ASIC_DATA_FUNCTIONAL_CONTROLLERS_NUM];
-
-	/* Check the "max num of controllers" feature,
-	 * use it for debugging purposes only */
-
-	/* Limit number of controllers by OS */
-
-	struct asic_feature_flags flags;
-
-	flags.raw = as->asic_cap->data[ASIC_DATA_FEATURE_FLAGS];
-
-	if (flags.bits.LEGACY_CLIENT &&
-		(result > LEGACY_MAX_NUM_OF_CONTROLLERS))
-		result = LEGACY_MAX_NUM_OF_CONTROLLERS;
-
-	return result;
-}
-
-/*
  * dal_adapter_service_is_feature_supported
  *
  * Return if a given feature is supported by the ASIC. The feature has to be
@@ -1095,17 +1018,6 @@ bool dal_adapter_service_get_firmware_info(
 	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	return dcb->funcs->get_firmware_info(dcb, info) == BP_RESULT_OK;
-}
-
-/*
- * dal_adapter_service_get_stream_engines_num
- *
- * Get number of stream engines
- */
-uint8_t dal_adapter_service_get_stream_engines_num(
-	struct adapter_service *as)
-{
-	return as->asic_cap->data[ASIC_DATA_DIGFE_NUM];
 }
 
 /*

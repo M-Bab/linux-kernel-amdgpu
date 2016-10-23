@@ -47,27 +47,18 @@ void tonga_asic_capability_create(struct asic_capability *cap,
 {
 	uint32_t e_fuse_setting;
 	/* ASIC data */
-	cap->data[ASIC_DATA_CONTROLLERS_NUM] = 6;
-	cap->data[ASIC_DATA_FUNCTIONAL_CONTROLLERS_NUM] = 6;
-	cap->data[ASIC_DATA_DIGFE_NUM] = 6;
-	cap->data[ASIC_DATA_LINEBUFFER_NUM] = 6;
-
 	cap->data[ASIC_DATA_LINEBUFFER_SIZE] = 1712 * 144;
 	cap->data[ASIC_DATA_DRAM_BANDWIDTH_EFFICIENCY] = 70;
-	cap->data[ASIC_DATA_CLOCKSOURCES_NUM] = 3;
 	cap->data[ASIC_DATA_MC_LATENCY] = 5000;
 	cap->data[ASIC_DATA_STUTTERMODE] = 0x2002;
 	cap->data[ASIC_DATA_PATH_NUM_PER_DPMST_CONNECTOR] = 4;
 	cap->data[ASIC_DATA_VIEWPORT_PIXEL_GRANULARITY] = 2;
-	cap->data[ASIC_DATA_SUPPORTED_HDMI_CONNECTION_NUM] = 3;
 	cap->data[ASIC_DATA_MIN_DISPCLK_FOR_UNDERSCAN] = 300000;
 
 	cap->data[ASIC_DATA_DCE_VERSION] = 0x100; /* DCE 11 */
 
-	cap->data[ASIC_DATA_MAX_COFUNC_NONDP_DISPLAYS] = 2;
 	cap->data[ASIC_DATA_MEMORYTYPE_MULTIPLIER] = 4;
 	cap->data[ASIC_DATA_DEFAULT_I2C_SPEED_IN_KHZ] = 40;
-	cap->data[ASIC_DATA_NUM_OF_VIDEO_PLANES] = 0;
 
 	/* ASIC basic capability */
 	cap->caps.IS_FUSION = true;

@@ -325,9 +325,20 @@ static const struct dce110_clk_src_reg_offsets dce110_clk_src_reg_offsets[] = {
 };
 
 
-static const struct resource_caps res_cap = {
-	.num_audio = 3,
-	.num_stream_encoder = 3
+static const struct resource_caps carrizo_resource_cap = {
+		.num_timing_generator = 3,
+		.num_video_plane = 1,
+		.num_audio = 3,
+		.num_stream_encoder = 3,
+		.num_pll = 2,
+};
+
+static const struct resource_caps stoney_resource_cap = {
+		.num_timing_generator = 2,
+		.num_video_plane = 1,
+		.num_audio = 3,
+		.num_stream_encoder = 3,
+		.num_pll = 2,
 };
 
 #define CTX  ctx
@@ -1140,6 +1151,15 @@ enum clocks_state dce110_resource_convert_clock_state_pp_to_dc(
 	return dc_clocks_state;
 }
 
+const struct resource_caps *dce110_resource_cap(
+	struct hw_asic_id *asic_id)
+{
+	if (ASIC_REV_IS_STONEY(asic_id->hw_internal_rev))
+		return &stoney_resource_cap;
+	else
+		return &carrizo_resource_cap;
+}
+
 static bool construct(
 	struct adapter_service *as,
 	uint8_t num_virtual_links,
@@ -1155,19 +1175,15 @@ static bool construct(
 	struct resource_straps straps = {0};
 
 	pool->base.adapter_srv = as;
+	pool->base.res_cap = dce110_resource_cap(&dc->asic_id);
 	pool->base.funcs = &dce110_res_pool_funcs;
 
 	/*************************************************
 	 *  Resource + asic cap harcoding                *
 	 *************************************************/
 
-	pool->base.pipe_count = 3;
-	pool->base.underlay_pipe_index = 3;
-
-	if (ASIC_REV_IS_STONEY(asic_id.hw_internal_rev)) {
-		pool->base.pipe_count = 2;
-		pool->base.underlay_pipe_index = 2;
-	}
+	pool->base.pipe_count = pool->base.res_cap->num_timing_generator;
+	pool->base.underlay_pipe_index = pool->base.pipe_count;
 
 	dc->public.caps.max_downscale_ratio = 150;
 	dc->public.caps.i2c_speed_in_khz = 100;
@@ -1175,8 +1191,6 @@ static bool construct(
 	/*************************************************
 	 *  Create resources                             *
 	 *************************************************/
-
-
 	pool->base.stream_engines.engine.ENGINE_ID_DIGA = 1;
 	pool->base.stream_engines.engine.ENGINE_ID_DIGB = 1;
 	pool->base.stream_engines.engine.ENGINE_ID_DIGC = 1;
@@ -1299,7 +1313,7 @@ static bool construct(
 	underlay_create(ctx, &pool->base);
 
 	if (!resource_construct(num_virtual_links, dc, &pool->base,
-			&res_cap, &res_create_funcs))
+			&res_create_funcs))
 		goto res_create_fail;
 
 	/* Create hardware sequencer */

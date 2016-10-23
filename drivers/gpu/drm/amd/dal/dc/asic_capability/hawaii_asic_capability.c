@@ -54,11 +54,6 @@ void dal_hawaii_asic_capability_create(struct asic_capability *cap,
 	uint32_t mc_seq_misc0;
 
 	/* ASIC data */
-	cap->data[ASIC_DATA_CONTROLLERS_NUM] = 6;
-	cap->data[ASIC_DATA_FUNCTIONAL_CONTROLLERS_NUM] = 6;
-	cap->data[ASIC_DATA_DIGFE_NUM] = 6;
-	cap->data[ASIC_DATA_LINEBUFFER_NUM] = 6;
-	cap->data[ASIC_DATA_MAX_COFUNC_NONDP_DISPLAYS] = 2;
 	cap->data[ASIC_DATA_MIN_DISPCLK_FOR_UNDERSCAN] = 300000;
 
 	cap->data[ASIC_DATA_DCE_VERSION] = 0x80; /* DCE 8.0 */
@@ -67,16 +62,12 @@ void dal_hawaii_asic_capability_create(struct asic_capability *cap,
 	 * in other words 246528 bits. */
 	cap->data[ASIC_DATA_LINEBUFFER_SIZE] = 1712 * 144;
 	cap->data[ASIC_DATA_DRAM_BANDWIDTH_EFFICIENCY] = 70;
-	cap->data[ASIC_DATA_CLOCKSOURCES_NUM] = 3;
 	cap->data[ASIC_DATA_MC_LATENCY] = 5000; /* units of ns */
 
 	/* StutterModeEnhanced; Quad DMIF Buffer */
 	cap->data[ASIC_DATA_STUTTERMODE] = 0x2002;
 	cap->data[ASIC_DATA_PATH_NUM_PER_DPMST_CONNECTOR] = 4;
 	cap->data[ASIC_DATA_VIEWPORT_PIXEL_GRANULARITY] = 2;
-
-	/* 3 HDMI support by default */
-	cap->data[ASIC_DATA_SUPPORTED_HDMI_CONNECTION_NUM] = 3;
 
 	cap->data[ASIC_DATA_DEFAULT_I2C_SPEED_IN_KHZ] = 40;
 

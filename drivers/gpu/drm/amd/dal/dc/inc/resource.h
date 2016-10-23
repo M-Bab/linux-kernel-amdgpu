@@ -37,8 +37,11 @@ enum dce_version resource_parse_asic_id(
 		struct hw_asic_id asic_id);
 
 struct resource_caps {
+	int num_timing_generator;
+	int num_video_plane;
 	int num_audio;
 	int num_stream_encoder;
+	int num_pll;
 };
 
 struct resource_straps {
@@ -64,7 +67,6 @@ bool resource_construct(
 	unsigned int num_virtual_links,
 	struct core_dc *dc,
 	struct resource_pool *pool,
-	const struct resource_caps *caps,
 	const struct resource_create_funcs *create_funcs);
 
 struct resource_pool *dc_create_resource_pool(struct adapter_service *adapter_serv,

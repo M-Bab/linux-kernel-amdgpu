@@ -350,8 +350,10 @@ static const struct dce110_clk_src_reg_offsets dce80_clk_src_reg_offsets[] = {
 };
 
 static const struct resource_caps res_cap = {
-	.num_audio = 6,
-	.num_stream_encoder = 6
+		.num_timing_generator = 6,
+		.num_audio = 6,
+		.num_stream_encoder = 6,
+		.num_pll = 3,
 };
 
 #define CTX  ctx
@@ -848,6 +850,7 @@ static bool construct(
 	struct dm_pp_static_clock_info static_clk_info = {0};
 
 	pool->base.adapter_srv = as;
+	pool->base.res_cap = &res_cap;
 	pool->base.funcs = &dce80_res_pool_funcs;
 
 
@@ -855,7 +858,7 @@ static bool construct(
 	 *  Resource + asic cap harcoding                *
 	 *************************************************/
 	pool->base.underlay_pipe_index = -1;
-	pool->base.pipe_count = dal_adapter_service_get_func_controllers_num(as);
+	pool->base.pipe_count = res_cap.num_timing_generator;
 	dc->public.caps.max_downscale_ratio = 200;
 	dc->public.caps.i2c_speed_in_khz = 40;
 
@@ -986,7 +989,7 @@ static bool construct(
 	}
 
 	if (!resource_construct(num_virtual_links, dc, &pool->base,
-			&res_cap, &res_create_funcs))
+			&res_create_funcs))
 		goto res_create_fail;
 
 	/* Create hardware sequencer */

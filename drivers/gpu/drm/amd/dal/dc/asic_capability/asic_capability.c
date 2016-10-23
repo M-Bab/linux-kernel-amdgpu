@@ -54,15 +54,10 @@ static bool construct(
 	memset(cap->data, 0, sizeof(cap->data));
 
 	/* ASIC data */
-	cap->data[ASIC_DATA_VRAM_TYPE] = init->vram_type;
 	cap->data[ASIC_DATA_VRAM_BITWIDTH] = init->vram_width;
-	cap->data[ASIC_DATA_FEATURE_FLAGS] = init->feature_flags;
 	cap->runtime_flags = init->runtime_flags;
-	cap->data[ASIC_DATA_REVISION_ID] = init->hw_internal_rev;
 	cap->data[ASIC_DATA_MAX_UNDERSCAN_PERCENTAGE] = 10;
 	cap->data[ASIC_DATA_VIEWPORT_PIXEL_GRANULARITY] = 4;
-	cap->data[ASIC_DATA_SUPPORTED_HDMI_CONNECTION_NUM] = 1;
-	cap->data[ASIC_DATA_NUM_OF_VIDEO_PLANES] = 0;
 	cap->data[ASIC_DATA_DEFAULT_I2C_SPEED_IN_KHZ] = 25;
 	cap->data[ASIC_DATA_DOWNSCALE_LIMIT] = 200;
 

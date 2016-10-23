@@ -270,6 +270,7 @@ struct resource_pool {
 	struct irq_service *irqs;
 
 	const struct resource_funcs *funcs;
+	const struct resource_caps *res_cap;
 };
 
 struct pipe_ctx {

@@ -37,6 +37,7 @@
 #include "stream_encoder.h"
 #include "link_encoder.h"
 #include "hw_sequencer.h"
+#include "resource.h"
 #include "fixed31_32.h"
 #include "adapter/adapter_service.h"
 #include "include/asic_capability_interface.h"
@@ -1566,8 +1567,7 @@ bool dc_link_setup_psr(const struct dc_link *dc_link,
 				asic_cap->caps.SKIP_PSR_WAIT_FOR_PLL_LOCK_BIT;
 
 		psr_context.numberOfControllers =
-				link->link_enc->adapter_service->asic_cap->
-				data[ASIC_DATA_CONTROLLERS_NUM];
+				link->dc->res_pool->res_cap->num_timing_generator;
 
 		psr_context.rfb_update_auto_en = true;
 
