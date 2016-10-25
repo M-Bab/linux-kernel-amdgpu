@@ -39,15 +39,6 @@
 
 #include "../dce110/i2c_hw_engine_dce110.h"
 
-static const enum gpio_ddc_line hw_ddc_lines[] = {
-	GPIO_DDC_LINE_DDC1,
-	GPIO_DDC_LINE_DDC2,
-	GPIO_DDC_LINE_DDC3,
-	GPIO_DDC_LINE_DDC4,
-	GPIO_DDC_LINE_DDC5,
-	GPIO_DDC_LINE_DDC6,
-};
-
 #include "dce/dce_11_2_d.h"
 #include "dce/dce_11_2_sh_mask.h"
 
@@ -93,46 +84,15 @@ static bool construct(
 	struct adapter_service *as,
 	struct dc_context *ctx)
 {
-	int i = 0;
-	uint32_t reference_frequency = 0;
-	struct i2caux *base = NULL;
-
-	if (!dal_i2caux_dce110_construct(i2caux_dce110, as, ctx, dce112_aux_regs)) {
+	if (!dal_i2caux_dce110_construct(
+			i2caux_dce110,
+			as,
+			ctx,
+			dce112_aux_regs,
+			dce112_hw_engine_regs)) {
 		ASSERT_CRITICAL(false);
 		return false;
 	}
-
-	/*TODO: For CZ bring up, if dal_i2caux_get_reference_clock
-	 * does not return 48KHz, we need hard coded for 48Khz.
-	 * Some BIOS setting incorrect cause this
-	 * For production, we always get value from BIOS*/
-	reference_frequency =
-		dal_i2caux_get_reference_clock(as) >> 1;
-
-	base = &i2caux_dce110->base;
-
-	/* Create I2C engines (DDC lines per connector)
-	 * different I2C/AUX usage cases, DDC, Generic GPIO, AUX.
-	 */
-	do {
-		enum gpio_ddc_line line_id = hw_ddc_lines[i];
-
-		struct i2c_hw_engine_dce110_create_arg hw_arg_dce110;
-
-		hw_arg_dce110.engine_id = i;
-		hw_arg_dce110.reference_frequency = reference_frequency;
-		hw_arg_dce110.default_speed = base->default_i2c_hw_speed;
-		hw_arg_dce110.ctx = ctx;
-		hw_arg_dce110.regs = &dce112_hw_engine_regs[i];
-
-		if (base->i2c_hw_engines[line_id])
-			base->i2c_hw_engines[line_id]->funcs->destroy(&base->i2c_hw_engines[line_id]);
-
-		base->i2c_hw_engines[line_id] =
-			dal_i2c_hw_engine_dce110_create(&hw_arg_dce110);
-
-		++i;
-	} while (i < ARRAY_SIZE(hw_ddc_lines));
 
 	return true;
 }

@@ -166,7 +166,7 @@ static const struct i2caux_funcs i2caux_funcs = {
 }
 
 #define hw_engine_regs(id)\
-[id] = {\
+{\
 		I2C_HW_ENGINE_COMMON_REG_LIST(id) \
 }
 
@@ -192,7 +192,8 @@ bool dal_i2caux_dce110_construct(
 	struct i2caux_dce110 *i2caux_dce110,
 	struct adapter_service *as,
 	struct dc_context *ctx,
-	const struct dce110_aux_registers aux_regs[])
+	const struct dce110_aux_registers aux_regs[],
+	const struct dce110_i2c_hw_engine_registers i2c_hw_engine_regs[])
 {
 	uint32_t i = 0;
 	uint32_t reference_frequency = 0;
@@ -239,7 +240,7 @@ bool dal_i2caux_dce110_construct(
 		hw_arg_dce110.reference_frequency = reference_frequency;
 		hw_arg_dce110.default_speed = base->default_i2c_hw_speed;
 		hw_arg_dce110.ctx = ctx;
-		hw_arg_dce110.regs = &i2c_hw_engine_regs[i + 1];
+		hw_arg_dce110.regs = &i2c_hw_engine_regs[i];
 
 		base->i2c_hw_engines[line_id] =
 			dal_i2c_hw_engine_dce110_create(&hw_arg_dce110);
@@ -298,7 +299,12 @@ struct i2caux *dal_i2caux_dce110_create(
 		return NULL;
 	}
 
-	if (dal_i2caux_dce110_construct(i2caux_dce110, as, ctx, dce110_aux_regs))
+	if (dal_i2caux_dce110_construct(
+			i2caux_dce110,
+			as,
+			ctx,
+			dce110_aux_regs,
+			i2c_hw_engine_regs))
 		return &i2caux_dce110->base;
 
 	ASSERT_CRITICAL(false);

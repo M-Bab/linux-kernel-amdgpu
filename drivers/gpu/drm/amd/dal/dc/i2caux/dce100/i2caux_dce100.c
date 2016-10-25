@@ -33,6 +33,7 @@
 #include "../i2c_hw_engine.h"
 
 #include "../dce110/aux_engine_dce110.h"
+#include "../dce110/i2c_hw_engine_dce110.h"
 #include "../dce110/i2caux_dce110.h"
 
 #include "dce/dce_10_0_d.h"
@@ -52,6 +53,11 @@
 	.AUX_RESET_MASK = 0 \
 }
 
+#define hw_engine_regs(id)\
+{\
+		I2C_HW_ENGINE_COMMON_REG_LIST(id) \
+}
+
 static const struct dce110_aux_registers dce100_aux_regs[] = {
 		aux_regs(0),
 		aux_regs(1),
@@ -59,6 +65,15 @@ static const struct dce110_aux_registers dce100_aux_regs[] = {
 		aux_regs(3),
 		aux_regs(4),
 		aux_regs(5),
+};
+
+static const struct dce110_i2c_hw_engine_registers dce100_hw_engine_regs[] = {
+		hw_engine_regs(1),
+		hw_engine_regs(2),
+		hw_engine_regs(3),
+		hw_engine_regs(4),
+		hw_engine_regs(5),
+		hw_engine_regs(6)
 };
 
 struct i2caux *dal_i2caux_dce100_create(
@@ -73,7 +88,12 @@ struct i2caux *dal_i2caux_dce100_create(
 		return NULL;
 	}
 
-	if (dal_i2caux_dce110_construct(i2caux_dce110, as, ctx, dce100_aux_regs))
+	if (dal_i2caux_dce110_construct(
+			i2caux_dce110,
+			as,
+			ctx,
+			dce100_aux_regs,
+			dce100_hw_engine_regs))
 		return &i2caux_dce110->base;
 
 	ASSERT_CRITICAL(false);
