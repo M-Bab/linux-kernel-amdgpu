@@ -76,6 +76,8 @@ struct dc_plane_address {
 
 		/*video  progressive*/
 		struct {
+			PHYSICAL_ADDRESS_LOC meta_chroma;
+			PHYSICAL_ADDRESS_LOC meta_luma;
 			PHYSICAL_ADDRESS_LOC chroma_addr;
 			PHYSICAL_ADDRESS_LOC luma_addr;
 		} video_progressive;
