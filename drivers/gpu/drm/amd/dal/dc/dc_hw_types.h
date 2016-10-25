@@ -114,6 +114,7 @@ union plane_size {
 		 * 32 pixel aligned.
 		 */
 		uint32_t luma_pitch;
+		uint32_t meta_luma_pitch;
 
 		struct rect chroma_size;
 		/* Graphic surface pitch in pixels.
@@ -121,6 +122,7 @@ union plane_size {
 		 * 32 pixel aligned.
 		 */
 		uint32_t chroma_pitch;
+		uint32_t meta_chroma_pitch;
 	} video;
 };
 
