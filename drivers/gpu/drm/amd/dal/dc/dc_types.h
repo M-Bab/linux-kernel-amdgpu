@@ -75,6 +75,7 @@ struct dc_context {
 
 	struct dc_bios *dc_bios;
 	bool created_bios;
+	struct gpio_service *gpio_service;
 };
 
 /*

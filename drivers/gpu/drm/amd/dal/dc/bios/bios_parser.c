@@ -2932,7 +2932,7 @@ static bool i2c_read(
 		i2c_info->i2c_hw_assist,
 		i2c_info->i2c_line };
 
-	ddc = dal_gpio_create_ddc(as->gpio_service,
+	ddc = dal_gpio_create_ddc(as->ctx->gpio_service,
 		i2c_info->gpio_info.clk_a_register_index,
 		(1 << i2c_info->gpio_info.clk_a_shift), &hw_info);
 

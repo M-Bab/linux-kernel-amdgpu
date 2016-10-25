@@ -280,7 +280,7 @@ static bool construct(
 	enum connector_id connector_id =
 		dal_graphics_object_id_get_connector_id(init_data->id);
 
-	struct gpio_service *gpio_service = init_data->as->gpio_service;
+	struct gpio_service *gpio_service = init_data->ctx->gpio_service;
 	struct graphics_object_i2c_info i2c_info;
 	struct gpio_ddc_hw_info hw_info;
 	struct dc_bios *dcb = init_data->ctx->dc_bios;

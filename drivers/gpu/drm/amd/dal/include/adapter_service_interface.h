@@ -33,9 +33,11 @@
 #include "dal_types.h"
 #include "asic_capability_types.h"
 
+#define SIZEOF_BACKLIGHT_LUT 101
+
 /* forward declaration */
 struct i2caux;
-struct adapter_service;
+struct asic_cap;
 
 /*
  * enum adapter_feature_id
@@ -291,6 +293,22 @@ enum adapter_feature_id {
 	FEATURE_SET_28_END = FEATURE_SET_28_START + 31,
 
 	FEATURE_MAXIMUM
+};
+
+/* Adapter service */
+struct adapter_service {
+	struct dc_context *ctx;
+	struct asic_capability *asic_cap;
+	enum dce_environment dce_environment;
+	struct i2caux *i2caux;
+	struct integrated_info *integrated_info;
+	uint32_t platform_methods_mask;
+	uint32_t ac_level_percentage;
+	uint32_t dc_level_percentage;
+	uint32_t backlight_caps_initialized;
+	uint32_t backlight_8bit_lut[SIZEOF_BACKLIGHT_LUT];
+	uint32_t adapter_feature_set[FEATURE_MAXIMUM/32];
+	uint32_t default_values[FEATURE_MAXIMUM];
 };
 
 /* Adapter Service type of DRR support*/

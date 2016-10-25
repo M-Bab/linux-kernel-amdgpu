@@ -30,29 +30,5 @@
 #include "dc_bios_types.h"
 #include "include/adapter_service_interface.h"
 
-#define SIZEOF_BACKLIGHT_LUT 101
-
-/*
- * Forward declaration
- */
-struct gpio_service;
-struct asic_cap;
-
-/* Adapter service */
-struct adapter_service {
-	struct dc_context *ctx;
-	struct asic_capability *asic_cap;
-	enum dce_environment dce_environment;
-	struct gpio_service *gpio_service;
-	struct i2caux *i2caux;
-	struct integrated_info *integrated_info;
-	uint32_t platform_methods_mask;
-	uint32_t ac_level_percentage;
-	uint32_t dc_level_percentage;
-	uint32_t backlight_caps_initialized;
-	uint32_t backlight_8bit_lut[SIZEOF_BACKLIGHT_LUT];
-	uint32_t adapter_feature_set[FEATURE_MAXIMUM/32];
-	uint32_t default_values[FEATURE_MAXIMUM];
-};
 
 #endif /* __DAL_ADAPTER_SERVICE_H__ */

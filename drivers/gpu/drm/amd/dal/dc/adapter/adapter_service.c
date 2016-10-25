@@ -610,7 +610,6 @@ static void adapter_service_destruct(
 	struct dc_bios *dcb = as->ctx->dc_bios;
 
 	dal_i2caux_destroy(&as->i2caux);
-	dal_gpio_service_destroy(&as->gpio_service);
 	dal_asic_capability_destroy(&as->asic_cap);
 
 	dcb->funcs->destroy_integrated_info(dcb, &as->integrated_info);
@@ -674,18 +673,6 @@ static bool adapter_service_construct(
 
 	dcb = as->ctx->dc_bios;
 
-
-	/* Create GPIO service */
-	as->gpio_service = dal_gpio_service_create(
-			dce_version,
-			as->dce_environment,
-			as->ctx);
-
-	if (!as->gpio_service) {
-		ASSERT_CRITICAL(false);
-		goto failed_to_create_gpio_service;
-	}
-
 	/* Create I2C AUX */
 	as->i2caux = dal_i2caux_create(as, as->ctx);
 
@@ -714,9 +701,6 @@ failed_to_generate_features:
 	dal_i2caux_destroy(&as->i2caux);
 
 failed_to_create_i2caux:
-	dal_gpio_service_destroy(&as->gpio_service);
-
-failed_to_create_gpio_service:
 	dal_asic_capability_destroy(&as->asic_cap);
 
 	return false;

@@ -537,7 +537,7 @@ static bool construct(struct core_dc *dc,
 
 		if (!dc_ctx->dc_bios) {
 			ASSERT_CRITICAL(false);
-			goto as_fail;
+			goto bios_fail;
 		}
 
 		dc_ctx->created_bios = true;
@@ -552,6 +552,17 @@ static bool construct(struct core_dc *dc,
 			dm_error("%s: create_as() failed!\n", __func__);
 			goto as_fail;
 		}
+	}
+
+	/* Create GPIO service */
+	dc_ctx->gpio_service = dal_gpio_service_create(
+			dc_version,
+			as->dce_environment,
+			as->ctx);
+
+	if (!dc_ctx->gpio_service) {
+		ASSERT_CRITICAL(false);
+		goto gpio_fail;
 	}
 
 	dc->res_pool = dc_create_resource_pool(
@@ -574,9 +585,15 @@ static bool construct(struct core_dc *dc,
 create_links_fail:
 	dc->res_pool->funcs->destroy(&dc->res_pool);
 create_resource_fail:
+	if (dc->ctx->gpio_service)
+		dal_gpio_service_destroy(&dc_ctx->gpio_service);
+gpio_fail:
 	if (as)
 		dal_adapter_service_destroy(&as);
 as_fail:
+	if (dc->ctx->created_bios)
+		dal_bios_parser_destroy(&dc->ctx->dc_bios);
+bios_fail:
 	dal_logger_destroy(&dc_ctx->logger);
 logger_fail:
 	dm_free(dc->current_context);
@@ -588,6 +605,7 @@ ctx_fail:
 
 static void destruct(struct core_dc *dc)
 {
+	dal_gpio_service_destroy(&dc->ctx->gpio_service);
 	resource_validate_ctx_destruct(dc->current_context);
 	dm_free(dc->current_context);
 	dm_free(dc->temp_flip_context);

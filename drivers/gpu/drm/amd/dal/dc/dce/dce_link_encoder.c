@@ -582,7 +582,7 @@ static struct gpio *get_hpd_gpio(const struct link_encoder *enc)
 	}
 
 	return dal_gpio_service_create_irq(
-		enc->adapter_service->gpio_service,
+		enc->ctx->gpio_service,
 		pin_info.offset,
 		pin_info.mask);
 }
