@@ -36,8 +36,6 @@
 
 #include "adapter_service.h"
 
-#include "wireless_data_source.h"
-
 #include "atom.h"
 
 #define ABSOLUTE_BACKLIGHT_MAX 255
@@ -475,10 +473,6 @@ static bool get_feature_value_from_data_sources(
 		*data = as->asic_cap->data[ASIC_DATA_STUTTERMODE];
 		break;
 
-	case FEATURE_WIRELESS_ENABLE:
-		*data = as->wireless_data.wireless_enable;
-		break;
-
 	case FEATURE_8BPP_SUPPORTED:
 		*data = as->asic_cap->caps.SUPPORT_8BPP;
 		break;
@@ -810,18 +804,6 @@ enum dce_version dal_adapter_service_get_dce_version(
 	}
 }
 
-static bool is_wireless_object(struct graphics_object_id id)
-{
-	if ((id.type == OBJECT_TYPE_ENCODER &&
-		id.id == ENCODER_ID_INTERNAL_WIRELESS) ||
-		(id.type == OBJECT_TYPE_CONNECTOR && id.id ==
-			CONNECTOR_ID_WIRELESS) ||
-		(id.type == OBJECT_TYPE_CONNECTOR && id.id ==
-			CONNECTOR_ID_MIRACAST))
-		return true;
-	return false;
-}
-
 /**
  * Get the source objects of an object
  *
@@ -841,17 +823,13 @@ struct graphics_object_id dal_adapter_service_get_src_obj(
 	struct graphics_object_id src_object_id;
 	struct dc_bios *dcb = as->ctx->dc_bios;
 
-	if (is_wireless_object(id))
-		src_object_id = wireless_get_src_obj_id(as, id, index);
-	else {
-		if (BP_RESULT_OK != dcb->funcs->get_src_obj(dcb, id, index,
-				&src_object_id)) {
-			src_object_id =
-				dal_graphics_object_id_init(
-					0,
-					ENUM_ID_UNKNOWN,
-					OBJECT_TYPE_UNKNOWN);
-		}
+	if (BP_RESULT_OK != dcb->funcs->get_src_obj(dcb, id, index,
+			&src_object_id)) {
+		src_object_id =
+			dal_graphics_object_id_init(
+				0,
+				ENUM_ID_UNKNOWN,
+				OBJECT_TYPE_UNKNOWN);
 	}
 
 	return src_object_id;
