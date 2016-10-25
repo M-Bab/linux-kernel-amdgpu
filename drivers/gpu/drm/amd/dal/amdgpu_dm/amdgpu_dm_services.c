@@ -133,7 +133,6 @@ bool dm_pp_pre_dce_clock_change(
 bool dm_pp_apply_safe_state(
 		const struct dc_context *ctx)
 {
-#ifdef CONFIG_DRM_AMD_POWERPLAY
 	struct amdgpu_device *adev = ctx->driver_context;
 
 	if (adev->pm.dpm_enabled) {
@@ -141,16 +140,12 @@ bool dm_pp_apply_safe_state(
 	}
 
 	return true;
-#else
-	return false;
-#endif
 }
 
 bool dm_pp_apply_display_requirements(
 		const struct dc_context *ctx,
 		const struct dm_pp_display_configuration *pp_display_cfg)
 {
-#ifdef CONFIG_DRM_AMD_POWERPLAY
 	struct amdgpu_device *adev = ctx->driver_context;
 
 	if (adev->pm.dpm_enabled) {
@@ -215,18 +210,13 @@ bool dm_pp_apply_display_requirements(
 	}
 
 	return true;
-#else
-	return false;
-#endif
 }
 
 bool dc_service_get_system_clocks_range(
 		const struct dc_context *ctx,
 		struct dm_pp_gpu_clock_range *sys_clks)
 {
-#ifdef CONFIG_DRM_AMD_POWERPLAY
 	struct amdgpu_device *adev = ctx->driver_context;
-#endif
 
 	/* Default values, in case PPLib is not compiled-in. */
 	sys_clks->mclk.max_khz = 800000;
@@ -235,7 +225,6 @@ bool dc_service_get_system_clocks_range(
 	sys_clks->sclk.max_khz = 600000;
 	sys_clks->sclk.min_khz = 300000;
 
-#ifdef CONFIG_DRM_AMD_POWERPLAY
 	if (adev->pm.dpm_enabled) {
 		sys_clks->mclk.max_khz = amdgpu_dpm_get_mclk(adev, false);
 		sys_clks->mclk.min_khz = amdgpu_dpm_get_mclk(adev, true);
@@ -243,7 +232,6 @@ bool dc_service_get_system_clocks_range(
 		sys_clks->sclk.max_khz = amdgpu_dpm_get_sclk(adev, false);
 		sys_clks->sclk.min_khz = amdgpu_dpm_get_sclk(adev, true);
 	}
-#endif
 
 	return true;
 }
@@ -280,7 +268,6 @@ static void get_default_clock_levels(
 	}
 }
 
-#ifdef CONFIG_DRM_AMD_POWERPLAY
 static enum amd_pp_clock_type dc_to_pp_clock_type(
 		enum dm_pp_clock_type dm_pp_clk_type)
 {
@@ -331,14 +318,12 @@ static void pp_to_dc_clock_levels(
 		dc_clks->clocks_in_khz[i] = pp_clks->clock[i] * 10;
 	}
 }
-#endif
 
 bool dm_pp_get_clock_levels_by_type(
 		const struct dc_context *ctx,
 		enum dm_pp_clock_type clk_type,
 		struct dm_pp_clock_levels *dc_clks)
 {
-#ifdef CONFIG_DRM_AMD_POWERPLAY
 	struct amdgpu_device *adev = ctx->driver_context;
 	void *pp_handle = adev->powerplay.pp_handle;
 	struct amd_pp_clocks pp_clks = { 0 };
@@ -398,9 +383,7 @@ bool dm_pp_get_clock_levels_by_type(
 			}
 		}
 	}
-#else
-	get_default_clock_levels(clk_type, dc_clks);
-#endif
+
 	return true;
 }
 
