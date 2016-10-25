@@ -502,7 +502,7 @@ static enum dc_status bios_parser_crtc_source_select(
 	return DC_OK;
 }
 
-static void update_info_frame(struct pipe_ctx *pipe_ctx)
+void dce110_update_info_frame(struct pipe_ctx *pipe_ctx)
 {
 	if (dc_is_hdmi_signal(pipe_ctx->stream->signal))
 		pipe_ctx->stream_enc->funcs->update_hdmi_info_packets(
@@ -514,7 +514,7 @@ static void update_info_frame(struct pipe_ctx *pipe_ctx)
 			&pipe_ctx->encoder_info_frame);
 }
 
-static void enable_stream(struct pipe_ctx *pipe_ctx)
+void dce110_enable_stream(struct pipe_ctx *pipe_ctx)
 {
 	enum dc_lane_count lane_count =
 		pipe_ctx->stream->sink->link->public.cur_link_settings.lane_count;
@@ -529,7 +529,8 @@ static void enable_stream(struct pipe_ctx *pipe_ctx)
 	uint32_t early_control = 0;
 	struct timing_generator *tg = pipe_ctx->tg;
 
-	update_info_frame(pipe_ctx);
+	/* TODOFPGA may change to hwss.update_info_frame */
+	dce110_update_info_frame(pipe_ctx);
 	/* enable early control to avoid corruption on DP monitor*/
 	active_total_with_borders =
 			timing->h_addressable
@@ -559,7 +560,7 @@ static void enable_stream(struct pipe_ctx *pipe_ctx)
 
 }
 
-static void disable_stream(struct pipe_ctx *pipe_ctx)
+void dce110_disable_stream(struct pipe_ctx *pipe_ctx)
 {
 	struct core_stream *stream = pipe_ctx->stream;
 	struct core_link *link = stream->sink->link;
@@ -606,7 +607,7 @@ static void disable_stream(struct pipe_ctx *pipe_ctx)
 
 }
 
-static void unblank_stream(struct pipe_ctx *pipe_ctx,
+void dce110_unblank_stream(struct pipe_ctx *pipe_ctx,
 		struct dc_link_settings *link_settings)
 {
 	struct encoder_unblank_param params = { { 0 } };
@@ -763,7 +764,7 @@ static void program_scaler(const struct core_dc *dc,
 		&pipe_ctx->scl_data);
 }
 
-static enum dc_status apply_single_controller_ctx_to_hw(
+static enum dc_status prog_pixclk_crtc_otg(
 		struct pipe_ctx *pipe_ctx,
 		struct validate_context *context,
 		struct core_dc *dc)
@@ -808,6 +809,21 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 		}
 	}
 
+	return DC_OK;
+}
+
+static enum dc_status apply_single_controller_ctx_to_hw(
+		struct pipe_ctx *pipe_ctx,
+		struct validate_context *context,
+		struct core_dc *dc)
+{
+	struct core_stream *stream = pipe_ctx->stream;
+	struct pipe_ctx *pipe_ctx_old = &dc->current_context->res_ctx.
+			pipe_ctx[pipe_ctx->pipe_idx];
+
+	/*  */
+	dc->hwss.prog_pixclk_crtc_otg(pipe_ctx, context, dc);
+
 	pipe_ctx->opp->funcs->opp_set_dyn_expansion(
 			pipe_ctx->opp,
 			COLOR_SPACE_YCBCR601,
@@ -818,6 +834,10 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 			pipe_ctx->opp,
 			&stream->bit_depth_params,
 			&stream->clamping);
+
+	/* FPGA does not program backend */
+	if (IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment))
+		return DC_OK;
 
 	/* TODO: move to stream encoder */
 	if (pipe_ctx->stream->signal != SIGNAL_TYPE_VIRTUAL)
@@ -854,17 +874,18 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 		core_link_enable_stream(pipe_ctx);
 
 		if (dc_is_dp_signal(pipe_ctx->stream->signal))
-			unblank_stream(pipe_ctx,
+			dce110_unblank_stream(pipe_ctx,
 				&stream->sink->link->public.cur_link_settings);
 	}
 
+	/* program_scaler and allocate_mem_input are not new asic */
 	if (!pipe_ctx_old || memcmp(&pipe_ctx_old->scl_data,
 				&pipe_ctx->scl_data,
 				sizeof(struct scaler_data)) != 0)
 		program_scaler(dc, pipe_ctx);
 
-	/*TODO: mst support - use total stream count*/
-	pipe_ctx->mi->funcs->allocate_mem_input(
+	/* mst support - use total stream count */
+		pipe_ctx->mi->funcs->allocate_mem_input(
 					pipe_ctx->mi,
 					stream->public.timing.h_total,
 					stream->public.timing.v_total,
@@ -949,7 +970,7 @@ static void disable_vga_and_power_gate_all_controllers(
  *  3. Enable power gating for controller
  *  4. Set acc_mode_change bit (VBIOS will clear this bit when going to FSDOS)
  */
-static void enable_accelerated_mode(struct core_dc *dc)
+void dce110_enable_accelerated_mode(struct core_dc *dc)
 {
 	power_down_all_hw_blocks(dc);
 
@@ -960,7 +981,7 @@ static void enable_accelerated_mode(struct core_dc *dc)
 /**
  * Call display_engine_clock_dce80 to perform the Dclk programming.
  */
-static void set_display_clock(struct validate_context *context)
+void dce110_set_display_clock(struct validate_context *context)
 {
 	/* Program the display engine clock.
 	 * Check DFS bypass mode support or not. DFSbypass feature is only when
@@ -1094,7 +1115,7 @@ static void program_wm_for_pipe(struct core_dc *dc,
 				total_dest_line_time_ns);
 }
 
-static void set_displaymarks(
+void dce110_set_displaymarks(
 	const struct core_dc *dc,
 	struct validate_context *context)
 {
@@ -1304,6 +1325,7 @@ static void apply_min_clocks(
 				pipe_ctx->dis_clk, *clocks_state))
 			return;
 
+		/* TODOFPGA */
 	}
 
 	/* get the required state based on state dependent clocks:
@@ -1322,16 +1344,42 @@ static void apply_min_clocks(
 	}
 }
 
-/*TODO: const validate_context*/
-static enum dc_status apply_ctx_to_hw(
+static enum dc_status apply_ctx_to_hw_fpga(
 		struct core_dc *dc,
 		struct validate_context *context)
 {
-	struct dc_bios *dcb = dc->ctx->dc_bios;
-	enum dc_status status;
+	enum dc_status status = DC_ERROR_UNEXPECTED;
 	int i;
-	bool programmed_audio_dto = false;
-	enum clocks_state clocks_state = CLOCKS_STATE_INVALID;
+	struct dc_bios *dcb = dc->ctx->dc_bios;
+
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
+		struct pipe_ctx *pipe_ctx_old =
+				&dc->current_context->res_ctx.pipe_ctx[i];
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+
+		if (pipe_ctx->stream == NULL)
+			continue;
+
+		if (pipe_ctx->stream == pipe_ctx_old->stream)
+			continue;
+
+		status = apply_single_controller_ctx_to_hw(
+				pipe_ctx,
+				context,
+				dc);
+
+		if (status != DC_OK)
+			return status;
+	}
+
+	return DC_OK;
+}
+
+static void reset_hw_ctx_wrap(
+		struct core_dc *dc,
+		struct validate_context *context)
+{
+	int i;
 
 	/* Reset old context */
 	/* look up the targets that have been removed since last commit */
@@ -1354,14 +1402,36 @@ static enum dc_status apply_ctx_to_hw(
 			reset_single_pipe_hw_ctx(
 				dc, pipe_ctx_old, dc->current_context);
 	}
+}
+
+/*TODO: const validate_context*/
+enum dc_status dce110_apply_ctx_to_hw(
+		struct core_dc *dc,
+		struct validate_context *context)
+{
+	struct dc_bios *dcb = dc->ctx->dc_bios;
+	enum dc_status status;
+	int i;
+	bool programmed_audio_dto = false;
+	enum clocks_state clocks_state = CLOCKS_STATE_INVALID;
+
+	/* Reset old context */
+	/* look up the targets that have been removed since last commit */
+	dc->hwss.reset_hw_ctx_wrap(dc, context);
 
 	/* Skip applying if no targets */
 	if (context->target_count <= 0)
 		return DC_OK;
 
+	if (IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment)) {
+		apply_ctx_to_hw_fpga(dc, context);
+		return DC_OK;
+	}
+
 	/* Apply new context */
 	dcb->funcs->set_scratch_critical_state(dcb, true);
 
+	/* below is for real asic only */
 	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx_old =
 					&dc->current_context->res_ctx.pipe_ctx[i];
@@ -1388,7 +1458,7 @@ static enum dc_status apply_ctx_to_hw(
 
 	if (context->bw_results.dispclk_khz
 		> dc->current_context->bw_results.dispclk_khz)
-		set_display_clock(context);
+		dc->hwss.set_display_clock(context);
 
 	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx_old =
@@ -1635,7 +1705,7 @@ static void update_plane_addr(const struct core_dc *dc,
 		pipe_ctx->tg->funcs->set_blank(pipe_ctx->tg, false);
 }
 
-static void update_pending_status(struct pipe_ctx *pipe_ctx)
+void dce110_update_pending_status(struct pipe_ctx *pipe_ctx)
 {
 	struct core_surface *surface = pipe_ctx->surface;
 
@@ -1652,7 +1722,7 @@ static void update_pending_status(struct pipe_ctx *pipe_ctx)
 	surface->status.current_address = pipe_ctx->mi->current_address;
 }
 
-static void power_down(struct core_dc *dc)
+void dce110_power_down(struct core_dc *dc)
 {
 	power_down_all_hw_blocks(dc);
 	disable_vga_and_power_gate_all_controllers(dc);
@@ -2068,20 +2138,20 @@ static void dce110_power_down_fe(struct core_dc *dc, struct pipe_ctx *pipe)
 
 static const struct hw_sequencer_funcs dce110_funcs = {
 	.init_hw = init_hw,
-	.apply_ctx_to_hw = apply_ctx_to_hw,
+	.apply_ctx_to_hw = dce110_apply_ctx_to_hw,
 	.prepare_pipe_for_context = dce110_prepare_pipe_for_context,
 	.apply_ctx_for_surface = dce110_apply_ctx_for_surface,
 	.set_plane_config = set_plane_config,
 	.update_plane_addr = update_plane_addr,
-	.update_pending_status = update_pending_status,
+	.update_pending_status = dce110_update_pending_status,
 	.set_gamma_correction = set_gamma_ramp,
-	.power_down = power_down,
-	.enable_accelerated_mode = enable_accelerated_mode,
+	.power_down = dce110_power_down,
+	.enable_accelerated_mode = dce110_enable_accelerated_mode,
 	.enable_timing_synchronization = dce110_enable_timing_synchronization,
-	.update_info_frame = update_info_frame,
-	.enable_stream = enable_stream,
-	.disable_stream = disable_stream,
-	.unblank_stream = unblank_stream,
+	.update_info_frame = dce110_update_info_frame,
+	.enable_stream = dce110_enable_stream,
+	.disable_stream = dce110_disable_stream,
+	.unblank_stream = dce110_unblank_stream,
 	.enable_display_pipe_clock_gating = enable_display_pipe_clock_gating,
 	.crtc_switch_to_clk_src = dce110_crtc_switch_to_clk_src,
 	.enable_display_power_gating = dce110_enable_display_power_gating,
@@ -2090,12 +2160,14 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.pipe_control_lock = dce110_pipe_control_lock,
 	.set_blender_mode = dce110_set_blender_mode,
 	.clock_gating_power_up = dal_dc_clock_gating_dce110_power_up,
-	.set_display_clock = set_display_clock,
-	.set_displaymarks = set_displaymarks,
+	.set_display_clock = dce110_set_display_clock,
+	.set_displaymarks = dce110_set_displaymarks,
 	.increase_watermarks_for_pipe = dce110_increase_watermarks_for_pipe,
 	.set_bandwidth = dce110_set_bandwidth,
 	.set_drr = set_drr,
-	.set_static_screen_control = set_static_screen_control
+	.set_static_screen_control = set_static_screen_control,
+	.reset_hw_ctx_wrap = reset_hw_ctx_wrap,
+	.prog_pixclk_crtc_otg = prog_pixclk_crtc_otg,
 };
 
 bool dce110_hw_sequencer_construct(struct core_dc *dc)

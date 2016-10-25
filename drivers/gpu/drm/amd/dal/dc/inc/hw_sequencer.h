@@ -51,6 +51,9 @@ struct hw_sequencer_funcs {
 	enum dc_status (*apply_ctx_to_hw)(
 			struct core_dc *dc, struct validate_context *context);
 
+	void (*reset_hw_ctx_wrap)(
+			struct core_dc *dc, struct validate_context *context);
+
 	void (*prepare_pipe_for_context)(
 			struct core_dc *dc,
 			struct pipe_ctx *pipe_ctx,
@@ -149,6 +152,11 @@ struct hw_sequencer_funcs {
 
 	void (*set_static_screen_control)(struct pipe_ctx **pipe_ctx,
 			int num_pipes, int value);
+
+	enum dc_status (*prog_pixclk_crtc_otg)(
+			struct pipe_ctx *pipe_ctx,
+			struct validate_context *context,
+			struct core_dc *dc);
 };
 
 void color_space_to_black_color(
