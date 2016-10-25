@@ -650,7 +650,7 @@ void ProgramPixelDurationV(unsigned int pixelClockInKHz )
 struct dc *dc_create(const struct dc_init_data *init_params)
  {
 	struct core_dc *core_dc = dm_alloc(sizeof(*core_dc));
-	int full_pipe_count;
+	unsigned int full_pipe_count;
 
 	if (NULL == core_dc)
 		goto alloc_fail;
