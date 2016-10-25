@@ -260,29 +260,6 @@ static void dce112_init_pte(struct dc_context *ctx)
 	uint32_t chunk_int = 0;
 	uint32_t chunk_mul = 0;
 
-	addr = mmUNP_DVMM_PTE_CONTROL;
-	value = dm_read_reg(ctx, addr);
-
-	set_reg_field_value(
-		value,
-		0,
-		DVMM_PTE_CONTROL,
-		DVMM_USE_SINGLE_PTE);
-
-	set_reg_field_value(
-		value,
-		1,
-		DVMM_PTE_CONTROL,
-		DVMM_PTE_BUFFER_MODE0);
-
-	set_reg_field_value(
-		value,
-		1,
-		DVMM_PTE_CONTROL,
-		DVMM_PTE_BUFFER_MODE1);
-
-	dm_write_reg(ctx, addr, value);
-
 	addr = mmDVMM_PTE_REQ;
 	value = dm_read_reg(ctx, addr);
 
