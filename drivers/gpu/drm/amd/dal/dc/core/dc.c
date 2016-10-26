@@ -557,8 +557,8 @@ static bool construct(struct core_dc *dc,
 	/* Create GPIO service */
 	dc_ctx->gpio_service = dal_gpio_service_create(
 			dc_version,
-			as->dce_environment,
-			as->ctx);
+			dc_ctx->dce_environment,
+			dc_ctx);
 
 	if (!dc_ctx->gpio_service) {
 		ASSERT_CRITICAL(false);
