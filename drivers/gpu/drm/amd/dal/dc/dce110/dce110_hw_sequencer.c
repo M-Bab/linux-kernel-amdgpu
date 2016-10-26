@@ -774,6 +774,12 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 	struct tg_color black_color = {0};
 
 	if (!pipe_ctx_old->stream) {
+
+		/* program blank color */
+		color_space_to_black_color(stream->public.output_color_space, &black_color);
+		pipe_ctx->tg->funcs->set_blank_color(
+				pipe_ctx->tg,
+				&black_color);
 		/*
 		 * Must blank CRTC after disabling power gating and before any
 		 * programming, otherwise CRTC will be hung in bad state
@@ -794,14 +800,6 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 				true);
 	}
 
-	/*TODO: mst support - use total stream count*/
-	pipe_ctx->mi->funcs->allocate_mem_input(
-					pipe_ctx->mi,
-					stream->public.timing.h_total,
-					stream->public.timing.v_total,
-					stream->public.timing.pix_clk_khz,
-					context->target_count);
-
 	if (!pipe_ctx_old->stream) {
 		if (false == pipe_ctx->tg->funcs->enable_crtc(
 				pipe_ctx->tg)) {
@@ -809,13 +807,6 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 			return DC_ERROR_UNEXPECTED;
 		}
 	}
-
-	/* TODO: move to stream encoder */
-	if (pipe_ctx->stream->signal != SIGNAL_TYPE_VIRTUAL)
-		if (DC_OK != bios_parser_crtc_source_select(pipe_ctx)) {
-			BREAK_TO_DEBUGGER();
-			return DC_ERROR_UNEXPECTED;
-		}
 
 	pipe_ctx->opp->funcs->opp_set_dyn_expansion(
 			pipe_ctx->opp,
@@ -827,6 +818,13 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 			pipe_ctx->opp,
 			&stream->bit_depth_params,
 			&stream->clamping);
+
+	/* TODO: move to stream encoder */
+	if (pipe_ctx->stream->signal != SIGNAL_TYPE_VIRTUAL)
+		if (DC_OK != bios_parser_crtc_source_select(pipe_ctx)) {
+			BREAK_TO_DEBUGGER();
+			return DC_ERROR_UNEXPECTED;
+		}
 
 	if (pipe_ctx->stream->signal != SIGNAL_TYPE_VIRTUAL)
 		stream->sink->link->link_enc->funcs->setup(
@@ -852,12 +850,6 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 			(pipe_ctx->stream->signal == SIGNAL_TYPE_DVI_DUAL_LINK) ?
 			true : false);
 
-	/* program blank color */
-	color_space_to_black_color(stream->public.output_color_space, &black_color);
-	pipe_ctx->tg->funcs->set_blank_color(
-			pipe_ctx->tg,
-			&black_color);
-
 	if (!pipe_ctx_old->stream) {
 		core_link_enable_stream(pipe_ctx);
 
@@ -870,6 +862,14 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 				&pipe_ctx->scl_data,
 				sizeof(struct scaler_data)) != 0)
 		program_scaler(dc, pipe_ctx);
+
+	/*TODO: mst support - use total stream count*/
+	pipe_ctx->mi->funcs->allocate_mem_input(
+					pipe_ctx->mi,
+					stream->public.timing.h_total,
+					stream->public.timing.v_total,
+					stream->public.timing.pix_clk_khz,
+					context->target_count);
 
 	return DC_OK;
 }
@@ -1335,7 +1335,7 @@ static enum dc_status apply_ctx_to_hw(
 
 	/* Reset old context */
 	/* look up the targets that have been removed since last commit */
-	for (i = 0; i < MAX_PIPES; i++) {
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx_old =
 			&dc->current_context->res_ctx.pipe_ctx[i];
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
@@ -1362,7 +1362,7 @@ static enum dc_status apply_ctx_to_hw(
 	/* Apply new context */
 	dcb->funcs->set_scratch_critical_state(dcb, true);
 
-	for (i = 0; i < MAX_PIPES; i++) {
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx_old =
 					&dc->current_context->res_ctx.pipe_ctx[i];
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
@@ -1390,7 +1390,7 @@ static enum dc_status apply_ctx_to_hw(
 		> dc->current_context->bw_results.dispclk_khz)
 		set_display_clock(context);
 
-	for (i = 0; i < MAX_PIPES; i++) {
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx_old =
 					&dc->current_context->res_ctx.pipe_ctx[i];
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
@@ -1428,7 +1428,7 @@ static enum dc_status apply_ctx_to_hw(
 	 * find first available pipe with audio, setup audio wall DTO per topology
 	 * instead of per pipe.
 	 */
-	for (i = 0; i < MAX_PIPES; i++) {
+	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		if (context->res_ctx.pipe_ctx[i].audio != NULL) {
 			struct audio_output audio_output;
 			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
