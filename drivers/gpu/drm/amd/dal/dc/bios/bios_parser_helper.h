@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-15 Advanced Micro Devices, Inc.
+ * Copyright 2012-16 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -26,31 +26,15 @@
 #ifndef __DAL_BIOS_PARSER_HELPER_H__
 #define __DAL_BIOS_PARSER_HELPER_H__
 
-#include "dce80/bios_parser_helper_dce80.h"
-
-#include "dce110/bios_parser_helper_dce110.h"
-
-#include "dce112/bios_parser_helper_dce112.h"
-
 struct bios_parser;
-
-struct bios_parser_helper {
-	bool (*is_accelerated_mode)(
-		struct dc_context *ctx);
-};
-
-bool dal_bios_parser_init_bios_helper(
-	struct bios_parser *bp,
-	enum dce_version ver);
-
 
 uint8_t *get_image(struct dc_bios *bp, uint32_t offset,
 	uint32_t size);
 
+bool bios_is_accelerated_mode(struct dc_bios *bios);
+void bios_set_scratch_acc_mode_change(struct dc_bios *bios);
+void bios_set_scratch_critical_state(struct dc_bios *bios, bool state);
+
 #define GET_IMAGE(type, offset) ((type *) get_image(&bp->base, offset, sizeof(type)))
-
-
-
-
 
 #endif

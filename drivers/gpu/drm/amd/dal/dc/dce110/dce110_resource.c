@@ -69,6 +69,7 @@
 
 #ifndef mmBIOS_SCRATCH_2
 	#define mmBIOS_SCRATCH_2 0x05CB
+	#define mmBIOS_SCRATCH_6 0x05CF
 #endif
 
 #ifndef mmDP_DPHY_BS_SR_SWAP_CNTL
@@ -325,6 +326,9 @@ static const struct dce110_clk_src_reg_offsets dce110_clk_src_reg_offsets[] = {
 	}
 };
 
+static const struct bios_registers bios_regs = {
+	.BIOS_SCRATCH_6 = mmBIOS_SCRATCH_6
+};
 
 static const struct resource_caps carrizo_resource_cap = {
 		.num_timing_generator = 3,
@@ -1178,6 +1182,8 @@ static bool construct(
 	struct dc_bios *bp;
 	struct dm_pp_static_clock_info static_clk_info = {0};
 	struct resource_straps straps = {0};
+
+	ctx->dc_bios->regs = &bios_regs;
 
 	pool->base.adapter_srv = as;
 	pool->base.res_cap = dce110_resource_cap(&dc->asic_id);

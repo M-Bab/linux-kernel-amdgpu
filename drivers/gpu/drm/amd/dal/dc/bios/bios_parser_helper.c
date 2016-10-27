@@ -33,33 +33,6 @@
 #include "command_table.h"
 #include "bios_parser_types_internal.h"
 
-bool dal_bios_parser_init_bios_helper(
-	struct bios_parser *bp,
-	enum dce_version version)
-{
-	switch (version) {
-	case DCE_VERSION_8_0:
-		bp->bios_helper = dal_bios_parser_helper_dce80_get_table();
-		return true;
-	case DCE_VERSION_10_0:
-		bp->bios_helper = dal_bios_parser_helper_dce110_get_table();
-		return true;
-
-	case DCE_VERSION_11_0:
-		bp->bios_helper = dal_bios_parser_helper_dce110_get_table();
-		return true;
-
-	case DCE_VERSION_11_2:
-		bp->bios_helper = dal_bios_parser_helper_dce112_get_table();
-		return true;
-
-	default:
-		BREAK_TO_DEBUGGER();
-		return false;
-	}
-}
-
-
 uint8_t *get_image(struct dc_bios *bp,
 	uint32_t offset,
 	uint32_t size)
@@ -69,3 +42,41 @@ uint8_t *get_image(struct dc_bios *bp,
 	else
 		return NULL;
 }
+
+#include "reg_helper.h"
+
+#define CTX \
+	bios->ctx
+#define REG(reg)\
+	(bios->regs->reg)
+
+#undef FN
+#define FN(reg_name, field_name) \
+		ATOM_ ## field_name ## _SHIFT, ATOM_ ## field_name
+
+bool bios_is_accelerated_mode(
+	struct dc_bios *bios)
+{
+	uint32_t acc_mode;
+	REG_GET(BIOS_SCRATCH_6, S6_ACC_MODE, &acc_mode);
+	return (acc_mode == 1);
+}
+
+
+void bios_set_scratch_acc_mode_change(
+	struct dc_bios *bios)
+{
+	REG_UPDATE(BIOS_SCRATCH_6, S6_ACC_MODE, 1);
+}
+
+
+void bios_set_scratch_critical_state(
+	struct dc_bios *bios,
+	bool state)
+{
+	uint32_t critial_state = state ? 1 : 0;
+	REG_UPDATE(BIOS_SCRATCH_6, S6_CRITICAL_STATE, critial_state);
+}
+
+
+

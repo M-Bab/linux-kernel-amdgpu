@@ -37,7 +37,6 @@
 
 #include "command_table.h"
 #include "bios_parser_helper.h"
-#include "dce110/bios_dce110.h"
 #include "command_table_helper.h"
 #include "bios_parser.h"
 #include "bios_parser_types_internal.h"
@@ -3667,10 +3666,7 @@ static void bios_parser_post_init(struct dc_bios *dcb,
 static bool bios_parser_is_accelerated_mode(
 	struct dc_bios *dcb)
 {
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	return bp->bios_helper->is_accelerated_mode(
-			bp->base.ctx);
+	bios_is_accelerated_mode(dcb);
 }
 
 /**
@@ -3686,10 +3682,7 @@ static void bios_parser_set_scratch_critical_state(
 	struct dc_bios *dcb,
 	bool state)
 {
-	struct bios_parser *bp = BP_FROM_DCB(dcb);
-
-	dce110_set_scratch_critical_state(
-			bp->base.ctx, state);
+	bios_set_scratch_critical_state(dcb, state);
 }
 
 /*
@@ -4127,7 +4120,7 @@ static const struct dc_vbios_funcs vbios_funcs = {
 	.get_encoder_cap_info = bios_parser_get_encoder_cap_info,
 
 	/* bios scratch register communication */
-	.is_accelerated_mode = bios_parser_is_accelerated_mode,
+	.is_accelerated_mode = bios_is_accelerated_mode,
 
 	.set_scratch_critical_state = bios_parser_set_scratch_critical_state,
 
@@ -4243,7 +4236,6 @@ static bool bios_parser_construct(
 	else
 		return false;
 
-	dal_bios_parser_init_bios_helper(bp, dce_version);
 	dal_bios_parser_init_cmd_tbl(bp);
 	dal_bios_parser_init_cmd_tbl_helper(&bp->cmd_helper, dce_version);
 

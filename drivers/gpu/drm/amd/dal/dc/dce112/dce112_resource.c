@@ -66,6 +66,7 @@
 
 #ifndef mmBIOS_SCRATCH_2
 	#define mmBIOS_SCRATCH_2 0x05CB
+	#define mmBIOS_SCRATCH_6 0x05CF
 #endif
 
 #ifndef mmDP_DPHY_BS_SR_SWAP_CNTL
@@ -373,6 +374,10 @@ static const struct dce112_clk_src_reg_offsets dce112_clk_src_reg_offsets[] = {
 	{
 		.pixclk_resync_cntl  = mmPHYPLLF_PIXCLK_RESYNC_CNTL
 	}
+};
+
+static const struct bios_registers bios_regs = {
+	.BIOS_SCRATCH_6 = mmBIOS_SCRATCH_6
 };
 
 static const struct resource_caps polaris_10_resource_cap = {
@@ -1186,6 +1191,8 @@ static bool construct(
 	unsigned int i;
 	struct dc_context *ctx = dc->ctx;
 	struct dm_pp_static_clock_info static_clk_info = {0};
+
+	ctx->dc_bios->regs = &bios_regs;
 
 	pool->base.adapter_srv = adapter_serv;
 	pool->base.res_cap = dce112_resource_cap(&dc->asic_id);

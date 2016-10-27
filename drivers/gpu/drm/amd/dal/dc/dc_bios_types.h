@@ -212,6 +212,10 @@ struct dc_vbios_funcs {
 	void (*bios_parser_destroy)(struct dc_bios **dcb);
 };
 
+struct bios_registers {
+	uint32_t BIOS_SCRATCH_6;
+};
+
 struct dc_bios {
 	const struct dc_vbios_funcs *funcs;
 
@@ -221,6 +225,7 @@ struct dc_bios {
 	uint8_t *bios_local_image;
 
 	struct dc_context *ctx;
+	const struct bios_registers *regs;
 };
 
 #endif /* DC_BIOS_TYPES_H */

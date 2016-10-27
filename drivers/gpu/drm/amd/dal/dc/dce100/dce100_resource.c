@@ -66,6 +66,7 @@
 
 #ifndef mmBIOS_SCRATCH_2
 	#define mmBIOS_SCRATCH_2 0x05CB
+	#define mmBIOS_SCRATCH_6 0x05CF
 #endif
 
 #ifndef mmDP_DPHY_BS_SR_SWAP_CNTL
@@ -356,6 +357,10 @@ static const struct dce110_opp_reg_offsets dce100_opp_reg_offsets[] = {
 	.dcfe_offset = (mmCRTC5_DCFE_MEM_PWR_CTRL - DCFE_MEM_PWR_CTRL_REG_BASE),
 	.dcp_offset = (mmDCP5_GRPH_CONTROL - mmDCP0_GRPH_CONTROL),
 }
+};
+
+static const struct bios_registers bios_regs = {
+	.BIOS_SCRATCH_6 = mmBIOS_SCRATCH_6
 };
 
 static const struct resource_caps res_cap = {
@@ -858,6 +863,8 @@ static bool construct(
 	struct firmware_info info;
 	struct dc_bios *bp;
 	struct dm_pp_static_clock_info static_clk_info = {0};
+
+	ctx->dc_bios->regs = &bios_regs;
 
 	pool->base.adapter_srv = as;
 	pool->base.res_cap = &res_cap;

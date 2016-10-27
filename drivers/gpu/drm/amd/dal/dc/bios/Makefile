@@ -13,18 +13,12 @@ AMD_DAL_FILES += $(AMD_DAL_BIOS)
 ###############################################################################
 # All DCE8.x are derived from DCE8.0, so 8.0 MUST be defined if ANY of
 # DCE8.x is compiled.
-AMD_DAL_FILES += $(AMDDALPATH)/dc/bios/dce80/bios_parser_helper_dce80.o
-
 AMD_DAL_FILES += $(AMDDALPATH)/dc/bios/dce80/command_table_helper_dce80.o
 
 ###############################################################################
 # DCE 11x
 ###############################################################################
-AMD_DAL_FILES += $(AMDDALPATH)/dc/bios/dce110/bios_parser_helper_dce110.o
-
 AMD_DAL_FILES += $(AMDDALPATH)/dc/bios/dce110/command_table_helper_dce110.o
 
 ccflags-y += -DLATEST_ATOM_BIOS_SUPPORT
-AMD_DAL_FILES += $(AMDDALPATH)/dc/bios/dce112/bios_parser_helper_dce112.o
-
 AMD_DAL_FILES += $(AMDDALPATH)/dc/bios/dce112/command_table_helper_dce112.o

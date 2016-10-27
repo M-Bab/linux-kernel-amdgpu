@@ -35,7 +35,7 @@
 
 #include "gpu/dce110/dc_clock_gating_dce110.h"
 
-#include "bios/dce110/bios_dce110.h"
+#include "bios/bios_parser_helper.h"
 #include "timing_generator.h"
 #include "mem_input.h"
 #include "opp.h"
@@ -975,7 +975,7 @@ void dce110_enable_accelerated_mode(struct core_dc *dc)
 	power_down_all_hw_blocks(dc);
 
 	disable_vga_and_power_gate_all_controllers(dc);
-	dce110_set_scratch_acc_mode_change(dc->ctx);
+	bios_set_scratch_acc_mode_change(dc->ctx->dc_bios);
 }
 
 /**
