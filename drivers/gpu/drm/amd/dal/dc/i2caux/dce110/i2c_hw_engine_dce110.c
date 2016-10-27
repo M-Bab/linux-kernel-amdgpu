@@ -98,20 +98,10 @@ enum {
 	(hw_engine->regs->reg_name)
 #include "reg_helper.h"
 
-
 static void disable_i2c_hw_engine(
 	struct i2c_hw_engine_dce110 *hw_engine)
 {
-	uint32_t value = 0;
-	value = REG_READ(SETUP);
-
-	set_reg_field_value(
-		value,
-		0,
-		DC_I2C_DDC1_SETUP,
-		DC_I2C_DDC1_ENABLE);
-
-	REG_WRITE(SETUP, value);
+	REG_UPDATE_N(SETUP, 1, FN(DC_I2C_DDC1_SETUP, DC_I2C_DDC1_ENABLE), 0);
 }
 
 static void release_engine(
@@ -121,7 +111,6 @@ static void release_engine(
 
 	struct i2c_engine *base = NULL;
 	bool safe_to_reset;
-	uint32_t value = 0;
 
 	base = &hw_engine->base.base;
 
@@ -130,49 +119,23 @@ static void release_engine(
 	base->funcs->set_speed(base, hw_engine->base.original_speed);
 
 	/* Release I2C */
-	{
-		value = REG_READ(DC_I2C_ARBITRATION);
-
-		set_reg_field_value(
-				value,
-				1,
-				DC_I2C_ARBITRATION,
-				DC_I2C_SW_DONE_USING_I2C_REG);
-
-		REG_WRITE(DC_I2C_ARBITRATION, value);
-	}
+	REG_UPDATE(DC_I2C_ARBITRATION, DC_I2C_SW_DONE_USING_I2C_REG, 1);
 
 	/* Reset HW engine */
 	{
 		uint32_t i2c_sw_status = 0;
-
-		value = REG_READ(DC_I2C_SW_STATUS);
-
-		i2c_sw_status = get_reg_field_value(
-				value,
-				DC_I2C_SW_STATUS,
-				DC_I2C_SW_STATUS);
+		REG_GET(DC_I2C_SW_STATUS, DC_I2C_SW_STATUS, &i2c_sw_status);
 		/* if used by SW, safe to reset */
 		safe_to_reset = (i2c_sw_status == 1);
 	}
-	{
-		value = REG_READ(DC_I2C_CONTROL);
 
 		if (safe_to_reset)
-			set_reg_field_value(
-				value,
-				1,
-				DC_I2C_CONTROL,
-				DC_I2C_SOFT_RESET);
-
-		set_reg_field_value(
-			value,
-			1,
-			DC_I2C_CONTROL,
-			DC_I2C_SW_STATUS_RESET);
-
-		REG_WRITE(DC_I2C_CONTROL, value);
-	}
+			REG_UPDATE_2(
+					DC_I2C_CONTROL,
+					DC_I2C_SOFT_RESET, 1,
+					DC_I2C_SW_STATUS_RESET, 1);
+		else
+			REG_UPDATE(DC_I2C_CONTROL, DC_I2C_SW_STATUS_RESET, 1);
 
 	/* HW I2c engine - clock gating feature */
 	if (!hw_engine->engine_keep_power_up_count)
@@ -182,92 +145,32 @@ static void release_engine(
 static bool setup_engine(
 	struct i2c_engine *i2c_engine)
 {
-	uint32_t value = 0;
 	struct i2c_hw_engine_dce110 *hw_engine = FROM_I2C_ENGINE(i2c_engine);
 
 	/* Program pin select */
-	{
-		value = REG_READ(DC_I2C_CONTROL);
-
-		set_reg_field_value(
-			value,
-			0,
+	REG_UPDATE_6(
 			DC_I2C_CONTROL,
-			DC_I2C_GO);
-
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_CONTROL,
-			DC_I2C_SOFT_RESET);
-
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_CONTROL,
-			DC_I2C_SEND_RESET);
-
-		set_reg_field_value(
-			value,
-			1,
-			DC_I2C_CONTROL,
-			DC_I2C_SW_STATUS_RESET);
-
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_CONTROL,
-			DC_I2C_TRANSACTION_COUNT);
-
-		set_reg_field_value(
-			value,
-			hw_engine->engine_id,
-			DC_I2C_CONTROL,
-			DC_I2C_DDC_SELECT);
-
-		REG_WRITE(DC_I2C_CONTROL, value);
-	}
+			DC_I2C_GO, 0,
+			DC_I2C_SOFT_RESET, 0,
+			DC_I2C_SEND_RESET, 0,
+			DC_I2C_SW_STATUS_RESET, 1,
+			DC_I2C_TRANSACTION_COUNT, 0,
+			DC_I2C_DDC_SELECT, hw_engine->engine_id);
 
 	/* Program time limit */
-	{
-		value = REG_READ(SETUP);
-
-		set_reg_field_value(
-			value,
-			I2C_SETUP_TIME_LIMIT,
-			DC_I2C_DDC1_SETUP,
-			DC_I2C_DDC1_TIME_LIMIT);
-
-		set_reg_field_value(
-			value,
-			1,
-			DC_I2C_DDC1_SETUP,
-			DC_I2C_DDC1_ENABLE);
-
-		REG_WRITE(SETUP, value);
-	}
+	REG_UPDATE_N(
+			SETUP, 2,
+			FN(DC_I2C_DDC1_SETUP, DC_I2C_DDC1_TIME_LIMIT), I2C_SETUP_TIME_LIMIT,
+			FN(DC_I2C_DDC1_SETUP, DC_I2C_DDC1_ENABLE), 1);
 
 	/* Program HW priority
 	 * set to High - interrupt software I2C at any time
 	 * Enable restart of SW I2C that was interrupted by HW
 	 * disable queuing of software while I2C is in use by HW */
-	{
-		value = REG_READ(DC_I2C_ARBITRATION);
-
-		set_reg_field_value(
-			value,
-			0,
+	REG_UPDATE_2(
 			DC_I2C_ARBITRATION,
-			DC_I2C_NO_QUEUED_SW_GO);
-
-		set_reg_field_value(
-			value,
-			DC_I2C_ARBITRATION__DC_I2C_SW_PRIORITY_NORMAL,
-			DC_I2C_ARBITRATION,
-			DC_I2C_SW_PRIORITY);
-
-		REG_WRITE(DC_I2C_ARBITRATION, value);
-	}
+			DC_I2C_NO_QUEUED_SW_GO, 0,
+			DC_I2C_SW_PRIORITY, DC_I2C_ARBITRATION__DC_I2C_SW_PRIORITY_NORMAL);
 
 	return true;
 }
@@ -277,16 +180,13 @@ static uint32_t get_speed(
 {
 	const struct i2c_hw_engine_dce110 *hw_engine = FROM_I2C_ENGINE(i2c_engine);
 	uint32_t pre_scale = 0;
-	uint32_t value = REG_READ(SPEED);
 
-	pre_scale = get_reg_field_value(
-			value,
-			DC_I2C_DDC1_SPEED,
-			DC_I2C_DDC1_PRESCALE);
+	generic_reg_get(
+			CTX, REG(SPEED),
+			FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_PRESCALE), &pre_scale);
 
 	/* [anaumov] it seems following is unnecessary */
 	/*ASSERT(value.bits.DC_I2C_DDC1_PRESCALE);*/
-
 	return pre_scale ?
 		hw_engine->reference_frequency / pre_scale :
 		hw_engine->base.default_speed;
@@ -298,58 +198,22 @@ static void set_speed(
 {
 	struct i2c_hw_engine_dce110 *hw_engine = FROM_I2C_ENGINE(i2c_engine);
 
-	if (speed) {
-		uint32_t value = REG_READ(SPEED);
-
-		set_reg_field_value(
-			value,
-			hw_engine->reference_frequency / speed,
-			DC_I2C_DDC1_SPEED,
-			DC_I2C_DDC1_PRESCALE);
-
-		set_reg_field_value(
-			value,
-			2,
-			DC_I2C_DDC1_SPEED,
-			DC_I2C_DDC1_THRESHOLD);
-
-		/*DCE11, HW add 100Khz support for I2c*/
-		if (speed > 50) {
-			set_reg_field_value(
-				value,
-				2,
-				DC_I2C_DDC1_SPEED,
-				DC_I2C_DDC1_START_STOP_TIMING_CNTL);
-		} else {
-			set_reg_field_value(
-				value,
-				1,
-				DC_I2C_DDC1_SPEED,
-				DC_I2C_DDC1_START_STOP_TIMING_CNTL);
-		}
-
-		REG_WRITE(SPEED, value);
-	}
+	if (speed)
+		REG_UPDATE_N(
+			SPEED, 3,
+			FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_PRESCALE), hw_engine->reference_frequency / speed,
+			FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_THRESHOLD), 2,
+			FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_START_STOP_TIMING_CNTL), speed > 50 ? 2:1);
 }
 
 static inline void reset_hw_engine(struct engine *engine)
 {
 	struct i2c_hw_engine_dce110 *hw_engine = FROM_ENGINE(engine);
-	uint32_t value = REG_READ(DC_I2C_CONTROL);
 
-	set_reg_field_value(
-		value,
-		1,
-		DC_I2C_CONTROL,
-		DC_I2C_SOFT_RESET);
-
-	set_reg_field_value(
-		value,
-		1,
-		DC_I2C_CONTROL,
-		DC_I2C_SW_STATUS_RESET);
-
-	REG_WRITE(DC_I2C_CONTROL, value);
+	REG_UPDATE_2(
+			DC_I2C_CONTROL,
+			DC_I2C_SW_STATUS_RESET, 1,
+			DC_I2C_SW_STATUS_RESET, 1);
 }
 
 static bool is_hw_busy(struct engine *engine)
@@ -357,70 +221,34 @@ static bool is_hw_busy(struct engine *engine)
 	struct i2c_hw_engine_dce110 *hw_engine = FROM_ENGINE(engine);
 	uint32_t i2c_sw_status = 0;
 
-	uint32_t value = REG_READ(DC_I2C_SW_STATUS);
-
-	i2c_sw_status = get_reg_field_value(
-			value,
-			DC_I2C_SW_STATUS,
-			DC_I2C_SW_STATUS);
-
+	REG_GET(DC_I2C_SW_STATUS, DC_I2C_SW_STATUS, &i2c_sw_status);
 	if (i2c_sw_status == DC_I2C_STATUS__DC_I2C_STATUS_IDLE)
 		return false;
 
 	reset_hw_engine(engine);
 
-	value = REG_READ(DC_I2C_SW_STATUS);
-
-	i2c_sw_status = get_reg_field_value(
-			value,
-			DC_I2C_SW_STATUS,
-			DC_I2C_SW_STATUS);
-
+	REG_GET(DC_I2C_SW_STATUS, DC_I2C_SW_STATUS, &i2c_sw_status);
 	return i2c_sw_status != DC_I2C_STATUS__DC_I2C_STATUS_IDLE;
 }
 
-/*
- * @brief
- * DC_GPIO_DDC MM register offsets
- */
-static uint32_t transaction_reg_read(struct i2c_hw_engine_dce110 *hw_engine,
-		uint32_t transaction_count)
-{
-	switch (transaction_count) {
-	case 0:
-		return REG_READ(DC_I2C_TRANSACTION0);
-	case 1:
-		return REG_READ(DC_I2C_TRANSACTION1);
-	case 2:
-		return REG_READ(DC_I2C_TRANSACTION2);
-	case 3:
-		return REG_READ(DC_I2C_TRANSACTION3);
-	default:
-		return 0;
-	}
-}
 
-static void transcation_reg_write(struct i2c_hw_engine_dce110 *hw_engine,
-		uint32_t transaction_count, uint32_t value)
-{
-	switch (transaction_count) {
-	case 0:
-		REG_WRITE(DC_I2C_TRANSACTION0, value);
-		break;
-	case 1:
-		REG_WRITE(DC_I2C_TRANSACTION1, value);
-		break;
-	case 2:
-		REG_WRITE(DC_I2C_TRANSACTION2, value);
-		break;
-	case 3:
-		REG_WRITE(DC_I2C_TRANSACTION3, value);
-		break;
+#define STOP_TRANS_PREDICAT \
+		((hw_engine->transaction_count == 3) ||	\
+				(request->action == I2CAUX_TRANSACTION_ACTION_I2C_WRITE) ||	\
+				(request->action & I2CAUX_TRANSACTION_ACTION_I2C_READ))
 
-	default:
-		break;
-	}
-}
+#define SET_I2C_TRANSACTION(id)	\
+		do {	\
+			REG_UPDATE_N(DC_I2C_TRANSACTION##id, 5,	\
+				FN(DC_I2C_TRANSACTION0, DC_I2C_STOP_ON_NACK0), 1,	\
+				FN(DC_I2C_TRANSACTION0, DC_I2C_START0), 1,	\
+				FN(DC_I2C_TRANSACTION0, DC_I2C_STOP0), STOP_TRANS_PREDICAT ? 1:0,	\
+				FN(DC_I2C_TRANSACTION0, DC_I2C_RW0), (0 != (request->action & I2CAUX_TRANSACTION_ACTION_I2C_READ)),	\
+				FN(DC_I2C_TRANSACTION0, DC_I2C_COUNT0), length);	\
+				if (STOP_TRANS_PREDICAT)	\
+					last_transaction = true;	\
+		} while (false)
+
 
 static bool process_transaction(
 	struct i2c_hw_engine_dce110 *hw_engine,
@@ -430,60 +258,31 @@ static bool process_transaction(
 	uint8_t *buffer = request->data;
 
 	bool last_transaction = false;
-	uint32_t value = 0;
 
 	struct dc_context *ctx = NULL;
 
 	ctx = hw_engine->base.base.base.ctx;
 
-	{
-		value = transaction_reg_read(hw_engine, hw_engine->transaction_count);
 
-		set_reg_field_value(
-			value,
-			1,
-			DC_I2C_TRANSACTION0,
-			DC_I2C_STOP_ON_NACK0);
 
-		set_reg_field_value(
-			value,
-			1,
-			DC_I2C_TRANSACTION0,
-			DC_I2C_START0);
-
-		if ((hw_engine->transaction_count == 3) ||
-		(request->action == I2CAUX_TRANSACTION_ACTION_I2C_WRITE) ||
-		(request->action & I2CAUX_TRANSACTION_ACTION_I2C_READ)) {
-
-			set_reg_field_value(
-				value,
-				1,
-				DC_I2C_TRANSACTION0,
-				DC_I2C_STOP0);
-
-			last_transaction = true;
-		} else
-			set_reg_field_value(
-				value,
-				0,
-				DC_I2C_TRANSACTION0,
-				DC_I2C_STOP0);
-
-		set_reg_field_value(
-			value,
-			(0 != (request->action &
-					I2CAUX_TRANSACTION_ACTION_I2C_READ)),
-			DC_I2C_TRANSACTION0,
-			DC_I2C_RW0);
-
-		set_reg_field_value(
-			value,
-			length,
-			DC_I2C_TRANSACTION0,
-			DC_I2C_COUNT0);
-
-		transcation_reg_write(hw_engine, hw_engine->transaction_count, value);
+	switch (hw_engine->transaction_count) {
+	case 0:
+		SET_I2C_TRANSACTION(0);
+		break;
+	case 1:
+		SET_I2C_TRANSACTION(1);
+		break;
+	case 2:
+		SET_I2C_TRANSACTION(2);
+		break;
+	case 3:
+		SET_I2C_TRANSACTION(3);
+		break;
+	default:
+		/* TODO Warning ? */
+		break;
 	}
+
 
 	/* Write the I2C address and I2C data
 	 * into the hardware circular buffer, one byte per entry.
@@ -491,64 +290,29 @@ static bool process_transaction(
 	 * for reading DDC/EDID information is 0b1010001.
 	 * For an I2C send operation, the LSB must be programmed to 0;
 	 * for I2C receive operation, the LSB must be programmed to 1. */
+	if (hw_engine->transaction_count == 0) {
+			REG_SET_4(DC_I2C_DATA, 0,
+			DC_I2C_DATA_RW, false,
+			DC_I2C_DATA, request->address,
+			DC_I2C_INDEX, 0,
+			DC_I2C_INDEX_WRITE, 1);
+		hw_engine->buffer_used_write = 0;
+	} else
+			REG_SET_2(DC_I2C_DATA, 0,
+			DC_I2C_DATA_RW, false,
+			DC_I2C_DATA, request->address);
 
-	{
-		value = 0;
+	hw_engine->buffer_used_write++;
 
-		set_reg_field_value(
-			value,
-			false,
-			DC_I2C_DATA,
-			DC_I2C_DATA_RW);
+	if (!(request->action & I2CAUX_TRANSACTION_ACTION_I2C_READ)) {
+		while (length) {
 
-		set_reg_field_value(
-			value,
-			request->address,
-			DC_I2C_DATA,
-			DC_I2C_DATA);
+			REG_UPDATE_2(DC_I2C_DATA,
+				DC_I2C_INDEX_WRITE, 0,
+				DC_I2C_DATA, *buffer++);
 
-		if (hw_engine->transaction_count == 0) {
-			set_reg_field_value(
-				value,
-				0,
-				DC_I2C_DATA,
-				DC_I2C_INDEX);
-
-			/*enable index write*/
-			set_reg_field_value(
-				value,
-				1,
-				DC_I2C_DATA,
-				DC_I2C_INDEX_WRITE);
-
-			hw_engine->buffer_used_write = 0;
-		}
-
-		REG_WRITE(DC_I2C_DATA, value);
-
-		hw_engine->buffer_used_write++;
-
-		if (!(request->action & I2CAUX_TRANSACTION_ACTION_I2C_READ)) {
-
-			set_reg_field_value(
-				value,
-				0,
-				DC_I2C_DATA,
-				DC_I2C_INDEX_WRITE);
-
-			while (length) {
-
-				set_reg_field_value(
-					value,
-					*buffer++,
-					DC_I2C_DATA,
-					DC_I2C_DATA);
-
-				REG_WRITE(DC_I2C_DATA, value);
-
-				hw_engine->buffer_used_write++;
-				--length;
-			}
+			hw_engine->buffer_used_write++;
+			--length;
 		}
 	}
 
@@ -561,92 +325,23 @@ static bool process_transaction(
 static void execute_transaction(
 	struct i2c_hw_engine_dce110 *hw_engine)
 {
-	uint32_t value = 0;
+	REG_UPDATE_N(SETUP, 5,
+		FN(DC_I2C_DDC1_SETUP, DC_I2C_DDC1_DATA_DRIVE_EN), 0,
+		FN(DC_I2C_DDC1_SETUP, DC_I2C_DDC1_CLK_DRIVE_EN), 0,
+		FN(DC_I2C_DDC1_SETUP, DC_I2C_DDC1_DATA_DRIVE_SEL), 0,
+		FN(DC_I2C_DDC1_SETUP, DC_I2C_DDC1_INTRA_TRANSACTION_DELAY), 0,
+		FN(DC_I2C_DDC1_SETUP, DC_I2C_DDC1_INTRA_BYTE_DELAY), 0);
 
-	{
-		value = REG_READ(SETUP);
 
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_DDC1_SETUP,
-			DC_I2C_DDC1_DATA_DRIVE_EN);
-
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_DDC1_SETUP,
-			DC_I2C_DDC1_CLK_DRIVE_EN);
-
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_DDC1_SETUP,
-			DC_I2C_DDC1_DATA_DRIVE_SEL);
-
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_DDC1_SETUP,
-			DC_I2C_DDC1_INTRA_TRANSACTION_DELAY);
-
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_DDC1_SETUP,
-			DC_I2C_DDC1_INTRA_BYTE_DELAY);
-
-		REG_WRITE(SETUP, value);
-	}
-
-	{
-		value = REG_READ(DC_I2C_CONTROL);
-
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_CONTROL,
-			DC_I2C_SOFT_RESET);
-
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_CONTROL,
-			DC_I2C_SW_STATUS_RESET);
-
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_CONTROL,
-			DC_I2C_SEND_RESET);
-
-		set_reg_field_value(
-			value,
-			0,
-			DC_I2C_CONTROL,
-			DC_I2C_GO);
-
-		set_reg_field_value(
-			value,
-			hw_engine->transaction_count - 1,
-			DC_I2C_CONTROL,
-			DC_I2C_TRANSACTION_COUNT);
-
-		REG_WRITE(DC_I2C_CONTROL, value);
-	}
+	REG_UPDATE_5(DC_I2C_CONTROL,
+		DC_I2C_SOFT_RESET, 0,
+		DC_I2C_SW_STATUS_RESET, 0,
+		DC_I2C_SEND_RESET, 0,
+		DC_I2C_GO, 0,
+		DC_I2C_TRANSACTION_COUNT, hw_engine->transaction_count - 1);
 
 	/* start I2C transfer */
-	{
-		value	= REG_READ(DC_I2C_CONTROL);
-
-		set_reg_field_value(
-			value,
-			1,
-			DC_I2C_CONTROL,
-			DC_I2C_GO);
-
-		REG_WRITE(DC_I2C_CONTROL, value);
-	}
+	REG_UPDATE(DC_I2C_CONTROL, DC_I2C_GO, 1);
 
 	/* all transactions were executed and HW buffer became empty
 	 * (even though it actually happens when status becomes DONE) */
@@ -681,28 +376,11 @@ static void process_channel_reply(
 	struct i2c_hw_engine_dce110 *hw_engine =
 		FROM_I2C_ENGINE(engine);
 
-	uint32_t value = 0;
 
-	/*set index*/
-	set_reg_field_value(
-		value,
-		hw_engine->buffer_used_write,
-		DC_I2C_DATA,
-		DC_I2C_INDEX);
-
-	set_reg_field_value(
-		value,
-		1,
-		DC_I2C_DATA,
-		DC_I2C_DATA_RW);
-
-	set_reg_field_value(
-		value,
-		1,
-		DC_I2C_DATA,
-		DC_I2C_INDEX_WRITE);
-
-	REG_WRITE(DC_I2C_DATA, value);
+	REG_SET_3(DC_I2C_DATA, 0,
+			DC_I2C_INDEX, hw_engine->buffer_used_write,
+			DC_I2C_DATA_RW, 1,
+			DC_I2C_INDEX_WRITE, 1);
 
 	while (length) {
 		/* after reading the status,
@@ -710,7 +388,7 @@ static void process_channel_reply(
 		 * (i.e. DC_I2C_STATUS_DONE = 1) then the I2C controller
 		 * should read data bytes from I2C circular data buffer */
 
-		value = REG_READ(DC_I2C_DATA);
+		uint32_t value = REG_READ(DC_I2C_DATA);
 
 		*buffer++ = get_reg_field_value(
 				value,
@@ -727,12 +405,8 @@ static enum i2c_channel_operation_result get_channel_status(
 {
 	uint32_t i2c_sw_status = 0;
 	struct i2c_hw_engine_dce110 *hw_engine = FROM_I2C_ENGINE(i2c_engine);
-	uint32_t value = REG_READ(DC_I2C_SW_STATUS);
-
-	i2c_sw_status = get_reg_field_value(
-			value,
-			DC_I2C_SW_STATUS,
-			DC_I2C_SW_STATUS);
+	uint32_t value =
+			REG_GET(DC_I2C_SW_STATUS, DC_I2C_SW_STATUS, &i2c_sw_status);
 
 	if (i2c_sw_status == DC_I2C_STATUS__DC_I2C_STATUS_USED_BY_SW)
 		return I2C_CHANNEL_OPERATION_ENGINE_BUSY;
@@ -793,40 +467,6 @@ static void destroy(
 
 	*i2c_engine = NULL;
 }
-/*
- * @brief
- * DC_I2C_DDC1_SETUP MM register offsets
- *
- * @note
- * The indices of this offset array are DDC engine IDs
- */
-static const int32_t ddc_setup_offset[] = {
-
-	mmDC_I2C_DDC1_SETUP - mmDC_I2C_DDC1_SETUP, /* DDC Engine 1 */
-	mmDC_I2C_DDC2_SETUP - mmDC_I2C_DDC1_SETUP, /* DDC Engine 2 */
-	mmDC_I2C_DDC3_SETUP - mmDC_I2C_DDC1_SETUP, /* DDC Engine 3 */
-	mmDC_I2C_DDC4_SETUP - mmDC_I2C_DDC1_SETUP, /* DDC Engine 4 */
-	mmDC_I2C_DDC5_SETUP - mmDC_I2C_DDC1_SETUP, /* DDC Engine 5 */
-	mmDC_I2C_DDC6_SETUP - mmDC_I2C_DDC1_SETUP, /* DDC Engine 6 */
-	mmDC_I2C_DDCVGA_SETUP - mmDC_I2C_DDC1_SETUP /* DDC Engine 7 */
-};
-
-/*
- * @brief
- * DC_I2C_DDC1_SPEED MM register offsets
- *
- * @note
- * The indices of this offset array are DDC engine IDs
- */
-static const int32_t ddc_speed_offset[] = {
-	mmDC_I2C_DDC1_SPEED - mmDC_I2C_DDC1_SPEED, /* DDC Engine 1 */
-	mmDC_I2C_DDC2_SPEED - mmDC_I2C_DDC1_SPEED, /* DDC Engine 2 */
-	mmDC_I2C_DDC3_SPEED - mmDC_I2C_DDC1_SPEED, /* DDC Engine 3 */
-	mmDC_I2C_DDC4_SPEED - mmDC_I2C_DDC1_SPEED, /* DDC Engine 4 */
-	mmDC_I2C_DDC5_SPEED - mmDC_I2C_DDC1_SPEED, /* DDC Engine 5 */
-	mmDC_I2C_DDC6_SPEED - mmDC_I2C_DDC1_SPEED, /* DDC Engine 6 */
-	mmDC_I2C_DDCVGA_SPEED - mmDC_I2C_DDC1_SPEED /* DDC Engine 7 */
-};
 
 static const struct i2c_engine_funcs i2c_engine_funcs = {
 	.destroy = destroy,
@@ -857,14 +497,7 @@ bool i2c_hw_engine_dce110_construct(
 	const struct i2c_hw_engine_dce110_create_arg *arg)
 {
 	uint32_t xtal_ref_div = 0;
-	uint32_t value = 0;
 
-	/*ddc_setup_offset of dce80 and dce110 have the same register name
-	 * but different offset. Do not need different array*/
-	if (arg->engine_id >= sizeof(ddc_setup_offset) / sizeof(int32_t))
-		return false;
-	if (arg->engine_id >= sizeof(ddc_speed_offset) / sizeof(int32_t))
-		return false;
 	if (!arg->reference_frequency)
 		return false;
 
@@ -884,18 +517,8 @@ bool i2c_hw_engine_dce110_construct(
 	hw_engine->transaction_count = 0;
 	hw_engine->engine_keep_power_up_count = 1;
 
-	/*values which are not included by arg*/
-	hw_engine->addr.DC_I2C_DDCX_SETUP =
-		mmDC_I2C_DDC1_SETUP + ddc_setup_offset[arg->engine_id];
-	hw_engine->addr.DC_I2C_DDCX_SPEED =
-		mmDC_I2C_DDC1_SPEED + ddc_speed_offset[arg->engine_id];
 
-	value = REG_READ(MICROSECOND_TIME_BASE_DIV);
-
-	xtal_ref_div = get_reg_field_value(
-			value,
-			MICROSECOND_TIME_BASE_DIV,
-			XTAL_REF_DIV);
+	REG_GET(MICROSECOND_TIME_BASE_DIV, XTAL_REF_DIV, &xtal_ref_div);
 
 	if (xtal_ref_div == 0) {
 		dm_logger_write(
