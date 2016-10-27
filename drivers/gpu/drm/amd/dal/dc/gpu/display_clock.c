@@ -56,13 +56,11 @@ uint32_t dal_display_clock_base_get_dfs_bypass_threshold(
 
 bool dal_display_clock_construct_base(
 	struct display_clock *base,
-	struct dc_context *ctx,
-	struct adapter_service *as)
+	struct dc_context *ctx)
 {
 	base->ctx = ctx;
 	base->id = CLOCK_SOURCE_ID_DCPLL;
 	base->min_display_clk_threshold_khz = 0;
-	base->as = as;
 
 /* Initially set current min clocks state to invalid since we
  * cannot make any assumption about PPLIB's initial state. This will be updated

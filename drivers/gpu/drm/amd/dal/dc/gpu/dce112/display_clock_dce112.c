@@ -644,8 +644,7 @@ uint32_t dispclk_dce112_calculate_min_clock(
 }
 
 static bool display_clock_integrated_info_construct(
-	struct display_clock_dce112 *disp_clk,
-	struct adapter_service *as)
+	struct display_clock_dce112 *disp_clk)
 {
 	struct integrated_info info;
 	uint32_t i;
@@ -696,11 +695,6 @@ static bool display_clock_integrated_info_construct(
 				info.disp_clk_voltage[i].max_supported_clk;
 		}
 	}
-	disp_clk->dfs_bypass_enabled =
-		dal_adapter_service_is_dfs_bypass_enabled(as);
-	disp_clk->use_max_disp_clk =
-		dal_adapter_service_is_feature_supported(as,
-			FEATURE_USE_MAX_DISPLAY_CLK);
 
 	return true;
 }
@@ -847,23 +841,22 @@ static const struct display_clock_funcs funcs = {
 
 bool dal_display_clock_dce112_construct(
 	struct display_clock_dce112 *dc112,
-	struct dc_context *ctx,
-	struct adapter_service *as)
+	struct dc_context *ctx)
 {
 	struct dm_pp_static_clock_info *static_clk_info = {0};
 	struct display_clock *dc_base = &dc112->disp_clk_base;
 
-	if (NULL == as)
-		return false;
+	/*if (NULL == as)
+		return false;*/
 
-	if (!dal_display_clock_construct_base(dc_base, ctx, as))
+	if (!dal_display_clock_construct_base(dc_base, ctx))
 		return false;
 
 	dc_base->funcs = &funcs;
 
 	dc112->dfs_bypass_disp_clk = 0;
 
-	if (!display_clock_integrated_info_construct(dc112, as))
+	if (!display_clock_integrated_info_construct(dc112))
 		dm_logger_write(dc_base->ctx->logger, LOG_WARNING,
 			"Cannot obtain VBIOS integrated info\n");
 
@@ -907,9 +900,8 @@ bool dal_display_clock_dce112_construct(
 
 	{
 		uint32_t ss_info_num =
-			dal_adapter_service_get_ss_info_num(
-				as,
-				AS_SIGNAL_TYPE_GPU_PLL);
+			ctx->dc_bios->funcs->
+			get_ss_entry_number(ctx->dc_bios, AS_SIGNAL_TYPE_GPU_PLL);
 
 		if (ss_info_num) {
 			struct spread_spectrum_info info;
@@ -918,11 +910,10 @@ bool dal_display_clock_dce112_construct(
 			memset(&info, 0, sizeof(info));
 
 			result =
-				dal_adapter_service_get_ss_info(
-					as,
-					AS_SIGNAL_TYPE_GPU_PLL,
-					0,
-					&info);
+					(BP_RESULT_OK == ctx->dc_bios->funcs->
+					get_spread_spectrum_info(ctx->dc_bios,
+					AS_SIGNAL_TYPE_GPU_PLL, 0, &info)) ? true : false;
+
 
 			/* Based on VBIOS, VBIOS will keep entry for GPU PLL SS
 			 * even if SS not enabled and in that case
@@ -967,7 +958,7 @@ struct display_clock *dal_display_clock_dce112_create(
 	if (dc112 == NULL)
 		return NULL;
 
-	if (dal_display_clock_dce112_construct(dc112, ctx, as))
+	if (dal_display_clock_dce112_construct(dc112, ctx))
 		return &dc112->disp_clk_base;
 
 	dm_free(dc112);

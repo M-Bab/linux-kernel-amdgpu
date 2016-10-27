@@ -929,7 +929,7 @@ static bool dal_display_clock_dce110_construct(
 	if (NULL == as)
 		return false;
 
-	if (!dal_display_clock_construct_base(dc_base, ctx, as))
+	if (!dal_display_clock_construct_base(dc_base, ctx))
 		return false;
 
 	dc_base->funcs = &funcs;

@@ -78,8 +78,7 @@ void dal_display_clock_base_set_clock_state(struct display_clock *disp_clk,
 	struct display_clock_state clk_state);
 bool dal_display_clock_construct_base(
 	struct display_clock *base,
-	struct dc_context *ctx,
-	struct adapter_service *as);
+	struct dc_context *ctx);
 
 uint32_t dal_display_clock_get_validation_clock(struct display_clock *disp_clk);
 

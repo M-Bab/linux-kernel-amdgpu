@@ -71,8 +71,7 @@ enum divider_range_start {
 
 bool dal_display_clock_dce112_construct(
 	struct display_clock_dce112 *dc112,
-	struct dc_context *ctx,
-	struct adapter_service *as);
+	struct dc_context *ctx);
 
 void dispclk_dce112_destroy(struct display_clock **base);
 
