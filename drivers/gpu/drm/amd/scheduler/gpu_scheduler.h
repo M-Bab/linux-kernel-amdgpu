@@ -145,6 +145,9 @@ void amd_sched_entity_fini(struct amd_gpu_scheduler *sched,
 			   struct amd_sched_entity *entity);
 void amd_sched_entity_push_job(struct amd_sched_job *sched_job);
 
+int amd_sched_fence_slab_init(void);
+void amd_sched_fence_slab_fini(void);
+
 struct amd_sched_fence *amd_sched_fence_create(
 	struct amd_sched_entity *s_entity, void *owner);
 void amd_sched_fence_scheduled(struct amd_sched_fence *fence);
