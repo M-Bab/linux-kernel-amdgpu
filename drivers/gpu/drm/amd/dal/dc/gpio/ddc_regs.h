@@ -32,7 +32,7 @@
 /*** following in header */
 
 #define DDC_GPIO_REG_LIST_ENTRY(type,cd,id) \
-	.type ## _reg =   mmDC_GPIO_DDC ## id ## _ ## type,\
+	.type ## _reg =   REG(DC_GPIO_DDC ## id ## _ ## type),\
 	.type ## _mask =  DC_GPIO_DDC ## id ## _ ## type ## __DC_GPIO_DDC ## id ## cd ## _ ## type ## _MASK,\
 	.type ## _shift = DC_GPIO_DDC ## id ## _ ## type ## __DC_GPIO_DDC ## id ## cd ## _ ## type ## __SHIFT
 
@@ -46,10 +46,10 @@
 
 #define DDC_REG_LIST(cd,id) \
 	DDC_GPIO_REG_LIST(cd,id),\
-	.ddc_setup = mmDC_I2C_DDC ## id ## _SETUP
+	.ddc_setup = REG(DC_I2C_DDC ## id ## _SETUP)
 
 #define DDC_GPIO_VGA_REG_LIST_ENTRY(type,cd)\
-	.type ## _reg =   mmDC_GPIO_DDCVGA_ ## type,\
+	.type ## _reg =   REG(DC_GPIO_DDCVGA_ ## type),\
 	.type ## _mask =  DC_GPIO_DDCVGA_ ## type ## __DC_GPIO_DDCVGA ## cd ## _ ## type ## _MASK,\
 	.type ## _shift = DC_GPIO_DDCVGA_ ## type ## __DC_GPIO_DDCVGA ## cd ## _ ## type ## __SHIFT
 
@@ -66,7 +66,7 @@
 	.ddc_setup = mmDC_I2C_DDCVGA_SETUP
 
 #define DDC_GPIO_I2C_REG_LIST_ENTRY(type,cd) \
-	.type ## _reg =   mmDC_GPIO_I2CPAD_ ## type,\
+	.type ## _reg =   REG(DC_GPIO_I2CPAD_ ## type),\
 	.type ## _mask =  DC_GPIO_I2CPAD_ ## type ## __DC_GPIO_ ## cd ## _ ## type ## _MASK,\
 	.type ## _shift = DC_GPIO_I2CPAD_ ## type ## __DC_GPIO_ ## cd ## _ ## type ## __SHIFT
 

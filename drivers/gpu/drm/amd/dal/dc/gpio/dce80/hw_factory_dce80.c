@@ -36,6 +36,9 @@
 #include "dce/dce_8_0_d.h"
 #include "dce/dce_8_0_sh_mask.h"
 
+#define REG(reg_name)\
+		mm ## reg_name
+
 #include "reg_helper.h"
 #include "../hpd_regs.h"
 

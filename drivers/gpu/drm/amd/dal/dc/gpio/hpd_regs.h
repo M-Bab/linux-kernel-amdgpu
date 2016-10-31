@@ -37,7 +37,7 @@
 
 
 #define HPD_GPIO_REG_LIST_ENTRY(type,cd,id) \
-	.type ## _reg =   mmDC_GPIO_HPD_## type,\
+	.type ## _reg =  REG(DC_GPIO_HPD_## type),\
 	.type ## _mask =  DC_GPIO_HPD_ ## type ## __DC_GPIO_HPD ## id ## _ ## type ## _MASK,\
 	.type ## _shift = DC_GPIO_HPD_ ## type ## __DC_GPIO_HPD ## id ## _ ## type ## __SHIFT
 
@@ -51,8 +51,8 @@
 
 #define HPD_REG_LIST(id) \
 	HPD_GPIO_REG_LIST(ONE_MORE_ ## id), \
-	.int_status = mmHPD ## id ## _DC_HPD_INT_STATUS,\
-	.toggle_filt_cntl = mmHPD ## id ## _DC_HPD_TOGGLE_FILT_CNTL
+	.int_status = REGI(DC_HPD_INT_STATUS, HPD, id),\
+	.toggle_filt_cntl = REGI(DC_HPD_TOGGLE_FILT_CNTL, HPD, id)
 
  #define HPD_MASK_SH_LIST(mask_sh) \
 		SF_HPD(DC_HPD_INT_STATUS, DC_HPD_SENSE_DELAYED, mask_sh),\

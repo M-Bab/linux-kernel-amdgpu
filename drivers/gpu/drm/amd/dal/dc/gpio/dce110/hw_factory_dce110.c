@@ -27,10 +27,6 @@
 #include "include/gpio_types.h"
 #include "../hw_factory.h"
 
-#include "../hw_gpio.h"
-#include "../hw_ddc.h"
-#include "../hw_hpd.h"
-
 #include "hw_factory_dce110.h"
 
 #include "dce/dce_11_0_d.h"
@@ -39,6 +35,16 @@
 /* set field name */
 #define SF_HPD(reg_name, field_name, post_fix)\
 	.field_name = reg_name ## __ ## field_name ## post_fix
+
+#define REG(reg_name)\
+		mm ## reg_name
+
+#define REGI(reg_name, block, id)\
+	mm ## block ## id ## _ ## reg_name
+
+#include "../hw_gpio.h"
+#include "../hw_ddc.h"
+#include "../hw_hpd.h"
 
 #include "reg_helper.h"
 #include "../hpd_regs.h"
