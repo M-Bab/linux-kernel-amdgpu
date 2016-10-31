@@ -30,7 +30,7 @@
 #include "irq_types.h"
 #include "dc_dp_types.h"
 #include "dc_hw_types.h"
-#include "signal_types.h"
+#include "dal_types.h"
 
 /* forward declarations */
 struct dc_surface;
@@ -73,6 +73,10 @@ struct dc_context {
 
 	enum dce_environment dce_environment;
 
+	/* todo: below should probably move to dc.  to facilitate removal
+	 * of AS we will store these here
+	 */
+	enum dce_version dce_version;
 	struct dc_bios *dc_bios;
 	bool created_bios;
 	struct gpio_service *gpio_service;

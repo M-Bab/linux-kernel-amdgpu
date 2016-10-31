@@ -518,8 +518,8 @@ static bool construct(struct core_dc *dc,
 	dc->ctx = dc_ctx;
 	dc->ctx->dce_environment = init_params->dce_environment;
 
-
 	dc_version = resource_parse_asic_id(init_params->asic_id);
+	dc->ctx->dce_version = dc_version;
 
 	/* Resource should construct all asic specific resources.
 	 * This should be the only place where we need to parse the asic id

@@ -77,7 +77,6 @@ static const struct dce110_i2c_hw_engine_registers dce100_hw_engine_regs[] = {
 };
 
 struct i2caux *dal_i2caux_dce100_create(
-	struct adapter_service *as,
 	struct dc_context *ctx)
 {
 	struct i2caux_dce110 *i2caux_dce110 =
@@ -90,7 +89,6 @@ struct i2caux *dal_i2caux_dce100_create(
 
 	if (dal_i2caux_dce110_construct(
 			i2caux_dce110,
-			as,
 			ctx,
 			dce100_aux_regs,
 			dce100_hw_engine_regs))

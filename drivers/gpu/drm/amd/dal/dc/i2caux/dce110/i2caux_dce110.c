@@ -190,7 +190,6 @@ static const struct dce110_i2c_hw_engine_registers i2c_hw_engine_regs[] = {
 
 bool dal_i2caux_dce110_construct(
 	struct i2caux_dce110 *i2caux_dce110,
-	struct adapter_service *as,
 	struct dc_context *ctx,
 	const struct dce110_aux_registers aux_regs[],
 	const struct dce110_i2c_hw_engine_registers i2c_hw_engine_regs[])
@@ -204,14 +203,11 @@ bool dal_i2caux_dce110_construct(
 	 * Some BIOS setting incorrect cause this
 	 * For production, we always get value from BIOS*/
 	reference_frequency =
-		dal_i2caux_get_reference_clock(as) >> 1;
-
-	use_i2c_sw_engine = dal_adapter_service_is_feature_supported(as,
-		FEATURE_RESTORE_USAGE_I2C_SW_ENGINE);
+		dal_i2caux_get_reference_clock(ctx->dc_bios) >> 1;
 
 	base = &i2caux_dce110->base;
 
-	if (!dal_i2caux_construct(base, as, ctx)) {
+	if (!dal_i2caux_construct(base, ctx)) {
 		ASSERT_CRITICAL(false);
 		return false;
 	}
@@ -288,7 +284,6 @@ bool dal_i2caux_dce110_construct(
  * pointer to the base struct of DCE11 I2CAUX
  */
 struct i2caux *dal_i2caux_dce110_create(
-	struct adapter_service *as,
 	struct dc_context *ctx)
 {
 	struct i2caux_dce110 *i2caux_dce110 =
@@ -301,7 +296,6 @@ struct i2caux *dal_i2caux_dce110_create(
 
 	if (dal_i2caux_dce110_construct(
 			i2caux_dce110,
-			as,
 			ctx,
 			dce110_aux_regs,
 			i2c_hw_engine_regs))

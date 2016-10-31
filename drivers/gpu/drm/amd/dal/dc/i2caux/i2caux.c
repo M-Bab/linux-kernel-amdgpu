@@ -64,33 +64,21 @@
  */
 
 struct i2caux *dal_i2caux_create(
-	struct adapter_service *as,
 	struct dc_context *ctx)
 {
-	enum dce_version dce_version;
-	enum dce_environment dce_environment;
-
-	if (!as) {
-		BREAK_TO_DEBUGGER();
-		return NULL;
+	if (IS_FPGA_MAXIMUS_DC(ctx->dce_environment)) {
+		return dal_i2caux_diag_fpga_create(ctx);
 	}
 
-	dce_version = dal_adapter_service_get_dce_version(as);
-	dce_environment = ctx->dce_environment;
-
-	if (IS_FPGA_MAXIMUS_DC(dce_environment)) {
-		return dal_i2caux_diag_fpga_create(as, ctx);
-	}
-
-	switch (dce_version) {
+	switch (ctx->dce_version) {
 	case DCE_VERSION_8_0:
-		return dal_i2caux_dce80_create(as, ctx);
+		return dal_i2caux_dce80_create(ctx);
 	case DCE_VERSION_11_2:
-		return dal_i2caux_dce112_create(as, ctx);
+		return dal_i2caux_dce112_create(ctx);
 	case DCE_VERSION_11_0:
-		return dal_i2caux_dce110_create(as, ctx);
+		return dal_i2caux_dce110_create(ctx);
 	case DCE_VERSION_10_0:
-		return dal_i2caux_dce100_create(as, ctx);
+		return dal_i2caux_dce100_create(ctx);
 	default:
 		BREAK_TO_DEBUGGER();
 		return NULL;
@@ -313,11 +301,11 @@ void dal_i2caux_destroy(
  */
 
 uint32_t dal_i2caux_get_reference_clock(
-	struct adapter_service *as)
+		struct dc_bios *bios)
 {
 	struct firmware_info info = { { 0 } };
 
-	if (!dal_adapter_service_get_firmware_info(as, &info))
+	if (bios->funcs->get_firmware_info(bios, &info) != BP_RESULT_OK)
 		return 0;
 
 	return info.pll_info.crystal_frequency;
@@ -413,7 +401,6 @@ void dal_i2caux_release_engine(
 
 bool dal_i2caux_construct(
 	struct i2caux *i2caux,
-	struct adapter_service *as,
 	struct dc_context *ctx)
 {
 	uint32_t i = 0;

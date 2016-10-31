@@ -76,7 +76,6 @@ enum adapter_feature_id {
 	FEATURE_MAXIMIZE_URGENCY_WATERMARKS,
 	FEATURE_MAXIMIZE_STUTTER_MARKS,
 	FEATURE_MAXIMIZE_NBP_MARKS,
-	FEATURE_RESTORE_USAGE_I2C_SW_ENGINE,
 	FEATURE_USE_MAX_DISPLAY_CLK,
 	FEATURE_ALLOW_EDP_RESOURCE_SHARING,
 	FEATURE_SUPPORT_DP_YUV,
@@ -336,11 +335,6 @@ void dal_adapter_service_destroy(
 /* Get the DCE version of current ASIC */
 enum dce_version dal_adapter_service_get_dce_version(
 	const struct adapter_service *as);
-
-/* Get firmware information from BIOS */
-bool dal_adapter_service_get_firmware_info(
-	struct adapter_service *as,
-	struct firmware_info *info);
 
 /* Get number of spread spectrum entries from BIOS */
 uint32_t dal_adapter_service_get_ss_info_num(

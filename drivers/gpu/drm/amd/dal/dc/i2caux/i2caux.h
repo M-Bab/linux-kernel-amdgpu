@@ -27,7 +27,7 @@
 #define __DAL_I2C_AUX_H__
 
 uint32_t dal_i2caux_get_reference_clock(
-	struct adapter_service *as);
+	struct dc_bios *bios);
 
 struct i2caux;
 
@@ -99,7 +99,6 @@ struct i2caux {
 
 bool dal_i2caux_construct(
 	struct i2caux *i2caux,
-	struct adapter_service *as,
 	struct dc_context *ctx);
 
 void dal_i2caux_release_engine(

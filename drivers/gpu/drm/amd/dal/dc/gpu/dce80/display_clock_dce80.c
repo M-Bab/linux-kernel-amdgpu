@@ -753,6 +753,7 @@ static bool display_clock_integrated_info_construct(
 	struct display_clock_dce80 *disp_clk,
 	struct adapter_service *as)
 {
+	struct dc_bios *bp = disp_clk->disp_clk.ctx->dc_bios;
 	struct integrated_info info = { { { 0 } } };
 	struct firmware_info fw_info = { { 0 } };
 	uint32_t i;
@@ -761,7 +762,7 @@ static bool display_clock_integrated_info_construct(
 
 	disp_clk->dentist_vco_freq_khz = info.dentist_vco_freq;
 	if (disp_clk->dentist_vco_freq_khz == 0) {
-		dal_adapter_service_get_firmware_info(as, &fw_info);
+		bp->funcs->get_firmware_info(bp, &fw_info);
 		disp_clk->dentist_vco_freq_khz =
 			fw_info.smu_gpu_pll_output_freq;
 		if (disp_clk->dentist_vco_freq_khz == 0)

@@ -81,12 +81,10 @@ static const struct dce110_i2c_hw_engine_registers dce112_hw_engine_regs[] = {
 
 static bool construct(
 	struct i2caux_dce110 *i2caux_dce110,
-	struct adapter_service *as,
 	struct dc_context *ctx)
 {
 	if (!dal_i2caux_dce110_construct(
 			i2caux_dce110,
-			as,
 			ctx,
 			dce112_aux_regs,
 			dce112_hw_engine_regs)) {
@@ -111,7 +109,6 @@ static bool construct(
  * pointer to the base struct of DCE11 I2CAUX
  */
 struct i2caux *dal_i2caux_dce112_create(
-	struct adapter_service *as,
 	struct dc_context *ctx)
 {
 	struct i2caux_dce110 *i2caux_dce110 =
@@ -122,7 +119,7 @@ struct i2caux *dal_i2caux_dce112_create(
 		return NULL;
 	}
 
-	if (construct(i2caux_dce110, as, ctx))
+	if (construct(i2caux_dce110, ctx))
 		return &i2caux_dce110->base;
 
 	ASSERT_CRITICAL(false);

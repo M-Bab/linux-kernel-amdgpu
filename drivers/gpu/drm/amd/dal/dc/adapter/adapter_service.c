@@ -86,16 +86,6 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_MAXIMIZE_URGENCY_WATERMARKS, false, true},
 	{FEATURE_MAXIMIZE_STUTTER_MARKS, false, true},
 	{FEATURE_MAXIMIZE_NBP_MARKS, false, true},
-	/*
-	 * We meet HW I2C issue when test S3 resume on KB.
-	 * An EPR is created for debug the issue.
-	 * Make Test has already been implemented
-	 * with HW I2C. The work load for revert back to SW I2C in make test
-	 * is big. Below is workaround for this issue.
-	 * Driver uses SW I2C.
-	 * Make Test uses HW I2C.
-	 */
-	{FEATURE_RESTORE_USAGE_I2C_SW_ENGINE, false, true},
 	{FEATURE_USE_MAX_DISPLAY_CLK, false, true},
 	{FEATURE_ALLOW_EDP_RESOURCE_SHARING, false, true},
 	{FEATURE_SUPPORT_DP_YUV, false, true},
@@ -672,7 +662,7 @@ static bool adapter_service_construct(
 	dcb = as->ctx->dc_bios;
 
 	/* Create I2C AUX */
-	as->i2caux = dal_i2caux_create(as, as->ctx);
+	as->i2caux = dal_i2caux_create(as->ctx);
 
 	if (!as->i2caux) {
 		ASSERT_CRITICAL(false);
@@ -940,20 +930,6 @@ struct dal_asic_runtime_flags dal_adapter_service_get_asic_runtime_flags(
 		struct adapter_service *as)
 {
 	return as->asic_cap->runtime_flags;
-}
-
-/*
- * dal_adapter_service_get_firmware_info
- *
- * Get firmware information from BIOS
- */
-bool dal_adapter_service_get_firmware_info(
-	struct adapter_service *as,
-	struct firmware_info *info)
-{
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	return dcb->funcs->get_firmware_info(dcb, info) == BP_RESULT_OK;
 }
 
 /*

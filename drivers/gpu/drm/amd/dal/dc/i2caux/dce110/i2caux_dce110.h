@@ -38,12 +38,10 @@ struct dce110_aux_registers;
 struct dce110_i2c_hw_engine_registers;
 
 struct i2caux *dal_i2caux_dce110_create(
-	struct adapter_service *as,
 	struct dc_context *ctx);
 
 bool dal_i2caux_dce110_construct(
 	struct i2caux_dce110 *i2caux_dce110,
-	struct adapter_service *as,
 	struct dc_context *ctx,
 	const struct dce110_aux_registers *aux_regs,
 	const struct dce110_i2c_hw_engine_registers *i2c_hw_engine_regs);

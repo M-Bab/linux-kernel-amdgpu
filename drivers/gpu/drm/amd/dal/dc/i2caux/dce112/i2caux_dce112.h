@@ -27,7 +27,6 @@
 #define __DAL_I2C_AUX_DCE112_H__
 
 struct i2caux *dal_i2caux_dce112_create(
-	struct adapter_service *as,
 	struct dc_context *ctx);
 
 #endif /* __DAL_I2C_AUX_DCE112_H__ */

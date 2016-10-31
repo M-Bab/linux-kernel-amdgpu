@@ -880,7 +880,7 @@ static bool construct(
 
 	bp = ctx->dc_bios;
 
-	if (dal_adapter_service_get_firmware_info(as, &info) &&
+	if ((bp->funcs->get_firmware_info(bp, &info) == BP_RESULT_OK) &&
 		info.external_clock_source_frequency_for_dp != 0) {
 		pool->base.dp_clock_source =
 				dce100_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_EXTERNAL, NULL, true);

@@ -189,7 +189,6 @@ static const struct i2caux_funcs i2caux_funcs = {
 
 static bool construct(
 	struct i2caux_dce80 *i2caux_dce80,
-	struct adapter_service *as,
 	struct dc_context *ctx)
 {
 	/* Entire family have I2C engine reference clock frequency
@@ -198,7 +197,7 @@ static bool construct(
 	struct i2caux *base = &i2caux_dce80->base;
 
 	uint32_t reference_frequency =
-		dal_i2caux_get_reference_clock(as) >> 1;
+		dal_i2caux_get_reference_clock(ctx->dc_bios) >> 1;
 
 	/*bool use_i2c_sw_engine = dal_adapter_service_is_feature_supported(as,
 		FEATURE_RESTORE_USAGE_I2C_SW_ENGINE);*/
@@ -208,7 +207,7 @@ static bool construct(
 
 	uint32_t i;
 
-	if (!dal_i2caux_construct(base, as, ctx)) {
+	if (!dal_i2caux_construct(base, ctx)) {
 		BREAK_TO_DEBUGGER();
 		return false;
 	}
@@ -275,7 +274,6 @@ static bool construct(
 }
 
 struct i2caux *dal_i2caux_dce80_create(
-	struct adapter_service *as,
 	struct dc_context *ctx)
 {
 	struct i2caux_dce80 *i2caux_dce80 =
@@ -286,7 +284,7 @@ struct i2caux *dal_i2caux_dce80_create(
 		return NULL;
 	}
 
-	if (construct(i2caux_dce80, as, ctx))
+	if (construct(i2caux_dce80, ctx))
 		return &i2caux_dce80->base;
 
 	BREAK_TO_DEBUGGER();

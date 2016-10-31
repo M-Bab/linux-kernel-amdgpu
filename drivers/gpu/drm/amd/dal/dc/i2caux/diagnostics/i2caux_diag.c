@@ -75,10 +75,9 @@ static const struct i2caux_funcs i2caux_funcs = {
 
 static bool construct(
 	struct i2caux *i2caux,
-	struct adapter_service *as,
 	struct dc_context *ctx)
 {
-	if (!dal_i2caux_construct(i2caux, as, ctx)) {
+	if (!dal_i2caux_construct(i2caux, ctx)) {
 		ASSERT_CRITICAL(false);
 		return false;
 	}
@@ -89,7 +88,6 @@ static bool construct(
 }
 
 struct i2caux *dal_i2caux_diag_fpga_create(
-	struct adapter_service *as,
 	struct dc_context *ctx)
 {
 	struct i2caux *i2caux =	dm_alloc(sizeof(struct i2caux));
@@ -99,7 +97,7 @@ struct i2caux *dal_i2caux_diag_fpga_create(
 		return NULL;
 	}
 
-	if (construct(i2caux, as, ctx))
+	if (construct(i2caux, ctx))
 		return i2caux;
 
 	ASSERT_CRITICAL(false);

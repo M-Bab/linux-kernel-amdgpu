@@ -33,7 +33,6 @@ struct i2caux_dce80 {
 };
 
 struct i2caux *dal_i2caux_dce80_create(
-	struct adapter_service *as,
 	struct dc_context *ctx);
 
 #endif

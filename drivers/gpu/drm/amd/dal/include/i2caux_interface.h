@@ -67,7 +67,6 @@ union aux_config {
 struct i2caux;
 
 struct i2caux *dal_i2caux_create(
-	struct adapter_service *as,
 	struct dc_context *ctx);
 
 bool dal_i2caux_submit_i2c_command(
