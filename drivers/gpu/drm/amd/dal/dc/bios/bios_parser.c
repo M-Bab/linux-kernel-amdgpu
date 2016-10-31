@@ -44,6 +44,8 @@
 
 /* TODO remove - only needed for gpio_service */
 #include "adapter/adapter_service.h"
+/* TODO remove - only needed for default i2c speed */
+#include "dc.h"
 
 #define THREE_PERCENT_OF_10000 300
 
@@ -2940,7 +2942,7 @@ static bool i2c_read(
 
 	/*Using SW engine */
 	cmd.engine = I2C_COMMAND_ENGINE_SW;
-	cmd.speed = dal_adapter_service_get_sw_i2c_speed(as);
+	cmd.speed = ddc->ctx->dc->caps.i2c_speed_in_khz;
 
 	{
 		struct i2c_payload payloads[] = {

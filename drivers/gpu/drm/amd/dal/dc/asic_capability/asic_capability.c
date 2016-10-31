@@ -58,7 +58,6 @@ static bool construct(
 	cap->runtime_flags = init->runtime_flags;
 	cap->data[ASIC_DATA_MAX_UNDERSCAN_PERCENTAGE] = 10;
 	cap->data[ASIC_DATA_VIEWPORT_PIXEL_GRANULARITY] = 4;
-	cap->data[ASIC_DATA_DEFAULT_I2C_SPEED_IN_KHZ] = 25;
 	cap->data[ASIC_DATA_DOWNSCALE_LIMIT] = 200;
 
 	/* ASIC basic capability */

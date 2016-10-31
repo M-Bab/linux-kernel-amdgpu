@@ -58,7 +58,6 @@ void polaris10_asic_capability_create(struct asic_capability *cap,
 	cap->data[ASIC_DATA_VIEWPORT_PIXEL_GRANULARITY] = 2;
 
 	cap->data[ASIC_DATA_MEMORYTYPE_MULTIPLIER] = 4;
-	cap->data[ASIC_DATA_DEFAULT_I2C_SPEED_IN_KHZ] = 100;
 
 	cap->data[ASIC_DATA_MIN_DISPCLK_FOR_UNDERSCAN] = 300000;
 

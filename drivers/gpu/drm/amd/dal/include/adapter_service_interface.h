@@ -87,7 +87,6 @@ enum adapter_feature_id {
 	FEATURE_DP_DISPLAY_FORCE_SS_ENABLE,
 	FEATURE_REPORT_CE_MODE_ONLY,
 	FEATURE_ALLOW_OPTIMIZED_MODE_AS_DEFAULT,
-	FEATURE_DDC_READ_FORCE_REPEATED_START,
 	FEATURE_FORCE_TIMING_RESYNC,
 	FEATURE_TMDS_DISABLE_DITHERING,
 	FEATURE_HDMI_DISABLE_DITHERING,
@@ -111,7 +110,6 @@ enum adapter_feature_id {
 	FEATURE_PREFER_3D_TIMING,
 	FEATURE_VARI_BRIGHT_ENABLE,
 	FEATURE_PSR_ENABLE,
-	FEATURE_EDID_STRESS_READ,
 	FEATURE_DP_FRAME_PACK_STEREO3D,
 	FEATURE_ALLOW_HDMI_WITHOUT_AUDIO,
 	FEATURE_RESTORE_USAGE_I2C_SW_ENGING,
@@ -379,12 +377,6 @@ bool dal_adapter_service_get_feature_value(struct adapter_service *as,
 	const enum adapter_feature_id feature_id,
 	void *data,
 	uint32_t size);
-
-/* Get SW I2C speed */
-uint32_t dal_adapter_service_get_sw_i2c_speed(struct adapter_service *as);
-
-/* Get HW I2C speed */
-uint32_t dal_adapter_service_get_hw_i2c_speed(struct adapter_service *as);
 
 /* Get I2C information from BIOS */
 bool dal_adapter_service_get_i2c_info(

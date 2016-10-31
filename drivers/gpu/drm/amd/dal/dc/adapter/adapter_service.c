@@ -118,7 +118,6 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_DP_DISPLAY_FORCE_SS_ENABLE, false, true},
 	{FEATURE_REPORT_CE_MODE_ONLY, false, true},
 	{FEATURE_ALLOW_OPTIMIZED_MODE_AS_DEFAULT, false, true},
-	{FEATURE_DDC_READ_FORCE_REPEATED_START, false, true},
 	{FEATURE_FORCE_TIMING_RESYNC, false, true},
 	{FEATURE_TMDS_DISABLE_DITHERING, false, true},
 	{FEATURE_HDMI_DISABLE_DITHERING, false, true},
@@ -136,7 +135,6 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_PSR_ENABLE, false, true},
 	{FEATURE_WIRELESS_ENABLE_COMPRESSED_AUDIO, false, true},
 	{FEATURE_WIRELESS_INCLUDE_UNVERIFIED_TIMINGS, true, true},
-	{FEATURE_EDID_STRESS_READ, false, true},
 	{FEATURE_DP_FRAME_PACK_STEREO3D, false, true},
 	{FEATURE_DISPLAY_PREFERRED_VIEW, 0, false},
 	{FEATURE_ALLOW_HDMI_WITHOUT_AUDIO, false, true},
@@ -925,30 +923,6 @@ bool dal_adapter_service_is_dfs_bypass_enabled(
 		return true;
 	else
 		return false;
-}
-
-/*
- * dal_adapter_service_get_sw_i2c_speed
- *
- * Get SW I2C speed
- */
-uint32_t dal_adapter_service_get_sw_i2c_speed(
-	struct adapter_service *as)
-{
-	/* TODO: only from ASIC caps. Feature key is not implemented*/
-	return as->asic_cap->data[ASIC_DATA_DEFAULT_I2C_SPEED_IN_KHZ];
-}
-
-/*
- * dal_adapter_service_get_hw_i2c_speed
- *
- * Get HW I2C speed
- */
-uint32_t dal_adapter_service_get_hw_i2c_speed(
-	struct adapter_service *as)
-{
-	/* TODO: only from ASIC caps. Feature key is not implemented*/
-	return as->asic_cap->data[ASIC_DATA_DEFAULT_I2C_SPEED_IN_KHZ];
 }
 
 /*

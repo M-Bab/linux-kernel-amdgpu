@@ -303,9 +303,7 @@ static bool construct(
 	}
 
 	ddc_service->flags.EDID_QUERY_DONE_ONCE = false;
-
 	ddc_service->flags.FORCE_READ_REPEATED_START = false;
-
 	ddc_service->flags.EDID_STRESS_READ = false;
 
 	ddc_service->flags.IS_INTERNAL_DISPLAY =
@@ -450,7 +448,7 @@ static bool i2c_read(
 		.payloads = payloads,
 		.number_of_payloads = 2,
 		.engine = DDC_I2C_COMMAND_ENGINE,
-		.speed = dal_adapter_service_get_sw_i2c_speed(ddc->as) };
+		.speed = ddc->ctx->dc->caps.i2c_speed_in_khz };
 
 	return dm_helpers_submit_i2c(
 			ddc->ctx,
@@ -561,7 +559,7 @@ static uint8_t i2c_read_edid_block(
 		.payloads = NULL,
 		.number_of_payloads = 0,
 		.engine = DDC_I2C_COMMAND_ENGINE,
-		.speed = dal_adapter_service_get_sw_i2c_speed(ddc->as) };
+		.speed = ddc->ctx->dc->caps.i2c_speed_in_khz };
 
 	struct i2c_payload payloads[3] = {
 		{
@@ -943,8 +941,7 @@ bool dal_ddc_service_query_ddc_data(
 			.payloads = dal_ddc_i2c_payloads_get(payloads),
 			.number_of_payloads = 0,
 			.engine = DDC_I2C_COMMAND_ENGINE,
-			.speed =
-				dal_adapter_service_get_sw_i2c_speed(ddc->as) };
+			.speed = ddc->ctx->dc->caps.i2c_speed_in_khz };
 
 		dal_ddc_i2c_payloads_add(
 			payloads, address, write_size, write_buf, true);

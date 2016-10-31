@@ -58,7 +58,6 @@ void tonga_asic_capability_create(struct asic_capability *cap,
 	cap->data[ASIC_DATA_DCE_VERSION] = 0x100; /* DCE 11 */
 
 	cap->data[ASIC_DATA_MEMORYTYPE_MULTIPLIER] = 4;
-	cap->data[ASIC_DATA_DEFAULT_I2C_SPEED_IN_KHZ] = 40;
 
 	/* ASIC basic capability */
 	cap->caps.IS_FUSION = true;

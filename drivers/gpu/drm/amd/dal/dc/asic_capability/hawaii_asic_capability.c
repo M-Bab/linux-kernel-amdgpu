@@ -69,8 +69,6 @@ void dal_hawaii_asic_capability_create(struct asic_capability *cap,
 	cap->data[ASIC_DATA_PATH_NUM_PER_DPMST_CONNECTOR] = 4;
 	cap->data[ASIC_DATA_VIEWPORT_PIXEL_GRANULARITY] = 2;
 
-	cap->data[ASIC_DATA_DEFAULT_I2C_SPEED_IN_KHZ] = 40;
-
 	mc_seq_misc0 = dm_read_reg(cap->ctx, mmMC_SEQ_MISC0);
 
 	switch (mc_seq_misc0 & MC_MISC0__MEMORY_TYPE_MASK) {
