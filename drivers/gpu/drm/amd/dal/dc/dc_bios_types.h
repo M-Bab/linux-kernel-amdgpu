@@ -226,6 +226,7 @@ struct dc_bios {
 
 	struct dc_context *ctx;
 	const struct bios_registers *regs;
+	struct integrated_info *integrated_info;
 };
 
 #endif /* DC_BIOS_TYPES_H */

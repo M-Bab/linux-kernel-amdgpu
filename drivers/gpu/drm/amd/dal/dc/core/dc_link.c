@@ -945,6 +945,7 @@ static bool construct(
 	struct encoder_init_data enc_init_data = { 0 };
 	struct integrated_info info = {{{ 0 }}};
 	struct dc_bios *bios = init_params->dc->ctx->dc_bios;
+	const struct dc_vbios_funcs *bp_funcs = bios->funcs;
 
 	link->public.irq_source_hpd = DC_IRQ_SOURCE_INVALID;
 	link->public.irq_source_hpd_rx = DC_IRQ_SOURCE_INVALID;
@@ -1033,8 +1034,7 @@ static bool construct(
 
 	enc_init_data.adapter_service = as;
 	enc_init_data.ctx = dc_ctx;
-	enc_init_data.encoder = dal_adapter_service_get_src_obj(
-							as, link->link_id, 0);
+	bp_funcs->get_src_obj(dc_ctx->dc_bios, link->link_id, 0, &enc_init_data.encoder);
 	enc_init_data.connector = link->link_id;
 	enc_init_data.channel = get_ddc_line(link, as);
 	enc_init_data.hpd_source = get_hpd_line(link, as);
@@ -1050,11 +1050,12 @@ static bool construct(
 
 	link->public.link_enc_hw_inst = link->link_enc->transmitter;
 
-	dal_adapter_service_get_integrated_info(as, &info);
+	/* TODO: refactor dal_adapter_service_get_integrated_info(as, &info); */
+	memmove(&info, dc_ctx->dc_bios->integrated_info, sizeof(struct integrated_info));
 
 	for (i = 0; ; i++) {
-		if (!dal_adapter_service_get_device_tag(
-				as, link->link_id, i, &link->device_tag)) {
+		if (BP_RESULT_OK !=
+				bp_funcs->get_device_tag(dc_ctx->dc_bios, link->link_id, i, &link->device_tag)) {
 			DC_ERROR("Failed to find device tag!\n");
 			goto device_tag_fail;
 		}
@@ -1062,8 +1063,7 @@ static bool construct(
 		/* Look for device tag that matches connector signal,
 		 * CRT for rgb, LCD for other supported signal tyes
 		 */
-		if (!dal_adapter_service_is_device_id_supported(
-						as, link->device_tag.dev_id))
+		if (!bp_funcs->is_device_id_supported(dc_ctx->dc_bios, link->device_tag.dev_id))
 			continue;
 		if (link->device_tag.dev_id.device_type == DEVICE_TYPE_CRT
 			&& link->public.connector_signal != SIGNAL_TYPE_RGB)

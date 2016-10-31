@@ -1002,10 +1002,10 @@ bool dce110_link_encoder_construct(
 	 * while doing the DP sink detect
 	 */
 
-	if (dal_adapter_service_is_feature_supported(as,
+/*	if (dal_adapter_service_is_feature_supported(as,
 		FEATURE_DP_SINK_DETECT_POLL_DATA_PIN))
 		enc110->base.features.flags.bits.
-			DP_SINK_DETECT_POLL_DATA_PIN = true;
+			DP_SINK_DETECT_POLL_DATA_PIN = true;*/
 
 	enc110->base.output_signals =
 		SIGNAL_TYPE_DVI_SINGLE_LINK |
@@ -1061,22 +1061,29 @@ bool dce110_link_encoder_construct(
 			init_data->channel);
 
 	/* Override features with DCE-specific values */
-	if (dal_adapter_service_get_encoder_cap_info(
-			enc110->base.adapter_service,
-			enc110->base.id, &enc_cap_info))
-		enc110->base.features.flags.bits.IS_HBR2_CAPABLE =
-				enc_cap_info.dp_hbr2_cap;
+	{
+	struct bp_encoder_cap_info bp_cap_info = {0};
+	const struct dc_vbios_funcs *bp_funcs = enc110->base.ctx->dc_bios->funcs;
 
+	if (BP_RESULT_OK != bp_funcs->get_encoder_cap_info(
+			enc110->base.ctx->dc_bios, enc110->base.id,
+			&bp_cap_info))
+		enc110->base.features.flags.bits.IS_HBR2_CAPABLE =
+				bp_cap_info.DP_HBR2_CAP;
+	}
 	/* test pattern 3 support */
 	enc110->base.features.flags.bits.IS_TPS3_CAPABLE = true;
 
-	enc110->base.features.flags.bits.IS_Y_ONLY_CAPABLE =
+	enc110->base.features.flags.bits.IS_Y_ONLY_CAPABLE = false;
+	/*
 		dal_adapter_service_is_feature_supported(as,
 			FEATURE_SUPPORT_DP_Y_ONLY);
-
-	enc110->base.features.flags.bits.IS_YCBCR_CAPABLE =
+*/
+	enc110->base.features.flags.bits.IS_YCBCR_CAPABLE = true;
+	/*
 		dal_adapter_service_is_feature_supported(as,
 			FEATURE_SUPPORT_DP_YUV);
+			*/
 	return true;
 }
 
