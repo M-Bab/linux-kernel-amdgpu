@@ -40,6 +40,7 @@ struct transform {
 
 	int lb_total_entries_num;
 	int lb_bits_per_entry;
+	unsigned int lb_memory_size;
 };
 
 enum lb_pixel_depth {

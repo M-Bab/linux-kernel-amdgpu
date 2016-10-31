@@ -116,6 +116,8 @@ bool dce110_transform_construct(
 	xfm110->base.lb_bits_per_entry = LB_BITS_PER_ENTRY;
 	xfm110->base.lb_total_entries_num = LB_TOTAL_NUMBER_OF_ENTRIES;
 
+	xfm110->base.lb_memory_size = 0x6B0; /*1712*/
+
 	return true;
 }
 

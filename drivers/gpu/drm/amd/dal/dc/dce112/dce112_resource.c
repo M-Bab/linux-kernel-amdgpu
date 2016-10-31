@@ -516,8 +516,10 @@ static struct transform *dce112_transform_create(
 	if (!transform)
 		return NULL;
 
-	if (dce110_transform_construct(transform, ctx, inst, offsets))
+	if (dce110_transform_construct(transform, ctx, inst, offsets)) {
+		transform->base.lb_memory_size = 0x1404; /*5124*/
 		return &transform->base;
+	}
 
 	BREAK_TO_DEBUGGER();
 	dm_free(transform);

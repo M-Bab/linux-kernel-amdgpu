@@ -732,7 +732,7 @@ bool dce80_transform_power_up_line_buffer(struct transform *xfm)
 	/*Use all three pieces of memory always*/
 	set_reg_field_value(value, 0, LB_MEMORY_CTRL, LB_MEMORY_CONFIG);
 	/*hard coded number DCE8 1712(0x6B0) Partitions: 720/960/1712*/
-	set_reg_field_value(value, LB_TOTAL_NUMBER_OF_ENTRIES, LB_MEMORY_CTRL,
+	set_reg_field_value(value, xfm80->base.lb_memory_size, LB_MEMORY_CTRL,
 			LB_MEMORY_SIZE);
 
 	dm_write_reg(xfm80->base.ctx, LB_REG(mmLB_MEMORY_CTRL), value);

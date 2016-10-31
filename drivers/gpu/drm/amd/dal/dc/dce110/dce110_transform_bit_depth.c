@@ -26,8 +26,8 @@
 #include "dm_services.h"
 
 /* include DCE11 register header files */
-#include "dce/dce_11_0_d.h"
-#include "dce/dce_11_0_sh_mask.h"
+#include "dce/dce_11_2_d.h"
+#include "dce/dce_11_2_sh_mask.h"
 
 #include "dce110_transform.h"
 #include "dce110_transform_v.h"
@@ -786,7 +786,7 @@ bool dce110_transform_power_up_line_buffer(struct transform *xfm)
 	/*Use all three pieces of memory always*/
 	set_reg_field_value(value, 0, LB_MEMORY_CTRL, LB_MEMORY_CONFIG);
 	/*hard coded number DCE11 1712(0x6B0) Partitions: 720/960/1712*/
-	set_reg_field_value(value, LB_TOTAL_NUMBER_OF_ENTRIES, LB_MEMORY_CTRL,
+	set_reg_field_value(value, xfm110->base.lb_memory_size, LB_MEMORY_CTRL,
 			LB_MEMORY_SIZE);
 
 	dm_write_reg(xfm110->base.ctx, LB_REG(mmLB_MEMORY_CTRL), value);

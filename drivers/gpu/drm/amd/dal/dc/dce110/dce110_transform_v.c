@@ -800,7 +800,7 @@ static bool dce110_transform_v_power_up_line_buffer(struct transform *xfm)
 	/*Use all three pieces of memory always*/
 	set_reg_field_value(value, 0, LBV_MEMORY_CTRL, LB_MEMORY_CONFIG);
 	/*hard coded number DCE11 1712(0x6B0) Partitions: 720/960/1712*/
-	set_reg_field_value(value, LB_TOTAL_NUMBER_OF_ENTRIES, LBV_MEMORY_CTRL,
+	set_reg_field_value(value, xfm110->base.lb_memory_size, LBV_MEMORY_CTRL,
 			LB_MEMORY_SIZE);
 
 	dm_write_reg(xfm110->base.ctx, mmLBV_MEMORY_CTRL, value);
