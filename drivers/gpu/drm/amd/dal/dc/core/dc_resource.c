@@ -444,11 +444,6 @@ static void calculate_recout(
 	struct core_stream *stream = pipe_ctx->stream;
 	struct rect clip = surface->clip_rect;
 
-	if (surface->rotation == ROTATION_ANGLE_90 ||
-			surface->rotation == ROTATION_ANGLE_270){
-		rect_swap_helper(&clip);
-	}
-
 	pipe_ctx->scl_data.recout.x = stream->public.dst.x;
 	if (stream->public.src.x < clip.x)
 		pipe_ctx->scl_data.recout.x += (clip.x
