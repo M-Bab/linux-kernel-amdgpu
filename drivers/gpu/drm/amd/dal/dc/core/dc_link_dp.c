@@ -1166,11 +1166,10 @@ bool dp_hbr_verify_link_cap(
 		if (skip_link_training)
 			success = true;
 		else {
-			success = perform_link_training_with_retries(
-								link,
-								cur,
-								skip_video_pattern,
-								LINK_TRAINING_ATTEMPTS);
+			success = dc_link_dp_perform_link_training(
+							&link->public,
+							cur,
+							skip_video_pattern);
 		}
 
 		if (success)
