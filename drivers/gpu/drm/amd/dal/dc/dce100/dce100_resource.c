@@ -659,9 +659,6 @@ static void destruct(struct dce110_resource_pool *pool)
 
 	if (pool->base.irqs != NULL)
 		dal_irq_service_destroy(&pool->base.irqs);
-
-	if (pool->base.adapter_srv != NULL)
-		dal_adapter_service_destroy(&pool->base.adapter_srv);
 }
 
 static enum dc_status validate_mapped_resource(

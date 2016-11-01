@@ -297,7 +297,6 @@ struct adapter_service {
 	struct dc_context *ctx;
 	struct asic_capability *asic_cap;
 	enum dce_environment dce_environment;
-	struct i2caux *i2caux;
 	uint32_t platform_methods_mask;
 	uint32_t ac_level_percentage;
 	uint32_t dc_level_percentage;
@@ -370,10 +369,6 @@ bool dal_adapter_service_get_i2c_info(
 	struct adapter_service *as,
 	struct graphics_object_id id,
 	struct graphics_object_i2c_info *i2c_info);
-
-/* Get i2c aux handler */
-struct i2caux *dal_adapter_service_get_i2caux(
-	struct adapter_service *as);
 
 struct dal_asic_runtime_flags dal_adapter_service_get_asic_runtime_flags(
 	struct adapter_service *as);

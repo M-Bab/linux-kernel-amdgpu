@@ -2968,7 +2968,7 @@ static bool i2c_read(
 
 		/* TODO route this through drm i2c_adapter */
 		result = dal_i2caux_submit_i2c_command(
-				dal_adapter_service_get_i2caux(as),
+				ddc->ctx->i2caux,
 				ddc,
 				&cmd);
 	}

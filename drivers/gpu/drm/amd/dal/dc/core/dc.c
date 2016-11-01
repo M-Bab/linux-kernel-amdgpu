@@ -479,6 +479,39 @@ static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 			set_test_pattern;
 }
 
+static void destruct(struct core_dc *dc)
+{
+	resource_validate_ctx_destruct(dc->current_context);
+
+	dm_free(dc->temp_flip_context);
+	dc->current_context = NULL;
+
+	destroy_links(dc);
+
+	if (dc->res_pool)
+		dc->res_pool->funcs->destroy(&dc->res_pool);
+
+	if (dc->ctx->gpio_service)
+		dal_gpio_service_destroy(&dc->ctx->gpio_service);
+
+	if (dc->ctx->adapter_srv)
+		dal_adapter_service_destroy(&dc->ctx->adapter_srv);
+
+	if (dc->ctx->i2caux)
+		dal_i2caux_destroy(&dc->ctx->i2caux);
+
+	if (dc->ctx->created_bios)
+		dal_bios_parser_destroy(&dc->ctx->dc_bios);
+
+	if (dc->ctx->logger)
+		dal_logger_destroy(&dc->ctx->logger);
+
+	dm_free(dc->current_context);
+	dm_free(dc->ctx);
+
+	dc->ctx = NULL;
+}
+
 static bool construct(struct core_dc *dc,
 		const struct dc_init_data *init_params)
 {
@@ -543,6 +576,14 @@ static bool construct(struct core_dc *dc,
 		dc_ctx->created_bios = true;
 	}
 
+	/* Create I2C AUX */
+	dc_ctx->i2caux = dal_i2caux_create(dc_ctx);
+
+	if (!dc_ctx->i2caux) {
+		ASSERT_CRITICAL(false);
+		goto failed_to_create_i2caux;
+	}
+
 	/* TODO: Refactor DCE code to remove AS and asic caps */
 	if (dc_version < DCE_VERSION_MAX) {
 		/* Create adapter service */
@@ -552,6 +593,7 @@ static bool construct(struct core_dc *dc,
 			dm_error("%s: create_as() failed!\n", __func__);
 			goto as_fail;
 		}
+		dc_ctx->adapter_srv = as;
 	}
 
 	/* Create GPIO service */
@@ -583,40 +625,16 @@ static bool construct(struct core_dc *dc,
 
 	/**** error handling here ****/
 create_links_fail:
-	dc->res_pool->funcs->destroy(&dc->res_pool);
 create_resource_fail:
-	if (dc->ctx->gpio_service)
-		dal_gpio_service_destroy(&dc_ctx->gpio_service);
 gpio_fail:
-	if (as)
-		dal_adapter_service_destroy(&as);
 as_fail:
-	if (dc->ctx->created_bios)
-		dal_bios_parser_destroy(&dc->ctx->dc_bios);
+failed_to_create_i2caux:
 bios_fail:
-	dal_logger_destroy(&dc_ctx->logger);
 logger_fail:
-	dm_free(dc->current_context);
 val_ctx_fail:
-	dm_free(dc_ctx);
 ctx_fail:
+	destruct(dc);
 	return false;
-}
-
-static void destruct(struct core_dc *dc)
-{
-	dal_gpio_service_destroy(&dc->ctx->gpio_service);
-	resource_validate_ctx_destruct(dc->current_context);
-	dm_free(dc->current_context);
-	dm_free(dc->temp_flip_context);
-	dc->current_context = NULL;
-	destroy_links(dc);
-	dc->res_pool->funcs->destroy(&dc->res_pool);
-	dal_logger_destroy(&dc->ctx->logger);
-	if (dc->ctx->created_bios)
-		dal_bios_parser_destroy(&dc->ctx->dc_bios);
-	dm_free(dc->ctx);
-	dc->ctx = NULL;
 }
 
 /*
@@ -1710,7 +1728,7 @@ bool dc_submit_i2c(
 	struct ddc_service *ddc = link->ddc;
 
 	return dal_i2caux_submit_i2c_command(
-		dal_adapter_service_get_i2caux(ddc->as),
+		ddc->ctx->i2caux,
 		ddc->ddc_pin,
 		cmd);
 }

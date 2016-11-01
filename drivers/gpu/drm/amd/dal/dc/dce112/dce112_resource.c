@@ -692,10 +692,6 @@ static void destruct(struct dce110_resource_pool *pool)
 	if (pool->base.irqs != NULL) {
 		dal_irq_service_destroy(&pool->base.irqs);
 	}
-
-	if (pool->base.adapter_srv != NULL) {
-		dal_adapter_service_destroy(&pool->base.adapter_srv);
-	}
 }
 
 static struct clock_source *find_matching_pll(struct resource_context *res_ctx,

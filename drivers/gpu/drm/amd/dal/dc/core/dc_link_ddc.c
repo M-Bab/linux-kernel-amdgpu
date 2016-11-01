@@ -507,7 +507,7 @@ static uint8_t aux_read_edid_block(
 		}
 
 		if (!dal_i2caux_submit_aux_command(
-			dal_adapter_service_get_i2caux(ddc->as),
+			ddc->ctx->i2caux,
 			ddc->ddc_pin,
 			&cmd))
 			/* cannot read, break*/
@@ -530,7 +530,7 @@ static uint8_t aux_read_edid_block(
 		cmd.payloads = payloads;
 
 		result = dal_i2caux_submit_aux_command(
-			dal_adapter_service_get_i2caux(ddc->as),
+			ddc->ctx->i2caux,
 			ddc->ddc_pin,
 			&cmd);
 
@@ -927,7 +927,7 @@ bool dal_ddc_service_query_ddc_data(
 			dal_ddc_aux_payloads_get_count(payloads);
 
 		ret = dal_i2caux_submit_aux_command(
-				dal_adapter_service_get_i2caux(ddc->as),
+				ddc->ctx->i2caux,
 				ddc->ddc_pin,
 				&command);
 
@@ -989,7 +989,7 @@ enum ddc_result dal_ddc_service_read_dpcd_data(
 	}
 
 	if (dal_i2caux_submit_aux_command(
-		dal_adapter_service_get_i2caux(ddc->as),
+		ddc->ctx->i2caux,
 		ddc->ddc_pin,
 		&command))
 		return DDC_RESULT_SUCESSFULL;
@@ -1023,7 +1023,7 @@ enum ddc_result dal_ddc_service_write_dpcd_data(
 	}
 
 	if (dal_i2caux_submit_aux_command(
-		dal_adapter_service_get_i2caux(ddc->as),
+		ddc->ctx->i2caux,
 		ddc->ddc_pin,
 		&command))
 		return DDC_RESULT_SUCESSFULL;

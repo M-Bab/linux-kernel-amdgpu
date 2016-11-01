@@ -595,9 +595,6 @@ static bool generate_feature_set(
 static void adapter_service_destruct(
 	struct adapter_service *as)
 {
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	dal_i2caux_destroy(&as->i2caux);
 	dal_asic_capability_destroy(&as->asic_cap);
 }
 
@@ -659,14 +656,6 @@ static bool adapter_service_construct(
 
 	dcb = as->ctx->dc_bios;
 
-	/* Create I2C AUX */
-	as->i2caux = dal_i2caux_create(as->ctx);
-
-	if (!as->i2caux) {
-		ASSERT_CRITICAL(false);
-		goto failed_to_create_i2caux;
-	}
-
 	dcb->funcs->post_init(dcb, as);
 
 	/* Generate backlight translation table and initializes
@@ -680,9 +669,6 @@ static bool adapter_service_construct(
 	return true;
 
 failed_to_generate_features:
-	dal_i2caux_destroy(&as->i2caux);
-
-failed_to_create_i2caux:
 	dal_asic_capability_destroy(&as->asic_cap);
 
 	return false;
@@ -964,17 +950,6 @@ bool dal_adapter_service_get_feature_value(struct adapter_service *as,
 	}
 
 	return true;
-}
-
-/*
- * dal_adapter_service_get_i2caux
- *
- * Get i2c aux handler
- */
-struct i2caux *dal_adapter_service_get_i2caux(
-	struct adapter_service *as)
-{
-	return as->i2caux;
 }
 
 bool dal_adapter_service_get_embedded_panel_info(
