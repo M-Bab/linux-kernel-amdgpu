@@ -1285,7 +1285,7 @@ bool dp_validate_mode_timing(
 	req_bw = bandwidth_in_kbps_from_timing(timing);
 	max_bw = bandwidth_in_kbps_from_link_settings(link_setting);
 
-	if (req_bw < max_bw) {
+	if (req_bw <= max_bw) {
 		/* remember the biggest mode here, during
 		 * initial link training (to get
 		 * verified_link_cap), LS sends event about
