@@ -113,6 +113,12 @@
 				FN(reg_name, f1), v1, \
 				FN(reg_name, f2), v2)
 
+#define REG_GET_3(reg_name, f1, v1, f2, v2, f3, v3)	\
+		generic_reg_get3(CTX, REG(reg_name), \
+				FN(reg_name, f1), v1, \
+				FN(reg_name, f2), v2, \
+				FN(reg_name, f3), v3)
+
 /* macro to poll and wait for a register field to read back given value */
 
 #define REG_WAIT(reg_name, field, val, delay, max_try)	\
@@ -223,5 +229,10 @@ uint32_t generic_reg_get(const struct dc_context *ctx, uint32_t addr,
 uint32_t generic_reg_get2(const struct dc_context *ctx, uint32_t addr,
 		uint8_t shift1, uint32_t mask1, uint32_t *field_value1,
 		uint8_t shift2, uint32_t mask2, uint32_t *field_value2);
+
+uint32_t generic_reg_get3(const struct dc_context *ctx, uint32_t addr,
+		uint8_t shift1, uint32_t mask1, uint32_t *field_value1,
+		uint8_t shift2, uint32_t mask2, uint32_t *field_value2,
+		uint8_t shift3, uint32_t mask3, uint32_t *field_value3);
 
 #endif /* DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_INC_REG_HELPER_H_ */

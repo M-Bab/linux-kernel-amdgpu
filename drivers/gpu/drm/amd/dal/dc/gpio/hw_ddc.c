@@ -66,7 +66,6 @@ static enum gpio_result set_config(
 {
 	struct hw_ddc *ddc = HW_DDC_FROM_BASE(ptr);
 	struct hw_gpio *hw_gpio = NULL;
-	uint32_t addr;
 	uint32_t regval;
 	uint32_t ddc_data_pd_en = 0;
 	uint32_t ddc_clk_pd_en = 0;
@@ -79,22 +78,10 @@ static enum gpio_result set_config(
 		return GPIO_RESULT_NULL_HANDLE;
 	}
 
-	/* switch dual mode GPIO to I2C/AUX mode */
-	addr = ddc->base.regs->MASK_reg;
-
-	regval = REG_READ(gpio.MASK_reg);
-
-	ddc_data_pd_en = get_reg_field_value_ex(
-			regval,
-			FN(,DC_GPIO_DDC1DATA_PD_EN));
-
-	ddc_clk_pd_en = get_reg_field_value_ex(
-			regval,
-			FN(,DC_GPIO_DDC1CLK_PD_EN));
-
-	aux_pad_mode = get_reg_field_value_ex(
-			regval,
-			FN(,AUX_PAD1_MODE));
+	regval = REG_GET_3(gpio.MASK_reg,
+			DC_GPIO_DDC1DATA_PD_EN, &ddc_data_pd_en,
+			DC_GPIO_DDC1CLK_PD_EN, &ddc_clk_pd_en,
+			AUX_PAD1_MODE, &aux_pad_mode);
 
 	switch (config_data->config.ddc.type) {
 	case GPIO_DDC_CONFIG_TYPE_MODE_I2C:
@@ -104,52 +91,39 @@ static enum gpio_result set_config(
 		 * is required for detection of AUX mode */
 		if (hw_gpio->base.en != GPIO_DDC_LINE_VIP_PAD) {
 			if (!ddc_data_pd_en || !ddc_clk_pd_en) {
-				set_reg_field_value_ex(
-					regval,
-					1,
-					FN(,DC_GPIO_DDC1DATA_PD_EN));
 
-				set_reg_field_value_ex(
-					regval,
-					1,
-					FN(,DC_GPIO_DDC1CLK_PD_EN));
-
-				REG_WRITE(gpio.MASK_reg, regval);
+				REG_SET_2(gpio.MASK_reg, regval,
+						DC_GPIO_DDC1DATA_PD_EN, 1,
+						DC_GPIO_DDC1CLK_PD_EN, 1);
 
 				if (config_data->type ==
-					GPIO_CONFIG_TYPE_I2C_AUX_DUAL_MODE)
-					/* should not affect normal I2C R/W */
-					/* [anaumov] in DAL2, there was
-					 * dc_service_delay_in_microseconds(2500); */
+						GPIO_CONFIG_TYPE_I2C_AUX_DUAL_MODE)
 					msleep(3);
 			}
 		} else {
-			uint32_t reg2 = regval;
+			uint32_t reg2;
 			uint32_t sda_pd_dis = 0;
 			uint32_t scl_pd_dis = 0;
 
-			sda_pd_dis = get_reg_field_value_ex(
-					reg2,
-					FN(,DC_GPIO_SDA_PD_DIS));
+			reg2 = REG_GET_2(gpio.MASK_reg,
+					DC_GPIO_SDA_PD_DIS, &sda_pd_dis,
+					DC_GPIO_SCL_PD_DIS, &scl_pd_dis);
 
-			scl_pd_dis = get_reg_field_value_ex(
-					reg2,
-					FN(,DC_GPIO_SCL_PD_DIS));
-
-			if (sda_pd_dis)
-				sda_pd_dis = 0;
-
-			if (!scl_pd_dis)
-				scl_pd_dis = 1;
-
-			if (sda_pd_dis || !scl_pd_dis) {
-				REG_WRITE(gpio.MASK_reg, reg2);
+			if (sda_pd_dis) {
+				REG_SET(gpio.MASK_reg, regval,
+						DC_GPIO_SDA_PD_DIS, 0);
 
 				if (config_data->type ==
-					GPIO_CONFIG_TYPE_I2C_AUX_DUAL_MODE)
-					/* should not affect normal I2C R/W */
-					/* [anaumov] in DAL2, there was
-					 * dc_service_delay_in_microseconds(2500); */
+						GPIO_CONFIG_TYPE_I2C_AUX_DUAL_MODE)
+					msleep(3);
+			}
+
+			if (!scl_pd_dis) {
+				REG_SET(gpio.MASK_reg, regval,
+						DC_GPIO_SCL_PD_DIS, 1);
+
+				if (config_data->type ==
+						GPIO_CONFIG_TYPE_I2C_AUX_DUAL_MODE)
 					msleep(3);
 			}
 		}
@@ -166,14 +140,16 @@ static enum gpio_result set_config(
 			/* set the I2C pad mode */
 			/* read the register again,
 			 * some bits may have been changed */
-			REG_UPDATE(gpio.MASK_reg, AUX_PAD1_MODE, 1);
+			REG_UPDATE(gpio.MASK_reg,
+					AUX_PAD1_MODE, 0);
 		}
 
 		return GPIO_RESULT_OK;
 	case GPIO_DDC_CONFIG_TYPE_MODE_AUX:
 		/* set the AUX pad mode */
 		if (!aux_pad_mode) {
-			REG_UPDATE(gpio.MASK_reg, AUX_PAD1_MODE, 1);
+			REG_SET(gpio.MASK_reg, regval,
+					AUX_PAD1_MODE, 1);
 		}
 
 		return GPIO_RESULT_OK;
