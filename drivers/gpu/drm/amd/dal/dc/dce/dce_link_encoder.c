@@ -1065,7 +1065,7 @@ bool dce110_link_encoder_construct(
 	struct bp_encoder_cap_info bp_cap_info = {0};
 	const struct dc_vbios_funcs *bp_funcs = enc110->base.ctx->dc_bios->funcs;
 
-	if (BP_RESULT_OK != bp_funcs->get_encoder_cap_info(
+	if (BP_RESULT_OK == bp_funcs->get_encoder_cap_info(
 			enc110->base.ctx->dc_bios, enc110->base.id,
 			&bp_cap_info))
 		enc110->base.features.flags.bits.IS_HBR2_CAPABLE =
