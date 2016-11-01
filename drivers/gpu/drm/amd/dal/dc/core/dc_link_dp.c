@@ -1076,17 +1076,31 @@ static bool exceeded_limit_link_setting(
 				 true : false);
 }
 
-static enum dc_link_rate get_max_link_rate(struct core_link *link)
+static struct dc_link_settings get_max_link_cap(struct core_link *link)
 {
-	enum dc_link_rate max_link_rate = LINK_RATE_HIGH;
+	/* Set Default link settings */
+	struct dc_link_settings max_link_cap = {LANE_COUNT_FOUR, LINK_RATE_HIGH,
+			LINK_SPREAD_05_DOWNSPREAD_30KHZ};
 
+	/* Higher link settings based on feature supported */
 	if (link->link_enc->features.flags.bits.IS_HBR2_CAPABLE)
-		max_link_rate = LINK_RATE_HIGH2;
+		max_link_cap.link_rate = LINK_RATE_HIGH2;
 
 	if (link->link_enc->features.flags.bits.IS_HBR3_CAPABLE)
-		max_link_rate = LINK_RATE_HIGH3;
+		max_link_cap.link_rate = LINK_RATE_HIGH3;
 
-	return max_link_rate;
+	/* Lower link settings based on sink's link cap */
+	if (link->public.reported_link_cap.lane_count < max_link_cap.lane_count)
+		max_link_cap.lane_count =
+				link->public.reported_link_cap.lane_count;
+	if (link->public.reported_link_cap.link_rate < max_link_cap.link_rate)
+		max_link_cap.link_rate =
+				link->public.reported_link_cap.link_rate;
+	if (link->public.reported_link_cap.link_spread <
+			max_link_cap.link_spread)
+		max_link_cap.link_spread =
+				link->public.reported_link_cap.link_spread;
+	return max_link_cap;
 }
 
 bool dp_hbr_verify_link_cap(
@@ -1105,9 +1119,7 @@ bool dp_hbr_verify_link_cap(
 	success = false;
 	skip_link_training = false;
 
-	max_link_cap.lane_count = LANE_COUNT_FOUR;
-	max_link_cap.link_rate = get_max_link_rate(link);
-	max_link_cap.link_spread = LINK_SPREAD_05_DOWNSPREAD_30KHZ;
+	max_link_cap = get_max_link_cap(link);
 
 	/* TODO implement override and monitor patch later */
 
