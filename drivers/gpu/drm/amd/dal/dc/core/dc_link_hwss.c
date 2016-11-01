@@ -8,6 +8,7 @@
 #include "include/i2caux_interface.h"
 #include "link_hwss.h"
 #include "hw_sequencer.h"
+#include "dc_link_dp.h"
 #include "dc_link_ddc.h"
 #include "dm_helpers.h"
 #include "dce/dce_link_encoder.h"
@@ -209,6 +210,10 @@ void dp_retrain_link(struct core_link *link)
 			dm_delay_in_microseconds(link->ctx, 100);
 			pipes->stream_enc->funcs->dp_blank(pipes[i].stream_enc);
 			link->dc->hwss.disable_stream(&pipes[i]);
+			dc_link_dp_perform_link_training(
+					&link->public,
+					&link->public.verified_link_cap,
+					true);
 			link->dc->hwss.enable_stream(&pipes[i]);
 			link->dc->hwss.unblank_stream(&pipes[i],
 					&link->public.verified_link_cap);
