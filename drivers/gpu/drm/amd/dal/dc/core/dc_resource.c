@@ -380,7 +380,7 @@ static void calculate_viewport(
 		const struct dc_surface *surface,
 		struct pipe_ctx *pipe_ctx)
 {
-	const struct rect stream_src = pipe_ctx->stream->public.src;
+	struct rect stream_src = pipe_ctx->stream->public.src;
 	struct rect src = surface->src_rect;
 	struct rect dst = surface->dst_rect;
 	struct rect surface_clip = surface->clip_rect;
@@ -388,10 +388,11 @@ static void calculate_viewport(
 
 
 	if (surface->rotation == ROTATION_ANGLE_90 ||
-			surface->rotation == ROTATION_ANGLE_270){
+	    surface->rotation == ROTATION_ANGLE_270) {
 		rect_swap_helper(&src);
 		rect_swap_helper(&dst);
 		rect_swap_helper(&surface_clip);
+		rect_swap_helper(&stream_src);
 	}
 
 	/* The actual clip is an intersection between stream
@@ -514,7 +515,6 @@ bool resource_build_scaling_params(
 {
 	bool res;
 	struct dc_crtc_timing *timing = &pipe_ctx->stream->public.timing;
-
 	/* Important: scaling ratio calculation requires pixel format,
 	 * lb depth calculation requires recout and taps require scaling ratios.
 	 */
