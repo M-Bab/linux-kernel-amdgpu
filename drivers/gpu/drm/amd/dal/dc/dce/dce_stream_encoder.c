@@ -35,6 +35,10 @@
 #define REG(reg)\
 	(enc110->regs->reg)
 
+#undef FN
+#define FN(reg_name, field_name) \
+	enc110->se_shift->field_name, enc110->se_mask->field_name
+
 #define VBI_LINE_0 0
 #define DP_BLANK_MAX_RETRY 20
 #define HDMI_CLOCK_CHANNEL_RATE_MORE_340M 340000
@@ -102,11 +106,14 @@ static void dce110_update_generic_info_packet(
 	}
 
 	/* force double-buffered packet update */
-	{
+	if (enc110->se_mask->AFMT_GENERIC0_UPDATE &&
+			enc110->se_mask->AFMT_GENERIC2_UPDATE) {
 		REG_UPDATE_2(AFMT_VBI_PACKET_CONTROL,
 			AFMT_GENERIC0_UPDATE, (packet_index == 0),
 			AFMT_GENERIC2_UPDATE, (packet_index == 2));
-
+	} else {
+		ASSERT(enc110->se_mask->AFMT_GENERIC0_UPDATE);
+		ASSERT(enc110->se_mask->AFMT_GENERIC2_UPDATE);
 	}
 }
 
@@ -234,12 +241,15 @@ static void dce110_stream_encoder_dp_set_stream_attribute(
 	}
 
 	/* set dynamic range and YCbCr range */
-
-	REG_UPDATE_2(
-			DP_PIXEL_FORMAT,
-			DP_DYN_RANGE, 0,
-			DP_YCBCR_RANGE, 0);
-
+	if (enc110->se_mask->DP_DYN_RANGE && enc110->se_mask->DP_YCBCR_RANGE) {
+		REG_UPDATE_2(
+				DP_PIXEL_FORMAT,
+				DP_DYN_RANGE, 0,
+				DP_YCBCR_RANGE, 0);
+	} else {
+		ASSERT(enc110->se_mask->DP_DYN_RANGE);
+		ASSERT(enc110->se_mask->DP_YCBCR_RANGE);
+	}
 }
 
 
@@ -294,13 +304,12 @@ static void dce110_stream_encoder_hdmi_set_stream_attribute(
 
 	dce110_stream_encoder_set_stream_attribute_helper(enc110, crtc_timing);
 
-	/* setup HDMI engine */
-	REG_UPDATE_5(HDMI_CONTROL,
-		HDMI_PACKET_GEN_VERSION, 1,
-		HDMI_KEEPOUT_MODE, 1,
-		HDMI_DEEP_COLOR_ENABLE, 0,
-		HDMI_DATA_SCRAMBLE_EN, 0,
-		HDMI_CLOCK_CHANNEL_RATE, 0);
+	if (enc110->regs->DIG_FE_CNTL) {
+		REG_UPDATE_3(HDMI_CONTROL,
+			HDMI_PACKET_GEN_VERSION, 1,
+			HDMI_KEEPOUT_MODE, 1,
+			HDMI_DEEP_COLOR_ENABLE, 0);
+	}
 
 	switch (crtc_timing->display_color_depth) {
 	case COLOR_DEPTH_888:
@@ -323,28 +332,6 @@ static void dce110_stream_encoder_hdmi_set_stream_attribute(
 		break;
 	default:
 		break;
-	}
-
-	if (actual_pix_clk_khz >= HDMI_CLOCK_CHANNEL_RATE_MORE_340M) {
-		/* enable HDMI data scrambler
-		 * HDMI_CLOCK_CHANNEL_RATE_MORE_340M
-		 * Clock channel frequency is 1/4 of character rate.
-		 */
-		REG_UPDATE_2(HDMI_CONTROL,
-			HDMI_DATA_SCRAMBLE_EN, 1,
-			HDMI_CLOCK_CHANNEL_RATE, 1);
-	} else if (crtc_timing->flags.LTE_340MCSC_SCRAMBLE) {
-
-		/* TODO: New feature for DCE11, still need to implement */
-
-		/* enable HDMI data scrambler
-		 * HDMI_CLOCK_CHANNEL_FREQ_EQUAL_TO_CHAR_RATE
-		 * Clock channel frequency is the same
-		 * as character rate
-		 */
-		REG_UPDATE_2(HDMI_CONTROL,
-			HDMI_DATA_SCRAMBLE_EN, 1,
-			HDMI_CLOCK_CHANNEL_RATE, 0);
 	}
 
 	REG_UPDATE_3(HDMI_VBI_PACKET_CONTROL,
@@ -396,9 +383,6 @@ static void dce110_stream_encoder_set_mst_bandwidth(
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
 	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t addr;
-	uint32_t field;
-	uint32_t value;
 	uint32_t retries = 0;
 	uint32_t x = dal_fixed31_32_floor(
 		avg_time_slots_per_mtp);
@@ -418,26 +402,9 @@ static void dce110_stream_encoder_set_mst_bandwidth(
 	/* wait for update to be completed on the link */
 	/* i.e. DP_MSE_RATE_UPDATE_PENDING field (read only) */
 	/* is reset to 0 (not pending) */
-	{
-		addr = REG(DP_MSE_RATE_UPDATE);
-
-		do {
-			value = dm_read_reg(ctx, addr);
-
-			field = get_reg_field_value(
-					value,
-					DP_MSE_RATE_UPDATE,
-					DP_MSE_RATE_UPDATE_PENDING);
-
-			if (!(field &
-			DP_MSE_RATE_UPDATE__DP_MSE_RATE_UPDATE_PENDING_MASK))
-				break;
-
-			udelay(10);
-
-			++retries;
-		} while (retries < DP_MST_UPDATE_MAX_RETRY);
-	}
+	REG_WAIT(DP_MSE_RATE_UPDATE, DP_MSE_RATE_UPDATE_PENDING,
+			enc110->se_mask->DP_MSE_RATE_UPDATE_PENDING,
+			10, DP_MST_UPDATE_MAX_RETRY);
 }
 
 static void dce110_stream_encoder_update_hdmi_info_packets(
@@ -446,33 +413,40 @@ static void dce110_stream_encoder_update_hdmi_info_packets(
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
 
-	if (info_frame->avi.valid) {
-		const uint32_t *content =
-			(const uint32_t *) &info_frame->avi.sb[0];
+	if (enc110->se_mask->HDMI_AVI_INFO_CONT &&
+			enc110->se_mask->HDMI_AVI_INFO_SEND) {
 
+		if (info_frame->avi.valid) {
+			const uint32_t *content =
+				(const uint32_t *) &info_frame->avi.sb[0];
 
-		REG_WRITE(AFMT_AVI_INFO0, content[0]);
+			REG_WRITE(AFMT_AVI_INFO0, content[0]);
 
-		REG_WRITE(AFMT_AVI_INFO1, content[1]);
+			REG_WRITE(AFMT_AVI_INFO1, content[1]);
 
-		REG_WRITE(AFMT_AVI_INFO2, content[2]);
+			REG_WRITE(AFMT_AVI_INFO2, content[2]);
 
-		REG_WRITE(AFMT_AVI_INFO3, content[3]);
+			REG_WRITE(AFMT_AVI_INFO3, content[3]);
 
-		REG_UPDATE(AFMT_AVI_INFO3, AFMT_AVI_INFO_VERSION,
-					info_frame->avi.hb1);
+			REG_UPDATE(AFMT_AVI_INFO3, AFMT_AVI_INFO_VERSION,
+						info_frame->avi.hb1);
 
-		REG_UPDATE_2(HDMI_INFOFRAME_CONTROL0,
-				HDMI_AVI_INFO_SEND, 1,
-				HDMI_AVI_INFO_CONT, 1);
+			REG_UPDATE_2(HDMI_INFOFRAME_CONTROL0,
+					HDMI_AVI_INFO_SEND, 1,
+					HDMI_AVI_INFO_CONT, 1);
 
-		REG_UPDATE(HDMI_INFOFRAME_CONTROL1, HDMI_AVI_INFO_LINE,
-						VBI_LINE_0 + 2);
+			REG_UPDATE(HDMI_INFOFRAME_CONTROL1, HDMI_AVI_INFO_LINE,
+							VBI_LINE_0 + 2);
 
+		} else {
+			REG_UPDATE_2(HDMI_INFOFRAME_CONTROL0,
+				HDMI_AVI_INFO_SEND, 0,
+				HDMI_AVI_INFO_CONT, 0);
+		}
 	} else {
-		REG_UPDATE_2(HDMI_INFOFRAME_CONTROL0,
-			HDMI_AVI_INFO_SEND, 0,
-			HDMI_AVI_INFO_CONT, 0);
+		ASSERT(enc110->se_mask->HDMI_AVI_INFO_SEND);
+		ASSERT(enc110->se_mask->HDMI_AVI_INFO_CONT);
+		ASSERT(enc110->se_mask->HDMI_AVI_INFO_LINE);
 	}
 
 	dce110_update_hdmi_info_packet(enc110, 0, &info_frame->vendor);
@@ -504,9 +478,16 @@ static void dce110_stream_encoder_stop_hdmi_info_packets(
 		HDMI_GENERIC3_SEND, 0);
 
 	/* stop AVI packet on HDMI */
-	REG_UPDATE_2(HDMI_INFOFRAME_CONTROL0,
-		HDMI_AVI_INFO_SEND, 0,
-		HDMI_AVI_INFO_CONT, 0);
+	if (enc110->se_mask->HDMI_AVI_INFO_CONT &&
+			enc110->se_mask->HDMI_AVI_INFO_SEND) {
+
+		REG_UPDATE_2(HDMI_INFOFRAME_CONTROL0,
+			HDMI_AVI_INFO_SEND, 0,
+			HDMI_AVI_INFO_CONT, 0);
+	} else {
+		ASSERT(enc110->se_mask->HDMI_AVI_INFO_SEND);
+		ASSERT(enc110->se_mask->HDMI_AVI_INFO_CONT);
+	}
 }
 
 static void dce110_stream_encoder_update_dp_info_packets(
@@ -545,15 +526,25 @@ static void dce110_stream_encoder_stop_dp_info_packets(
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
 	uint32_t value = REG_READ(DP_SEC_CNTL);
 
-	REG_SET_7(DP_SEC_CNTL, 0,
-		DP_SEC_GSP0_ENABLE, 0,
-		DP_SEC_GSP1_ENABLE, 0,
-		DP_SEC_GSP2_ENABLE, 0,
-		DP_SEC_GSP3_ENABLE, 0,
-		DP_SEC_AVI_ENABLE, 0,
-		DP_SEC_MPG_ENABLE, 0,
-		DP_SEC_STREAM_ENABLE, 0);
-
+	if (enc110->se_mask->DP_SEC_AVI_ENABLE) {
+		REG_SET_7(DP_SEC_CNTL, 0,
+			DP_SEC_GSP0_ENABLE, 0,
+			DP_SEC_GSP1_ENABLE, 0,
+			DP_SEC_GSP2_ENABLE, 0,
+			DP_SEC_GSP3_ENABLE, 0,
+			DP_SEC_AVI_ENABLE, 0,
+			DP_SEC_MPG_ENABLE, 0,
+			DP_SEC_STREAM_ENABLE, 0);
+	} else {
+		ASSERT(enc110->se_mask->DP_SEC_AVI_ENABLE);
+		REG_SET_6(DP_SEC_CNTL, 0,
+			DP_SEC_GSP0_ENABLE, 0,
+			DP_SEC_GSP1_ENABLE, 0,
+			DP_SEC_GSP2_ENABLE, 0,
+			DP_SEC_GSP3_ENABLE, 0,
+			DP_SEC_MPG_ENABLE, 0,
+			DP_SEC_STREAM_ENABLE, 0);
+	}
 	/* this register shared with audio info frame.
 	 * therefore we need to keep master enabled
 	 * if at least one of the fields is not 0 */
@@ -1252,7 +1243,9 @@ bool dce110_stream_encoder_construct(
 	struct dc_context *ctx,
 	struct dc_bios *bp,
 	enum engine_id eng_id,
-	const struct dce110_stream_enc_registers *regs)
+	const struct dce110_stream_enc_registers *regs,
+	const struct dce_stream_encoder_shift *se_shift,
+	const struct dce_stream_encoder_mask *se_mask)
 {
 	if (!enc110)
 		return false;
@@ -1264,6 +1257,8 @@ bool dce110_stream_encoder_construct(
 	enc110->base.id = eng_id;
 	enc110->base.bp = bp;
 	enc110->regs = regs;
+	enc110->se_shift = se_shift;
+	enc110->se_mask = se_mask;
 
 	return true;
 }

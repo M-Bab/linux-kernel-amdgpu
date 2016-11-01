@@ -291,7 +291,6 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 [id] = {\
 	SE_COMMON_REG_LIST_DCE_BASE(id),\
 	.AFMT_CNTL = 0,\
-	.TMDS_CNTL = 0,\
 }
 
 static const struct dce110_stream_enc_registers stream_enc_regs[] = {
@@ -302,6 +301,14 @@ static const struct dce110_stream_enc_registers stream_enc_regs[] = {
 	stream_enc_regs(4),
 	stream_enc_regs(5),
 	stream_enc_regs(6)
+};
+
+static const struct dce_stream_encoder_shift se_shift = {
+		SE_COMMON_MASK_SH_LIST_DCE80_100(__SHIFT)
+};
+
+static const struct dce_stream_encoder_mask se_mask = {
+		SE_COMMON_MASK_SH_LIST_DCE80_100(_MASK)
 };
 
 #define audio_regs(id)\
@@ -431,7 +438,8 @@ static struct stream_encoder *dce100_stream_encoder_create(
 		return NULL;
 
 	if (dce110_stream_encoder_construct(
-			enc110, ctx, ctx->dc_bios, eng_id, &stream_enc_regs[eng_id]))
+			enc110, ctx, ctx->dc_bios, eng_id,
+			&stream_enc_regs[eng_id], &se_shift, &se_mask))
 		return &enc110->base;
 
 	BREAK_TO_DEBUGGER();
