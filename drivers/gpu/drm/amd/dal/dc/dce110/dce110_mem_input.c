@@ -525,7 +525,8 @@ bool dce110_mem_input_program_surface_config(
 	union dc_tiling_info *tiling_info,
 	union plane_size *plane_size,
 	enum dc_rotation_angle rotation,
-	struct dc_plane_dcc_param *dcc)
+	struct dc_plane_dcc_param *dcc,
+	bool horizotal_mirror)
 {
 	struct dce110_mem_input *mem_input110 = TO_DCE110_MEM_INPUT(mem_input);
 

@@ -238,6 +238,7 @@ struct dc_plane_info {
 	union dc_tiling_info tiling_info;
 	enum surface_pixel_format format;
 	enum dc_rotation_angle rotation;
+	bool horizontal_mirror;
 	enum plane_stereo_format stereo_format;
 	enum dc_color_space color_space; /*todo: wrong place, fits in scaling info*/
 	bool visible;

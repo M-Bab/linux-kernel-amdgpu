@@ -1354,6 +1354,7 @@ bool dc_commit_surfaces_to_target(
 		plane_info[i].format = new_surfaces[i]->format;
 		plane_info[i].plane_size = new_surfaces[i]->plane_size;
 		plane_info[i].rotation = new_surfaces[i]->rotation;
+		plane_info[i].horizontal_mirror = new_surfaces[i]->horizontal_mirror;
 		plane_info[i].stereo_format = new_surfaces[i]->stereo_format;
 		plane_info[i].tiling_info = new_surfaces[i]->tiling_info;
 		plane_info[i].visible = new_surfaces[i]->visible;
@@ -1456,6 +1457,8 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 						updates[i].plane_info->plane_size;
 					surface->public.rotation =
 						updates[i].plane_info->rotation;
+					surface->public.horizontal_mirror =
+						updates[i].plane_info->horizontal_mirror;
 					surface->public.stereo_format =
 						updates[i].plane_info->stereo_format;
 					surface->public.tiling_info =
