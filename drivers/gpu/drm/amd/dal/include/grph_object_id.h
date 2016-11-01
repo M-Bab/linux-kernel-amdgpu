@@ -190,22 +190,6 @@ enum engine_id {
 	ENGINE_ID_UNKNOWN = (-1L)
 };
 
-union supported_stream_engines {
-	struct {
-		uint32_t ENGINE_ID_DIGA:1;
-		uint32_t ENGINE_ID_DIGB:1;
-		uint32_t ENGINE_ID_DIGC:1;
-		uint32_t ENGINE_ID_DIGD:1;
-		uint32_t ENGINE_ID_DIGE:1;
-		uint32_t ENGINE_ID_DIGF:1;
-		uint32_t ENGINE_ID_DIGG:1;
-		uint32_t ENGINE_ID_DACA:1;
-		uint32_t ENGINE_ID_DACB:1;
-		uint32_t ENGINE_ID_VCE:1;
-	} engine;
-	uint32_t u_all;
-};
-
 enum transmitter_color_depth {
 	TRANSMITTER_COLOR_DEPTH_24 = 0,  /* 8  bits */
 	TRANSMITTER_COLOR_DEPTH_30,      /* 10 bits */

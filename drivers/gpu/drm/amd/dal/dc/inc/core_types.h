@@ -251,8 +251,6 @@ struct resource_pool {
 	unsigned int underlay_pipe_index;
 	unsigned int stream_enc_count;
 
-	union supported_stream_engines stream_engines;
-
 	/*
 	 * reserved clock source for DP
 	 */
@@ -306,7 +304,6 @@ struct pipe_ctx {
 struct resource_context {
 	const struct resource_pool *pool;
 	struct pipe_ctx pipe_ctx[MAX_PIPES];
-	union supported_stream_engines used_stream_engines;
 	bool is_stream_enc_acquired[MAX_PIPES * 2];
 	bool is_audio_acquired[MAX_PIPES];
 	uint8_t clock_source_ref_count[MAX_CLOCK_SOURCES];

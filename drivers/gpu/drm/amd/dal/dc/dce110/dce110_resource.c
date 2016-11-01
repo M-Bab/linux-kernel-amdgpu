@@ -1198,12 +1198,6 @@ static bool construct(
 	/*************************************************
 	 *  Create resources                             *
 	 *************************************************/
-	pool->base.stream_engines.engine.ENGINE_ID_DIGA = 1;
-	pool->base.stream_engines.engine.ENGINE_ID_DIGB = 1;
-	pool->base.stream_engines.engine.ENGINE_ID_DIGC = 1;
-	pool->base.stream_engines.engine.ENGINE_ID_DIGD = 1;
-	pool->base.stream_engines.engine.ENGINE_ID_DIGE = 1;
-	pool->base.stream_engines.engine.ENGINE_ID_DIGF = 1;
 
 	bp = ctx->dc_bios;
 
