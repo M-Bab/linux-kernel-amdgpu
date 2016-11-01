@@ -135,6 +135,9 @@ static void destruct(struct bios_parser *bp)
 {
 	if (bp->base.bios_local_image)
 		dm_free(bp->base.bios_local_image);
+
+	if (bp->base.integrated_info)
+		dm_free(bp->base.integrated_info);
 }
 
 static void bios_parser_destroy(struct dc_bios **dcb)
@@ -4063,21 +4066,6 @@ static struct integrated_info *bios_parser_create_integrated_info(
 	return NULL;
 }
 
-static void bios_parser_destroy_integrated_info(
-	struct dc_bios *dcb,
-	struct integrated_info **info)
-{
-	if (info == NULL) {
-		ASSERT_CRITICAL(0);
-		return;
-	}
-
-	if (*info != NULL) {
-		dm_free(*info);
-		*info = NULL;
-	}
-}
-
 /******************************************************************************/
 
 static const struct dc_vbios_funcs vbios_funcs = {
@@ -4155,10 +4143,6 @@ static const struct dc_vbios_funcs vbios_funcs = {
 
 	/* SW init and patch */
 	.post_init = bios_parser_post_init,  /* patch vbios table for mxm module by reading i2c */
-
-	.create_integrated_info = bios_parser_create_integrated_info,
-
-	.destroy_integrated_info = bios_parser_destroy_integrated_info,
 
 	.bios_parser_destroy = bios_parser_destroy,
 };
@@ -4240,6 +4224,8 @@ static bool bios_parser_construct(
 
 	dal_bios_parser_init_cmd_tbl(bp);
 	dal_bios_parser_init_cmd_tbl_helper(&bp->cmd_helper, dce_version);
+
+	bp->base.integrated_info = bios_parser_create_integrated_info(&bp->base);
 
 	return true;
 }

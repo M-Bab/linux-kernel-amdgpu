@@ -202,13 +202,6 @@ struct dc_vbios_funcs {
 	void (*post_init)(struct dc_bios *bios,
 			  struct adapter_service *as);
 
-	struct integrated_info *(*create_integrated_info)(
-		struct dc_bios *bios);
-
-	void (*destroy_integrated_info)(
-		struct dc_bios *dcb,
-		struct integrated_info **info);
-
 	void (*bios_parser_destroy)(struct dc_bios **dcb);
 };
 

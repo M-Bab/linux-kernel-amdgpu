@@ -758,7 +758,8 @@ static bool display_clock_integrated_info_construct(
 	struct firmware_info fw_info = { { 0 } };
 	uint32_t i;
 
-	dal_adapter_service_get_integrated_info(as, &info);
+	if (bp->integrated_info)
+		info = *bp->integrated_info;
 
 	disp_clk->dentist_vco_freq_khz = info.dentist_vco_freq;
 	if (disp_clk->dentist_vco_freq_khz == 0) {

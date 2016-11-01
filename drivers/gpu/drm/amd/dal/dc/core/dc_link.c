@@ -1050,9 +1050,6 @@ static bool construct(
 
 	link->public.link_enc_hw_inst = link->link_enc->transmitter;
 
-	/* TODO: refactor dal_adapter_service_get_integrated_info(as, &info); */
-	memmove(&info, dc_ctx->dc_bios->integrated_info, sizeof(struct integrated_info));
-
 	for (i = 0; ; i++) {
 		if (BP_RESULT_OK !=
 				bp_funcs->get_device_tag(dc_ctx->dc_bios, link->link_id, i, &link->device_tag)) {
@@ -1076,6 +1073,9 @@ static bool construct(
 			continue;
 		break;
 	}
+
+	if (bios->integrated_info)
+		info = *bios->integrated_info;
 
 	/* Look for channel mapping corresponding to connector and device tag */
 	for (i = 0; i < MAX_NUMBER_OF_EXT_DISPLAY_PATH; i++) {

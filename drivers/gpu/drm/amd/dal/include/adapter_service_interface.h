@@ -298,7 +298,6 @@ struct adapter_service {
 	struct asic_capability *asic_cap;
 	enum dce_environment dce_environment;
 	struct i2caux *i2caux;
-	struct integrated_info *integrated_info;
 	uint32_t platform_methods_mask;
 	uint32_t ac_level_percentage;
 	uint32_t dc_level_percentage;
@@ -355,12 +354,6 @@ bool dal_adapter_service_is_dfs_bypass_enabled(struct adapter_service *as);
 /* Get the video RAM bit width set on the ASIC */
 uint32_t dal_adapter_service_get_asic_vram_bit_width(
 	struct adapter_service *as);
-
-
-/* Get integrated information on BIOS */
-bool dal_adapter_service_get_integrated_info(
-	struct adapter_service *as,
-	struct integrated_info *info);
 
 /* Return if a given feature is supported by the ASIC */
 bool dal_adapter_service_is_feature_supported(struct adapter_service *as,

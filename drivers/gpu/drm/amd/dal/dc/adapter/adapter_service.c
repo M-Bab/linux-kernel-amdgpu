@@ -599,8 +599,6 @@ static void adapter_service_destruct(
 
 	dal_i2caux_destroy(&as->i2caux);
 	dal_asic_capability_destroy(&as->asic_cap);
-
-	dcb->funcs->destroy_integrated_info(dcb, &as->integrated_info);
 }
 
 /*
@@ -668,10 +666,6 @@ static bool adapter_service_construct(
 		ASSERT_CRITICAL(false);
 		goto failed_to_create_i2caux;
 	}
-
-	/* Integrated info is not provided on discrete ASIC. NULL is allowed */
-	if (dcb->funcs->create_integrated_info)
-		as->integrated_info = dcb->funcs->create_integrated_info(dcb);
 
 	dcb->funcs->post_init(dcb, as);
 
@@ -881,23 +875,6 @@ bool dal_adapter_service_get_ss_info(
 }
 
 /*
- * dal_adapter_service_get_integrated_info
- *
- * Get integrated information on BIOS
- */
-bool dal_adapter_service_get_integrated_info(
-	struct adapter_service *as,
-	struct integrated_info *info)
-{
-	if (info == NULL || as->integrated_info == NULL)
-		return false;
-
-	memmove(info, as->integrated_info, sizeof(struct integrated_info));
-
-	return true;
-}
-
-/*
  * dal_adapter_service_is_dfs_bypass_enabled
  *
  * Check if DFS bypass is enabled
@@ -905,9 +882,11 @@ bool dal_adapter_service_get_integrated_info(
 bool dal_adapter_service_is_dfs_bypass_enabled(
 	struct adapter_service *as)
 {
-	if (as->integrated_info == NULL)
+	struct dc_bios *bp = as->ctx->dc_bios;
+
+	if (bp->integrated_info == NULL)
 		return false;
-	if ((as->integrated_info->gpu_cap_info & DFS_BYPASS_ENABLE) &&
+	if ((bp->integrated_info->gpu_cap_info & DFS_BYPASS_ENABLE) &&
 	    dal_adapter_service_is_feature_supported(as,
 			FEATURE_ENABLE_DFS_BYPASS))
 		return true;
@@ -1031,6 +1010,7 @@ bool dal_adapter_service_should_optimize(
 {
 	uint32_t supported_optimization = 0;
 	struct dal_asic_runtime_flags flags;
+	struct dc_bios *bp = as->ctx->dc_bios;
 
 	if (!dal_adapter_service_get_feature_value(as, FEATURE_OPTIMIZATION,
 			&supported_optimization, sizeof(uint32_t)))
@@ -1047,7 +1027,7 @@ bool dal_adapter_service_should_optimize(
 		break;
 
 	case OF_SKIP_RESET_OF_ALL_HW_ON_S3RESUME:
-		if (as->integrated_info == NULL ||
+		if (bp->integrated_info == NULL ||
 				!flags.flags.bits.SKIP_POWER_DOWN_ON_RESUME)
 			return false;
 		break;
