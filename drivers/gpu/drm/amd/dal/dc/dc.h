@@ -139,6 +139,8 @@ struct dc_debug {
 	bool surface_visual_confirm;
 	bool disable_stutter;
 	bool disable_dcc;
+	bool disalbe_dfs_bypass;
+	bool max_disp_clk;
 };
 
 struct dc {

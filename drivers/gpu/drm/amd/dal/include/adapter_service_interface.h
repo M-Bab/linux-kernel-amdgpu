@@ -76,11 +76,9 @@ enum adapter_feature_id {
 	FEATURE_MAXIMIZE_URGENCY_WATERMARKS,
 	FEATURE_MAXIMIZE_STUTTER_MARKS,
 	FEATURE_MAXIMIZE_NBP_MARKS,
-	FEATURE_USE_MAX_DISPLAY_CLK,
 	FEATURE_ALLOW_EDP_RESOURCE_SHARING,
 	FEATURE_SUPPORT_DP_YUV,
 	FEATURE_SUPPORT_DP_Y_ONLY,
-	FEATURE_ENABLE_DFS_BYPASS,
 	FEATURE_LB_HIGH_RESOLUTION,
 	FEATURE_DP_DISPLAY_FORCE_SS_ENABLE,
 	FEATURE_REPORT_CE_MODE_ONLY,
@@ -323,13 +321,6 @@ struct adapter_service *dal_adapter_service_create(
 /* Destroy adapter service and objects it contains */
 void dal_adapter_service_destroy(
 	struct adapter_service **as);
-
-/* Check if DFS bypass is enabled */
-bool dal_adapter_service_is_dfs_bypass_enabled(struct adapter_service *as);
-
-/* Return if a given feature is supported by the ASIC */
-bool dal_adapter_service_is_feature_supported(struct adapter_service *as,
-	enum adapter_feature_id feature_id);
 
 /* Get the cached value of a given feature */
 bool dal_adapter_service_get_feature_value(struct adapter_service *as,

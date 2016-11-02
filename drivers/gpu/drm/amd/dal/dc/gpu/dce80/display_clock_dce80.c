@@ -35,6 +35,7 @@
 
 #include "../divider_range.h"
 #include "display_clock_dce80.h"
+#include "dc.h"
 
 #define DCE80_DFS_BYPASS_THRESHOLD_KHZ 100000
 
@@ -754,6 +755,7 @@ static bool display_clock_integrated_info_construct(
 	struct display_clock_dce80 *disp_clk,
 	struct adapter_service *as)
 {
+	struct dc_debug *debug = &disp_clk->disp_clk.ctx->dc->debug;
 	struct dc_bios *bp = disp_clk->disp_clk.ctx->dc_bios;
 	struct integrated_info info = { { { 0 } } };
 	struct firmware_info fw_info = { { 0 } };
@@ -809,14 +811,13 @@ static bool display_clock_integrated_info_construct(
 		}
 	}
 
-	disp_clk->dfs_bypass_enabled =
-		dal_adapter_service_is_dfs_bypass_enabled(as) &&
-		dal_adapter_service_is_feature_supported(as,
-			FEATURE_ENABLE_DFS_BYPASS);
+	disp_clk->dfs_bypass_enabled = false;
+	if (!debug->disalbe_dfs_bypass)
+		if (bp->integrated_info->gpu_cap_info & DFS_BYPASS_ENABLE)
+			disp_clk->dfs_bypass_enabled = true;
 
-	disp_clk->use_max_disp_clk =
-		dal_adapter_service_is_feature_supported(as,
-			FEATURE_USE_MAX_DISPLAY_CLK);
+	disp_clk->use_max_disp_clk = debug->max_disp_clk;
+
 	return true;
 }
 

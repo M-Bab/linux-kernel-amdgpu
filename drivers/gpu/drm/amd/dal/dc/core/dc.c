@@ -692,6 +692,10 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 	dm_logger_write(core_dc->ctx->logger, LOG_DC,
 			"Display Core initialized\n");
 
+
+	/* TODO: missing feature to be enabled */
+	core_dc->public.debug.disalbe_dfs_bypass = true;
+
 	return &core_dc->public;
 
 construct_fail:

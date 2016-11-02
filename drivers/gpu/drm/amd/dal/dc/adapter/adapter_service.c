@@ -86,7 +86,6 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_MAXIMIZE_URGENCY_WATERMARKS, false, true},
 	{FEATURE_MAXIMIZE_STUTTER_MARKS, false, true},
 	{FEATURE_MAXIMIZE_NBP_MARKS, false, true},
-	{FEATURE_USE_MAX_DISPLAY_CLK, false, true},
 	{FEATURE_ALLOW_EDP_RESOURCE_SHARING, false, true},
 	{FEATURE_SUPPORT_DP_YUV, false, true},
 	{FEATURE_SUPPORT_DP_Y_ONLY, false, true},
@@ -94,7 +93,6 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_DCP_BIT_DEPTH_REDUCTION_MODE, 0, false},
 	{FEATURE_DCP_DITHER_MODE, 0, false},
 	{FEATURE_DCP_PROGRAMMING_WA, 0, false},
-	{FEATURE_ENABLE_DFS_BYPASS, false, true},
 	{FEATURE_WIRELESS_FULL_TIMING_ADJUSTMENT, false, true},
 	{FEATURE_WIRELESS_LIMIT_720P, false, true},
 	{FEATURE_MODIFY_TIMINGS_FOR_WIRELESS, false, true},
@@ -627,42 +625,6 @@ void dal_adapter_service_destroy(
 	dm_free(*as);
 
 	*as = NULL;
-}
-
-/*
- * dal_adapter_service_is_feature_supported
- *
- * Return if a given feature is supported by the ASIC. The feature has to be
- * a boolean type.
- */
-bool dal_adapter_service_is_feature_supported(struct adapter_service *as,
-					      enum adapter_feature_id feature_id)
-{
-	bool data = 0;
-
-	dal_adapter_service_get_feature_value(as, feature_id, &data, sizeof(bool));
-
-	return data;
-}
-
-/*
- * dal_adapter_service_is_dfs_bypass_enabled
- *
- * Check if DFS bypass is enabled
- */
-bool dal_adapter_service_is_dfs_bypass_enabled(
-	struct adapter_service *as)
-{
-	struct dc_bios *bp = as->ctx->dc_bios;
-
-	if (bp->integrated_info == NULL)
-		return false;
-	if ((bp->integrated_info->gpu_cap_info & DFS_BYPASS_ENABLE) &&
-	    dal_adapter_service_is_feature_supported(as,
-			FEATURE_ENABLE_DFS_BYPASS))
-		return true;
-	else
-		return false;
 }
 
 struct dal_asic_runtime_flags dal_adapter_service_get_asic_runtime_flags(
