@@ -330,22 +330,6 @@ struct adapter_service *dal_adapter_service_create(
 void dal_adapter_service_destroy(
 	struct adapter_service **as);
 
-/* Get the DCE version of current ASIC */
-enum dce_version dal_adapter_service_get_dce_version(
-	const struct adapter_service *as);
-
-/* Get number of spread spectrum entries from BIOS */
-uint32_t dal_adapter_service_get_ss_info_num(
-	struct adapter_service *as,
-	enum as_signal_type signal);
-
-/* Get spread spectrum info from BIOS */
-bool dal_adapter_service_get_ss_info(
-	struct adapter_service *as,
-	enum as_signal_type signal,
-	uint32_t idx,
-	struct spread_spectrum_info *info);
-
 /* Check if DFS bypass is enabled */
 bool dal_adapter_service_is_dfs_bypass_enabled(struct adapter_service *as);
 
@@ -373,33 +357,8 @@ bool dal_adapter_service_get_i2c_info(
 struct dal_asic_runtime_flags dal_adapter_service_get_asic_runtime_flags(
 	struct adapter_service *as);
 
-bool dal_adapter_service_get_embedded_panel_info(
-	struct adapter_service *as,
-	struct embedded_panel_info *info);
-
-
-bool dal_adapter_service_get_device_tag(
-	struct adapter_service *as,
-	struct graphics_object_id connector_object_id,
-	uint32_t device_tag_index,
-	struct connector_device_tag_info *info);
-
-bool dal_adapter_service_is_device_id_supported(
-	struct adapter_service *as,
-	struct device_id id);
-
-struct graphics_object_id dal_adapter_service_get_src_obj(
-	struct adapter_service *as,
-	struct graphics_object_id id,
-	uint32_t index);
-
 /* Reports whether driver settings allow requested optimization */
 bool dal_adapter_service_should_optimize(
 		struct adapter_service *as, enum optimization_feature feature);
-
-bool dal_adapter_service_get_encoder_cap_info(
-		struct adapter_service *as,
-		struct graphics_object_id id,
-		struct graphics_object_encoder_cap_info *info);
 
 #endif /* __DAL_ADAPTER_SERVICE_INTERFACE_H__ */

@@ -926,6 +926,7 @@ static bool dal_display_clock_dce110_construct(
 	struct adapter_service *as)
 {
 	struct display_clock *dc_base = &dc110->disp_clk_base;
+	struct dc_bios *bp = dc110->disp_clk_base.ctx->dc_bios;
 
 	if (NULL == as)
 		return false;
@@ -973,19 +974,16 @@ static bool dal_display_clock_dce110_construct(
 
 	{
 		uint32_t ss_info_num =
-			dal_adapter_service_get_ss_info_num(
-				as,
+				bp->funcs->get_ss_entry_number(bp,
 				AS_SIGNAL_TYPE_GPU_PLL);
 
 		if (ss_info_num) {
 			struct spread_spectrum_info info;
-			bool result;
+			enum bp_result result;
 
 			memset(&info, 0, sizeof(info));
 
-			result =
-				dal_adapter_service_get_ss_info(
-					as,
+			result = bp->funcs->get_spread_spectrum_info(bp,
 					AS_SIGNAL_TYPE_GPU_PLL,
 					0,
 					&info);
@@ -995,7 +993,8 @@ static bool dal_display_clock_dce110_construct(
 			 * SSInfo.spreadSpectrumPercentage !=0 would be sign
 			 * that SS is enabled
 			 */
-			if (result && info.spread_spectrum_percentage != 0) {
+			if (result == BP_RESULT_OK &&
+					info.spread_spectrum_percentage != 0) {
 				dc110->ss_on_gpu_pll = true;
 				dc110->gpu_pll_ss_divider =
 					info.spread_percentage_divider;

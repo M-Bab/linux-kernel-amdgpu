@@ -795,6 +795,7 @@ void dce112_compressor_set_fbc_invalidation_triggers(
 bool dce112_compressor_construct(struct dce112_compressor *compressor,
 	struct dc_context *ctx, struct adapter_service *as)
 {
+	struct dc_bios *bp = ctx->dc_bios;
 	struct embedded_panel_info panel_info;
 
 	compressor->base.options.bits.FBC_SUPPORT = true;
@@ -833,8 +834,8 @@ bool dce112_compressor_construct(struct dce112_compressor *compressor,
 	compressor->base.attached_inst = 0;
 	compressor->base.is_enabled = false;
 
-	if (dal_adapter_service_get_embedded_panel_info(as,
-		&panel_info)) {
+	if (BP_RESULT_OK ==
+			bp->funcs->get_embedded_panel_info(bp, &panel_info)) {
 		compressor->base.embedded_panel_h_size =
 			panel_info.lcd_timing.horizontal_addressable;
 		compressor->base.embedded_panel_v_size =

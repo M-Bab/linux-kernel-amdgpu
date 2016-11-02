@@ -608,7 +608,6 @@ static bool adapter_service_construct(
 	struct as_init_data *init_data)
 {
 	struct dc_bios *dcb;
-	enum dce_version dce_version;
 	uint32_t i;
 
 	if (!init_data)
@@ -631,7 +630,7 @@ static bool adapter_service_construct(
 		as->default_values[id] = feature_entry_table[i].default_value;
 	}
 
-	if (dal_adapter_service_get_dce_version(as) == DCE_VERSION_11_0) {
+	if (as->ctx->dce_version == DCE_VERSION_11_0) {
 		uint32_t i;
 
 		for (i = 0; i < ARRAY_SIZE(feature_entry_table); i++) {
@@ -652,7 +651,6 @@ static bool adapter_service_construct(
 	}
 
 	as->dce_environment = init_data->dce_environment;
-	dce_version = dal_adapter_service_get_dce_version(as);
 
 	dcb = as->ctx->dc_bios;
 
@@ -731,87 +729,6 @@ void dal_adapter_service_destroy(
 }
 
 /*
- * dal_adapter_service_get_dce_version
- *
- * Get the DCE version of current ASIC
- */
-enum dce_version dal_adapter_service_get_dce_version(
-	const struct adapter_service *as)
-{
-	uint32_t version = as->asic_cap->data[ASIC_DATA_DCE_VERSION];
-
-	switch (version) {
-	case 0x80:
-		/* CI Bonaire */
-		return DCE_VERSION_8_0;
-	case 0x100:
-		return DCE_VERSION_10_0;
-	case 0x110:
-		return DCE_VERSION_11_0;
-	case 0x112:
-		return DCE_VERSION_11_2;
-	default:
-		ASSERT_CRITICAL(false);
-		return DCE_VERSION_UNKNOWN;
-	}
-}
-
-/**
- * Get the source objects of an object
- *
- * \param [in] id      The graphics object id
- * \param [in] index   Enumerating index which starts at 0
- *
- * \return If enumerating successfully, return the VALID source object id,
- *	otherwise, returns "zeroed out" object id.
- *	Client should call dal_graphics_object_id_is_valid() to check
- *	weather the id is valid.
- */
-struct graphics_object_id dal_adapter_service_get_src_obj(
-	struct adapter_service *as,
-	struct graphics_object_id id,
-	uint32_t index)
-{
-	struct graphics_object_id src_object_id;
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	if (BP_RESULT_OK != dcb->funcs->get_src_obj(dcb, id, index,
-			&src_object_id)) {
-		src_object_id =
-			dal_graphics_object_id_init(
-				0,
-				ENUM_ID_UNKNOWN,
-				OBJECT_TYPE_UNKNOWN);
-	}
-
-	return src_object_id;
-}
-
-bool dal_adapter_service_get_device_tag(
-		struct adapter_service *as,
-		struct graphics_object_id connector_object_id,
-		uint32_t device_tag_index,
-		struct connector_device_tag_info *info)
-{
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	if (BP_RESULT_OK == dcb->funcs->get_device_tag(dcb,
-			connector_object_id, device_tag_index, info))
-		return true;
-	else
-		return false;
-}
-
-/* Check if DeviceId is supported by ATOM_OBJECT_HEADER support info */
-bool dal_adapter_service_is_device_id_supported(struct adapter_service *as,
-		struct device_id id)
-{
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	return dcb->funcs->is_device_id_supported(dcb, id);
-}
-
-/*
  * dal_adapter_service_is_feature_supported
  *
  * Return if a given feature is supported by the ASIC. The feature has to be
@@ -825,39 +742,6 @@ bool dal_adapter_service_is_feature_supported(struct adapter_service *as,
 	dal_adapter_service_get_feature_value(as, feature_id, &data, sizeof(bool));
 
 	return data;
-}
-
-/*
- * dal_adapter_service_get_ss_info_num
- *
- * Get number of spread spectrum entries from BIOS
- */
-uint32_t dal_adapter_service_get_ss_info_num(
-	struct adapter_service *as,
-	enum as_signal_type signal)
-{
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	return dcb->funcs->get_ss_entry_number(dcb, signal);
-}
-
-/*
- * dal_adapter_service_get_ss_info
- *
- * Get spread spectrum info from BIOS
- */
-bool dal_adapter_service_get_ss_info(
-	struct adapter_service *as,
-	enum as_signal_type signal,
-	uint32_t idx,
-	struct spread_spectrum_info *info)
-{
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	enum bp_result bp_result = dcb->funcs->get_spread_spectrum_info(dcb,
-			signal, idx, info);
-
-	return BP_RESULT_OK == bp_result;
 }
 
 /*
@@ -952,22 +836,6 @@ bool dal_adapter_service_get_feature_value(struct adapter_service *as,
 	return true;
 }
 
-bool dal_adapter_service_get_embedded_panel_info(
-	struct adapter_service *as,
-	struct embedded_panel_info *info)
-{
-	enum bp_result result;
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	if (info == NULL)
-		/*TODO: add DALASSERT_MSG here*/
-		return false;
-
-	result = dcb->funcs->get_embedded_panel_info(dcb, info);
-
-	return result == BP_RESULT_OK;
-}
-
 /*
  * dal_adapter_service_should_optimize
  *
@@ -1018,37 +886,3 @@ bool dal_adapter_service_should_optimize(
 	return (supported_optimization & feature) != 0;
 }
 
-bool dal_adapter_service_get_encoder_cap_info(
-		struct adapter_service *as,
-		struct graphics_object_id id,
-		struct graphics_object_encoder_cap_info *info)
-{
-	struct bp_encoder_cap_info bp_cap_info = {0};
-	enum bp_result result;
-	struct dc_bios *dcb = as->ctx->dc_bios;
-
-	if (NULL == info) {
-		ASSERT_CRITICAL(false);
-		return false;
-	}
-
-	/*
-	 * Retrieve Encoder Capability Information from VBIOS and store the
-	 * call result (success or fail)
-	 * Info from VBIOS about HBR2 has two fields:
-	 *
-	 * - dpHbr2Cap: indicates supported/not supported by HW Encoder
-	 * - dpHbr2En : indicates DP spec compliant/not compliant
-	 */
-	result = dcb->funcs->get_encoder_cap_info(dcb, id, &bp_cap_info);
-
-	/* Set dp_hbr2_validated flag (it's equal to Enable) */
-	info->dp_hbr2_validated = bp_cap_info.DP_HBR2_EN;
-
-	if (result == BP_RESULT_OK) {
-		info->dp_hbr2_cap = bp_cap_info.DP_HBR2_CAP;
-		return true;
-	}
-
-	return false;
-}
