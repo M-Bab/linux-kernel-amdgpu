@@ -855,7 +855,8 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 	if (dc_is_dp_signal(pipe_ctx->stream->signal))
 		pipe_ctx->stream_enc->funcs->dp_set_stream_attribute(
 			pipe_ctx->stream_enc,
-			&stream->public.timing);
+			&stream->public.timing,
+			stream->public.output_color_space);
 
 	if (dc_is_hdmi_signal(pipe_ctx->stream->signal))
 		pipe_ctx->stream_enc->funcs->hdmi_set_stream_attribute(

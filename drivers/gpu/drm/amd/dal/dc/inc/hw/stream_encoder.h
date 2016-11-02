@@ -55,7 +55,8 @@ struct stream_encoder {
 struct stream_encoder_funcs {
 	void (*dp_set_stream_attribute)(
 		struct stream_encoder *enc,
-		struct dc_crtc_timing *crtc_timing);
+		struct dc_crtc_timing *crtc_timing,
+		enum dc_color_space output_color_space);
 
 	void (*hdmi_set_stream_attribute)(
 		struct stream_encoder *enc,

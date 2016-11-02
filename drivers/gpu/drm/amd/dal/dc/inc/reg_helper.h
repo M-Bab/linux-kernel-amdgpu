@@ -69,38 +69,50 @@
 
 #define REG_SET_3(reg, init_value, f1, v1, f2, v2, f3, v3)	\
 		REG_SET_N(reg, 3, init_value, \
-				FD(reg##__##f1), v1,\
-				FD(reg##__##f2), v2,\
-				FD(reg##__##f3), v3)
+				FN(reg, f1), v1,\
+				FN(reg, f2), v2,\
+				FN(reg, f3), v3)
 
 #define REG_SET_4(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4)	\
 		REG_SET_N(reg, 4, init_value, \
-				FD(reg##__##f1), v1,\
-				FD(reg##__##f2), v2,\
-				FD(reg##__##f3), v3,\
-				FD(reg##__##f4), v4)
+				FN(reg, f1), v1,\
+				FN(reg, f2), v2,\
+				FN(reg, f3), v3,\
+				FN(reg, f4), v4)
 
 #define REG_SET_6(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4,	\
 		f5, v5, f6, v6)	\
 		REG_SET_N(reg, 6, init_value, \
-				FD(reg##__##f1), v1,\
-				FD(reg##__##f2), v2,\
-				FD(reg##__##f3), v3,\
-				FD(reg##__##f4), v4,\
-				FD(reg##__##f5), v5,\
-				FD(reg##__##f6), v6)
+				FN(reg, f1), v1,\
+				FN(reg, f2), v2,\
+				FN(reg, f3), v3,\
+				FN(reg, f4), v4,\
+				FN(reg, f5), v5,\
+				FN(reg, f6), v6)
 
 #define REG_SET_7(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4,	\
 		f5, v5, f6, v6, f7, v7)	\
 		REG_SET_N(reg, 7, init_value, \
-				FD(reg##__##f1), v1,\
-				FD(reg##__##f2), v2,\
-				FD(reg##__##f3), v3,\
-				FD(reg##__##f4), v4,\
-				FD(reg##__##f5), v5,\
-				FD(reg##__##f6), v6,\
-				FD(reg##__##f7), v7)
+				FN(reg, f1), v1,\
+				FN(reg, f2), v2,\
+				FN(reg, f3), v3,\
+				FN(reg, f4), v4,\
+				FN(reg, f5), v5,\
+				FN(reg, f6), v6,\
+				FN(reg, f7), v7)
 
+#define REG_SET_10(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4, f5, v5, f6, v6, f7, v7, f8, v8, f9, v9, f10, v10)	\
+		REG_SET_N(reg, 10, init_value, \
+				FN(reg, f1), v1,\
+				FN(reg, f2), v2, \
+				FN(reg, f3), v3, \
+				FN(reg, f4), v4, \
+				FN(reg, f5), v5, \
+				FN(reg, f6), v6, \
+				FN(reg, f7), v7, \
+				FN(reg, f8), v8, \
+				FN(reg, f9), v9, \
+				FN(reg, f10), v10)
 
 /* macro to get register fields
  * read given register and fill in field value in output parameter */
@@ -196,15 +208,28 @@
 
 #define REG_UPDATE_9(reg, f1, v1, f2, v2, f3, v3, f4, v4, f5, v5, f6, v6, f7, v7, f8, v8, f9, v9)	\
 		REG_UPDATE_N(reg, 9, \
-				FN(reg, f1), val1,\
-				FN(reg, f2), val2, \
-				FN(reg, f3), val3, \
-				FN(reg, f4), val4, \
-				FN(reg, f5), val5, \
-				FN(reg, f6), val6, \
-				FN(reg, f7), val7, \
-				FN(reg, f8), val8, \
-				FN(reg, f9), val9)
+				FN(reg, f1), v1,\
+				FN(reg, f2), v2, \
+				FN(reg, f3), v3, \
+				FN(reg, f4), v4, \
+				FN(reg, f5), v5, \
+				FN(reg, f6), v6, \
+				FN(reg, f7), v7, \
+				FN(reg, f8), v8, \
+				FN(reg, f9), v9)
+
+#define REG_UPDATE_10(reg, f1, v1, f2, v2, f3, v3, f4, v4, f5, v5, f6, v6, f7, v7, f8, v8, f9, v9, f10, v10)	\
+		REG_UPDATE_N(reg, 10, \
+				FN(reg, f1), v1,\
+				FN(reg, f2), v2, \
+				FN(reg, f3), v3, \
+				FN(reg, f4), v4, \
+				FN(reg, f5), v5, \
+				FN(reg, f6), v6, \
+				FN(reg, f7), v7, \
+				FN(reg, f8), v8, \
+				FN(reg, f9), v9, \
+				FN(reg, f10), v10)
 
 /* macro to update a register field to specified values in given sequences.
  * useful when toggling bits

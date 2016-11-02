@@ -71,6 +71,31 @@ static void dce110_update_generic_info_packet(
 	const struct encoder_info_packet *info_packet)
 {
 	uint32_t regval;
+	/* TODOFPGA Figure out a proper number for max_retries polling for lock
+	 * use 50 for now.
+	 */
+	uint32_t max_retries = 50;
+
+	if (REG(AFMT_VBI_PACKET_CONTROL1)) {
+		if (packet_index >= 8)
+			ASSERT(0);
+
+		/* poll dig_update_lock is not locked -> asic internal signal
+		 * assume otg master lock will unlock it
+		 */
+		REG_WAIT(AFMT_VBI_PACKET_CONTROL, AFMT_GENERIC_LOCK_STATUS,
+				1, 10, max_retries);
+
+		/* check if HW reading GSP memory */
+		REG_WAIT(AFMT_VBI_PACKET_CONTROL, AFMT_GENERIC_CONFLICT,
+				1, 10, max_retries);
+
+		/* HW does is not reading GSP memory not reading too long ->
+		 * something wrong. clear GPS memory access and notify?
+		 * hw SW is writing to GSP memory
+		 */
+		REG_UPDATE(AFMT_VBI_PACKET_CONTROL, AFMT_GENERIC_CONFLICT_CLR, 1);
+	}
 	/* choose which generic packet to use */
 	{
 		regval = REG_READ(AFMT_VBI_PACKET_CONTROL);
@@ -105,15 +130,11 @@ static void dce110_update_generic_info_packet(
 		REG_WRITE(AFMT_GENERIC_7, 0);
 	}
 
-	/* force double-buffered packet update */
-	if (enc110->se_mask->AFMT_GENERIC0_UPDATE &&
-			enc110->se_mask->AFMT_GENERIC2_UPDATE) {
+	if (!REG(AFMT_VBI_PACKET_CONTROL1)) {
+		/* force double-buffered packet update */
 		REG_UPDATE_2(AFMT_VBI_PACKET_CONTROL,
 			AFMT_GENERIC0_UPDATE, (packet_index == 0),
 			AFMT_GENERIC2_UPDATE, (packet_index == 2));
-	} else {
-		ASSERT(enc110->se_mask->AFMT_GENERIC0_UPDATE);
-		ASSERT(enc110->se_mask->AFMT_GENERIC2_UPDATE);
 	}
 }
 
@@ -160,15 +181,15 @@ static void dce110_update_hdmi_info_packet(
 		break;
 	case 2:
 		REG_UPDATE_3(HDMI_GENERIC_PACKET_CONTROL1,
-				HDMI_GENERIC2_CONT, cont,
-				HDMI_GENERIC2_SEND, send,
-				HDMI_GENERIC2_LINE, line);
+				HDMI_GENERIC0_CONT, cont,
+				HDMI_GENERIC0_SEND, send,
+				HDMI_GENERIC0_LINE, line);
 		break;
 	case 3:
 		REG_UPDATE_3(HDMI_GENERIC_PACKET_CONTROL1,
-				HDMI_GENERIC3_CONT, cont,
-				HDMI_GENERIC3_SEND, send,
-				HDMI_GENERIC3_LINE, line);
+				HDMI_GENERIC1_CONT, cont,
+				HDMI_GENERIC1_SEND, send,
+				HDMI_GENERIC1_LINE, line);
 		break;
 	default:
 		/* invalid HW packet index */
@@ -183,9 +204,19 @@ static void dce110_update_hdmi_info_packet(
 /* setup stream encoder in dp mode */
 static void dce110_stream_encoder_dp_set_stream_attribute(
 	struct stream_encoder *enc,
-	struct dc_crtc_timing *crtc_timing)
+	struct dc_crtc_timing *crtc_timing,
+	enum dc_color_space output_color_space)
 {
+	uint32_t h_active_start;
+	uint32_t v_active_start;
+	uint32_t misc0;
+	uint32_t misc1;
+	uint32_t h_blank;
+	uint32_t h_back_porch;
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
+
+	/* for bring up, disable dp double  TODO */
+	REG_UPDATE(DP_DB_CNTL, DP_DB_DISABLE, 1);
 
 	/* set pixel encoding */
 	switch (crtc_timing->pixel_encoding) {
@@ -219,39 +250,46 @@ static void dce110_stream_encoder_dp_set_stream_attribute(
 		break;
 	}
 
+	misc1 = REG_READ(DP_MSA_MISC);
 	/* set color depth */
 
 	switch (crtc_timing->display_color_depth) {
+	case COLOR_DEPTH_666:
+		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
+				0);
+		misc0 = 0;
+		break;
 	case COLOR_DEPTH_888:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_8BPC);
+		misc0 = 1;
 		break;
 	case COLOR_DEPTH_101010:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_10BPC);
+
+		misc0 = 2;
 		break;
 	case COLOR_DEPTH_121212:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_12BPC);
+		misc0 = 3;
 		break;
 	default:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_6BPC);
+		misc0 = 0;
 		break;
 	}
 
 	/* set dynamic range and YCbCr range */
-	if (enc110->se_mask->DP_DYN_RANGE && enc110->se_mask->DP_YCBCR_RANGE) {
+	if (enc110->se_mask->DP_DYN_RANGE && enc110->se_mask->DP_YCBCR_RANGE)
 		REG_UPDATE_2(
-				DP_PIXEL_FORMAT,
-				DP_DYN_RANGE, 0,
-				DP_YCBCR_RANGE, 0);
-	} else {
-		ASSERT(enc110->se_mask->DP_DYN_RANGE);
-		ASSERT(enc110->se_mask->DP_YCBCR_RANGE);
-	}
-}
+			DP_PIXEL_FORMAT,
+			DP_DYN_RANGE, 0,
+			DP_YCBCR_RANGE, 0);
 
+}
 
 static void dce110_stream_encoder_set_stream_attribute_helper(
 		struct dce110_stream_encoder *enc110,
@@ -403,7 +441,7 @@ static void dce110_stream_encoder_set_mst_bandwidth(
 	/* i.e. DP_MSE_RATE_UPDATE_PENDING field (read only) */
 	/* is reset to 0 (not pending) */
 	REG_WAIT(DP_MSE_RATE_UPDATE, DP_MSE_RATE_UPDATE_PENDING,
-			enc110->se_mask->DP_MSE_RATE_UPDATE_PENDING,
+			1,
 			10, DP_MST_UPDATE_MAX_RETRY);
 }
 
@@ -443,15 +481,15 @@ static void dce110_stream_encoder_update_hdmi_info_packets(
 				HDMI_AVI_INFO_SEND, 0,
 				HDMI_AVI_INFO_CONT, 0);
 		}
-	} else {
-		ASSERT(enc110->se_mask->HDMI_AVI_INFO_SEND);
-		ASSERT(enc110->se_mask->HDMI_AVI_INFO_CONT);
-		ASSERT(enc110->se_mask->HDMI_AVI_INFO_LINE);
 	}
 
-	dce110_update_hdmi_info_packet(enc110, 0, &info_frame->vendor);
-	dce110_update_hdmi_info_packet(enc110, 1, &info_frame->gamut);
-	dce110_update_hdmi_info_packet(enc110, 2, &info_frame->spd);
+	if (enc110->se_mask->HDMI_AVI_INFO_CONT &&
+			enc110->se_mask->HDMI_AVI_INFO_SEND) {
+		dce110_update_hdmi_info_packet(enc110, 0, &info_frame->vendor);
+		dce110_update_hdmi_info_packet(enc110, 1, &info_frame->gamut);
+		dce110_update_hdmi_info_packet(enc110, 2, &info_frame->spd);
+	}
+
 }
 
 static void dce110_stream_encoder_stop_hdmi_info_packets(
@@ -470,24 +508,13 @@ static void dce110_stream_encoder_stop_hdmi_info_packets(
 
 	/* stop generic packets 2 & 3 on HDMI */
 	REG_SET_6(HDMI_GENERIC_PACKET_CONTROL1, 0,
-		HDMI_GENERIC2_CONT, 0,
-		HDMI_GENERIC2_LINE, 0,
-		HDMI_GENERIC2_SEND, 0,
-		HDMI_GENERIC3_CONT, 0,
-		HDMI_GENERIC3_LINE, 0,
-		HDMI_GENERIC3_SEND, 0);
+		HDMI_GENERIC0_CONT, 0,
+		HDMI_GENERIC0_LINE, 0,
+		HDMI_GENERIC0_SEND, 0,
+		HDMI_GENERIC1_CONT, 0,
+		HDMI_GENERIC1_LINE, 0,
+		HDMI_GENERIC1_SEND, 0);
 
-	/* stop AVI packet on HDMI */
-	if (enc110->se_mask->HDMI_AVI_INFO_CONT &&
-			enc110->se_mask->HDMI_AVI_INFO_SEND) {
-
-		REG_UPDATE_2(HDMI_INFOFRAME_CONTROL0,
-			HDMI_AVI_INFO_SEND, 0,
-			HDMI_AVI_INFO_CONT, 0);
-	} else {
-		ASSERT(enc110->se_mask->HDMI_AVI_INFO_SEND);
-		ASSERT(enc110->se_mask->HDMI_AVI_INFO_CONT);
-	}
 }
 
 static void dce110_stream_encoder_update_dp_info_packets(
@@ -500,14 +527,14 @@ static void dce110_stream_encoder_update_dp_info_packets(
 	if (info_frame->vsc.valid)
 		dce110_update_generic_info_packet(
 			enc110,
-			0,
+			0,  /* packetIndex */
 			&info_frame->vsc);
 
 	/* enable/disable transmission of packet(s).
 	*  If enabled, packet transmission begins on the next frame
 	*/
+		REG_UPDATE(DP_SEC_CNTL, DP_SEC_GSP0_ENABLE, info_frame->vsc.valid);
 
-	REG_UPDATE(DP_SEC_CNTL, DP_SEC_GSP0_ENABLE, info_frame->vsc.valid);
 	/* This bit is the master enable bit.
 	* When enabling secondary stream engine,
 	* this master bit must also be set.
@@ -535,16 +562,8 @@ static void dce110_stream_encoder_stop_dp_info_packets(
 			DP_SEC_AVI_ENABLE, 0,
 			DP_SEC_MPG_ENABLE, 0,
 			DP_SEC_STREAM_ENABLE, 0);
-	} else {
-		ASSERT(enc110->se_mask->DP_SEC_AVI_ENABLE);
-		REG_SET_6(DP_SEC_CNTL, 0,
-			DP_SEC_GSP0_ENABLE, 0,
-			DP_SEC_GSP1_ENABLE, 0,
-			DP_SEC_GSP2_ENABLE, 0,
-			DP_SEC_GSP3_ENABLE, 0,
-			DP_SEC_MPG_ENABLE, 0,
-			DP_SEC_STREAM_ENABLE, 0);
 	}
+
 	/* this register shared with audio info frame.
 	 * therefore we need to keep master enabled
 	 * if at least one of the fields is not 0 */
@@ -558,7 +577,6 @@ static void dce110_stream_encoder_dp_blank(
 	struct stream_encoder *enc)
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
-	uint32_t value;
 	uint32_t retries = 0;
 	uint32_t max_retries = DP_BLANK_MAX_RETRY * 10;
 
@@ -586,19 +604,9 @@ static void dce110_stream_encoder_dp_blank(
 	* Poll for DP_VID_STREAM_STATUS == 0
 	*/
 
-	do {
-		value = REG_READ(DP_VID_STREAM_CNTL);
-
-		if (!get_reg_field_value(
-			value,
-			DP_VID_STREAM_CNTL,
-			DP_VID_STREAM_STATUS))
-			break;
-
-		udelay(10);
-
-		++retries;
-	} while (retries < max_retries);
+	REG_WAIT(DP_VID_STREAM_CNTL, DP_VID_STREAM_STATUS,
+			1,
+			10, max_retries);
 
 	ASSERT(retries <= max_retries);
 
