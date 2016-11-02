@@ -62,28 +62,6 @@ enum dce_environment {
 	(IS_FPGA_MAXIMUS_DC(dce_environment) || (dce_environment == DCE_ENV_DIAG))
 
 /********************************/
-
-struct dc_context {
-	struct dc *dc;
-
-	void *driver_context; /* e.g. amdgpu_device */
-
-	struct dal_logger *logger;
-	void *cgs_device;
-
-	enum dce_environment dce_environment;
-
-	/* todo: below should probably move to dc.  to facilitate removal
-	 * of AS we will store these here
-	 */
-	enum dce_version dce_version;
-	struct dc_bios *dc_bios;
-	bool created_bios;
-	struct gpio_service *gpio_service;
-	struct i2caux *i2caux;
-	struct adapter_service *adapter_srv;
-};
-
 /*
  * ASIC Runtime Flags
  */
@@ -120,6 +98,29 @@ struct hw_asic_id {
 	uint32_t fake_paths_num;
 	void *atombios_base_address;
 };
+
+struct dc_context {
+	struct dc *dc;
+
+	void *driver_context; /* e.g. amdgpu_device */
+
+	struct dal_logger *logger;
+	void *cgs_device;
+
+	enum dce_environment dce_environment;
+	struct hw_asic_id asic_id;
+
+	/* todo: below should probably move to dc.  to facilitate removal
+	 * of AS we will store these here
+	 */
+	enum dce_version dce_version;
+	struct dc_bios *dc_bios;
+	bool created_bios;
+	struct gpio_service *gpio_service;
+	struct i2caux *i2caux;
+	struct adapter_service *adapter_srv;
+};
+
 
 #define MAX_EDID_BUFFER_SIZE 512
 #define EDID_BLOCK_SIZE 128

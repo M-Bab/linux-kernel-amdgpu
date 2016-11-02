@@ -80,7 +80,6 @@ enum adapter_feature_id {
 	FEATURE_ALLOW_EDP_RESOURCE_SHARING,
 	FEATURE_SUPPORT_DP_YUV,
 	FEATURE_SUPPORT_DP_Y_ONLY,
-	FEATURE_NO_HPD_LOW_POLLING_VCC_OFF, /* 20th */
 	FEATURE_ENABLE_DFS_BYPASS,
 	FEATURE_LB_HIGH_RESOLUTION,
 	FEATURE_DP_DISPLAY_FORCE_SS_ENABLE,
@@ -166,9 +165,6 @@ enum adapter_feature_id {
 	FEATURE_POWER_GATING_PIPE_IN_TILE = FEATURE_SET_12_END + 1,
 	FEATURE_SET_13_START = FEATURE_POWER_GATING_PIPE_IN_TILE,
 	FEATURE_USE_PPLIB,
-	FEATURE_DISABLE_LPT_SUPPORT,
-	FEATURE_DUMMY_FBC_BACKEND,
-	FEATURE_DISABLE_FBC_COMP_CLK_GATE,
 	FEATURE_DPMS_AUDIO_ENDPOINT_CONTROL,
 	FEATURE_PIXEL_PERFECT_OUTPUT,
 	FEATURE_8BPP_SUPPORTED,
@@ -315,6 +311,7 @@ enum as_drr_support {
 struct as_init_data {
 	struct hw_asic_id hw_init_data;
 	struct dc_context *ctx;
+	const struct dal_override_parameters *display_param;
 	struct dc_bios *vbios_override;
 	enum dce_environment dce_environment;
 };
@@ -330,11 +327,6 @@ void dal_adapter_service_destroy(
 /* Check if DFS bypass is enabled */
 bool dal_adapter_service_is_dfs_bypass_enabled(struct adapter_service *as);
 
-
-/* Get the video RAM bit width set on the ASIC */
-uint32_t dal_adapter_service_get_asic_vram_bit_width(
-	struct adapter_service *as);
-
 /* Return if a given feature is supported by the ASIC */
 bool dal_adapter_service_is_feature_supported(struct adapter_service *as,
 	enum adapter_feature_id feature_id);
@@ -344,12 +336,6 @@ bool dal_adapter_service_get_feature_value(struct adapter_service *as,
 	const enum adapter_feature_id feature_id,
 	void *data,
 	uint32_t size);
-
-/* Get I2C information from BIOS */
-bool dal_adapter_service_get_i2c_info(
-	struct adapter_service *as,
-	struct graphics_object_id id,
-	struct graphics_object_i2c_info *i2c_info);
 
 struct dal_asic_runtime_flags dal_adapter_service_get_asic_runtime_flags(
 	struct adapter_service *as);

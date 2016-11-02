@@ -535,8 +535,7 @@ static bool construct(struct core_dc *dc,
 	dc_ctx->cgs_device = init_params->cgs_device;
 	dc_ctx->driver_context = init_params->driver;
 	dc_ctx->dc = &dc->public;
-
-	dc->asic_id = init_params->asic_id;
+	dc_ctx->asic_id = init_params->asic_id;
 
 	/* Create logger */
 	logger = dal_logger_create(dc_ctx);

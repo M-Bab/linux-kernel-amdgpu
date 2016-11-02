@@ -54,7 +54,6 @@ static bool construct(
 	memset(cap->data, 0, sizeof(cap->data));
 
 	/* ASIC data */
-	cap->data[ASIC_DATA_VRAM_BITWIDTH] = init->vram_width;
 	cap->runtime_flags = init->runtime_flags;
 	cap->data[ASIC_DATA_MAX_UNDERSCAN_PERCENTAGE] = 10;
 	cap->data[ASIC_DATA_VIEWPORT_PIXEL_GRANULARITY] = 4;
@@ -71,7 +70,6 @@ static bool construct(
 	cap->caps.WIRELESS_COMPRESSED_AUDIO = false;
 	cap->caps.VCE_SUPPORTED = false;
 	cap->caps.HPD_CHECK_FOR_EDID = false;
-	cap->caps.NO_VCC_OFF_HPD_POLLING = false;
 	cap->caps.NEED_MC_TUNING = false;
 	cap->caps.SUPPORT_8BPP = true;
 

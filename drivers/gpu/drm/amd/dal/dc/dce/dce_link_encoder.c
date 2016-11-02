@@ -610,8 +610,7 @@ static void link_encoder_edp_wait_for_hpd_ready(
 		return;
 	}
 
-	if (!power_up && dal_adapter_service_is_feature_supported(as,
-		FEATURE_NO_HPD_LOW_POLLING_VCC_OFF))
+	if (!power_up)
 		/* from KV, we will not HPD low after turning off VCC -
 		 * instead, we will check the SW timer in power_up(). */
 		return;

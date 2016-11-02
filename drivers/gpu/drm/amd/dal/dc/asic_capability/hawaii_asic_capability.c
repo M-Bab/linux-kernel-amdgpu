@@ -111,7 +111,6 @@ void dal_hawaii_asic_capability_create(struct asic_capability *cap,
 	cap->caps.HEADLESS_NO_OPM_SUPPORTED = true;
 
 	cap->caps.HPD_CHECK_FOR_EDID = true;
-	cap->caps.NO_VCC_OFF_HPD_POLLING = true;
 
 	/* true will hang the system! */
 	cap->caps.DFSBYPASS_DYNAMIC_SUPPORT = false;

@@ -799,29 +799,22 @@ bool dce110_compressor_construct(struct dce110_compressor *compressor,
 	struct embedded_panel_info panel_info;
 
 	compressor->base.options.bits.FBC_SUPPORT = true;
-	if (!(dal_adapter_service_is_feature_supported(as,
-		FEATURE_DISABLE_LPT_SUPPORT)))
-		compressor->base.options.bits.LPT_SUPPORT = true;
+	compressor->base.options.bits.LPT_SUPPORT = true;
 	 /* For DCE 11 always use one DRAM channel for LPT */
 	compressor->base.lpt_channels_num = 1;
-
-	if (dal_adapter_service_is_feature_supported(as, FEATURE_DUMMY_FBC_BACKEND))
-		compressor->base.options.bits.DUMMY_BACKEND = true;
+	compressor->base.options.bits.DUMMY_BACKEND = false;
 
 	/* Check if this system has more than 1 DRAM channel; if only 1 then LPT
 	 * should not be supported */
 	if (compressor->base.memory_bus_width == 64)
 		compressor->base.options.bits.LPT_SUPPORT = false;
 
-	if (dal_adapter_service_is_feature_supported(as,
-		FEATURE_DISABLE_FBC_COMP_CLK_GATE))
-		compressor->base.options.bits.CLK_GATING_DISABLED = true;
+	compressor->base.options.bits.CLK_GATING_DISABLED = false;
 
 	compressor->base.ctx = ctx;
 	compressor->base.embedded_panel_h_size = 0;
 	compressor->base.embedded_panel_v_size = 0;
-	compressor->base.memory_bus_width =
-		dal_adapter_service_get_asic_vram_bit_width(as);
+	compressor->base.memory_bus_width = ctx->asic_id.vram_width;
 	compressor->base.allocated_size = 0;
 	compressor->base.preferred_requested_size = 0;
 	compressor->base.min_compress_ratio = FBC_COMPRESS_RATIO_INVALID;

@@ -17,7 +17,6 @@
 struct core_dc {
 	struct dc public;
 	struct dc_context *ctx;
-	struct hw_asic_id asic_id;
 
 	uint8_t link_count;
 	struct core_link *links[MAX_PIPES * 2];

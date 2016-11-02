@@ -94,13 +94,11 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_DCP_BIT_DEPTH_REDUCTION_MODE, 0, false},
 	{FEATURE_DCP_DITHER_MODE, 0, false},
 	{FEATURE_DCP_PROGRAMMING_WA, 0, false},
-	{FEATURE_NO_HPD_LOW_POLLING_VCC_OFF, false, true},
 	{FEATURE_ENABLE_DFS_BYPASS, false, true},
 	{FEATURE_WIRELESS_FULL_TIMING_ADJUSTMENT, false, true},
 	{FEATURE_WIRELESS_LIMIT_720P, false, true},
 	{FEATURE_MODIFY_TIMINGS_FOR_WIRELESS, false, true},
 	{FEATURE_DETECT_REQUIRE_HPD_HIGH, false, true},
-	{FEATURE_NO_HPD_LOW_POLLING_VCC_OFF, false, true},
 	{FEATURE_LB_HIGH_RESOLUTION, false, true},
 	{FEATURE_MAX_CONTROLLER_NUM, 0, false},
 	{FEATURE_DRR_SUPPORT, AS_DRR_SUPPORT_ENABLED, false},
@@ -154,10 +152,7 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_ALLOW_DIRECT_MEMORY_ACCESS_TRIG, false, true},
 	{FEATURE_FORCE_STATIC_SCREEN_EVENT_TRIGGERS, 0, false},
 	{FEATURE_USE_PPLIB, true, true},
-	{FEATURE_DISABLE_LPT_SUPPORT, false, true},
-	{FEATURE_DUMMY_FBC_BACKEND, false, true},
 	{FEATURE_DPMS_AUDIO_ENDPOINT_CONTROL, true, true},
-	{FEATURE_DISABLE_FBC_COMP_CLK_GATE, false, true},
 	{FEATURE_PIXEL_PERFECT_OUTPUT, false, true},
 	{FEATURE_8BPP_SUPPORTED, false, true},
 };
@@ -365,10 +360,6 @@ static bool get_feature_value_from_data_sources(
 
 	case FEATURE_DETECT_REQUIRE_HPD_HIGH:
 		*data = as->asic_cap->caps.HPD_CHECK_FOR_EDID;
-		break;
-
-	case FEATURE_NO_HPD_LOW_POLLING_VCC_OFF:
-		*data = as->asic_cap->caps.NO_VCC_OFF_HPD_POLLING;
 		break;
 
 	case FEATURE_STUTTER_MODE:
@@ -672,17 +663,6 @@ bool dal_adapter_service_is_dfs_bypass_enabled(
 		return true;
 	else
 		return false;
-}
-
-/*
- * dal_adapter_service_get_asic_vram_bit_width
- *
- * Get the video RAM bit width set on the ASIC
- */
-uint32_t dal_adapter_service_get_asic_vram_bit_width(
-	struct adapter_service *as)
-{
-	return as->asic_cap->data[ASIC_DATA_VRAM_BITWIDTH];
 }
 
 struct dal_asic_runtime_flags dal_adapter_service_get_asic_runtime_flags(

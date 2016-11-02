@@ -66,7 +66,6 @@ void polaris10_asic_capability_create(struct asic_capability *cap,
 	cap->caps.DP_MST_SUPPORTED = true;
 	cap->caps.PANEL_SELF_REFRESH_SUPPORTED = true;
 	cap->caps.MIRABILIS_SUPPORTED = true;
-	cap->caps.NO_VCC_OFF_HPD_POLLING = true;
 	cap->caps.VCE_SUPPORTED = true;
 	cap->caps.HPD_CHECK_FOR_EDID = true;
 	cap->caps.DFSBYPASS_DYNAMIC_SUPPORT = true;

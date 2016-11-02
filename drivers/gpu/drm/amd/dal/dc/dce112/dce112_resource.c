@@ -1202,7 +1202,7 @@ static bool construct(
 	ctx->dc_bios->regs = &bios_regs;
 
 	pool->base.adapter_srv = adapter_serv;
-	pool->base.res_cap = dce112_resource_cap(&dc->asic_id);
+	pool->base.res_cap = dce112_resource_cap(&ctx->asic_id);
 	pool->base.funcs = &dce112_res_pool_funcs;
 
 	/*************************************************
