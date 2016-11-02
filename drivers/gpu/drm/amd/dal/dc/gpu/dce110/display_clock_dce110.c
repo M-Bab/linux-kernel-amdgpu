@@ -930,7 +930,7 @@ static bool dal_display_clock_dce110_construct(
 	struct adapter_service *as)
 {
 	struct display_clock *dc_base = &dc110->disp_clk_base;
-	struct dc_bios *bp = dc110->disp_clk_base.ctx->dc_bios;
+	struct dc_bios *bp = ctx->dc_bios;
 
 	if (NULL == as)
 		return false;
