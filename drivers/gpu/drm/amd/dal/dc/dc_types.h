@@ -121,50 +121,6 @@ struct hw_asic_id {
 	void *atombios_base_address;
 };
 
-/* array index for integer override parameters*/
-enum int_param_array_index {
-	DAL_PARAM_MAX_COFUNC_NON_DP_DISPLAYS = 0,
-	DAL_PARAM_DRR_SUPPORT,
-	DAL_INT_PARAM_MAX
-};
-
-struct dal_override_parameters {
-	uint32_t bool_param_enable_mask;
-	uint32_t bool_param_values;
-};
-
-/*
- * shift values for bool override parameter mask
- * bmask is for this struct,if we touch this feature
- * bval indicates every bit fields for this struct too,1 is enable this feature
- * amdgpu.disp_bval=1594, amdgpu.disp_bmask=1594 ,
- * finally will show log like this:
- * Overridden FEATURE_LIGHT_SLEEP is enabled now
- * Overridden FEATURE_USE_MAX_DISPLAY_CLK is enabled now
- * Overridden FEATURE_ENABLE_DFS_BYPASS is enabled now
- * Overridden FEATURE_POWER_GATING_PIPE_IN_TILE is enabled now
- * Overridden FEATURE_USE_PPLIB is enabled now
- * Overridden FEATURE_DISABLE_LPT_SUPPORT is enabled now
- * Overridden FEATURE_DUMMY_FBC_BACKEND is enabled now
- * */
-enum bool_param_shift {
-	DAL_PARAM_MAXIMIZE_STUTTER_MARKS = 0,
-	DAL_PARAM_LIGHT_SLEEP,
-	DAL_PARAM_MAXIMIZE_URGENCY_WATERMARKS,
-	DAL_PARAM_USE_MAX_DISPLAY_CLK,
-	DAL_PARAM_ENABLE_DFS_BYPASS,
-	DAL_PARAM_POWER_GATING_PIPE_IN_TILE,
-	DAL_PARAM_POWER_GATING_LB_PORTION,
-	DAL_PARAM_PSR_ENABLE,
-	DAL_PARAM_VARI_BRIGHT_ENABLE,
-	DAL_PARAM_USE_PPLIB,
-	DAL_PARAM_DISABLE_LPT_SUPPORT,
-	DAL_PARAM_DUMMY_FBC_BACKEND,
-	DAL_PARAM_ENABLE_GPU_SCALING,
-	DAL_PARAM_DISABLE_CLOCK_SHARING,
-	DAL_BOOL_PARAM_MAX
-};
-
 #define MAX_EDID_BUFFER_SIZE 512
 #define EDID_BLOCK_SIZE 128
 #define MAX_SURFACE_NUM 2

@@ -136,7 +136,6 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_MAX_BACKLIGHT_LEVEL, 255, false},
 	{FEATURE_LOAD_DMCU_FIRMWARE, true, true},
 	{FEATURE_DISABLE_AZ_CLOCK_GATING, false, true},
-	{FEATURE_ENABLE_GPU_SCALING, false, true},
 	{FEATURE_DONGLE_SINK_COUNT_CHECK, true, true},
 	{FEATURE_INSTANT_UP_SCALE_DOWN_SCALE, false, true},
 	{FEATURE_TILED_DISPLAY, false, true},
@@ -161,7 +160,6 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_DISABLE_FBC_COMP_CLK_GATE, false, true},
 	{FEATURE_PIXEL_PERFECT_OUTPUT, false, true},
 	{FEATURE_8BPP_SUPPORTED, false, true},
-	{FEATURE_DISABLE_CLOCK_SHARING, false, true}
 };
 
 enum {
@@ -335,90 +333,6 @@ static void initialize_backlight_caps(
 	}
 	as->backlight_caps_initialized = true;
 }
-
-static void log_overriden_features(
-	struct adapter_service *as,
-	const char *feature_name,
-	enum adapter_feature_id id,
-	bool bool_feature,
-	uint32_t value)
-{
-	if (bool_feature)
-		dm_logger_write(as->ctx->logger, LOG_FEATURE_OVERRIDE,
-			"Overridden %s is %s now\n",
-			feature_name,
-			(value == 0) ? "disabled" : "enabled");
-	else
-		dm_logger_write(as->ctx->logger, LOG_FEATURE_OVERRIDE,
-			"Overridden %s new value: %d\n",
-			feature_name,
-			value);
-}
-
-/*************************************
- * Local static functions definition *
- *************************************/
-
-#define check_bool_feature(feature) \
-case FEATURE_ ## feature: \
-	if (param->bool_param_enable_mask & \
-		(1 << DAL_PARAM_ ## feature)) { \
-		*data = param->bool_param_values & \
-		(1 << DAL_PARAM_ ## feature); \
-		ret = true; \
-		feature_name = "FEATURE_" #feature; \
-	} \
-	break
-
-/*
- * override_default_parameters
- *
- * Override features (from runtime parameter)
- * corresponding to Adapter Service Feature ID
- */
-static bool override_default_parameters(
-	struct adapter_service *as,
-	const struct dal_override_parameters *param,
-	const uint32_t idx,
-	uint32_t *data)
-{
-	bool ret = false;
-	bool bool_feature = true;
-	char *feature_name;
-
-	if (idx >= get_feature_entries_num()) {
-		ASSERT_CRITICAL(false);
-		return false;
-	}
-
-	switch (feature_entry_table[idx].feature_id) {
-	check_bool_feature(MAXIMIZE_STUTTER_MARKS);
-	check_bool_feature(MAXIMIZE_URGENCY_WATERMARKS);
-	check_bool_feature(USE_MAX_DISPLAY_CLK);
-	check_bool_feature(ENABLE_DFS_BYPASS);
-	check_bool_feature(POWER_GATING_PIPE_IN_TILE);
-	check_bool_feature(POWER_GATING_LB_PORTION);
-	check_bool_feature(PSR_ENABLE);
-	check_bool_feature(VARI_BRIGHT_ENABLE);
-	check_bool_feature(USE_PPLIB);
-	check_bool_feature(DISABLE_LPT_SUPPORT);
-	check_bool_feature(DUMMY_FBC_BACKEND);
-	check_bool_feature(ENABLE_GPU_SCALING);
-	check_bool_feature(DISABLE_CLOCK_SHARING);
-	default:
-		return false;
-	}
-	if (ret)
-		log_overriden_features(
-			as,
-			feature_name,
-			feature_entry_table[idx].feature_id,
-			bool_feature,
-			*data);
-
-	return ret;
-}
-
 /*
  * get_feature_value_from_data_sources
  *
@@ -536,8 +450,7 @@ static void set_bool_value(
  * Generate the internal feature set from multiple data sources
  */
 static bool generate_feature_set(
-		struct adapter_service *as,
-		const struct dal_override_parameters *param)
+		struct adapter_service *as)
 {
 	uint32_t i = 0;
 	uint32_t value = 0;
@@ -561,17 +474,14 @@ static bool generate_feature_set(
 		set_idx = (uint32_t)((entry->feature_id - 1) / 32);
 		internal_idx = (uint32_t)((entry->feature_id - 1) % 32);
 
-		/* TODO: wireless, runtime parameter, vbios */
-		if (!override_default_parameters(as, param, i, &value)) {
-			if (!get_feature_value_from_data_sources(
-					as, i, &value)) {
-				/*
-				 * Can't find feature values from
-				 * above data sources
-				 * Assign default value
-				 */
-				value = as->default_values[entry->feature_id];
-			}
+		if (!get_feature_value_from_data_sources(
+				as, i, &value)) {
+			/*
+			 * Can't find feature values from
+			 * above data sources
+			 * Assign default value
+			 */
+			value = as->default_values[entry->feature_id];
 		}
 
 		if (entry->is_boolean_type)
@@ -645,7 +555,7 @@ static bool adapter_service_construct(
 	}
 
 	/* Generate feature set table */
-	if (!generate_feature_set(as, init_data->display_param)) {
+	if (!generate_feature_set(as)) {
 		ASSERT_CRITICAL(false);
 		goto failed_to_generate_features;
 	}

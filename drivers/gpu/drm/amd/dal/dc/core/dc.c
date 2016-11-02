@@ -185,7 +185,6 @@ static struct adapter_service *create_as(
 	init_data.hw_init_data.vram_width = init->asic_id.vram_width;
 	init_data.hw_init_data.vram_type = init->asic_id.vram_type;
 
-	init_data.display_param = &init->display_param;
 	init_data.vbios_override = init->vbios_override;
 	init_data.dce_environment = init->dce_environment;
 
@@ -689,7 +688,7 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 	core_dc->public.caps.max_links = core_dc->link_count;
 	core_dc->public.caps.max_audios = core_dc->res_pool->audio_count;
 
-	core_dc->public.config.gpu_vm_support = init_params->flags.gpu_vm_support;
+	core_dc->public.config = init_params->flags;
 
 	dm_logger_write(core_dc->ctx->logger, LOG_DC,
 			"Display Core initialized\n");

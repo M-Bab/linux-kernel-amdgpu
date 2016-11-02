@@ -54,15 +54,6 @@
 
 #include "modules/inc/mod_freesync.h"
 
-/* Define variables here
- * These values will be passed to DAL for feature enable purpose
- * Disable ALL for HDMI light up
- * TODO: follow up if need this mechanism*/
-struct dal_override_parameters display_param = {
-	.bool_param_enable_mask = 0,
-	.bool_param_values = 0,
-};
-
 /* Debug facilities */
 #define AMDGPU_DM_NOT_IMPL(fmt, ...) \
 	DRM_INFO("DM_NOT_IMPL: " fmt, ##__VA_ARGS__)
@@ -280,8 +271,6 @@ int amdgpu_dm_init(struct amdgpu_device *adev)
 		goto error;
 	}
 
-	init_data.display_param = display_param;
-
 	init_data.asic_id.chip_family = adev->family;
 
 	init_data.asic_id.pci_revision_id = adev->rev_id;
@@ -309,12 +298,6 @@ int amdgpu_dm_init(struct amdgpu_device *adev)
 	init_data.cgs_device = adev->dm.cgs_device;
 
 	adev->dm.dal = NULL;
-
-	/* enable gpu scaling in DAL */
-	init_data.display_param.bool_param_enable_mask |=
-		1 << DAL_PARAM_ENABLE_GPU_SCALING;
-	init_data.display_param.bool_param_values |=
-		1 << DAL_PARAM_ENABLE_GPU_SCALING;
 
 	init_data.dce_environment = DCE_ENV_PRODUCTION_DRV;
 

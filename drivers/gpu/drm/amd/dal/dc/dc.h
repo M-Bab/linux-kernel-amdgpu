@@ -132,6 +132,7 @@ struct dc_link_funcs {
 /* Structure to hold configuration flags set by dm at dc creation. */
 struct dc_config {
 	bool gpu_vm_support;
+	bool disable_disp_pll_sharing;
 };
 
 struct dc_debug {
@@ -151,7 +152,6 @@ struct dc {
 
 struct dc_init_data {
 	struct hw_asic_id asic_id;
-	struct dal_override_parameters display_param;
 	void *driver; /* ctx */
 	struct cgs_device *cgs_device;
 

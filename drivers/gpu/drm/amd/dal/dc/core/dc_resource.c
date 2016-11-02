@@ -301,15 +301,11 @@ struct clock_source *resource_find_used_clk_src_for_sharing(
 					struct resource_context *res_ctx,
 					struct pipe_ctx *pipe_ctx)
 {
-	if (!dal_adapter_service_is_feature_supported(
-			res_ctx->pool->adapter_srv,
-			FEATURE_DISABLE_CLOCK_SHARING)) {
-		int i;
+	int i;
 
-		for (i = 0; i < MAX_PIPES; i++) {
-			if (is_sharable_clk_src(&res_ctx->pipe_ctx[i], pipe_ctx))
-				return res_ctx->pipe_ctx[i].clock_source;
-		}
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (is_sharable_clk_src(&res_ctx->pipe_ctx[i], pipe_ctx))
+			return res_ctx->pipe_ctx[i].clock_source;
 	}
 
 	return NULL;
@@ -1869,7 +1865,9 @@ enum dc_status resource_map_clock_resources(
 					pipe_ctx->clock_source =
 						context->res_ctx.pool->dp_clock_source;
 				else {
-					pipe_ctx->clock_source =
+					pipe_ctx->clock_source = NULL;
+
+					if (!dc->public.config.disable_disp_pll_sharing)
 						resource_find_used_clk_src_for_sharing(
 							&context->res_ctx,
 							pipe_ctx);

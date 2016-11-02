@@ -115,7 +115,6 @@ enum adapter_feature_id {
 	FEATURE_ABM_2_0,
 	FEATURE_SUPPORT_MIRABILIS,
 	FEATURE_LOAD_DMCU_FIRMWARE, /* 20th */
-	FEATURE_ENABLE_GPU_SCALING,
 	FEATURE_DONGLE_SINK_COUNT_CHECK,
 	FEATURE_INSTANT_UP_SCALE_DOWN_SCALE,
 	FEATURE_TILED_DISPLAY,
@@ -126,7 +125,6 @@ enum adapter_feature_id {
 	FEATURE_SUPPORT_SMOOTH_BRIGHTNESS,
 	FEATURE_ALLOW_DIRECT_MEMORY_ACCESS_TRIG, /* 30th */
 	FEATURE_POWER_GATING_LB_PORTION,
-	FEATURE_DISABLE_CLOCK_SHARING, /* 32nd. Set Done. */
 	FEATURE_SET_02_END = FEATURE_SET_02_START + 31,
 
 	/* UInt set, 1 entry: DCP Bit Depth Reduction Mode */
@@ -317,7 +315,6 @@ enum as_drr_support {
 struct as_init_data {
 	struct hw_asic_id hw_init_data;
 	struct dc_context *ctx;
-	const struct dal_override_parameters *display_param;
 	struct dc_bios *vbios_override;
 	enum dce_environment dce_environment;
 };
