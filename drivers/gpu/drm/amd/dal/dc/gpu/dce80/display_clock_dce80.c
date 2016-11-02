@@ -812,7 +812,7 @@ static bool display_clock_integrated_info_construct(
 	}
 
 	disp_clk->dfs_bypass_enabled = false;
-	if (!debug->disalbe_dfs_bypass)
+	if (!debug->disable_dfs_bypass)
 		if (bp->integrated_info->gpu_cap_info & DFS_BYPASS_ENABLE)
 			disp_clk->dfs_bypass_enabled = true;
 

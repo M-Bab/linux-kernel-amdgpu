@@ -694,7 +694,7 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 
 
 	/* TODO: missing feature to be enabled */
-	core_dc->public.debug.disalbe_dfs_bypass = true;
+	core_dc->public.debug.disable_dfs_bypass = true;
 
 	return &core_dc->public;
 
