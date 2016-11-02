@@ -627,12 +627,6 @@ void dal_adapter_service_destroy(
 	*as = NULL;
 }
 
-struct dal_asic_runtime_flags dal_adapter_service_get_asic_runtime_flags(
-		struct adapter_service *as)
-{
-	return as->asic_cap->runtime_flags;
-}
-
 /*
  * dal_adapter_service_get_feature_value
  *
@@ -686,55 +680,5 @@ bool dal_adapter_service_get_feature_value(struct adapter_service *as,
 	}
 
 	return true;
-}
-
-/*
- * dal_adapter_service_should_optimize
- *
- * @brief Reports whether driver settings allow requested optimization
- *
- * @param
- * as: adapter service handler
- * feature: for which optimization is validated
- *
- * @return
- * true if requested feature can be optimized
- */
-bool dal_adapter_service_should_optimize(
-		struct adapter_service *as, enum optimization_feature feature)
-{
-	uint32_t supported_optimization = 0;
-	struct dal_asic_runtime_flags flags;
-	struct dc_bios *bp = as->ctx->dc_bios;
-
-	if (!dal_adapter_service_get_feature_value(as, FEATURE_OPTIMIZATION,
-			&supported_optimization, sizeof(uint32_t)))
-		return false;
-
-	/* Retrieve ASIC runtime flags */
-	flags = dal_adapter_service_get_asic_runtime_flags(as);
-
-	/* Check runtime flags against different optimization features */
-	switch (feature) {
-	case OF_SKIP_HW_PROGRAMMING_ON_ENABLED_EMBEDDED_DISPLAY:
-		if (!flags.flags.bits.OPTIMIZED_DISPLAY_PROGRAMMING_ON_BOOT)
-			return false;
-		break;
-
-	case OF_SKIP_RESET_OF_ALL_HW_ON_S3RESUME:
-		if (bp->integrated_info == NULL ||
-				!flags.flags.bits.SKIP_POWER_DOWN_ON_RESUME)
-			return false;
-		break;
-	case OF_SKIP_POWER_DOWN_INACTIVE_ENCODER:
-		if (!dal_adapter_service_get_asic_runtime_flags(as).flags.bits.
-			SKIP_POWER_DOWN_ON_RESUME)
-			return false;
-		break;
-	default:
-		break;
-	}
-
-	return (supported_optimization & feature) != 0;
 }
 

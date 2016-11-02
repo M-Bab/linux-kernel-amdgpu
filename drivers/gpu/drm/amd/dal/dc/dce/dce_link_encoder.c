@@ -1359,10 +1359,8 @@ void dce110_link_encoder_disable_output(
 	struct bp_transmitter_control cntl = { 0 };
 	enum bp_result result;
 
-	if (!is_dig_enabled(enc110) && enc110->base.adapter_service &&
-		dal_adapter_service_should_optimize(
-			enc110->base.adapter_service,
-			OF_SKIP_POWER_DOWN_INACTIVE_ENCODER)) {
+	if (!is_dig_enabled(enc110)) {
+		/* OF_SKIP_POWER_DOWN_INACTIVE_ENCODER */
 		return;
 	}
 	/* Power-down RX and disable GPU PHY should be paired.

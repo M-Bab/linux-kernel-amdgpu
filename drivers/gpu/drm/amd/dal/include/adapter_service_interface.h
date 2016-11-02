@@ -328,9 +328,6 @@ bool dal_adapter_service_get_feature_value(struct adapter_service *as,
 	void *data,
 	uint32_t size);
 
-struct dal_asic_runtime_flags dal_adapter_service_get_asic_runtime_flags(
-	struct adapter_service *as);
-
 /* Reports whether driver settings allow requested optimization */
 bool dal_adapter_service_should_optimize(
 		struct adapter_service *as, enum optimization_feature feature);

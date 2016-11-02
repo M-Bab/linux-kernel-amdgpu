@@ -54,7 +54,6 @@ static bool construct(
 	memset(cap->data, 0, sizeof(cap->data));
 
 	/* ASIC data */
-	cap->runtime_flags = init->runtime_flags;
 	cap->data[ASIC_DATA_MAX_UNDERSCAN_PERCENTAGE] = 10;
 	cap->data[ASIC_DATA_VIEWPORT_PIXEL_GRANULARITY] = 4;
 	cap->data[ASIC_DATA_DOWNSCALE_LIMIT] = 200;

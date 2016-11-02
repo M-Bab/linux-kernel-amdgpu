@@ -61,31 +61,6 @@ enum dce_environment {
 #define IS_DIAG_DC(dce_environment) \
 	(IS_FPGA_MAXIMUS_DC(dce_environment) || (dce_environment == DCE_ENV_DIAG))
 
-/********************************/
-/*
- * ASIC Runtime Flags
- */
-struct dal_asic_runtime_flags {
-	union {
-		uint32_t raw;
-		struct {
-			uint32_t EMULATE_REPLUG_ON_CAP_CHANGE:1;
-			uint32_t SUPPORT_XRBIAS:1;
-			uint32_t SKIP_POWER_DOWN_ON_RESUME:1;
-			uint32_t FULL_DETECT_ON_RESUME:1;
-			uint32_t GSL_FRAMELOCK:1;
-			uint32_t NO_LOW_BPP_MODES:1;
-			uint32_t BLOCK_ON_INITIAL_DETECTION:1;
-			uint32_t OPTIMIZED_DISPLAY_PROGRAMMING_ON_BOOT:1;
-			uint32_t DRIVER_CONTROLLED_BRIGHTNESS:1;
-			uint32_t MODIFIABLE_FRAME_DURATION:1;
-			uint32_t MIRACAST_SUPPORTED:1;
-			uint32_t CONNECTED_STANDBY_SUPPORTED:1;
-			uint32_t GNB_WAKEUP_SUPPORTED:1;
-		} bits;
-	} flags;
-};
-
 struct hw_asic_id {
 	uint32_t chip_id;
 	uint32_t chip_family;
@@ -94,7 +69,6 @@ struct hw_asic_id {
 	uint32_t vram_type;
 	uint32_t vram_width;
 	uint32_t feature_flags;
-	struct dal_asic_runtime_flags runtime_flags;
 	uint32_t fake_paths_num;
 	void *atombios_base_address;
 };

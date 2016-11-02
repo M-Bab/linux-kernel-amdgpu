@@ -381,36 +381,6 @@ struct bios_event_info {
 	bool backlight_changed;
 };
 
-/* Bitvector and bitfields of possible optimizations
- #IMPORTANT# Keep bitfields match bitvector! */
-enum optimization_feature {
-	/* Don't do HW programming on panels that were enabled by VBIOS */
-	OF_SKIP_HW_PROGRAMMING_ON_ENABLED_EMBEDDED_DISPLAY = 0x1,
-	OF_SKIP_RESET_OF_ALL_HW_ON_S3RESUME = 0x2,
-	OF_SKIP_HW_RESET_OF_EMBEDDED_DISPLAY_ON_S3RESUME = 0x4,
-	OF_SKIP_POWER_UP_VBIOS_ENABLED_ENCODER = 0x8,
-	/* Do not turn off VCC while powering down on boot or resume */
-	OF_KEEP_VCC_DURING_POWER_DOWN_ON_BOOT_OR_RESUME = 0x10,
-	/* Do not turn off VCC while performing SetMode */
-	OF_KEEP_VCC_DURING_SET_MODE = 0x20,
-	OF_DO_NOT_WAIT_FOR_HPD_LOW = 0x40,
-	OF_SKIP_POWER_DOWN_INACTIVE_ENCODER = 0x80
-};
-
-/* Bitvector and bitfields of performance measurements
- #IMPORTANT# Keep bitfields match bitvector! */
-
-enum {
-	PERF_MEASURE_POWERCODE_OFFSET = 0x0,
-	PERF_MEASURE_POWER_CODE_MASK = 0xFF,
-	PERF_MEASURE_POWER_STATE_OFFSET = 8,
-	PERF_MEASURE_POWER_STATE_MASK = 0x000FF00,
-	PERF_MEASURE_PREV_POWER_STATE_OFFSET = 16,
-	PERF_MEASURE_PREV_POWER_STATE_MASK = 0x00FF0000,
-	PERF_MEASURE_DISPLAY_INDEX_OFFSET = 24,
-	PERF_MEASURE_DISPLAY_INDEX_MASK = 0xFF000000
-};
-
 enum {
 	HDMI_PIXEL_CLOCK_IN_KHZ_297 = 297000,
 	TMDS_PIXEL_CLOCK_IN_KHZ_165 = 165000

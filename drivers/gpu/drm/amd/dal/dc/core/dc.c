@@ -181,7 +181,6 @@ static struct adapter_service *create_as(
 	init_data.hw_init_data.fake_paths_num = init->asic_id.fake_paths_num;
 	init_data.hw_init_data.feature_flags = init->asic_id.feature_flags;
 	init_data.hw_init_data.hw_internal_rev = init->asic_id.hw_internal_rev;
-	init_data.hw_init_data.runtime_flags = init->asic_id.runtime_flags;
 	init_data.hw_init_data.vram_width = init->asic_id.vram_width;
 	init_data.hw_init_data.vram_type = init->asic_id.vram_type;
 

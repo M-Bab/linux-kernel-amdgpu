@@ -38,7 +38,6 @@ struct asic_capability {
 	struct asic_caps caps;
 	struct asic_stereo_3d_caps stereo_3d_caps;
 	struct asic_bugs bugs;
-	struct dal_asic_runtime_flags runtime_flags;
 	uint32_t data[ASIC_DATA_MAX_NUMBER];
 };
 
