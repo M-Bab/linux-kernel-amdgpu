@@ -1557,9 +1557,7 @@ bool dc_link_setup_psr(const struct dc_link *dc_link,
 		psr_context.psrFrameCaptureIndicationReq =
 			dc_link->psr_caps.psr_frame_capture_indication_req;
 
-		psr_context.skipPsrWaitForPllLock =
-				ctx->adapter_srv->
-				asic_cap->caps.SKIP_PSR_WAIT_FOR_PLL_LOCK_BIT;
+		psr_context.skipPsrWaitForPllLock = 0; /* only = 1 in KV */
 
 		psr_context.numberOfControllers =
 				link->dc->res_pool->res_cap->num_timing_generator;
