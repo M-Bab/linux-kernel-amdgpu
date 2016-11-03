@@ -72,7 +72,6 @@ static void destroy_links(struct core_dc *dc)
 
 static bool create_links(
 		struct core_dc *dc,
-		struct adapter_service *as,
 		uint32_t num_virtual_links)
 {
 	int i;
@@ -106,7 +105,6 @@ static bool create_links(
 		struct core_link *link;
 
 		link_init_params.ctx = dc->ctx;
-		link_init_params.adapter_srv = as;
 		link_init_params.connector_index = i;
 		link_init_params.link_index = dc->link_count;
 		link_init_params.dc = dc;
@@ -130,7 +128,6 @@ static bool create_links(
 			goto failed_alloc;
 		}
 
-		link->adapter_srv = as;
 		link->ctx = dc->ctx;
 		link->dc = dc;
 		link->public.connector_signal = SIGNAL_TYPE_VIRTUAL;
@@ -604,7 +601,6 @@ static bool construct(struct core_dc *dc,
 	}
 
 	dc->res_pool = dc_create_resource_pool(
-			as,
 			dc,
 			init_params->num_virtual_links,
 			dc_version,
@@ -612,7 +608,7 @@ static bool construct(struct core_dc *dc,
 	if (!dc->res_pool)
 		goto create_resource_fail;
 
-	if (!create_links(dc, as, init_params->num_virtual_links))
+	if (!create_links(dc, init_params->num_virtual_links))
 		goto create_links_fail;
 
 	allocate_dc_stream_funcs(dc);

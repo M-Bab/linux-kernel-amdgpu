@@ -47,7 +47,6 @@
 #include "dce110/dce110_opp_v.h"
 #include "dce110/dce110_clock_source.h"
 #include "dce110/dce110_hw_sequencer.h"
-#include "adapter_service_interface.h"
 
 #include "reg_helper.h"
 
@@ -384,7 +383,6 @@ static struct audio *create_audio(
 }
 
 static struct timing_generator *dce110_timing_generator_create(
-		struct adapter_service *as,
 		struct dc_context *ctx,
 		uint32_t instance,
 		const struct dce110_timing_generator_offsets *offsets)
@@ -1174,7 +1172,6 @@ const struct resource_caps *dce110_resource_cap(
 }
 
 static bool construct(
-	struct adapter_service *as,
 	uint8_t num_virtual_links,
 	struct core_dc *dc,
 	struct dce110_resource_pool *pool,
@@ -1189,7 +1186,6 @@ static bool construct(
 
 	ctx->dc_bios->regs = &bios_regs;
 
-	pool->base.adapter_srv = as;
 	pool->base.res_cap = dce110_resource_cap(&ctx->asic_id);
 	pool->base.funcs = &dce110_res_pool_funcs;
 
@@ -1274,7 +1270,7 @@ static bool construct(
 
 	for (i = 0; i < pool->base.pipe_count; i++) {
 		pool->base.timing_generators[i] = dce110_timing_generator_create(
-				as, ctx, i, &dce110_tg_offsets[i]);
+				ctx, i, &dce110_tg_offsets[i]);
 		if (pool->base.timing_generators[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create tg!\n");
@@ -1341,7 +1337,6 @@ res_create_fail:
 }
 
 struct resource_pool *dce110_create_resource_pool(
-	struct adapter_service *as,
 	uint8_t num_virtual_links,
 	struct core_dc *dc,
 	struct hw_asic_id asic_id)
@@ -1352,7 +1347,7 @@ struct resource_pool *dce110_create_resource_pool(
 	if (!pool)
 		return NULL;
 
-	if (construct(as, num_virtual_links, dc, pool, asic_id))
+	if (construct(num_virtual_links, dc, pool, asic_id))
 		return &pool->base;
 
 	BREAK_TO_DEBUGGER();

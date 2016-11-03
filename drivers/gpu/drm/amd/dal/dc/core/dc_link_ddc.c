@@ -287,7 +287,6 @@ static bool construct(
 
 	ddc_service->link = init_data->link;
 	ddc_service->ctx = init_data->ctx;
-	ddc_service->as = init_data->as;
 
 	if (BP_RESULT_OK != dcb->funcs->get_i2c_info(dcb, init_data->id, &i2c_info)) {
 		ddc_service->ddc_pin = NULL;

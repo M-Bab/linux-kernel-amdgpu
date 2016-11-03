@@ -29,6 +29,7 @@
  * Pre-requisites: headers required by header of this unit
  */
 #include "include/i2caux_interface.h"
+#include "dc_bios_types.h"
 
 /*
  * Header of this unit

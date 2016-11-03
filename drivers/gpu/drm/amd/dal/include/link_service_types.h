@@ -162,7 +162,6 @@ struct link_service_init_data {
 	struct link_service_init_options init_options;
 	uint32_t connector_enum_id;
 	struct graphics_object_id connector_id;
-	struct adapter_service *adapter_service;
 	struct dc_context *ctx;
 	struct topology_mgr *tm;
 };

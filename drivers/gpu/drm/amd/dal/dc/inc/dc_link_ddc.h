@@ -32,7 +32,6 @@
 #define EDID_SEGMENT_SIZE 256
 
 struct ddc_service;
-struct adapter_service;
 struct graphics_object_id;
 enum ddc_result;
 struct av_sync_data;
@@ -66,7 +65,6 @@ void dal_ddc_aux_payloads_add(
 		bool write);
 
 struct ddc_service_init_data {
-	struct adapter_service *as;
 	struct graphics_object_id id;
 	struct dc_context *ctx;
 	struct core_link *link;

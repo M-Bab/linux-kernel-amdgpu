@@ -27,7 +27,6 @@
 #define __DC_HWSS_DCE110_H__
 
 #include "core_types.h"
-#include "adapter_service_interface.h"
 
 #define GAMMA_HW_POINTS_NUM 256
 struct core_dc;

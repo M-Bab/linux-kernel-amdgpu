@@ -433,7 +433,6 @@ static struct audio *create_audio(
 
 
 static struct timing_generator *dce112_timing_generator_create(
-		struct adapter_service *as,
 		struct dc_context *ctx,
 		uint32_t instance,
 		const struct dce110_timing_generator_offsets *offsets)
@@ -480,7 +479,6 @@ static const struct resource_create_funcs res_create_funcs = {
 
 static struct mem_input *dce112_mem_input_create(
 	struct dc_context *ctx,
-	struct adapter_service *as,
 	uint32_t inst,
 	const struct dce110_mem_input_reg_offsets *offset)
 {
@@ -1190,7 +1188,6 @@ const struct resource_caps *dce112_resource_cap(
 }
 
 static bool construct(
-	struct adapter_service *adapter_serv,
 	uint8_t num_virtual_links,
 	struct core_dc *dc,
 	struct dce110_resource_pool *pool)
@@ -1201,7 +1198,6 @@ static bool construct(
 
 	ctx->dc_bios->regs = &bios_regs;
 
-	pool->base.adapter_srv = adapter_serv;
 	pool->base.res_cap = dce112_resource_cap(&ctx->asic_id);
 	pool->base.funcs = &dce112_res_pool_funcs;
 
@@ -1302,7 +1298,6 @@ static bool construct(
 	for (i = 0; i < pool->base.pipe_count; i++) {
 		pool->base.timing_generators[i] =
 				dce112_timing_generator_create(
-					adapter_serv,
 					ctx,
 					i,
 					&dce112_tg_offsets[i]);
@@ -1314,7 +1309,6 @@ static bool construct(
 
 		pool->base.mis[i] = dce112_mem_input_create(
 			ctx,
-			adapter_serv,
 			i,
 			&dce112_mi_reg_offsets[i]);
 		if (pool->base.mis[i] == NULL) {
@@ -1381,7 +1375,6 @@ res_create_fail:
 }
 
 struct resource_pool *dce112_create_resource_pool(
-	struct adapter_service *as,
 	uint8_t num_virtual_links,
 	struct core_dc *dc)
 {
@@ -1391,7 +1384,7 @@ struct resource_pool *dce112_create_resource_pool(
 	if (!pool)
 		return NULL;
 
-	if (construct(as, num_virtual_links, dc, pool))
+	if (construct(num_virtual_links, dc, pool))
 		return &pool->base;
 
 	BREAK_TO_DEBUGGER();

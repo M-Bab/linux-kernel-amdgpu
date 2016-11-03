@@ -69,7 +69,7 @@ bool resource_construct(
 	struct resource_pool *pool,
 	const struct resource_create_funcs *create_funcs);
 
-struct resource_pool *dc_create_resource_pool(struct adapter_service *adapter_serv,
+struct resource_pool *dc_create_resource_pool(
 				struct core_dc *dc,
 				int num_virtual_links,
 				enum dce_version dc_version,

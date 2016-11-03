@@ -407,7 +407,6 @@ static struct audio *create_audio(
 }
 
 static struct timing_generator *dce100_timing_generator_create(
-		struct adapter_service *as,
 		struct dc_context *ctx,
 		uint32_t instance,
 		const struct dce110_timing_generator_offsets *offsets)
@@ -859,7 +858,6 @@ static const struct resource_funcs dce100_res_pool_funcs = {
 };
 
 static bool construct(
-	struct adapter_service *as,
 	uint8_t num_virtual_links,
 	struct core_dc *dc,
 	struct dce110_resource_pool *pool)
@@ -872,7 +870,6 @@ static bool construct(
 
 	ctx->dc_bios->regs = &bios_regs;
 
-	pool->base.adapter_srv = as;
 	pool->base.res_cap = &res_cap;
 	pool->base.funcs = &dce100_res_pool_funcs;
 	pool->base.underlay_pipe_index = -1;
@@ -962,7 +959,6 @@ static bool construct(
 	for (i = 0; i < pool->base.pipe_count; i++) {
 		pool->base.timing_generators[i] =
 			dce100_timing_generator_create(
-				as,
 				ctx,
 				i,
 				&dce100_tg_offsets[i]);
@@ -1028,7 +1024,6 @@ res_create_fail:
 }
 
 struct resource_pool *dce100_create_resource_pool(
-	struct adapter_service *as,
 	uint8_t num_virtual_links,
 	struct core_dc *dc)
 {
@@ -1038,7 +1033,7 @@ struct resource_pool *dce100_create_resource_pool(
 	if (!pool)
 		return NULL;
 
-	if (construct(as, num_virtual_links, dc, pool))
+	if (construct(num_virtual_links, dc, pool))
 		return &pool->base;
 
 	BREAK_TO_DEBUGGER();

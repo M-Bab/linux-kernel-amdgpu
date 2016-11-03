@@ -104,7 +104,6 @@ struct ddc_service {
 	union ddc_wa wa;
 	enum ddc_transaction_type transaction_type;
 	enum display_dongle_type dongle_type;
-	struct adapter_service *as;
 	struct dc_context *ctx;
 	struct core_link *link;
 

@@ -26,7 +26,6 @@
 #ifndef __DAL_I2CAUX_INTERFACE_H__
 #define __DAL_I2CAUX_INTERFACE_H__
 
-#include "adapter_service_interface.h"
 #include "gpio_service_interface.h"
 
 

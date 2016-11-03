@@ -127,7 +127,6 @@ struct link_init_data {
 	uint32_t connector_index; /* this will be mapped to the HPD pins */
 	uint32_t link_index; /* this is mapped to DAL display_index
 				TODO: remove it when DC is complete. */
-	struct adapter_service *adapter_srv;
 };
 
 /* DP MST stream allocation (payload bandwidth number) */
@@ -155,7 +154,6 @@ struct core_link {
 
 	struct dc_context *ctx; /* TODO: AUTO remove 'dal' when DC is complete*/
 
-	struct adapter_service *adapter_srv;
 	struct link_encoder *link_enc;
 	struct ddc_service *ddc;
 	struct graphics_object_id link_id;
@@ -264,7 +262,6 @@ struct resource_pool {
 	struct audio_support audio_support;
 
 	struct display_clock *display_clock;
-	struct adapter_service *adapter_srv;
 	struct irq_service *irqs;
 
 	const struct resource_funcs *funcs;

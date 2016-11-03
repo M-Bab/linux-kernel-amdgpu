@@ -13,7 +13,6 @@
 #include "dc_types.h"
 
 struct dc_context;
-struct adapter_service;
 struct encoder_set_dp_phy_pattern_param;
 struct link_mst_stream_allocation_table;
 struct dc_link_settings;
@@ -201,7 +200,6 @@ struct psr_dmcu_context {
 
 struct link_encoder {
 	const struct link_encoder_funcs *funcs;
-	struct adapter_service *adapter_service;
 	int32_t aux_channel_offset;
 	struct dc_context *ctx;
 	struct graphics_object_id id;

@@ -8,13 +8,11 @@
 #ifndef DCE100_RESOURCE_H_
 #define DCE100_RESOURCE_H_
 
-struct adapter_service;
 struct core_dc;
 struct resource_pool;
 struct dc_validation_set;
 
 struct resource_pool *dce100_create_resource_pool(
-	struct adapter_service *as,
 	uint8_t num_virtual_links,
 	struct core_dc *dc);
 

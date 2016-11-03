@@ -787,8 +787,7 @@ bool dc_link_detect(const struct dc_link *dc_link, bool boot)
 }
 
 static enum hpd_source_id get_hpd_line(
-		struct core_link *link,
-		struct adapter_service *as)
+		struct core_link *link)
 {
 	struct gpio *hpd;
 	enum hpd_source_id hpd_id = HPD_SOURCEID_UNKNOWN;
@@ -826,7 +825,7 @@ static enum hpd_source_id get_hpd_line(
 	return hpd_id;
 }
 
-static enum channel_id get_ddc_line(struct core_link *link, struct adapter_service *as)
+static enum channel_id get_ddc_line(struct core_link *link)
 {
 	struct ddc *ddc;
 	enum channel_id channel = CHANNEL_ID_UNKNOWN;
@@ -938,7 +937,6 @@ static bool construct(
 	const struct link_init_data *init_params)
 {
 	uint8_t i;
-	struct adapter_service *as = init_params->adapter_srv;
 	struct gpio *hpd_gpio = NULL;
 	struct ddc_service_init_data ddc_service_init_data = { 0 };
 	struct dc_context *dc_ctx = init_params->ctx;
@@ -953,7 +951,6 @@ static bool construct(
 	link->link_status.dpcd_caps = &link->dpcd_caps;
 
 	link->dc = init_params->dc;
-	link->adapter_srv = as;
 	link->ctx = dc_ctx;
 	link->public.link_index = init_params->link_index;
 
@@ -1017,7 +1014,6 @@ static bool construct(
 			init_params->connector_index,
 			link->public.connector_signal);
 
-	ddc_service_init_data.as = as;
 	ddc_service_init_data.ctx = link->ctx;
 	ddc_service_init_data.id = link->link_id;
 	ddc_service_init_data.link = link;
@@ -1035,8 +1031,8 @@ static bool construct(
 	enc_init_data.ctx = dc_ctx;
 	bp_funcs->get_src_obj(dc_ctx->dc_bios, link->link_id, 0, &enc_init_data.encoder);
 	enc_init_data.connector = link->link_id;
-	enc_init_data.channel = get_ddc_line(link, as);
-	enc_init_data.hpd_source = get_hpd_line(link, as);
+	enc_init_data.channel = get_ddc_line(link);
+	enc_init_data.hpd_source = get_hpd_line(link);
 	enc_init_data.transmitter =
 			translate_encoder_to_transmitter(enc_init_data.encoder);
 	link->link_enc = link->dc->res_pool->funcs->link_enc_create(
@@ -1562,7 +1558,7 @@ bool dc_link_setup_psr(const struct dc_link *dc_link,
 			dc_link->psr_caps.psr_frame_capture_indication_req;
 
 		psr_context.skipPsrWaitForPllLock =
-				link->link_enc->adapter_service->
+				ctx->adapter_srv->
 				asic_cap->caps.SKIP_PSR_WAIT_FOR_PLL_LOCK_BIT;
 
 		psr_context.numberOfControllers =

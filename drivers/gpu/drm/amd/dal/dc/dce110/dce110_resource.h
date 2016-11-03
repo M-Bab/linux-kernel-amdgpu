@@ -28,7 +28,6 @@
 
 #include "core_types.h"
 
-struct adapter_service;
 struct core_dc;
 struct resource_pool;
 
@@ -49,7 +48,6 @@ void dce110_resource_build_bit_depth_reduction_params(
 		struct bit_depth_reduction_params *fmt_bit_depth);
 
 struct resource_pool *dce110_create_resource_pool(
-	struct adapter_service *as,
 	uint8_t num_virtual_links,
 	struct core_dc *dc,
 	struct hw_asic_id asic_id);

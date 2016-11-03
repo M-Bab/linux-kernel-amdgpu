@@ -28,12 +28,10 @@
 
 #include "core_types.h"
 
-struct adapter_service;
 struct core_dc;
 struct resource_pool;
 
 struct resource_pool *dce80_create_resource_pool(
-	struct adapter_service *as,
 	uint8_t num_virtual_links,
 	struct core_dc *dc);
 

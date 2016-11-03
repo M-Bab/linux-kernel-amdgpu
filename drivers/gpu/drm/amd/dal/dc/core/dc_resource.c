@@ -72,7 +72,7 @@ enum dce_version resource_parse_asic_id(struct hw_asic_id asic_id)
 	return dc_version;
 }
 
-struct resource_pool *dc_create_resource_pool(struct adapter_service *adapter_serv,
+struct resource_pool *dc_create_resource_pool(
 				struct core_dc *dc,
 				int num_virtual_links,
 				enum dce_version dc_version,
@@ -82,16 +82,16 @@ struct resource_pool *dc_create_resource_pool(struct adapter_service *adapter_se
 	switch (dc_version) {
 	case DCE_VERSION_8_0:
 		return dce80_create_resource_pool(
-			adapter_serv, num_virtual_links, dc);
+			num_virtual_links, dc);
 	case DCE_VERSION_10_0:
 		return dce100_create_resource_pool(
-			adapter_serv, num_virtual_links, dc);
+				num_virtual_links, dc);
 	case DCE_VERSION_11_0:
 		return dce110_create_resource_pool(
-			adapter_serv, num_virtual_links, dc, asic_id);
+			num_virtual_links, dc, asic_id);
 	case DCE_VERSION_11_2:
 		return dce112_create_resource_pool(
-			adapter_serv, num_virtual_links, dc);
+			num_virtual_links, dc);
 	default:
 		break;
 	}
