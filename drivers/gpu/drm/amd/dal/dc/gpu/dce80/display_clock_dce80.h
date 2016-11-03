@@ -52,7 +52,6 @@ struct display_clock_dce80 {
 };
 
 struct display_clock *dal_display_clock_dce80_create(
-	struct dc_context *ctx,
-	struct adapter_service *as);
+	struct dc_context *ctx);
 
 #endif /* __DAL_DISPLAY_CLOCK_DCE80_H__ */

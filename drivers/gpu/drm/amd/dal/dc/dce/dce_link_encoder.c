@@ -596,7 +596,6 @@ static void link_encoder_edp_wait_for_hpd_ready(
 	bool power_up)
 {
 	struct dc_context *ctx = enc110->base.ctx;
-	struct adapter_service *as = enc110->base.adapter_service;
 	struct graphics_object_id connector = enc110->base.connector;
 	struct gpio *hpd;
 	bool edp_hpd_high = false;
@@ -971,7 +970,6 @@ bool dce110_link_encoder_construct(
 	const struct dce110_link_enc_hpd_registers *hpd_regs)
 {
 	struct graphics_object_encoder_cap_info enc_cap_info = {0};
-	struct adapter_service *as = init_data->adapter_service;
 
 	enc110->base.funcs = &dce110_lnk_enc_funcs;
 	enc110->base.ctx = init_data->ctx;
@@ -980,8 +978,6 @@ bool dce110_link_encoder_construct(
 	enc110->base.hpd_source = init_data->hpd_source;
 	enc110->base.connector = init_data->connector;
 	enc110->base.input_signals = SIGNAL_TYPE_ALL;
-
-	enc110->base.adapter_service = as;
 
 	enc110->base.preferred_engine = ENGINE_ID_UNKNOWN;
 

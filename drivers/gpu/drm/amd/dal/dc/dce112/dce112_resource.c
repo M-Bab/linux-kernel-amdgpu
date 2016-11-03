@@ -444,7 +444,7 @@ static struct timing_generator *dce112_timing_generator_create(
 	if (!tg110)
 		return NULL;
 
-	if (dce110_timing_generator_construct(tg110, as, ctx, instance, offsets))
+	if (dce110_timing_generator_construct(tg110, ctx, instance, offsets))
 		return &tg110->base;
 
 	BREAK_TO_DEBUGGER();
@@ -491,7 +491,7 @@ static struct mem_input *dce112_mem_input_create(
 		return NULL;
 
 	if (dce112_mem_input_construct(mem_input110,
-				       ctx, as, inst, offset))
+				       ctx, inst, offset))
 		return &mem_input110->base;
 
 	BREAK_TO_DEBUGGER();
@@ -1263,7 +1263,7 @@ static bool construct(
 	}
 
 	pool->base.display_clock = dal_display_clock_dce112_create(
-			ctx, adapter_serv);
+			ctx);
 
 	if (pool->base.display_clock == NULL) {
 		dm_error("DC: failed to create display clock!\n");

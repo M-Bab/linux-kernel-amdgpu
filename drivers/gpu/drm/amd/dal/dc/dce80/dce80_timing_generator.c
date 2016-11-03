@@ -32,7 +32,6 @@
 #include "dc_types.h"
 
 #include "include/grph_object_id.h"
-#include "include/adapter_service_interface.h"
 #include "include/logger_interface.h"
 #include "../dce110/dce110_timing_generator.h"
 #include "dce80_timing_generator.h"
@@ -152,15 +151,11 @@ static const struct timing_generator_funcs dce80_tg_funcs = {
 
 bool dce80_timing_generator_construct(
 	struct dce110_timing_generator *tg110,
-	struct adapter_service *as,
 	struct dc_context *ctx,
 	uint32_t instance,
 	const struct dce110_timing_generator_offsets *offsets)
 {
 	if (!tg110)
-		return false;
-
-	if (!as)
 		return false;
 
 	tg110->controller_id = CONTROLLER_ID_D0 + instance;

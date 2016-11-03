@@ -28,7 +28,6 @@
 
 #include "dc_bios_types.h"
 
-struct adapter_service;
 struct bios_parser;
 
 struct bp_init_data {

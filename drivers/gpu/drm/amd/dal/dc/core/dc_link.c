@@ -1032,7 +1032,6 @@ static bool construct(
 		dal_ddc_get_line(
 			dal_ddc_service_get_ddc_pin(link->ddc));
 
-	enc_init_data.adapter_service = as;
 	enc_init_data.ctx = dc_ctx;
 	bp_funcs->get_src_obj(dc_ctx->dc_bios, link->link_id, 0, &enc_init_data.encoder);
 	enc_init_data.connector = link->link_id;

@@ -31,8 +31,6 @@
 #include "gmc/gmc_7_1_d.h"
 
 #include "include/logger_interface.h"
-#include "include/adapter_service_interface.h"
-
 #include "dce80_compressor.h"
 
 #define DCP_REG(reg)\
@@ -774,7 +772,7 @@ void dce80_compressor_set_fbc_invalidation_triggers(
 }
 
 bool dce80_compressor_construct(struct dce80_compressor *compressor,
-	struct dc_context *ctx, struct adapter_service *as)
+	struct dc_context *ctx)
 {
 	struct dc_bios *bp = ctx->dc_bios;
 	struct embedded_panel_info panel_info;
@@ -818,8 +816,7 @@ bool dce80_compressor_construct(struct dce80_compressor *compressor,
 	return true;
 }
 
-struct compressor *dce80_compressor_create(struct dc_context *ctx,
-	struct adapter_service *as)
+struct compressor *dce80_compressor_create(struct dc_context *ctx)
 {
 	struct dce80_compressor *cp80 =
 		dm_alloc(sizeof(struct dce80_compressor));
@@ -827,7 +824,7 @@ struct compressor *dce80_compressor_create(struct dc_context *ctx,
 	if (!cp80)
 		return NULL;
 
-	if (dce80_compressor_construct(cp80, ctx, as))
+	if (dce80_compressor_construct(cp80, ctx))
 		return &cp80->base;
 
 	BREAK_TO_DEBUGGER();

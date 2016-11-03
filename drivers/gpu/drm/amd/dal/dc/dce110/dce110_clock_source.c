@@ -36,7 +36,6 @@
 #include "include/logger_interface.h"
 
 #include "dce110_clock_source.h"
-#include "adapter_service_interface.h"
 
 #define FRACT_FB_DIVIDER_DEC_POINTS_MAX_NUM 6
 #define CALC_PLL_CLK_SRC_ERR_TOLERANCE 1

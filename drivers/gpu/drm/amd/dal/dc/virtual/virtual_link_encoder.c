@@ -136,8 +136,6 @@ bool virtual_link_encoder_construct(
 	enc->hpd_source = init_data->hpd_source;
 	enc->connector = init_data->connector;
 
-	enc->adapter_service = init_data->adapter_service;
-
 	enc->transmitter = init_data->transmitter;
 
 	enc->features.max_pixel_clock = VIRTUAL_MAX_PIXEL_CLK_IN_KHZ;

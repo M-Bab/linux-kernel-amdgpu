@@ -119,7 +119,6 @@ struct dce110_timing_generator {
 
 bool dce110_timing_generator_construct(
 	struct dce110_timing_generator *tg,
-	struct adapter_service *as,
 	struct dc_context *ctx,
 	uint32_t instance,
 	const struct dce110_timing_generator_offsets *offsets);

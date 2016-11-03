@@ -27,6 +27,7 @@
 #define __DAL_COMPRESSOR_H__
 
 #include "include/grph_object_id.h"
+#include "bios_parser_interface.h"
 
 enum fbc_compress_ratio {
 	FBC_COMPRESS_RATIO_INVALID = 0,

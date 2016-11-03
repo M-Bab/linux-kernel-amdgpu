@@ -395,7 +395,7 @@ static struct timing_generator *dce110_timing_generator_create(
 	if (!tg110)
 		return NULL;
 
-	if (dce110_timing_generator_construct(tg110, as, ctx, instance, offsets))
+	if (dce110_timing_generator_construct(tg110, ctx, instance, offsets))
 		return &tg110->base;
 
 	BREAK_TO_DEBUGGER();
@@ -432,7 +432,6 @@ static const struct resource_create_funcs res_create_funcs = {
 
 static struct mem_input *dce110_mem_input_create(
 	struct dc_context *ctx,
-	struct adapter_service *as,
 	uint32_t inst,
 	const struct dce110_mem_input_reg_offsets *offset)
 {
@@ -443,7 +442,7 @@ static struct mem_input *dce110_mem_input_create(
 		return NULL;
 
 	if (dce110_mem_input_construct(mem_input110,
-				       ctx, as, inst, offset))
+				       ctx, inst, offset))
 		return &mem_input110->base;
 
 	BREAK_TO_DEBUGGER();
@@ -1049,8 +1048,8 @@ static void underlay_create(struct dc_context *ctx, struct resource_pool *pool)
 	struct dce110_opp *dce110_oppv = dm_alloc(sizeof (*dce110_oppv));
 
 	dce110_opp_v_construct(dce110_oppv, ctx);
-	dce110_timing_generator_v_construct(dce110_tgv, pool->adapter_srv, ctx);
-	dce110_mem_input_v_construct(dce110_miv, ctx, pool->adapter_srv);
+	dce110_timing_generator_v_construct(dce110_tgv, ctx);
+	dce110_mem_input_v_construct(dce110_miv, ctx);
 	dce110_transform_v_construct(dce110_xfmv, ctx);
 
 	pool->opps[pool->pipe_count] = &dce110_oppv->base;
@@ -1239,7 +1238,7 @@ static bool construct(
 		}
 	}
 
-	pool->base.display_clock = dal_display_clock_dce110_create(ctx, as);
+	pool->base.display_clock = dal_display_clock_dce110_create(ctx);
 	if (pool->base.display_clock == NULL) {
 		dm_error("DC: failed to create display clock!\n");
 		BREAK_TO_DEBUGGER();
@@ -1282,7 +1281,7 @@ static bool construct(
 			goto res_create_fail;
 		}
 
-		pool->base.mis[i] = dce110_mem_input_create(ctx, as, i,
+		pool->base.mis[i] = dce110_mem_input_create(ctx, i,
 				&dce110_mi_reg_offsets[i]);
 		if (pool->base.mis[i] == NULL) {
 			BREAK_TO_DEBUGGER();

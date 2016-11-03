@@ -717,8 +717,7 @@ static void store_max_clocks_state(
 }
 
 static void display_clock_ss_construct(
-	struct display_clock_dce80 *disp_clk,
-	struct adapter_service *as)
+	struct display_clock_dce80 *disp_clk)
 {
 	struct dc_bios *bp = disp_clk->disp_clk.ctx->dc_bios;
 	uint32_t ss_entry_num = bp->funcs->get_ss_entry_number(bp,
@@ -752,8 +751,7 @@ static void display_clock_ss_construct(
 }
 
 static bool display_clock_integrated_info_construct(
-	struct display_clock_dce80 *disp_clk,
-	struct adapter_service *as)
+	struct display_clock_dce80 *disp_clk)
 {
 	struct dc_debug *debug = &disp_clk->disp_clk.ctx->dc->debug;
 	struct dc_bios *bp = disp_clk->disp_clk.ctx->dc_bios;
@@ -856,13 +854,9 @@ static const struct display_clock_funcs funcs = {
 
 static bool display_clock_construct(
 	struct dc_context *ctx,
-	struct display_clock_dce80 *disp_clk,
-	struct adapter_service *as)
+	struct display_clock_dce80 *disp_clk)
 {
 	struct display_clock *dc_base = &disp_clk->disp_clk;
-
-	if (NULL == as)
-		return false;
 
 	if (!dal_display_clock_construct_base(dc_base, ctx))
 		return false;
@@ -894,9 +888,9 @@ static bool display_clock_construct(
  * state dependent clocks.*/
 	disp_clk->cur_min_clks_state = CLOCKS_STATE_INVALID;
 
-	display_clock_ss_construct(disp_clk, as);
+	display_clock_ss_construct(disp_clk);
 
-	if (!display_clock_integrated_info_construct(disp_clk, as)) {
+	if (!display_clock_integrated_info_construct(disp_clk)) {
 		dm_logger_write(dc_base->ctx->logger, LOG_WARNING,
 			"Cannot obtain VBIOS integrated info");
 	}
@@ -923,8 +917,7 @@ static bool display_clock_construct(
 }
 
 struct display_clock *dal_display_clock_dce80_create(
-	struct dc_context *ctx,
-	struct adapter_service *as)
+	struct dc_context *ctx)
 {
 	struct display_clock_dce80 *disp_clk;
 
@@ -933,7 +926,7 @@ struct display_clock *dal_display_clock_dce80_create(
 	if (disp_clk == NULL)
 		return NULL;
 
-	if (display_clock_construct(ctx, disp_clk, as))
+	if (display_clock_construct(ctx, disp_clk))
 		return &disp_clk->disp_clk;
 
 	dm_free(disp_clk);

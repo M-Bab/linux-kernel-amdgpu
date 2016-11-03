@@ -26,8 +26,6 @@
 #include "dm_services.h"
 #include "display_clock.h"
 
-#include "adapter_service_interface.h"
-
 void dal_display_clock_base_set_dp_ref_clock_source(
 	struct display_clock *disp_clk,
 	enum clock_source_id clk_src)

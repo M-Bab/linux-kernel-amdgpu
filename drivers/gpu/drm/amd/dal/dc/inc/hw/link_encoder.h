@@ -22,7 +22,6 @@ struct core_stream;
 struct pipe_ctx;
 
 struct encoder_init_data {
-	struct adapter_service *adapter_service;
 	enum channel_id channel;
 	struct graphics_object_id connector;
 	enum hpd_source_id hpd_source;

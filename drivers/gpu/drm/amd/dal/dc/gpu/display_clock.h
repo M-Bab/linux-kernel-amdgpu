@@ -63,7 +63,6 @@ struct display_clock {
 	const struct display_clock_funcs *funcs;
 	uint32_t min_display_clk_threshold_khz;
 	enum clock_source_id id;
-	struct adapter_service *as;
 
 	enum clocks_state cur_min_clks_state;
 };

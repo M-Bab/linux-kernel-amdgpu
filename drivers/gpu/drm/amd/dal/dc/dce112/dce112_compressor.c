@@ -793,7 +793,7 @@ void dce112_compressor_set_fbc_invalidation_triggers(
 }
 
 bool dce112_compressor_construct(struct dce112_compressor *compressor,
-	struct dc_context *ctx, struct adapter_service *as)
+	struct dc_context *ctx)
 {
 	struct dc_bios *bp = ctx->dc_bios;
 	struct embedded_panel_info panel_info;
@@ -837,8 +837,7 @@ bool dce112_compressor_construct(struct dce112_compressor *compressor,
 	return true;
 }
 
-struct compressor *dce112_compressor_create(struct dc_context *ctx,
-	struct adapter_service *as)
+struct compressor *dce112_compressor_create(struct dc_context *ctx)
 {
 	struct dce112_compressor *cp110 =
 		dm_alloc(sizeof(struct dce112_compressor));
@@ -846,7 +845,7 @@ struct compressor *dce112_compressor_create(struct dc_context *ctx,
 	if (!cp110)
 		return NULL;
 
-	if (dce112_compressor_construct(cp110, ctx, as))
+	if (dce112_compressor_construct(cp110, ctx))
 		return &cp110->base;
 
 	BREAK_TO_DEBUGGER();

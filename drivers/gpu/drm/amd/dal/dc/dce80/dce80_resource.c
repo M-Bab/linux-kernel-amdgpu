@@ -410,7 +410,7 @@ static struct timing_generator *dce80_timing_generator_create(
 	if (!tg110)
 		return NULL;
 
-	if (dce80_timing_generator_construct(tg110, as, ctx, instance, offsets))
+	if (dce80_timing_generator_construct(tg110, ctx, instance, offsets))
 		return &tg110->base;
 
 	BREAK_TO_DEBUGGER();
@@ -446,7 +446,6 @@ static const struct resource_create_funcs res_create_funcs = {
 
 static struct mem_input *dce80_mem_input_create(
 	struct dc_context *ctx,
-	struct adapter_service *as,
 	uint32_t inst,
 	const struct dce110_mem_input_reg_offsets *offsets)
 {
@@ -457,7 +456,7 @@ static struct mem_input *dce80_mem_input_create(
 		return NULL;
 
 	if (dce80_mem_input_construct(mem_input80,
-				      ctx, as, inst, offsets))
+				      ctx, inst, offsets))
 		return &mem_input80->base;
 
 	BREAK_TO_DEBUGGER();
@@ -922,7 +921,7 @@ static bool construct(
 		}
 	}
 
-	pool->base.display_clock = dal_display_clock_dce80_create(ctx, as);
+	pool->base.display_clock = dal_display_clock_dce80_create(ctx);
 	if (pool->base.display_clock == NULL) {
 		dm_error("DC: failed to create display clock!\n");
 		BREAK_TO_DEBUGGER();
@@ -963,7 +962,7 @@ static bool construct(
 			goto res_create_fail;
 		}
 
-		pool->base.mis[i] = dce80_mem_input_create(ctx, as, i,
+		pool->base.mis[i] = dce80_mem_input_create(ctx, i,
 				&dce80_mi_reg_offsets[i]);
 		if (pool->base.mis[i] == NULL) {
 			BREAK_TO_DEBUGGER();

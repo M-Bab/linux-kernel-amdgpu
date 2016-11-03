@@ -139,7 +139,6 @@ static bool create_links(
 		link->link_id.enum_id = ENUM_ID_1;
 		link->link_enc = dm_alloc(sizeof(*link->link_enc));
 
-		enc_init.adapter_service = as;
 		enc_init.ctx = dc->ctx;
 		enc_init.channel = CHANNEL_ID_UNKNOWN;
 		enc_init.hpd_source = HPD_SOURCEID_UNKNOWN;

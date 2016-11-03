@@ -118,16 +118,13 @@ struct display_clock_state {
 struct display_clock;
 
 struct display_clock *dal_display_clock_dce112_create(
-	struct dc_context *ctx,
-	struct adapter_service *as);
+	struct dc_context *ctx);
 
 struct display_clock *dal_display_clock_dce110_create(
-	struct dc_context *ctx,
-	struct adapter_service *as);
+	struct dc_context *ctx);
 
 struct display_clock *dal_display_clock_dce80_create(
-	struct dc_context *ctx,
-	struct adapter_service *as);
+	struct dc_context *ctx);
 
 void dal_display_clock_destroy(struct display_clock **to_destroy);
 bool dal_display_clock_validate(

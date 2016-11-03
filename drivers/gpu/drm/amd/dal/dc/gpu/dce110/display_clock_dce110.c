@@ -668,8 +668,7 @@ static uint32_t calculate_min_clock(
 }
 
 static bool display_clock_integrated_info_construct(
-	struct display_clock_dce110 *disp_clk,
-	struct adapter_service *as)
+	struct display_clock_dce110 *disp_clk)
 {
 	struct dc_debug *debug = &disp_clk->disp_clk_base.ctx->dc->debug;
 	struct dc_bios *bp = disp_clk->disp_clk_base.ctx->dc_bios;
@@ -926,14 +925,10 @@ static const struct display_clock_funcs funcs = {
 
 static bool dal_display_clock_dce110_construct(
 	struct display_clock_dce110 *dc110,
-	struct dc_context *ctx,
-	struct adapter_service *as)
+	struct dc_context *ctx)
 {
 	struct display_clock *dc_base = &dc110->disp_clk_base;
 	struct dc_bios *bp = ctx->dc_bios;
-
-	if (NULL == as)
-		return false;
 
 	if (!dal_display_clock_construct_base(dc_base, ctx))
 		return false;
@@ -942,7 +937,7 @@ static bool dal_display_clock_dce110_construct(
 
 	dc110->dfs_bypass_disp_clk = 0;
 
-	if (!display_clock_integrated_info_construct(dc110, as))
+	if (!display_clock_integrated_info_construct(dc110))
 		dm_logger_write(dc_base->ctx->logger, LOG_WARNING,
 			"Cannot obtain VBIOS integrated info\n");
 
@@ -1023,8 +1018,7 @@ static bool dal_display_clock_dce110_construct(
  *****************************************************************************/
 
 struct display_clock *dal_display_clock_dce110_create(
-	struct dc_context *ctx,
-	struct adapter_service *as)
+	struct dc_context *ctx)
 {
 	struct display_clock_dce110 *dc110;
 
@@ -1033,7 +1027,7 @@ struct display_clock *dal_display_clock_dce110_create(
 	if (dc110 == NULL)
 		return NULL;
 
-	if (dal_display_clock_dce110_construct(dc110, ctx, as))
+	if (dal_display_clock_dce110_construct(dc110, ctx))
 		return &dc110->disp_clk_base;
 
 	dm_free(dc110);

@@ -40,11 +40,10 @@ struct dce110_compressor {
 	struct dce110_compressor_reg_offsets offsets;
 };
 
-struct compressor *dce110_compressor_create(struct dc_context *ctx,
-	struct adapter_service *as);
+struct compressor *dce110_compressor_create(struct dc_context *ctx);
 
 bool dce110_compressor_construct(struct dce110_compressor *cp110,
-	struct dc_context *ctx, struct adapter_service *as);
+	struct dc_context *ctx);
 
 void dce110_compressor_destroy(struct compressor **cp);
 

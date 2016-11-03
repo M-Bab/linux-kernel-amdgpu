@@ -548,7 +548,7 @@ static bool adapter_service_construct(
 
 	dcb = as->ctx->dc_bios;
 
-	dcb->funcs->post_init(dcb, as);
+	dcb->funcs->post_init(dcb);
 
 	/* Generate backlight translation table and initializes
 			  other brightness properties */

@@ -28,7 +28,6 @@
 
 bool dce110_timing_generator_v_construct(
 	struct dce110_timing_generator *tg110,
-	struct adapter_service *as,
 	struct dc_context *ctx);
 
 #endif /* __DC_TIMING_GENERATOR_V_DCE110_H__ */

@@ -199,8 +199,7 @@ struct dc_vbios_funcs {
 		enum controller_id controller_id,
 		enum bp_pipe_control_action action);
 
-	void (*post_init)(struct dc_bios *bios,
-			  struct adapter_service *as);
+	void (*post_init)(struct dc_bios *bios);
 
 	void (*bios_parser_destroy)(struct dc_bios **dcb);
 };

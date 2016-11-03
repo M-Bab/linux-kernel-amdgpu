@@ -1926,15 +1926,11 @@ static const struct timing_generator_funcs dce110_tg_funcs = {
 
 bool dce110_timing_generator_construct(
 	struct dce110_timing_generator *tg110,
-	struct adapter_service *as,
 	struct dc_context *ctx,
 	uint32_t instance,
 	const struct dce110_timing_generator_offsets *offsets)
 {
 	if (!tg110)
-		return false;
-
-	if (!as)
 		return false;
 
 	tg110->controller_id = CONTROLLER_ID_D0 + instance;

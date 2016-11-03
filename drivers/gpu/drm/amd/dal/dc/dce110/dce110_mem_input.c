@@ -31,7 +31,6 @@
 #include "gmc/gmc_8_2_sh_mask.h"
 
 #include "include/logger_interface.h"
-#include "adapter_service_interface.h"
 
 #include "dce110_mem_input.h"
 
@@ -993,7 +992,6 @@ static struct mem_input_funcs dce110_mem_input_funcs = {
 bool dce110_mem_input_construct(
 	struct dce110_mem_input *mem_input110,
 	struct dc_context *ctx,
-	struct adapter_service *as,
 	uint32_t inst,
 	const struct dce110_mem_input_reg_offsets *offsets)
 {

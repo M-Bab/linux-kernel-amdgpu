@@ -948,8 +948,7 @@ bool dal_display_clock_dce112_construct(
  *****************************************************************************/
 
 struct display_clock *dal_display_clock_dce112_create(
-	struct dc_context *ctx,
-	struct adapter_service *as)
+	struct dc_context *ctx)
 {
 	struct display_clock_dce112 *dc112;
 

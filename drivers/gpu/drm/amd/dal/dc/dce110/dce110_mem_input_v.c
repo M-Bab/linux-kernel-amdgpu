@@ -1061,8 +1061,7 @@ static struct mem_input_funcs dce110_mem_input_v_funcs = {
 
 bool dce110_mem_input_v_construct(
 	struct dce110_mem_input *mem_input110,
-	struct dc_context *ctx,
-	struct adapter_service *as)
+	struct dc_context *ctx)
 {
 	mem_input110->base.funcs = &dce110_mem_input_v_funcs;
 	mem_input110->base.ctx = ctx;

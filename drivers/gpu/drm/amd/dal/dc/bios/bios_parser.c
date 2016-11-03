@@ -2923,7 +2923,7 @@ static uint32_t get_support_mask_for_device_id(struct device_id device_id)
  */
 
 static bool i2c_read(
-	struct adapter_service *as,
+	struct bios_parser *bp,
 	struct graphics_object_i2c_info *i2c_info,
 	uint8_t *buffer,
 	uint32_t length)
@@ -2936,7 +2936,7 @@ static bool i2c_read(
 		i2c_info->i2c_hw_assist,
 		i2c_info->i2c_line };
 
-	ddc = dal_gpio_create_ddc(as->ctx->gpio_service,
+	ddc = dal_gpio_create_ddc(bp->base.ctx->gpio_service,
 		i2c_info->gpio_info.clk_a_register_index,
 		(1 << i2c_info->gpio_info.clk_a_shift), &hw_info);
 
@@ -2986,7 +2986,6 @@ static bool i2c_read(
  */
 static enum bp_result get_ext_display_connection_info(
 	struct bios_parser *bp,
-	struct adapter_service *as,
 	ATOM_OBJECT *opm_object,
 	ATOM_EXTERNAL_DISPLAY_CONNECTION_INFO *ext_display_connection_info_tbl)
 {
@@ -3013,7 +3012,7 @@ static enum bp_result get_ext_display_connection_info(
 				BP_RESULT_OK)
 			return BP_RESULT_BADBIOSTABLE;
 
-		if (i2c_read(as,
+		if (i2c_read(bp,
 			     &i2c_info,
 			     (uint8_t *)ext_display_connection_info_tbl,
 			     sizeof(ATOM_EXTERNAL_DISPLAY_CONNECTION_INFO))) {
@@ -3333,8 +3332,7 @@ static ATOM_CONNECTOR_HPDPIN_LUT_RECORD *get_ext_connector_hpd_pin_lut_record(
  *
  */
 static enum bp_result patch_bios_image_from_ext_display_connection_info(
-	struct bios_parser *bp,
-	struct adapter_service *as)
+	struct bios_parser *bp)
 {
 	ATOM_OBJECT_TABLE *connector_tbl;
 	uint32_t connector_tbl_offset;
@@ -3374,7 +3372,7 @@ static enum bp_result patch_bios_image_from_ext_display_connection_info(
 	connector_tbl = GET_IMAGE(ATOM_OBJECT_TABLE, connector_tbl_offset);
 
 	/* Read Connector info table from EEPROM through i2c */
-	if (get_ext_display_connection_info(bp, as,
+	if (get_ext_display_connection_info(bp,
 					    opm_object,
 					    &ext_display_connection_info_tbl) != BP_RESULT_OK) {
 
@@ -3570,8 +3568,7 @@ static enum bp_result patch_bios_image_from_ext_display_connection_info(
  *
  */
 
-static void process_ext_display_connection_info(struct bios_parser *bp,
-						struct adapter_service *as)
+static void process_ext_display_connection_info(struct bios_parser *bp)
 {
 	ATOM_OBJECT_TABLE *connector_tbl;
 	uint32_t connector_tbl_offset;
@@ -3626,7 +3623,7 @@ static void process_ext_display_connection_info(struct bios_parser *bp,
 		/* Step 2: (only if MXM connector found) Patch BIOS image with
 		 * info from external module */
 		if (mxm_connector_found &&
-		    patch_bios_image_from_ext_display_connection_info(bp, as) !=
+		    patch_bios_image_from_ext_display_connection_info(bp) !=
 						BP_RESULT_OK) {
 			/* Patching the bios image has failed. We will copy
 			 * again original image provided and afterwards
@@ -3660,12 +3657,11 @@ static void process_ext_display_connection_info(struct bios_parser *bp,
 	}
 }
 
-static void bios_parser_post_init(struct dc_bios *dcb,
-		       struct adapter_service *as)
+static void bios_parser_post_init(struct dc_bios *dcb)
 {
 	struct bios_parser *bp = BP_FROM_DCB(dcb);
 
-	process_ext_display_connection_info(bp, as);
+	process_ext_display_connection_info(bp);
 }
 
 static bool bios_parser_is_accelerated_mode(
