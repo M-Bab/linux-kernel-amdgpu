@@ -35,9 +35,6 @@
 
 #include "gpio_service_interface.h"
 
-/* TODO remove - only needed for gpio_service */
-#include "adapter/adapter_service.h"
-
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 #include "dce/dce_11_0_enum.h"

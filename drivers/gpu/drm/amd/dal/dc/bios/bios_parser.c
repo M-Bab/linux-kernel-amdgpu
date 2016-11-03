@@ -42,8 +42,6 @@
 #include "bios_parser_types_internal.h"
 #include "bios_parser_interface.h"
 
-/* TODO remove - only needed for gpio_service */
-#include "adapter/adapter_service.h"
 /* TODO remove - only needed for default i2c speed */
 #include "dc.h"
 

@@ -2,7 +2,7 @@
 # Makefile for Display Core (dc) component.
 #
 
-DC_LIBS = adapter asic_capability basics bios calcs dce \
+DC_LIBS = basics bios calcs dce \
 gpio gpu i2caux irq virtual
 
 DC_LIBS += dce112

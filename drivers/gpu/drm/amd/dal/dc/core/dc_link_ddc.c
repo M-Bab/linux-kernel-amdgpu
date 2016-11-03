@@ -35,9 +35,6 @@
 #include "core_types.h"
 #include "dc_link_ddc.h"
 
-/* TODO remove - only needed for gpio_service */
-#include "adapter/adapter_service.h"
-
 #define AUX_POWER_UP_WA_DELAY 500
 #define I2C_OVER_AUX_DEFER_WA_DELAY 70
 

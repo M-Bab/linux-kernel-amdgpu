@@ -157,37 +157,6 @@ failed_alloc:
 	return false;
 }
 
-
-
-static struct adapter_service *create_as(
-		const struct dc_init_data *init,
-		struct dc_context *dc_ctx)
-{
-	struct adapter_service *as = NULL;
-	struct as_init_data init_data;
-
-	memset(&init_data, 0, sizeof(init_data));
-
-	init_data.ctx = dc_ctx;
-
-	/* HW init data */
-	init_data.hw_init_data.chip_id = init->asic_id.chip_id;
-	init_data.hw_init_data.chip_family = init->asic_id.chip_family;
-	init_data.hw_init_data.pci_revision_id = init->asic_id.pci_revision_id;
-	init_data.hw_init_data.fake_paths_num = init->asic_id.fake_paths_num;
-	init_data.hw_init_data.feature_flags = init->asic_id.feature_flags;
-	init_data.hw_init_data.hw_internal_rev = init->asic_id.hw_internal_rev;
-	init_data.hw_init_data.vram_width = init->asic_id.vram_width;
-	init_data.hw_init_data.vram_type = init->asic_id.vram_type;
-
-	init_data.vbios_override = init->vbios_override;
-	init_data.dce_environment = init->dce_environment;
-
-	as = dal_adapter_service_create(&init_data);
-
-	return as;
-}
-
 static bool stream_adjust_vmin_vmax(struct dc *dc,
 		const struct dc_stream **stream, int num_streams,
 		int vmin, int vmax)
@@ -488,9 +457,6 @@ static void destruct(struct core_dc *dc)
 	if (dc->ctx->gpio_service)
 		dal_gpio_service_destroy(&dc->ctx->gpio_service);
 
-	if (dc->ctx->adapter_srv)
-		dal_adapter_service_destroy(&dc->ctx->adapter_srv);
-
 	if (dc->ctx->i2caux)
 		dal_i2caux_destroy(&dc->ctx->i2caux);
 
@@ -510,7 +476,6 @@ static bool construct(struct core_dc *dc,
 		const struct dc_init_data *init_params)
 {
 	struct dal_logger *logger;
-	struct adapter_service *as = NULL;
 	struct dc_context *dc_ctx = dm_alloc(sizeof(*dc_ctx));
 	enum dce_version dc_version = DCE_VERSION_UNKNOWN;
 
@@ -577,18 +542,6 @@ static bool construct(struct core_dc *dc,
 		goto failed_to_create_i2caux;
 	}
 
-	/* TODO: Refactor DCE code to remove AS and asic caps */
-	if (dc_version < DCE_VERSION_MAX) {
-		/* Create adapter service */
-		as = create_as(init_params, dc_ctx);
-
-		if (!as) {
-			dm_error("%s: create_as() failed!\n", __func__);
-			goto as_fail;
-		}
-		dc_ctx->adapter_srv = as;
-	}
-
 	/* Create GPIO service */
 	dc_ctx->gpio_service = dal_gpio_service_create(
 			dc_version,
@@ -619,7 +572,6 @@ static bool construct(struct core_dc *dc,
 create_links_fail:
 create_resource_fail:
 gpio_fail:
-as_fail:
 failed_to_create_i2caux:
 bios_fail:
 logger_fail:
