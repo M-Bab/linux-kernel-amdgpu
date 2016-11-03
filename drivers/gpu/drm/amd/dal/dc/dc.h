@@ -141,6 +141,9 @@ struct dc_debug {
 	bool disable_dcc;
 	bool disable_dfs_bypass;
 	bool max_disp_clk;
+	bool target_trace;
+	bool surface_trace;
+	bool validation_trace;
 };
 
 struct dc {

@@ -1119,6 +1119,8 @@ bool dc_pre_update_surfaces_to_target(
 	struct validate_context *temp_context;
 	bool ret = true;
 
+	pre_surface_trace(dc, new_surfaces, new_surface_count);
+
 	if (core_dc->current_context->target_count == 0)
 		return false;
 
@@ -1249,6 +1251,8 @@ bool dc_post_update_surfaces_to_target(struct dc *dc)
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	int i;
 
+	post_surface_trace(dc);
+
 	for (i = 0; i < core_dc->current_context->res_ctx.pool->pipe_count; i++)
 		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == NULL)
 			core_dc->hwss.power_down_front_end(
@@ -1319,6 +1323,8 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 	struct validate_context *context = core_dc->temp_flip_context;
 	int i, j;
 	bool is_new_pipe_surface[MAX_SURFACES];
+
+	update_surface_trace(dc, updates, surface_count);
 
 	for (j = 0; j < MAX_SURFACES; j++)
 		is_new_pipe_surface[j] = true;

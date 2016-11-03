@@ -30,6 +30,7 @@
 
 struct dc_context;
 struct dc_link;
+struct dc_surface_update;
 
 /*
  *
@@ -66,6 +67,23 @@ void dc_conn_log(struct dc_context *ctx,
 		enum dc_log_type event,
 		const char *msg,
 		...);
+
+void logger_write(struct dal_logger *logger,
+		enum dc_log_type log_type,
+		const char *msg,
+		void *paralist);
+
+void pre_surface_trace(
+		const struct dc *dc,
+		const struct dc_surface *const *surfaces,
+		int surface_count);
+
+void update_surface_trace(
+		const struct dc *dc,
+		const struct dc_surface_update *updates,
+		int surface_count);
+
+void post_surface_trace(const struct dc *dc);
 
 
 /* Any function which is empty or have incomplete implementation should be
