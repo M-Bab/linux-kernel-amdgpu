@@ -108,10 +108,6 @@ static void allocate_mem_input(
 	uint32_t value;
 	uint32_t field;
 
-	if (bm80->supported_stutter_mode
-			& STUTTER_MODE_NO_DMIF_BUFFER_ALLOCATION)
-		goto register_underflow_int;
-
 	/*Allocate DMIF buffer*/
 	value = dm_read_reg(mi->ctx, addr);
 	field = get_reg_field_value(
@@ -194,18 +190,16 @@ bool dce80_mem_input_construct(
 	uint32_t inst,
 	const struct dce110_mem_input_reg_offsets *offsets)
 {
-
+	/* supported stutter method
+	 * STUTTER_MODE_ENHANCED
+	 * STUTTER_MODE_QUAD_DMIF_BUFFER
+	 */
 	mem_input80->base.funcs = &dce80_mem_input_funcs;
 	mem_input80->base.ctx = ctx;
 
 	mem_input80->base.inst = inst;
 
 	mem_input80->offsets = *offsets;
-
-	mem_input80->supported_stutter_mode = 0;
-	dal_adapter_service_get_feature_value(as, FEATURE_STUTTER_MODE,
-			&(mem_input80->supported_stutter_mode),
-			sizeof(mem_input80->supported_stutter_mode));
 
 	return true;
 }

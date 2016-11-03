@@ -29,12 +29,19 @@
 #include "include/grph_object_id.h"
 #include "inc/bandwidth_calcs.h"
 
+struct stutter_modes {
+	bool enhanced;
+	bool quad_dmif_buffer;
+	bool watermark_nb_pstate;
+};
+
 struct mem_input {
 	struct mem_input_funcs *funcs;
 	struct dc_context *ctx;
 	struct dc_plane_address request_address;
 	struct dc_plane_address current_address;
 	uint32_t inst;
+	struct stutter_modes stutter_mode;
 };
 
 struct mem_input_funcs {

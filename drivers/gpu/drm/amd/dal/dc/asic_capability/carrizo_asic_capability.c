@@ -53,7 +53,6 @@ void carrizo_asic_capability_create(struct asic_capability *cap,
 	cap->data[ASIC_DATA_LINEBUFFER_SIZE] = 1712 * 144;
 	cap->data[ASIC_DATA_DRAM_BANDWIDTH_EFFICIENCY] = 45;
 	cap->data[ASIC_DATA_MC_LATENCY] = 5000;
-	cap->data[ASIC_DATA_STUTTERMODE] = 0x200A;
 	cap->data[ASIC_DATA_VIEWPORT_PIXEL_GRANULARITY] = 2;
 	cap->data[ASIC_DATA_MEMORYTYPE_MULTIPLIER] = 2;
 	cap->data[ASIC_DATA_DOWNSCALE_LIMIT] = 150;

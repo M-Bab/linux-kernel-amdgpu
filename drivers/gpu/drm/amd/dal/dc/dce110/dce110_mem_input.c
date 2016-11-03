@@ -836,10 +836,6 @@ void dce110_allocate_mem_input(
 	uint32_t field;
 	uint32_t pix_dur;
 
-	if (bm110->supported_stutter_mode
-			& STUTTER_MODE_NO_DMIF_BUFFER_ALLOCATION)
-		goto register_underflow_int;
-
 	/*Allocate DMIF buffer*/
 	value = dm_read_reg(mi->ctx, addr);
 	field = get_reg_field_value(
@@ -950,14 +946,10 @@ void dce110_free_mem_input(
 	struct dce110_mem_input *bm_dce110 = TO_DCE110_MEM_INPUT(mi);
 	uint32_t value;
 
-	if (!(bm_dce110->supported_stutter_mode &
-		STUTTER_MODE_NO_DMIF_BUFFER_ALLOCATION)) {
-
-		/* De-allocate DMIF buffer first */
-		if (mmPIPE0_DMIF_BUFFER_CONTROL + bm_dce110->offsets.pipe != 0)
-			deallocate_dmif_buffer_helper(
-					mi->ctx, bm_dce110->offsets.pipe);
-	}
+	/* De-allocate DMIF buffer first */
+	if (mmPIPE0_DMIF_BUFFER_CONTROL + bm_dce110->offsets.pipe != 0)
+		deallocate_dmif_buffer_helper(
+				mi->ctx, bm_dce110->offsets.pipe);
 
 	/* TODO: unregister underflow interrupt
 	unregisterInterrupt();
@@ -1005,17 +997,17 @@ bool dce110_mem_input_construct(
 	uint32_t inst,
 	const struct dce110_mem_input_reg_offsets *offsets)
 {
+	/* supported stutter method
+	 * STUTTER_MODE_ENHANCED
+	 * STUTTER_MODE_QUAD_DMIF_BUFFER
+	 * STUTTER_MODE_WATERMARK_NBP_STATE
+	 */
 	mem_input110->base.funcs = &dce110_mem_input_funcs;
 	mem_input110->base.ctx = ctx;
 
 	mem_input110->base.inst = inst;
 
 	mem_input110->offsets = *offsets;
-
-	mem_input110->supported_stutter_mode = 0;
-	dal_adapter_service_get_feature_value(as, FEATURE_STUTTER_MODE,
-			&(mem_input110->supported_stutter_mode),
-			sizeof(mem_input110->supported_stutter_mode));
 
 	return true;
 }

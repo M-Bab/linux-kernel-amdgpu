@@ -1071,11 +1071,6 @@ bool dce110_mem_input_v_construct(
 
 	mem_input110->offsets = dce110_mi_v_reg_offsets[0];
 
-	mem_input110->supported_stutter_mode = 0;
-	dal_adapter_service_get_feature_value(as, FEATURE_STUTTER_MODE,
-			&(mem_input110->supported_stutter_mode),
-			sizeof(mem_input110->supported_stutter_mode));
-
 	return true;
 }
 

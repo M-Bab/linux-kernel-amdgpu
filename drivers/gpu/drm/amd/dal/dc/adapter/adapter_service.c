@@ -100,7 +100,6 @@ static const struct feature_source_entry feature_entry_table[] = {
 	{FEATURE_LB_HIGH_RESOLUTION, false, true},
 	{FEATURE_MAX_CONTROLLER_NUM, 0, false},
 	{FEATURE_DRR_SUPPORT, AS_DRR_SUPPORT_ENABLED, false},
-	{FEATURE_STUTTER_MODE, 15, false},
 	{FEATURE_DP_DISPLAY_FORCE_SS_ENABLE, false, true},
 	{FEATURE_REPORT_CE_MODE_ONLY, false, true},
 	{FEATURE_ALLOW_OPTIMIZED_MODE_AS_DEFAULT, false, true},
@@ -358,10 +357,6 @@ static bool get_feature_value_from_data_sources(
 
 	case FEATURE_DETECT_REQUIRE_HPD_HIGH:
 		*data = as->asic_cap->caps.HPD_CHECK_FOR_EDID;
-		break;
-
-	case FEATURE_STUTTER_MODE:
-		*data = as->asic_cap->data[ASIC_DATA_STUTTERMODE];
 		break;
 
 	case FEATURE_8BPP_SUPPORTED:
@@ -627,58 +622,4 @@ void dal_adapter_service_destroy(
 	*as = NULL;
 }
 
-/*
- * dal_adapter_service_get_feature_value
- *
- * Get the cached value of a given feature. This value can be a boolean, int,
- * or characters.
- */
-bool dal_adapter_service_get_feature_value(struct adapter_service *as,
-					   const enum adapter_feature_id feature_id,
-					   void *data,
-					   uint32_t size)
-{
-	uint32_t entry_idx = 0;
-	uint32_t set_idx = 0;
-	uint32_t set_internal_idx = 0;
-
-	if (feature_id >= FEATURE_MAXIMUM || feature_id <= FEATURE_UNKNOWN) {
-		ASSERT_CRITICAL(false);
-		return false;
-	}
-
-	if (data == NULL) {
-		ASSERT_CRITICAL(false);
-		return false;
-	}
-
-	entry_idx = lookup_feature_entry(as, feature_id);
-	set_idx = (uint32_t)((feature_id - 1)/32);
-	set_internal_idx = (uint32_t)((feature_id - 1) % 32);
-
-	if (entry_idx >= get_feature_entries_num()) {
-		/* Cannot find this entry */
-		ASSERT_CRITICAL(false);
-		return false;
-	}
-
-	if (feature_entry_table[entry_idx].is_boolean_type) {
-		if (size != sizeof(bool)) {
-			ASSERT_CRITICAL(false);
-			return false;
-		}
-
-		*(bool *)data = get_bool_value(as->adapter_feature_set[set_idx],
-				set_internal_idx);
-	} else {
-		if (size != sizeof(uint32_t)) {
-			ASSERT_CRITICAL(false);
-			return false;
-		}
-
-		*(uint32_t *)data = as->adapter_feature_set[set_idx];
-	}
-
-	return true;
-}
 

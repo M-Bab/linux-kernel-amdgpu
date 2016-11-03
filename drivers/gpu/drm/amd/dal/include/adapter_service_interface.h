@@ -149,13 +149,8 @@ enum adapter_feature_id {
 	FEATURE_SET_10_START = FEATURE_DRR_SUPPORT,
 	FEATURE_SET_10_END = FEATURE_SET_10_START + 31,
 
-	/* UInt set, 1 entry: Stutter mode support */
-	FEATURE_STUTTER_MODE = FEATURE_SET_10_END + 1,
-	FEATURE_SET_11_START = FEATURE_STUTTER_MODE,
-	FEATURE_SET_11_END = FEATURE_SET_11_START + 31,
-
 	/* UInt set, 1 entry: Measure PSR setup time */
-	FEATURE_PSR_SETUP_TIME_TEST = FEATURE_SET_11_END + 1,
+	FEATURE_PSR_SETUP_TIME_TEST = FEATURE_SET_10_END + 1,
 	FEATURE_SET_12_START = FEATURE_PSR_SETUP_TIME_TEST,
 	FEATURE_SET_12_END = FEATURE_SET_12_START + 31,
 
@@ -321,15 +316,5 @@ struct adapter_service *dal_adapter_service_create(
 /* Destroy adapter service and objects it contains */
 void dal_adapter_service_destroy(
 	struct adapter_service **as);
-
-/* Get the cached value of a given feature */
-bool dal_adapter_service_get_feature_value(struct adapter_service *as,
-	const enum adapter_feature_id feature_id,
-	void *data,
-	uint32_t size);
-
-/* Reports whether driver settings allow requested optimization */
-bool dal_adapter_service_should_optimize(
-		struct adapter_service *as, enum optimization_feature feature);
 
 #endif /* __DAL_ADAPTER_SERVICE_INTERFACE_H__ */

@@ -54,7 +54,6 @@ void polaris10_asic_capability_create(struct asic_capability *cap,
 	cap->data[ASIC_DATA_DRAM_BANDWIDTH_EFFICIENCY] = 70;
 
 	cap->data[ASIC_DATA_MC_LATENCY] = 3000;
-	cap->data[ASIC_DATA_STUTTERMODE] = 0x200A;
 	cap->data[ASIC_DATA_VIEWPORT_PIXEL_GRANULARITY] = 2;
 
 	cap->data[ASIC_DATA_MEMORYTYPE_MULTIPLIER] = 4;
