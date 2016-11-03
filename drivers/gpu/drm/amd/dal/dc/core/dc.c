@@ -902,12 +902,6 @@ static bool targets_changed(
 	return false;
 }
 
-void pplib_apply_safe_state(
-	const struct core_dc *dc)
-{
-	dm_pp_apply_safe_state(dc->ctx);
-}
-
 static void fill_display_configs(
 	const struct validate_context *context,
 	struct dm_pp_display_configuration *pp_display_cfg)
@@ -1109,8 +1103,6 @@ bool dc_commit_targets(
 		resource_validate_ctx_destruct(context);
 		goto fail;
 	}
-
-	pplib_apply_safe_state(core_dc);
 
 	if (!dcb->funcs->is_accelerated_mode(dcb)) {
 		core_dc->hwss.enable_accelerated_mode(core_dc);
