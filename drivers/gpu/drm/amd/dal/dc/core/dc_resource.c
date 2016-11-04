@@ -493,9 +493,6 @@ static void calculate_scaling_ratios(
 	pipe_ctx->scl_data.ratios.horz.value = div64_s64(
 		pipe_ctx->scl_data.ratios.horz.value * in_w, out_w);
 
-	pipe_ctx->scl_data.ratios.horz.value++;
-	pipe_ctx->scl_data.ratios.vert.value++;
-
 	pipe_ctx->scl_data.ratios.horz_c = pipe_ctx->scl_data.ratios.horz;
 	pipe_ctx->scl_data.ratios.vert_c = pipe_ctx->scl_data.ratios.vert;
 
