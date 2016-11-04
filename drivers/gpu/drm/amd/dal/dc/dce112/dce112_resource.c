@@ -298,11 +298,11 @@ static const struct dce110_stream_enc_registers stream_enc_regs[] = {
 };
 
 static const struct dce_stream_encoder_shift se_shift = {
-		SE_COMMON_MASK_SH_LIST_DCE110(__SHIFT)
+		SE_COMMON_MASK_SH_LIST_DCE112(__SHIFT)
 };
 
 static const struct dce_stream_encoder_mask se_mask = {
-		SE_COMMON_MASK_SH_LIST_DCE110(_MASK)
+		SE_COMMON_MASK_SH_LIST_DCE112(_MASK)
 };
 
 #define audio_regs(id)\

@@ -330,6 +330,8 @@ struct dce_stream_encoder_shift {
 	uint8_t DP_MSA_HWIDTH;
 	uint8_t DP_MSA_VHEIGHT;
 	uint8_t HDMI_DB_DISABLE;
+	uint8_t DP_VID_N_MUL;
+	uint8_t DP_VID_M_DOUBLE_VALUE_EN;
 };
 
 struct dce_stream_encoder_mask {
@@ -455,6 +457,8 @@ struct dce_stream_encoder_mask {
 	uint32_t DP_MSA_HWIDTH;
 	uint32_t DP_MSA_VHEIGHT;
 	uint32_t HDMI_DB_DISABLE;
+	uint32_t DP_VID_N_MUL;
+	uint32_t DP_VID_M_DOUBLE_VALUE_EN;
 };
 
 struct dce110_stream_enc_registers {
