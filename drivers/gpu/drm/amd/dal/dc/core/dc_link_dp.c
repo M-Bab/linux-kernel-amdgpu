@@ -1668,6 +1668,7 @@ static void dp_test_send_link_test_pattern(struct core_link *link)
 {
 	union link_test_pattern dpcd_test_pattern;
 	union test_misc dpcd_test_params;
+	enum dp_test_pattern test_pattern;
 
 	memset(&dpcd_test_pattern, 0, sizeof(dpcd_test_pattern));
 	memset(&dpcd_test_params, 0, sizeof(dpcd_test_params));
@@ -1684,52 +1685,30 @@ static void dp_test_send_link_test_pattern(struct core_link *link)
 			&dpcd_test_params.raw,
 			sizeof(dpcd_test_params));
 
-	/* translate request */
-	enum controller_dp_test_pattern test_pattern;
-	enum dc_color_depth color_depth;
-
 	switch (dpcd_test_pattern.bits.PATTERN) {
 	case LINK_TEST_PATTERN_COLOR_RAMP:
-		test_pattern = CONTROLLER_DP_TEST_PATTERN_COLORRAMP;
+		test_pattern = DP_TEST_PATTERN_COLOR_RAMP;
 	break;
 	case LINK_TEST_PATTERN_VERTICAL_BARS:
-		test_pattern = CONTROLLER_DP_TEST_PATTERN_VERTICALBARS;
+		test_pattern = DP_TEST_PATTERN_VERTICAL_BARS;
 	break; /* black and white */
 	case LINK_TEST_PATTERN_COLOR_SQUARES:
 		test_pattern = (dpcd_test_params.bits.DYN_RANGE ==
 				TEST_DYN_RANGE_VESA ?
-				CONTROLLER_DP_TEST_PATTERN_COLORSQUARES :
-				CONTROLLER_DP_TEST_PATTERN_COLORSQUARES_CEA);
+				DP_TEST_PATTERN_COLOR_SQUARES :
+				DP_TEST_PATTERN_COLOR_SQUARES_CEA);
 	break;
 	default:
-		test_pattern = CONTROLLER_DP_TEST_PATTERN_VIDEOMODE;
+		test_pattern = DP_TEST_PATTERN_VIDEO_MODE;
 	break;
 	}
 
-	switch (dpcd_test_params.bits.BPC) {
-	case TEST_BIT_DEPTH_6:
-		color_depth = COLOR_DEPTH_666;
-	break;
-	case TEST_BIT_DEPTH_8:
-		color_depth = COLOR_DEPTH_888;
-	break;
-	case TEST_BIT_DEPTH_10:
-		color_depth = COLOR_DEPTH_101010;
-	break;
-	case TEST_BIT_DEPTH_12:
-		color_depth = COLOR_DEPTH_121212;
-	break;
-	case TEST_BIT_DEPTH_16:
-		color_depth = COLOR_DEPTH_161616;
-	break;
-	default:
-		color_depth = COLOR_DEPTH_UNDEFINED;
-	break;
-	}
-
-	link->dc->current_context->res_ctx.pipe_ctx->tg->funcs->
-		set_test_pattern(link->dc->current_context->res_ctx.
-				pipe_ctx->tg, test_pattern, color_depth);
+	dc_link_dp_set_test_pattern(
+			&link->public,
+			test_pattern,
+			NULL,
+			NULL,
+			0);
 }
 
 static void handle_automated_test(struct core_link *link)
@@ -1784,6 +1763,7 @@ bool dc_link_handle_hpd_rx_irq(const struct dc_link *dc_link)
 {
 	struct core_link *link = DC_LINK_TO_LINK(dc_link);
 	union hpd_irq_data hpd_irq_dpcd_data = {{{{0}}}};
+	union device_service_irq device_service_clear = {0};
 	enum dc_status result = DDC_RESULT_UNKNOWN;
 	bool status = false;
 	/* For use cases related to down stream connection status change,
@@ -1809,12 +1789,15 @@ bool dc_link_handle_hpd_rx_irq(const struct dc_link *dc_link)
 	}
 
 	if (hpd_irq_dpcd_data.bytes.device_service_irq.bits.AUTOMATED_TEST) {
+		device_service_clear.bits.AUTOMATED_TEST = 1;
 		core_link_write_dpcd(
 			link,
 			DPCD_ADDRESS_DEVICE_SERVICE_IRQ_VECTOR,
-			&hpd_irq_dpcd_data.bytes.device_service_irq.raw,
-			sizeof(hpd_irq_dpcd_data.bytes.device_service_irq));
+			&device_service_clear.raw,
+			sizeof(device_service_clear.raw));
+		device_service_clear.raw = 0;
 		handle_automated_test(link);
+		return false;
 	}
 
 	if (!allow_hpd_rx_irq(link)) {
