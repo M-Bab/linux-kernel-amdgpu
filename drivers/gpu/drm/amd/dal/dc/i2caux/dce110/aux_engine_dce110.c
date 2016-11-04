@@ -362,7 +362,11 @@ static enum aux_channel_operation_result get_channel_status(
 			(value & AUX_SW_STATUS__AUX_SW_RX_TIMEOUT_MASK))
 			return AUX_CHANNEL_OPERATION_FAILED_TIMEOUT;
 
-		else if (value & AUX_SW_STATUS__AUX_SW_RX_INVALID_STOP_MASK)
+		else if ((value & AUX_SW_STATUS__AUX_SW_RX_INVALID_STOP_MASK) ||
+			(value & AUX_SW_STATUS__AUX_SW_RX_RECV_NO_DET_MASK) ||
+			(value &
+				AUX_SW_STATUS__AUX_SW_RX_RECV_INVALID_H_MASK) ||
+			(value & AUX_SW_STATUS__AUX_SW_RX_RECV_INVALID_L_MASK))
 			return AUX_CHANNEL_OPERATION_FAILED_INVALID_REPLY;
 
 		*returned_bytes = get_reg_field_value(value,
