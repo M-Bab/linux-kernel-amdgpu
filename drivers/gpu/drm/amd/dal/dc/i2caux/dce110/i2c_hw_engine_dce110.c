@@ -43,14 +43,6 @@
 /*
  * Post-requisites: headers required by this unit
  */
-
-/*
- * Temporarily adding ellesmere specific headers
- * to get the right defined values
- */
-#include "dce/dce_11_2_d.h"
-#include "dce/dce_11_2_sh_mask.h"
-
 #include "reg_helper.h"
 
 /*
@@ -100,8 +92,14 @@ enum {
 
 #define CTX \
 		hw_engine->base.base.base.ctx
+
 #define REG(reg_name)\
 	(hw_engine->regs->reg_name)
+
+#undef FN
+#define FN(reg_name, field_name) \
+	hw_engine->i2c_shift->field_name, hw_engine->i2c_mask->field_name
+
 #include "reg_helper.h"
 
 static void disable_i2c_hw_engine(
@@ -187,9 +185,7 @@ static uint32_t get_speed(
 	const struct i2c_hw_engine_dce110 *hw_engine = FROM_I2C_ENGINE(i2c_engine);
 	uint32_t pre_scale = 0;
 
-	generic_reg_get(
-			CTX, REG(SPEED),
-			FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_PRESCALE), &pre_scale);
+	REG_GET(SPEED, DC_I2C_DDC1_PRESCALE, &pre_scale);
 
 	/* [anaumov] it seems following is unnecessary */
 	/*ASSERT(value.bits.DC_I2C_DDC1_PRESCALE);*/
@@ -204,12 +200,19 @@ static void set_speed(
 {
 	struct i2c_hw_engine_dce110 *hw_engine = FROM_I2C_ENGINE(i2c_engine);
 
-	if (speed)
-		REG_UPDATE_N(
-			SPEED, 3,
-			FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_PRESCALE), hw_engine->reference_frequency / speed,
-			FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_THRESHOLD), 2,
-			FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_START_STOP_TIMING_CNTL), speed > 50 ? 2:1);
+	if (speed) {
+		if (hw_engine->i2c_mask->DC_I2C_DDC1_START_STOP_TIMING_CNTL)
+			REG_UPDATE_N(
+				SPEED, 3,
+				FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_PRESCALE), hw_engine->reference_frequency / speed,
+				FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_THRESHOLD), 2,
+				FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_START_STOP_TIMING_CNTL), speed > 50 ? 2:1);
+		else
+			REG_UPDATE_N(
+				SPEED, 2,
+				FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_PRESCALE), hw_engine->reference_frequency / speed,
+				FN(DC_I2C_DDC1_SPEED, DC_I2C_DDC1_THRESHOLD), 2);
+	}
 }
 
 static inline void reset_hw_engine(struct engine *engine)
@@ -393,12 +396,10 @@ static void process_channel_reply(
 		 * (i.e. DC_I2C_STATUS_DONE = 1) then the I2C controller
 		 * should read data bytes from I2C circular data buffer */
 
-		uint32_t value = REG_READ(DC_I2C_DATA);
+		uint32_t i2c_data;
 
-		*buffer++ = get_reg_field_value(
-				value,
-				DC_I2C_DATA,
-				DC_I2C_DATA);
+		REG_GET(DC_I2C_DATA, DC_I2C_DATA, &i2c_data);
+		*buffer++ = i2c_data;
 
 		--length;
 	}
@@ -415,13 +416,13 @@ static enum i2c_channel_operation_result get_channel_status(
 
 	if (i2c_sw_status == DC_I2C_STATUS__DC_I2C_STATUS_USED_BY_SW)
 		return I2C_CHANNEL_OPERATION_ENGINE_BUSY;
-	else if (value & DC_I2C_SW_STATUS__DC_I2C_SW_STOPPED_ON_NACK_MASK)
+	else if (value & hw_engine->i2c_mask->DC_I2C_SW_STOPPED_ON_NACK)
 		return I2C_CHANNEL_OPERATION_NO_RESPONSE;
-	else if (value & DC_I2C_SW_STATUS__DC_I2C_SW_TIMEOUT_MASK)
+	else if (value & hw_engine->i2c_mask->DC_I2C_SW_TIMEOUT)
 		return I2C_CHANNEL_OPERATION_TIMEOUT;
-	else if (value & DC_I2C_SW_STATUS__DC_I2C_SW_ABORTED_MASK)
+	else if (value & hw_engine->i2c_mask->DC_I2C_SW_ABORTED)
 		return I2C_CHANNEL_OPERATION_FAILED;
-	else if (value & DC_I2C_SW_STATUS__DC_I2C_SW_DONE_MASK)
+	else if (value & hw_engine->i2c_mask->DC_I2C_SW_DONE)
 		return I2C_CHANNEL_OPERATION_SUCCEEDED;
 
 	/*
@@ -515,6 +516,8 @@ bool i2c_hw_engine_dce110_construct(
 	hw_engine->base.default_speed = arg->default_speed;
 
 	hw_engine->regs = arg->regs;
+	hw_engine->i2c_shift = arg->i2c_shift;
+	hw_engine->i2c_mask = arg->i2c_mask;
 
 	hw_engine->engine_id = arg->engine_id;
 

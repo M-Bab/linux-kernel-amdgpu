@@ -79,6 +79,14 @@ static const struct dce110_i2c_hw_engine_registers dce112_hw_engine_regs[] = {
 		hw_engine_regs(6)
 };
 
+static const struct dce110_i2c_hw_engine_shift i2c_shift = {
+		I2C_COMMON_MASK_SH_LIST_DCE110(__SHIFT)
+};
+
+static const struct dce110_i2c_hw_engine_mask i2c_mask = {
+		I2C_COMMON_MASK_SH_LIST_DCE110(_MASK)
+};
+
 static bool construct(
 	struct i2caux_dce110 *i2caux_dce110,
 	struct dc_context *ctx)
@@ -87,7 +95,9 @@ static bool construct(
 			i2caux_dce110,
 			ctx,
 			dce112_aux_regs,
-			dce112_hw_engine_regs)) {
+			dce112_hw_engine_regs,
+			&i2c_shift,
+			&i2c_mask)) {
 		ASSERT_CRITICAL(false);
 		return false;
 	}

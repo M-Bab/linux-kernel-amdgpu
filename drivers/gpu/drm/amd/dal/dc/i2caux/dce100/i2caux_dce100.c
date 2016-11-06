@@ -76,6 +76,14 @@ static const struct dce110_i2c_hw_engine_registers dce100_hw_engine_regs[] = {
 		hw_engine_regs(6)
 };
 
+static const struct dce110_i2c_hw_engine_shift i2c_shift = {
+		I2C_COMMON_MASK_SH_LIST_DCE100(__SHIFT)
+};
+
+static const struct dce110_i2c_hw_engine_mask i2c_mask = {
+		I2C_COMMON_MASK_SH_LIST_DCE100(_MASK)
+};
+
 struct i2caux *dal_i2caux_dce100_create(
 	struct dc_context *ctx)
 {
@@ -91,7 +99,9 @@ struct i2caux *dal_i2caux_dce100_create(
 			i2caux_dce110,
 			ctx,
 			dce100_aux_regs,
-			dce100_hw_engine_regs))
+			dce100_hw_engine_regs,
+			&i2c_shift,
+			&i2c_mask))
 		return &i2caux_dce110->base;
 
 	ASSERT_CRITICAL(false);

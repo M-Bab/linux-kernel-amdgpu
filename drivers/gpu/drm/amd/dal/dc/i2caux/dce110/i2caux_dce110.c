@@ -188,11 +188,21 @@ static const struct dce110_i2c_hw_engine_registers i2c_hw_engine_regs[] = {
 		hw_engine_regs(6)
 };
 
+static const struct dce110_i2c_hw_engine_shift i2c_shift = {
+		I2C_COMMON_MASK_SH_LIST_DCE110(__SHIFT)
+};
+
+static const struct dce110_i2c_hw_engine_mask i2c_mask = {
+		I2C_COMMON_MASK_SH_LIST_DCE110(_MASK)
+};
+
 bool dal_i2caux_dce110_construct(
 	struct i2caux_dce110 *i2caux_dce110,
 	struct dc_context *ctx,
 	const struct dce110_aux_registers aux_regs[],
-	const struct dce110_i2c_hw_engine_registers i2c_hw_engine_regs[])
+	const struct dce110_i2c_hw_engine_registers i2c_hw_engine_regs[],
+	const struct dce110_i2c_hw_engine_shift *i2c_shift,
+	const struct dce110_i2c_hw_engine_mask *i2c_mask)
 {
 	uint32_t i = 0;
 	uint32_t reference_frequency = 0;
@@ -237,6 +247,8 @@ bool dal_i2caux_dce110_construct(
 		hw_arg_dce110.default_speed = base->default_i2c_hw_speed;
 		hw_arg_dce110.ctx = ctx;
 		hw_arg_dce110.regs = &i2c_hw_engine_regs[i];
+		hw_arg_dce110.i2c_shift = i2c_shift;
+		hw_arg_dce110.i2c_mask = i2c_mask;
 
 		base->i2c_hw_engines[line_id] =
 			dal_i2c_hw_engine_dce110_create(&hw_arg_dce110);
@@ -298,7 +310,9 @@ struct i2caux *dal_i2caux_dce110_create(
 			i2caux_dce110,
 			ctx,
 			dce110_aux_regs,
-			i2c_hw_engine_regs))
+			i2c_hw_engine_regs,
+			&i2c_shift,
+			&i2c_mask))
 		return &i2caux_dce110->base;
 
 	ASSERT_CRITICAL(false);
