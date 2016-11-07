@@ -155,6 +155,21 @@ struct dc {
 	struct dc_debug debug;
 };
 
+enum frame_buffer_mode {
+	FRAME_BUFFER_MODE_LOCAL_ONLY = 0,
+	FRAME_BUFFER_MODE_ZFB_ONLY,
+	FRAME_BUFFER_MODE_MIXED_ZFB_AND_LOCAL,
+} ;
+
+struct dchub_init_data {
+	bool dchub_initialzied;
+	bool dchub_info_valid;
+	int64_t zfb_phys_addr_base;
+	int64_t zfb_mc_base_addr;
+	uint64_t zfb_size_in_byte;
+	enum frame_buffer_mode fb_mode;
+};
+
 struct dc_init_data {
 	struct hw_asic_id asic_id;
 	void *driver; /* ctx */
@@ -172,7 +187,10 @@ struct dc_init_data {
 };
 
 struct dc *dc_create(const struct dc_init_data *init_params);
+
 void dc_destroy(struct dc **dc);
+
+bool dc_init_dchub(struct dc *dc, struct dchub_init_data *dh_data);
 
 /*******************************************************************************
  * Surface Interfaces
@@ -346,6 +364,7 @@ bool dc_post_update_surfaces_to_target(
 
 void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *updates,
 		int surface_count, struct dc_target *dc_target);
+
 /*******************************************************************************
  * Target Interfaces
  ******************************************************************************/
