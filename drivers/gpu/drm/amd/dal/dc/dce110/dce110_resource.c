@@ -1325,7 +1325,10 @@ static bool construct(
 	if (!dce110_hw_sequencer_construct(dc))
 		goto res_create_fail;
 
-	bw_calcs_init(&dc->bw_dceip, &dc->bw_vbios, BW_CALCS_VERSION_CARRIZO);
+	if (ASIC_REV_IS_STONEY(ctx->asic_id.hw_internal_rev))
+		bw_calcs_init(&dc->bw_dceip, &dc->bw_vbios, BW_CALCS_VERSION_STONEY);
+	else
+		bw_calcs_init(&dc->bw_dceip, &dc->bw_vbios, BW_CALCS_VERSION_CARRIZO);
 
 	bw_calcs_data_update_from_pplib(dc);
 
