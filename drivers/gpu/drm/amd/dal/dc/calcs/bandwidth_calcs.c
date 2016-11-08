@@ -2121,7 +2121,7 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		dceip.number_of_underlay_pipes = 0;
 		dceip.low_power_tiling_mode = 0;
 		dceip.display_write_back_supported = false;
-		dceip.argb_compression_support = false;
+		dceip.argb_compression_support = true;
 		dceip.underlay_vscaler_efficiency6_bit_per_component =
 			bw_frc_to_fixed(35556, 10000);
 		dceip.underlay_vscaler_efficiency8_bit_per_component =
@@ -2231,7 +2231,7 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		dceip.number_of_underlay_pipes = 0;
 		dceip.low_power_tiling_mode = 0;
 		dceip.display_write_back_supported = false;
-		dceip.argb_compression_support = false;
+		dceip.argb_compression_support = true;
 		dceip.underlay_vscaler_efficiency6_bit_per_component =
 			bw_frc_to_fixed(35556, 10000);
 		dceip.underlay_vscaler_efficiency8_bit_per_component =
@@ -2321,7 +2321,7 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		vbios.dmifmc_urgent_latency = bw_int_to_fixed(4);
 		vbios.stutter_self_refresh_exit_latency = bw_frc_to_fixed(158, 10);
 		vbios.stutter_self_refresh_entry_latency = bw_int_to_fixed(0);
-		vbios.nbp_state_change_latency = bw_frc_to_fixed(208, 10);
+		vbios.nbp_state_change_latency = bw_frc_to_fixed(2008, 100);
 		vbios.mcifwrmc_urgent_latency = bw_int_to_fixed(10);
 		vbios.scatter_gather_enable = true;
 		vbios.down_spread_percentage = bw_frc_to_fixed(5, 10);
@@ -2341,7 +2341,7 @@ void bw_calcs_init(struct bw_calcs_dceip *bw_dceip,
 		dceip.number_of_underlay_pipes = 1;
 		dceip.low_power_tiling_mode = 0;
 		dceip.display_write_back_supported = false;
-		dceip.argb_compression_support = false;
+		dceip.argb_compression_support = true;
 		dceip.underlay_vscaler_efficiency6_bit_per_component =
 			bw_frc_to_fixed(35556, 10000);
 		dceip.underlay_vscaler_efficiency8_bit_per_component =
