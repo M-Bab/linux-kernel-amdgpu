@@ -1205,7 +1205,6 @@ bool dc_pre_update_surfaces_to_target(
 				context);
 		if (!temp_context) {
 			dm_error("%s:failed apply clk constraints\n", __func__);
-			BREAK_TO_DEBUGGER();
 			ret = false;
 			goto unexpected_fail;
 		}
