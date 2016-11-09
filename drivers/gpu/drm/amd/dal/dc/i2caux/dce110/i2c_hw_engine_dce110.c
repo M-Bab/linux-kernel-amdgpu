@@ -256,6 +256,7 @@ static bool process_transaction(
 {
 	uint32_t length = request->length;
 	uint8_t *buffer = request->data;
+	uint32_t value = 0;
 
 	bool last_transaction = false;
 
@@ -291,26 +292,24 @@ static bool process_transaction(
 	 * For an I2C send operation, the LSB must be programmed to 0;
 	 * for I2C receive operation, the LSB must be programmed to 1. */
 	if (hw_engine->transaction_count == 0) {
-			REG_SET_4(DC_I2C_DATA, 0,
-			DC_I2C_DATA_RW, false,
-			DC_I2C_DATA, request->address,
-			DC_I2C_INDEX, 0,
-			DC_I2C_INDEX_WRITE, 1);
+			value = REG_SET_4(DC_I2C_DATA, 0,
+						DC_I2C_DATA_RW, false,
+						DC_I2C_DATA, request->address,
+						DC_I2C_INDEX, 0,
+						DC_I2C_INDEX_WRITE, 1);
 		hw_engine->buffer_used_write = 0;
 	} else
-			REG_SET_2(DC_I2C_DATA, 0,
-			DC_I2C_DATA_RW, false,
-			DC_I2C_DATA, request->address);
+			value = REG_SET_2(DC_I2C_DATA, 0,
+						DC_I2C_DATA_RW, false,
+						DC_I2C_DATA, request->address);
 
 	hw_engine->buffer_used_write++;
 
 	if (!(request->action & I2CAUX_TRANSACTION_ACTION_I2C_READ)) {
 		while (length) {
-
-			REG_UPDATE_2(DC_I2C_DATA,
-				DC_I2C_INDEX_WRITE, 0,
-				DC_I2C_DATA, *buffer++);
-
+			REG_SET_2(DC_I2C_DATA, value,
+					DC_I2C_INDEX_WRITE, 0,
+					DC_I2C_DATA, *buffer++);
 			hw_engine->buffer_used_write++;
 			--length;
 		}
