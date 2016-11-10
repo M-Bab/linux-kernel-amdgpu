@@ -1607,10 +1607,10 @@ err1:
 static void gfx_v6_0_cp_gfx_enable(struct amdgpu_device *adev, bool enable)
 {
 	int i;
-	if (enable)
+	if (enable) {
 		WREG32(mmCP_ME_CNTL, 0);
-	else {
-		WREG32(mmCP_ME_CNTL, (CP_ME_CNTL__CE_HALT_MASK |
+	} else {
+		WREG32(mmCP_ME_CNTL, (CP_ME_CNTL__ME_HALT_MASK |
 				      CP_ME_CNTL__PFP_HALT_MASK |
 				      CP_ME_CNTL__CE_HALT_MASK));
 		WREG32(mmSCRATCH_UMSK, 0);
@@ -1899,6 +1899,7 @@ static int gfx_v6_0_cp_compute_resume(struct amdgpu_device *adev)
 		r = amdgpu_ring_test_ring(&adev->gfx.compute_ring[i]);
 		if (r)
 			return r;
+		adev->gfx.compute_ring[i].ready = true;
 	}
 
 	return 0;
