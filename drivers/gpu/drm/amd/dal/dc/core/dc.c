@@ -314,14 +314,15 @@ static bool setup_psr(struct dc *dc, const struct dc_stream *stream)
 	int i;
 	unsigned int underlay_idx = core_dc->res_pool->underlay_pipe_index;
 
-	for (i = 0; i < core_dc->link_count; i++)
-		dc_link_setup_psr(&core_dc->links[i]->public,
-				stream);
+	for (i = 0; i < core_dc->link_count; i++) {
+		if (core_stream->sink->link == core_dc->links[i])
+			dc_link_setup_psr(&core_dc->links[i]->public,
+					stream);
+	}
 
 	for (i = 0; i < MAX_PIPES; i++) {
-		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == core_stream
-				&& i != underlay_idx) {
-
+		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream
+				== core_stream && i != underlay_idx) {
 			pipes = &core_dc->current_context->res_ctx.pipe_ctx[i];
 			core_dc->hwss.set_static_screen_control(&pipes, 1,
 					0x182);

@@ -2134,6 +2134,12 @@ static void retrieve_link_cap(struct core_link *link)
 	link->public.test_pattern_enabled = false;
 	link->public.compliance_test_state.raw = 0;
 
+	link->public.psr_caps.psr_exit_link_training_required = false;
+	link->public.psr_caps.psr_frame_capture_indication_req = false;
+	link->public.psr_caps.psr_rfb_setup_time = 0;
+	link->public.psr_caps.psr_sdp_transmit_line_num_deadline = 0;
+	link->public.psr_caps.psr_version = 0;
+
 	/* read sink count */
 	core_link_read_dpcd(link,
 			DPCD_ADDRESS_SINK_COUNT,
