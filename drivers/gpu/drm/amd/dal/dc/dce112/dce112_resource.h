@@ -35,5 +35,21 @@ struct resource_pool *dce112_create_resource_pool(
 	uint8_t num_virtual_links,
 	struct core_dc *dc);
 
+enum dc_status dce112_validate_with_context(
+		const struct core_dc *dc,
+		const struct dc_validation_set set[],
+		int set_count,
+		struct validate_context *context);
+
+enum dc_status dce112_validate_guaranteed(
+		const struct core_dc *dc,
+		const struct dc_target *dc_target,
+		struct validate_context *context);
+
+enum dc_status dce112_validate_bandwidth(
+	const struct core_dc *dc,
+	struct validate_context *context);
+
+
 #endif /* __DC_RESOURCE_DCE112_H__ */
 
