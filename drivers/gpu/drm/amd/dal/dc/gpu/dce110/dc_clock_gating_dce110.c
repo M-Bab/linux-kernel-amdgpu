@@ -102,4 +102,9 @@ void dal_dc_clock_gating_dce110_power_up(
 		force_hw_base_light_sleep(ctx);
 		underlay_clock_enable(ctx);
 	}
+
+#if 0
+    if (ctx->dc->debug.disable_clock_gate)
+    	return;   /* clock gating not implemented so nothing to disable */
+#endif
 }

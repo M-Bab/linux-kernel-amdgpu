@@ -137,13 +137,15 @@ struct dc_config {
 
 struct dc_debug {
 	bool surface_visual_confirm;
-	bool disable_stutter;
-	bool disable_dcc;
-	bool disable_dfs_bypass;
 	bool max_disp_clk;
 	bool target_trace;
 	bool surface_trace;
 	bool validation_trace;
+	bool disable_stutter;
+	bool disable_dcc;
+	bool disable_dfs_bypass;
+	bool disable_power_gate;
+	bool disable_clock_gate;
 };
 
 struct dc {
