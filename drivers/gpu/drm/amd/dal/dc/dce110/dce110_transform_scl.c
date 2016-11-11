@@ -44,7 +44,7 @@
 
 #define SCL_PHASES 16
 
-const uint16_t filter_2tap_16p[18] = {
+static const uint16_t filter_2tap_16p[18] = {
 	4096, 0,
 	3840, 256,
 	3584, 512,
@@ -56,7 +56,7 @@ const uint16_t filter_2tap_16p[18] = {
 	2048, 2048
 };
 
-const uint16_t filter_3tap_16p_upscale[27] = {
+static const uint16_t filter_3tap_16p_upscale[27] = {
 	2048, 2048, 0,
 	1708, 2424, 16348,
 	1372, 2796, 16308,
@@ -68,7 +68,7 @@ const uint16_t filter_3tap_16p_upscale[27] = {
 	0, 4096, 0
 };
 
-const uint16_t filter_3tap_16p_117[27] = {
+static const uint16_t filter_3tap_16p_117[27] = {
 	2048, 2048, 0,
 	1824, 2276, 16376,
 	1600, 2496, 16380,
@@ -80,7 +80,7 @@ const uint16_t filter_3tap_16p_117[27] = {
 	428, 3236, 428
 };
 
-const uint16_t filter_3tap_16p_150[27] = {
+static const uint16_t filter_3tap_16p_150[27] = {
 	2048, 2048, 0,
 	1872, 2184, 36,
 	1692, 2308, 88,
@@ -92,7 +92,7 @@ const uint16_t filter_3tap_16p_150[27] = {
 	696, 2696, 696
 };
 
-const uint16_t filter_3tap_16p_183[27] = {
+static const uint16_t filter_3tap_16p_183[27] = {
 	2048, 2048, 0,
 	1892, 2104, 92,
 	1744, 2152, 196,
@@ -104,7 +104,7 @@ const uint16_t filter_3tap_16p_183[27] = {
 	900, 2292, 900
 };
 
-const uint16_t filter_4tap_16p_upscale[36] = {
+static const uint16_t filter_4tap_16p_upscale[36] = {
 	0, 4096, 0, 0,
 	16240, 4056, 180, 16380,
 	16136, 3952, 404, 16364,
@@ -116,7 +116,7 @@ const uint16_t filter_4tap_16p_upscale[36] = {
 	16128, 2304, 2304, 16128
 };
 
-const uint16_t filter_4tap_16p_117[36] = {
+static const uint16_t filter_4tap_16p_117[36] = {
 	428, 3236, 428, 0,
 	276, 3232, 604, 16364,
 	148, 3184, 800, 16340,
@@ -128,7 +128,7 @@ const uint16_t filter_4tap_16p_117[36] = {
 	16212, 2216, 2216, 16212
 };
 
-const uint16_t filter_4tap_16p_150[36] = {
+static const uint16_t filter_4tap_16p_150[36] = {
 	696, 2700, 696, 0,
 	560, 2700, 848, 16364,
 	436, 2676, 1008, 16348,
@@ -140,7 +140,7 @@ const uint16_t filter_4tap_16p_150[36] = {
 	16376, 2052, 2052, 16376
 };
 
-const uint16_t filter_4tap_16p_183[36] = {
+static const uint16_t filter_4tap_16p_183[36] = {
 	940, 2208, 940, 0,
 	832, 2200, 1052, 4,
 	728, 2180, 1164, 16,
@@ -325,7 +325,7 @@ static void set_coeff_update_complete(struct dce110_transform *xfm110)
 	dm_write_reg(xfm110->base.ctx, addr, value);
 }
 
-const uint16_t *get_filter_3tap_16p(struct fixed31_32 ratio)
+static const uint16_t *get_filter_3tap_16p(struct fixed31_32 ratio)
 {
 	if (ratio.value < dal_fixed31_32_one.value)
 		return filter_3tap_16p_upscale;
@@ -337,7 +337,7 @@ const uint16_t *get_filter_3tap_16p(struct fixed31_32 ratio)
 		return filter_3tap_16p_183;
 }
 
-const uint16_t *get_filter_4tap_16p(struct fixed31_32 ratio)
+static const uint16_t *get_filter_4tap_16p(struct fixed31_32 ratio)
 {
 	if (ratio.value < dal_fixed31_32_one.value)
 		return filter_4tap_16p_upscale;
