@@ -47,6 +47,7 @@
 
 #include "dc_link_ddc.h"
 #include "dm_helpers.h"
+#include "mem_input.h"
 
 /*******************************************************************************
  * Private structures
@@ -1806,7 +1807,6 @@ const struct dc_stream_status *dc_stream_get_status(
 bool dc_init_dchub(struct dc *dc, struct dchub_init_data *dh_data)
 {
 	int i;
-	int status_check = false;
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	struct mem_input *mi;
 
@@ -1816,7 +1816,6 @@ bool dc_init_dchub(struct dc *dc, struct dchub_init_data *dh_data)
 			break;
 		}
 	}
-
 
 	if (mi->funcs->mem_input_update_dchub)
 		mi->funcs->mem_input_update_dchub(mi, dh_data);
