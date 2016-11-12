@@ -52,15 +52,16 @@ struct resource_straps {
 
 struct resource_create_funcs {
 	void (*read_dce_straps)(
-		struct dc_context *ctx, struct resource_straps *straps);
+			struct dc_context *ctx, struct resource_straps *straps);
 
 	struct audio *(*create_audio)(
 			struct dc_context *ctx, unsigned int inst);
 
 	struct stream_encoder *(*create_stream_encoder)(
-			enum engine_id eng_id,
-			struct dc_context *ctx);
+			enum engine_id eng_id, struct dc_context *ctx);
 
+	struct dce_hwseq *(*create_hwseq)(
+			struct dc_context *ctx);
 };
 
 bool resource_construct(

@@ -38,6 +38,44 @@
 
 #undef DEPRECATED
 
+/*
+ *
+ * general debug capabilities
+ *
+ */
+#if defined(CONFIG_DEBUG_KERNEL) || defined(CONFIG_DEBUG_DRIVER)
+
+#if defined(CONFIG_HAVE_KGDB) || defined(CONFIG_KGDB)
+#define ASSERT_CRITICAL(expr) do {	\
+	if (WARN_ON(!(expr))) { \
+		kgdb_breakpoint(); \
+	} \
+} while (0)
+#else
+#define ASSERT_CRITICAL(expr) do {	\
+	if (WARN_ON(!(expr))) { \
+		; \
+	} \
+} while (0)
+#endif
+
+#if defined(CONFIG_DEBUG_KERNEL_DAL)
+#define ASSERT(expr) ASSERT_CRITICAL(expr)
+
+#else
+#define ASSERT(expr) WARN_ON(!(expr))
+#endif
+
+#define BREAK_TO_DEBUGGER() ASSERT(0)
+
+#endif /* CONFIG_DEBUG_KERNEL || CONFIG_DEBUG_DRIVER */
+
+
+#define DC_ERR(err_msg)  do { \
+	BREAK_TO_DEBUGGER(); \
+	dm_error(err_msg); \
+} while (0)
+
 #define dm_alloc(size) kzalloc(size, GFP_KERNEL)
 #define dm_realloc(ptr, size) krealloc(ptr, size, GFP_KERNEL)
 #define dm_free(ptr) kfree(ptr)
@@ -63,7 +101,14 @@ static inline uint32_t dm_read_reg_func(
 	uint32_t address,
 	const char *func_name)
 {
-	uint32_t value = cgs_read_register(ctx->cgs_device, address);
+	uint32_t value;
+
+	if (address == 0) {
+		DC_ERR("invalid register read. address = 0");
+		return 0;
+	}
+
+	value = cgs_read_register(ctx->cgs_device, address);
 
 #if defined(__DAL_REGISTER_LOGGER__)
 	if (true == dal_reg_logger_should_dump_register()) {
@@ -89,6 +134,11 @@ static inline void dm_write_reg_func(
 		DRM_INFO("%s DC_WRITE_REG: 0x%x 0x%x\n", func_name, address, value);
 	}
 #endif
+
+	if (address == 0) {
+		DC_ERR("invalid register write. address = 0");
+		return;
+	}
 	cgs_write_register(ctx->cgs_device, address, value);
 }
 
@@ -369,43 +419,5 @@ bool dm_dmcu_set_pipe(struct dc_context *ctx, unsigned int controller_id);
 
 long dm_get_pid(void);
 long dm_get_tgid(void);
-
-/*
- *
- * general debug capabilities
- *
- */
-#if defined(CONFIG_DEBUG_KERNEL) || defined(CONFIG_DEBUG_DRIVER)
-
-#if defined(CONFIG_HAVE_KGDB) || defined(CONFIG_KGDB)
-#define ASSERT_CRITICAL(expr) do {	\
-	if (WARN_ON(!(expr))) { \
-		kgdb_breakpoint(); \
-	} \
-} while (0)
-#else
-#define ASSERT_CRITICAL(expr) do {	\
-	if (WARN_ON(!(expr))) { \
-		; \
-	} \
-} while (0)
-#endif
-
-#if defined(CONFIG_DEBUG_KERNEL_DAL)
-#define ASSERT(expr) ASSERT_CRITICAL(expr)
-
-#else
-#define ASSERT(expr) WARN_ON(!(expr))
-#endif
-
-#define BREAK_TO_DEBUGGER() ASSERT(0)
-
-#endif /* CONFIG_DEBUG_KERNEL || CONFIG_DEBUG_DRIVER */
-
-
-#define DC_ERR(err_msg)  do { \
-	BREAK_TO_DEBUGGER(); \
-	dm_error(err_msg); \
-} while (0)
 
 #endif /* __DM_SERVICES_H__ */

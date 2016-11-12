@@ -29,6 +29,7 @@
 #include "core_types.h"
 #include "dce112_hw_sequencer.h"
 
+#include "dce/dce_hwseq.h"
 #include "dce110/dce110_hw_sequencer.h"
 #include "gpu/dce112/dc_clock_gating_dce112.h"
 
@@ -37,7 +38,6 @@
 #include "dce/dce_11_2_sh_mask.h"
 
 struct dce112_hw_seq_reg_offsets {
-	uint32_t dcfe;
 	uint32_t blnd;
 	uint32_t crtc;
 };
@@ -51,39 +51,30 @@ enum blender_mode {
 
 static const struct dce112_hw_seq_reg_offsets reg_offsets[] = {
 {
-	.dcfe = (mmDCFE0_DCFE_CLOCK_CONTROL - mmDCFE_CLOCK_CONTROL),
 	.blnd = (mmBLND0_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC0_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.dcfe = (mmDCFE1_DCFE_CLOCK_CONTROL - mmDCFE_CLOCK_CONTROL),
 	.blnd = (mmBLND1_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC1_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.dcfe = (mmDCFE2_DCFE_CLOCK_CONTROL - mmDCFE_CLOCK_CONTROL),
 	.blnd = (mmBLND2_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC2_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.dcfe = (mmDCFE3_DCFE_CLOCK_CONTROL - mmDCFE_CLOCK_CONTROL),
 	.blnd = (mmBLND3_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC3_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.dcfe = (mmDCFE4_DCFE_CLOCK_CONTROL - mmDCFE_CLOCK_CONTROL),
 	.blnd = (mmBLND4_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC4_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.dcfe = (mmDCFE5_DCFE_CLOCK_CONTROL - mmDCFE_CLOCK_CONTROL),
 	.blnd = (mmBLND5_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC5_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 }
 };
-
-#define HW_REG_DCFE(reg, id)\
-	(reg + reg_offsets[id].dcfe)
 
 #define HW_REG_BLND(reg, id)\
 	(reg + reg_offsets[id].blnd)
@@ -95,24 +86,6 @@ static const struct dce112_hw_seq_reg_offsets reg_offsets[] = {
  * Private definitions
  ******************************************************************************/
 /***************************PIPE_CONTROL***********************************/
-static void dce112_enable_fe_clock(
-	struct dc_context *ctx, uint8_t controller_id, bool enable)
-{
-	uint32_t value = 0;
-	uint32_t addr;
-
-	addr = HW_REG_DCFE(mmDCFE_CLOCK_CONTROL, controller_id);
-
-	value = dm_read_reg(ctx, addr);
-
-	set_reg_field_value(
-		value,
-		enable,
-		DCFE_CLOCK_CONTROL,
-		DCFE_CLOCK_ENABLE);
-
-	dm_write_reg(ctx, addr, value);
-}
 
 static bool dce112_pipe_control_lock(
 	struct dc_context *ctx,
@@ -350,7 +323,6 @@ bool dce112_hw_sequencer_construct(struct core_dc *dc)
 	dc->hwss.clock_gating_power_up = dal_dc_clock_gating_dce112_power_up;
 	dc->hwss.pipe_control_lock = dce112_pipe_control_lock;
 	dc->hwss.set_blender_mode = dce112_set_blender_mode;
-	dc->hwss.enable_fe_clock = dce112_enable_fe_clock;
 
 	return true;
 }

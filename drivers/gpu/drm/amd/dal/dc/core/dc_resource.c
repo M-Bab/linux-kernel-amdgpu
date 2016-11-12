@@ -193,6 +193,8 @@ bool resource_construct(
 		pool->stream_enc_count++;
 	}
 
+	dc->hwseq = create_funcs->create_hwseq(ctx);
+
 	return true;
 }
 

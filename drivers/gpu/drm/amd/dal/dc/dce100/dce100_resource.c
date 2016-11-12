@@ -43,6 +43,7 @@
 #include "dce110/dce110_opp.h"
 #include "dce110/dce110_clock_source.h"
 #include "dce/dce_audio.h"
+#include "dce/dce_hwseq.h"
 #include "dce100/dce100_hw_sequencer.h"
 
 #include "reg_helper.h"
@@ -446,10 +447,40 @@ static struct stream_encoder *dce100_stream_encoder_create(
 	return NULL;
 }
 
+#define SRII(reg_name, block, id)\
+	.reg_name[id] = mm ## block ## id ## _ ## reg_name
+
+static const struct dce_hwseq_registers hwseq_reg = {
+		HWSEQ_COMMON_REG_LIST_BASE()
+};
+
+static const struct dce_hwseq_shift hwseq_shift = {
+		HWSEQ_COMMON_MASK_SH_LIST_BASE(__SHIFT)
+};
+
+static const struct dce_hwseq_mask hwseq_mask = {
+		HWSEQ_COMMON_MASK_SH_LIST_BASE(_MASK)
+};
+
+static struct dce_hwseq *dce100_hwseq_create(
+	struct dc_context *ctx)
+{
+	struct dce_hwseq *hws = dm_alloc(sizeof(struct dce_hwseq));
+
+	if (hws) {
+		hws->ctx = ctx;
+		hws->regs = &hwseq_reg;
+		hws->shifts = &hwseq_shift;
+		hws->masks = &hwseq_mask;
+	}
+	return hws;
+}
+
 static const struct resource_create_funcs res_create_funcs = {
 	.read_dce_straps = read_dce_straps,
 	.create_audio = create_audio,
-	.create_stream_encoder = dce100_stream_encoder_create
+	.create_stream_encoder = dce100_stream_encoder_create,
+	.create_hwseq = dce100_hwseq_create,
 };
 
 static struct mem_input *dce100_mem_input_create(

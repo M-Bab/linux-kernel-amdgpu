@@ -29,6 +29,7 @@
 #include "core_types.h"
 #include "dce80_hw_sequencer.h"
 
+#include "dce/dce_hwseq.h"
 #include "dce110/dce110_hw_sequencer.h"
 
 #include "gpu/dce80/dc_clock_gating_dce80.h"
@@ -87,24 +88,6 @@ static const struct dce80_hw_seq_reg_offsets reg_offsets[] = {
  ******************************************************************************/
 
 /***************************PIPE_CONTROL***********************************/
-static void dce80_enable_fe_clock(
-	struct dc_context *ctx, uint8_t controller_id, bool enable)
-{
-	uint32_t value = 0;
-	uint32_t addr;
-
-	addr = HW_REG_CRTC(mmCRTC_DCFE_CLOCK_CONTROL, controller_id);
-
-	value = dm_read_reg(ctx, addr);
-
-	set_reg_field_value(
-		value,
-		enable,
-		CRTC_DCFE_CLOCK_CONTROL,
-		CRTC_DCFE_CLOCK_ENABLE);
-
-	dm_write_reg(ctx, addr, value);
-}
 
 static bool dce80_pipe_control_lock(
 	struct dc_context *ctx,
@@ -241,7 +224,6 @@ bool dce80_hw_sequencer_construct(struct core_dc *dc)
 	dce110_hw_sequencer_construct(dc);
 
 	dc->hwss.clock_gating_power_up = dal_dc_clock_gating_dce80_power_up;
-	dc->hwss.enable_fe_clock = dce80_enable_fe_clock;
 	dc->hwss.enable_display_power_gating = dce80_enable_display_power_gating;
 	dc->hwss.pipe_control_lock = dce80_pipe_control_lock;
 	dc->hwss.set_blender_mode = dce80_set_blender_mode;

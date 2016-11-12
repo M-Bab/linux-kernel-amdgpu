@@ -46,13 +46,13 @@
 #include "clock_source.h"
 #include "gamma_calcs.h"
 #include "audio.h"
+#include "dce/dce_hwseq.h"
 
 /* include DCE11 register header files */
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
 struct dce110_hw_seq_reg_offsets {
-	uint32_t dcfe;
 	uint32_t blnd;
 	uint32_t crtc;
 };
@@ -66,29 +66,22 @@ enum blender_mode {
 
 static const struct dce110_hw_seq_reg_offsets reg_offsets[] = {
 {
-	.dcfe = (mmDCFE0_DCFE_CLOCK_CONTROL - mmDCFE_CLOCK_CONTROL),
 	.blnd = (mmBLND0_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC0_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.dcfe = (mmDCFE1_DCFE_CLOCK_CONTROL - mmDCFE_CLOCK_CONTROL),
 	.blnd = (mmBLND1_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC1_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.dcfe = (mmDCFE2_DCFE_CLOCK_CONTROL - mmDCFE_CLOCK_CONTROL),
 	.blnd = (mmBLND2_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC2_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.dcfe = (mmDCFEV_CLOCK_CONTROL - mmDCFE_CLOCK_CONTROL),
 	.blnd = (mmBLNDV_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTCV_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 }
 };
-
-#define HW_REG_DCFE(reg, id)\
-	(reg + reg_offsets[id].dcfe)
 
 #define HW_REG_BLND(reg, id)\
 	(reg + reg_offsets[id].blnd)
@@ -103,25 +96,6 @@ static const struct dce110_hw_seq_reg_offsets reg_offsets[] = {
  * Private definitions
  ******************************************************************************/
 /***************************PIPE_CONTROL***********************************/
-static void dce110_enable_fe_clock(
-	struct dc_context *ctx, uint8_t controller_id, bool enable)
-{
-	uint32_t value = 0;
-	uint32_t addr;
-
-	addr = HW_REG_DCFE(mmDCFE_CLOCK_CONTROL, controller_id);
-
-	value = dm_read_reg(ctx, addr);
-
-	set_reg_field_value(
-		value,
-		enable,
-		DCFE_CLOCK_CONTROL,
-		DCFE_CLOCK_ENABLE);
-
-	dm_write_reg(ctx, addr, value);
-}
-
 static void dce110_init_pte(struct dc_context *ctx)
 {
 	uint32_t addr;
@@ -1616,7 +1590,7 @@ static void set_plane_config(
 	memset(&tbl_entry, 0, sizeof(tbl_entry));
 	adjust.gamut_adjust_type = GRAPHICS_GAMUT_ADJUST_TYPE_BYPASS;
 
-	dc->hwss.enable_fe_clock(ctx, pipe_ctx->pipe_idx, true);
+	dce_enable_fe_clock(dc->hwseq, pipe_ctx->pipe_idx, true);
 
 	set_default_colors(pipe_ctx);
 	if (pipe_ctx->stream->public.csc_color_matrix.enable_adjustment
@@ -1958,7 +1932,7 @@ static void dce110_program_front_end_for_pipe(
 	memset(&adjust, 0, sizeof(adjust));
 	adjust.gamut_adjust_type = GRAPHICS_GAMUT_ADJUST_TYPE_BYPASS;
 
-	dc->hwss.enable_fe_clock(ctx, pipe_ctx->pipe_idx, true);
+	dce_enable_fe_clock(dc->hwseq, pipe_ctx->pipe_idx, true);
 
 	set_default_colors(pipe_ctx);
 	if (pipe_ctx->stream->public.csc_color_matrix.enable_adjustment
@@ -2160,7 +2134,6 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.crtc_switch_to_clk_src = dce110_crtc_switch_to_clk_src,
 	.enable_display_power_gating = dce110_enable_display_power_gating,
 	.power_down_front_end = dce110_power_down_fe,
-	.enable_fe_clock = dce110_enable_fe_clock,
 	.pipe_control_lock = dce110_pipe_control_lock,
 	.set_blender_mode = dce110_set_blender_mode,
 	.clock_gating_power_up = dal_dc_clock_gating_dce110_power_up,
