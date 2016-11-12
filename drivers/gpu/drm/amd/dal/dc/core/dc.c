@@ -1446,7 +1446,7 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 
 			if (updates[i].flip_addr) {
 				core_dc->hwss.pipe_control_lock(
-							core_dc->ctx,
+							core_dc->hwseq,
 							pipe_ctx->pipe_idx,
 							PIPE_LOCK_CONTROL_SURFACE,
 							true);
@@ -1460,7 +1460,7 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 
 				if (!pipe_ctx->tg->funcs->is_blanked(pipe_ctx->tg)) {
 					core_dc->hwss.pipe_control_lock(
-							core_dc->ctx,
+							core_dc->hwseq,
 							pipe_ctx->pipe_idx,
 							PIPE_LOCK_CONTROL_SURFACE |
 							PIPE_LOCK_CONTROL_GRAPHICS |
@@ -1486,7 +1486,7 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 			if (updates[j].surface == &pipe_ctx->surface->public) {
 				if (!pipe_ctx->tg->funcs->is_blanked(pipe_ctx->tg)) {
 					core_dc->hwss.pipe_control_lock(
-							core_dc->ctx,
+							core_dc->hwseq,
 							pipe_ctx->pipe_idx,
 							PIPE_LOCK_CONTROL_GRAPHICS |
 							PIPE_LOCK_CONTROL_SCL |

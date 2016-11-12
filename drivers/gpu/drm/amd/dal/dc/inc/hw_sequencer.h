@@ -121,16 +121,11 @@ struct hw_sequencer_funcs {
 	void (*unblank_stream)(struct pipe_ctx *pipe_ctx,
 			struct dc_link_settings *link_settings);
 
-	bool (*pipe_control_lock)(
-				struct dc_context *ctx,
-				uint8_t controller_idx,
-				uint32_t control_mask,
+	void (*pipe_control_lock)(
+				struct dce_hwseq *hwseq,
+				unsigned int blnd_inst,
+				enum pipe_lock_control control_mask,
 				bool lock);
-
-	void (*set_blender_mode)(
-				struct core_dc *dc,
-				uint8_t controller_id,
-				uint32_t mode);
 
 	void (*set_displaymarks)(
 				const struct core_dc *dc,

@@ -53,32 +53,20 @@
 #include "dce/dce_11_0_sh_mask.h"
 
 struct dce110_hw_seq_reg_offsets {
-	uint32_t blnd;
 	uint32_t crtc;
-};
-
-enum blender_mode {
-	BLENDER_MODE_CURRENT_PIPE = 0,/* Data from current pipe only */
-	BLENDER_MODE_OTHER_PIPE, /* Data from other pipe only */
-	BLENDER_MODE_BLENDING,/* Alpha blending - blend 'current' and 'other' */
-	BLENDER_MODE_STEREO
 };
 
 static const struct dce110_hw_seq_reg_offsets reg_offsets[] = {
 {
-	.blnd = (mmBLND0_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC0_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.blnd = (mmBLND1_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC1_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.blnd = (mmBLND2_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC2_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.blnd = (mmBLNDV_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTCV_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 }
 };
@@ -161,132 +149,6 @@ static void dce110_init_pte(struct dc_context *ctx)
 
 		dm_write_reg(ctx, addr, value);
 	}
-}
-
-/* this is a workaround for hw bug - it is a trigger on r/w */
-static void trigger_write_crtc_h_blank_start_end(
-	struct dc_context *ctx,
-	uint8_t controller_id)
-{
-	uint32_t value;
-	uint32_t addr;
-
-	addr =  HW_REG_CRTC(mmCRTC_H_BLANK_START_END, controller_id);
-	value = dm_read_reg(ctx, addr);
-	dm_write_reg(ctx, addr, value);
-}
-
-static bool dce110_pipe_control_lock(
-	struct dc_context *ctx,
-	uint8_t controller_idx,
-	uint32_t control_mask,
-	bool lock)
-{
-	uint32_t addr = HW_REG_BLND(mmBLND_V_UPDATE_LOCK, controller_idx);
-	uint32_t value = dm_read_reg(ctx, addr);
-
-	if (control_mask & PIPE_LOCK_CONTROL_GRAPHICS)
-		set_reg_field_value(
-			value,
-			lock,
-			BLND_V_UPDATE_LOCK,
-			BLND_DCP_GRPH_V_UPDATE_LOCK);
-
-	if (control_mask & PIPE_LOCK_CONTROL_SCL)
-		set_reg_field_value(
-			value,
-			lock,
-			BLND_V_UPDATE_LOCK,
-			BLND_SCL_V_UPDATE_LOCK);
-
-	if (control_mask & PIPE_LOCK_CONTROL_SURFACE)
-		set_reg_field_value(
-			value,
-			lock,
-			BLND_V_UPDATE_LOCK,
-			BLND_DCP_GRPH_SURF_V_UPDATE_LOCK);
-
-	if (control_mask & PIPE_LOCK_CONTROL_BLENDER) {
-		set_reg_field_value(
-			value,
-			lock,
-			BLND_V_UPDATE_LOCK,
-			BLND_BLND_V_UPDATE_LOCK);
-	}
-
-	if (control_mask & PIPE_LOCK_CONTROL_MODE)
-		set_reg_field_value(
-			value,
-			lock,
-			BLND_V_UPDATE_LOCK,
-			BLND_V_UPDATE_LOCK_MODE);
-
-	dm_write_reg(ctx, addr, value);
-
-	if (!lock && (control_mask & PIPE_LOCK_CONTROL_BLENDER))
-		trigger_write_crtc_h_blank_start_end(ctx, controller_idx);
-
-	return true;
-}
-
-static void dce110_set_blender_mode(
-	struct core_dc *dc,
-	uint8_t controller_id,
-	uint32_t mode)
-{
-	uint32_t value;
-	uint32_t addr = HW_REG_BLND(mmBLND_CONTROL, controller_id);
-	uint32_t alpha_mode = 2;
-	uint32_t blnd_mode = 0;
-	uint32_t feedthrough = 1;
-	uint32_t multiplied_mode = 0;
-
-	struct dc_context *ctx = dc->ctx;
-	unsigned int underlay_idx = dc->current_context->res_ctx.pool->underlay_pipe_index;
-
-	switch (mode) {
-	case BLENDER_MODE_OTHER_PIPE:
-		feedthrough = 0;
-		alpha_mode = 0;
-		blnd_mode = 1;
-		break;
-	case BLENDER_MODE_BLENDING:
-		feedthrough = 0;
-		alpha_mode = 0;
-		blnd_mode = 2;
-		multiplied_mode = 1;
-		break;
-	case BLENDER_MODE_CURRENT_PIPE:
-	default:
-		if (controller_id == underlay_idx || controller_id == 0)
-			feedthrough = 0;
-		break;
-	}
-
-	value = dm_read_reg(ctx, addr);
-
-	set_reg_field_value(
-		value,
-		feedthrough,
-		BLND_CONTROL,
-		BLND_FEEDTHROUGH_EN);
-	set_reg_field_value(
-		value,
-		alpha_mode,
-		BLND_CONTROL,
-		BLND_ALPHA_MODE);
-	set_reg_field_value(
-		value,
-		blnd_mode,
-		BLND_CONTROL,
-		BLND_MODE);
-	set_reg_field_value(
-		value,
-		multiplied_mode,
-		BLND_CONTROL,
-		BLND_MULTIPLIED_MODE);
-
-	dm_write_reg(ctx, addr, value);
 }
 
 static void dce110_crtc_switch_to_clk_src(
@@ -1557,18 +1419,17 @@ static void set_default_colors(struct pipe_ctx *pipe_ctx)
 static void program_blender(const struct core_dc *dc,
 		struct pipe_ctx *pipe_ctx)
 {
-	enum blender_mode blender_mode = BLENDER_MODE_CURRENT_PIPE;
+	enum blnd_mode blender_mode = BLND_MODE_CURRENT_PIPE;
 
 	if (pipe_ctx->bottom_pipe) {
 		if (pipe_ctx->bottom_pipe->surface->public.visible) {
 			if (pipe_ctx->surface->public.visible)
-				blender_mode = BLENDER_MODE_BLENDING;
+				blender_mode = BLND_MODE_BLENDING;
 			else
-				blender_mode = BLENDER_MODE_OTHER_PIPE;
+				blender_mode = BLND_MODE_OTHER_PIPE;
 		}
 	}
-	dc->hwss.set_blender_mode(
-		(struct core_dc *)dc, pipe_ctx->pipe_idx, blender_mode);
+	dce_set_blender_mode(dc->hwseq, pipe_ctx->pipe_idx, blender_mode);
 }
 
 /**
@@ -2134,8 +1995,7 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.crtc_switch_to_clk_src = dce110_crtc_switch_to_clk_src,
 	.enable_display_power_gating = dce110_enable_display_power_gating,
 	.power_down_front_end = dce110_power_down_fe,
-	.pipe_control_lock = dce110_pipe_control_lock,
-	.set_blender_mode = dce110_set_blender_mode,
+	.pipe_control_lock = dce_pipe_control_lock,
 	.clock_gating_power_up = dal_dc_clock_gating_dce110_power_up,
 	.set_display_clock = dce110_set_display_clock,
 	.set_displaymarks = dce110_set_displaymarks,

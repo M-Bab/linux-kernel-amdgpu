@@ -80,6 +80,15 @@
 				FN(reg, f3), v3,\
 				FN(reg, f4), v4)
 
+#define REG_SET_5(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4,	\
+		f5, v5)	\
+		REG_SET_N(reg, 6, init_value, \
+				FN(reg, f1), v1,\
+				FN(reg, f2), v2,\
+				FN(reg, f3), v3,\
+				FN(reg, f4), v4,\
+				FN(reg, f5), v5)
+
 #define REG_SET_6(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4,	\
 		f5, v5, f6, v6)	\
 		REG_SET_N(reg, 6, init_value, \
@@ -101,7 +110,8 @@
 				FN(reg, f6), v6,\
 				FN(reg, f7), v7)
 
-#define REG_SET_10(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4, f5, v5, f6, v6, f7, v7, f8, v8, f9, v9, f10, v10)	\
+#define REG_SET_10(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4, f5, \
+		v5, f6, v6, f7, v7, f8, v8, f9, v9, f10, v10)	\
 		REG_SET_N(reg, 10, init_value, \
 				FN(reg, f1), v1,\
 				FN(reg, f2), v2, \
@@ -130,6 +140,14 @@
 				FN(reg_name, f1), v1, \
 				FN(reg_name, f2), v2, \
 				FN(reg_name, f3), v3)
+
+#define REG_GET_5(reg_name, f1, v1, f2, v2, f3, v3, f4, v4, f5, v5)	\
+		generic_reg_get5(CTX, REG(reg_name), \
+				FN(reg_name, f1), v1, \
+				FN(reg_name, f2), v2, \
+				FN(reg_name, f3), v3, \
+				FN(reg_name, f4), v4, \
+				FN(reg_name, f5), v5)
 
 /* macro to poll and wait for a register field to read back given value */
 
@@ -259,5 +277,12 @@ uint32_t generic_reg_get3(const struct dc_context *ctx, uint32_t addr,
 		uint8_t shift1, uint32_t mask1, uint32_t *field_value1,
 		uint8_t shift2, uint32_t mask2, uint32_t *field_value2,
 		uint8_t shift3, uint32_t mask3, uint32_t *field_value3);
+
+uint32_t generic_reg_get5(const struct dc_context *ctx, uint32_t addr,
+		uint8_t shift1, uint32_t mask1, uint32_t *field_value1,
+		uint8_t shift2, uint32_t mask2, uint32_t *field_value2,
+		uint8_t shift3, uint32_t mask3, uint32_t *field_value3,
+		uint8_t shift4, uint32_t mask4, uint32_t *field_value4,
+		uint8_t shift5, uint32_t mask5, uint32_t *field_value5);
 
 #endif /* DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_INC_REG_HELPER_H_ */

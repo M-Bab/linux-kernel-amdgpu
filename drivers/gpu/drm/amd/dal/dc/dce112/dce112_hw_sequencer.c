@@ -29,7 +29,6 @@
 #include "core_types.h"
 #include "dce112_hw_sequencer.h"
 
-#include "dce/dce_hwseq.h"
 #include "dce110/dce110_hw_sequencer.h"
 #include "gpu/dce112/dc_clock_gating_dce112.h"
 
@@ -38,47 +37,30 @@
 #include "dce/dce_11_2_sh_mask.h"
 
 struct dce112_hw_seq_reg_offsets {
-	uint32_t blnd;
 	uint32_t crtc;
 };
 
-enum blender_mode {
-	BLENDER_MODE_CURRENT_PIPE = 0,/* Data from current pipe only */
-	BLENDER_MODE_OTHER_PIPE, /* Data from other pipe only */
-	BLENDER_MODE_BLENDING,/* Alpha blending - blend 'current' and 'other' */
-	BLENDER_MODE_STEREO
-};
 
 static const struct dce112_hw_seq_reg_offsets reg_offsets[] = {
 {
-	.blnd = (mmBLND0_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC0_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.blnd = (mmBLND1_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC1_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.blnd = (mmBLND2_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC2_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.blnd = (mmBLND3_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC3_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.blnd = (mmBLND4_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC4_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 },
 {
-	.blnd = (mmBLND5_BLND_CONTROL - mmBLND_CONTROL),
 	.crtc = (mmCRTC5_CRTC_GSL_CONTROL - mmCRTC_GSL_CONTROL),
 }
 };
-
-#define HW_REG_BLND(reg, id)\
-	(reg + reg_offsets[id].blnd)
-
 #define HW_REG_CRTC(reg, id)\
 	(reg + reg_offsets[id].crtc)
 
@@ -86,112 +68,6 @@ static const struct dce112_hw_seq_reg_offsets reg_offsets[] = {
  * Private definitions
  ******************************************************************************/
 /***************************PIPE_CONTROL***********************************/
-
-static bool dce112_pipe_control_lock(
-	struct dc_context *ctx,
-	uint8_t controller_idx,
-	uint32_t control_mask,
-	bool lock)
-{
-	uint32_t addr = HW_REG_BLND(mmBLND_V_UPDATE_LOCK, controller_idx);
-	uint32_t value = dm_read_reg(ctx, addr);
-
-	if (control_mask & PIPE_LOCK_CONTROL_GRAPHICS)
-		set_reg_field_value(
-			value,
-			lock,
-			BLND_V_UPDATE_LOCK,
-			BLND_DCP_GRPH_V_UPDATE_LOCK);
-
-	if (control_mask & PIPE_LOCK_CONTROL_SCL)
-		set_reg_field_value(
-			value,
-			lock,
-			BLND_V_UPDATE_LOCK,
-			BLND_SCL_V_UPDATE_LOCK);
-
-	if (control_mask & PIPE_LOCK_CONTROL_SURFACE)
-		set_reg_field_value(
-			value,
-			lock,
-			BLND_V_UPDATE_LOCK,
-			BLND_DCP_GRPH_SURF_V_UPDATE_LOCK);
-
-	if (control_mask & PIPE_LOCK_CONTROL_BLENDER) {
-		set_reg_field_value(
-			value,
-			lock,
-			BLND_V_UPDATE_LOCK,
-			BLND_BLND_V_UPDATE_LOCK);
-	}
-
-	if (control_mask & PIPE_LOCK_CONTROL_MODE)
-		set_reg_field_value(
-			value,
-			lock,
-			BLND_V_UPDATE_LOCK,
-			BLND_V_UPDATE_LOCK_MODE);
-
-	dm_write_reg(ctx, addr, value);
-
-	return true;
-}
-
-static void dce112_set_blender_mode(
-	struct core_dc *dc,
-	uint8_t controller_id,
-	uint32_t mode)
-{
-	uint32_t value;
-	uint32_t addr = HW_REG_BLND(mmBLND_CONTROL, controller_id);
-	uint32_t alpha_mode = 2;
-	uint32_t blnd_mode = 0;
-	uint32_t feedthrough = 1;
-	uint32_t multiplied_mode = 0;
-	struct dc_context *ctx = dc->ctx;
-
-	switch (mode) {
-	case BLENDER_MODE_OTHER_PIPE:
-		feedthrough = 0;
-		alpha_mode = 0;
-		blnd_mode = 1;
-		break;
-	case BLENDER_MODE_BLENDING:
-		feedthrough = 0;
-		alpha_mode = 0;
-		blnd_mode = 2;
-		multiplied_mode = 1;
-		break;
-	case BLENDER_MODE_CURRENT_PIPE:
-	default:
-		break;
-	}
-
-	value = dm_read_reg(ctx, addr);
-
-	set_reg_field_value(
-		value,
-		feedthrough,
-		BLND_CONTROL,
-		BLND_FEEDTHROUGH_EN);
-	set_reg_field_value(
-		value,
-		alpha_mode,
-		BLND_CONTROL,
-		BLND_ALPHA_MODE);
-	set_reg_field_value(
-		value,
-		blnd_mode,
-		BLND_CONTROL,
-		BLND_MODE);
-	set_reg_field_value(
-		value,
-		multiplied_mode,
-		BLND_CONTROL,
-		BLND_MULTIPLIED_MODE);
-
-	dm_write_reg(ctx, addr, value);
-}
 
 static void dce112_crtc_switch_to_clk_src(
 				struct clock_source *clk_src, uint8_t crtc_inst)
@@ -321,8 +197,6 @@ bool dce112_hw_sequencer_construct(struct core_dc *dc)
 	dc->hwss.crtc_switch_to_clk_src = dce112_crtc_switch_to_clk_src;
 	dc->hwss.enable_display_power_gating = dce112_enable_display_power_gating;
 	dc->hwss.clock_gating_power_up = dal_dc_clock_gating_dce112_power_up;
-	dc->hwss.pipe_control_lock = dce112_pipe_control_lock;
-	dc->hwss.set_blender_mode = dce112_set_blender_mode;
 
 	return true;
 }
