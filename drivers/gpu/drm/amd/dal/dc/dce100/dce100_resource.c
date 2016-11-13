@@ -455,11 +455,11 @@ static const struct dce_hwseq_registers hwseq_reg = {
 };
 
 static const struct dce_hwseq_shift hwseq_shift = {
-		HWSEQ_COMMON_MASK_SH_LIST_BASE(__SHIFT)
+		HWSEQ_DCE10_MASK_SH_LIST(__SHIFT)
 };
 
 static const struct dce_hwseq_mask hwseq_mask = {
-		HWSEQ_COMMON_MASK_SH_LIST_BASE(_MASK)
+		HWSEQ_DCE10_MASK_SH_LIST(_MASK)
 };
 
 static struct dce_hwseq *dce100_hwseq_create(

@@ -32,8 +32,6 @@
 #include "dce/dce_hwseq.h"
 #include "dce110/dce110_hw_sequencer.h"
 
-#include "gpu/dce80/dc_clock_gating_dce80.h"
-
 /* include DCE8 register header files */
 #include "dce/dce_8_0_d.h"
 #include "dce/dce_8_0_sh_mask.h"
@@ -132,7 +130,6 @@ bool dce80_hw_sequencer_construct(struct core_dc *dc)
 {
 	dce110_hw_sequencer_construct(dc);
 
-	dc->hwss.clock_gating_power_up = dal_dc_clock_gating_dce80_power_up;
 	dc->hwss.enable_display_power_gating = dce80_enable_display_power_gating;
 	dc->hwss.pipe_control_lock = dce_pipe_control_lock;
 	dc->hwss.set_displaymarks = set_displaymarks;

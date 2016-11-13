@@ -98,9 +98,6 @@ struct hw_sequencer_funcs {
 
 	void (*crtc_switch_to_clk_src)(struct clock_source *, uint8_t);
 
-	/* power management */
-	void (*clock_gating_power_up)(struct dc_context *ctx, bool enable);
-
 	void (*enable_display_pipe_clock_gating)(
 					struct dc_context *ctx,
 					bool clock_gating);

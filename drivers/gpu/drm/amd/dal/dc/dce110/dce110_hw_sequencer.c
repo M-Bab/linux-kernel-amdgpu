@@ -33,8 +33,6 @@
 #include "dce110_hw_sequencer.h"
 #include "dce110_timing_generator.h"
 
-#include "gpu/dce110/dc_clock_gating_dce110.h"
-
 #include "bios/bios_parser_helper.h"
 #include "timing_generator.h"
 #include "mem_input.h"
@@ -1677,7 +1675,7 @@ static void init_hw(struct core_dc *dc)
 			true);
 	}
 
-	dc->hwss.clock_gating_power_up(dc->ctx, false);
+	dce_clock_gating_power_up(dc->hwseq, false);;
 	/***************************************/
 
 	for (i = 0; i < dc->link_count; i++) {
@@ -1996,7 +1994,6 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.enable_display_power_gating = dce110_enable_display_power_gating,
 	.power_down_front_end = dce110_power_down_fe,
 	.pipe_control_lock = dce_pipe_control_lock,
-	.clock_gating_power_up = dal_dc_clock_gating_dce110_power_up,
 	.set_display_clock = dce110_set_display_clock,
 	.set_displaymarks = dce110_set_displaymarks,
 	.increase_watermarks_for_pipe = dce110_increase_watermarks_for_pipe,

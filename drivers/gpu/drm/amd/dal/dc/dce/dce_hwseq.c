@@ -122,3 +122,42 @@ void dce_set_blender_mode(struct dce_hwseq *hws,
 		BLND_MODE, blnd_mode,
 		BLND_MULTIPLIED_MODE, multiplied_mode);
 }
+
+
+static void dce_disable_sram_shut_down(struct dce_hwseq *hws)
+{
+	if (REG(DC_MEM_GLOBAL_PWR_REQ_CNTL))
+		REG_UPDATE(DC_MEM_GLOBAL_PWR_REQ_CNTL,
+				DC_MEM_GLOBAL_PWR_REQ_DIS, 1);
+}
+
+static void dce_underlay_clock_enable(struct dce_hwseq *hws)
+{
+	/* todo: why do we need this at boot? is dce_enable_fe_clock enough? */
+	if (REG(DCFEV_CLOCK_CONTROL))
+		REG_UPDATE(DCFEV_CLOCK_CONTROL,
+				DCFEV_CLOCK_ENABLE, 1);
+}
+
+static void enable_hw_base_light_sleep(void)
+{
+	/* TODO: implement */
+}
+
+static void disable_sw_manual_control_light_sleep(void)
+{
+	/* TODO: implement */
+}
+
+void dce_clock_gating_power_up(
+		struct dce_hwseq *hws,
+		bool enable)
+{
+	if (enable) {
+		enable_hw_base_light_sleep();
+		disable_sw_manual_control_light_sleep();
+	} else {
+		dce_disable_sram_shut_down(hws);
+		dce_underlay_clock_enable(hws);
+	}
+}

@@ -122,30 +122,6 @@ static void set_bandwidth(struct core_dc *dc)
 	/* Do nothing until we have proper bandwitdth calcs */
 }
 
-static void enable_hw_base_light_sleep(void)
-{
-	/* TODO: implement */
-}
-
-static void disable_sw_manual_control_light_sleep(void)
-{
-	/* TODO: implement */
-}
-
-static void enable_sw_manual_control_light_sleep(void)
-{
-	/* TODO: implement */
-}
-
-static void dal_dc_clock_gating_dce100_power_up(struct dc_context *ctx, bool enable)
-{
-	if (enable) {
-		enable_hw_base_light_sleep();
-		disable_sw_manual_control_light_sleep();
-	} else {
-		enable_sw_manual_control_light_sleep();
-	}
-}
 
 /**************************************************************************/
 
@@ -154,8 +130,6 @@ bool dce100_hw_sequencer_construct(struct core_dc *dc)
 	dce110_hw_sequencer_construct(dc);
 
 	/* TODO: dce80 is empty implementation at the moment*/
-	dc->hwss.clock_gating_power_up = dal_dc_clock_gating_dce100_power_up;
-
 	dc->hwss.enable_display_power_gating = dce100_enable_display_power_gating;
 	dc->hwss.set_displaymarks = set_displaymarks;
 	dc->hwss.increase_watermarks_for_pipe = set_display_mark_for_pipe_if_needed;

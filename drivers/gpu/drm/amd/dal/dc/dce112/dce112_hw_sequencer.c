@@ -30,7 +30,6 @@
 #include "dce112_hw_sequencer.h"
 
 #include "dce110/dce110_hw_sequencer.h"
-#include "gpu/dce112/dc_clock_gating_dce112.h"
 
 /* include DCE11.2 register header files */
 #include "dce/dce_11_2_d.h"
@@ -196,7 +195,6 @@ bool dce112_hw_sequencer_construct(struct core_dc *dc)
 	dce110_hw_sequencer_construct(dc);
 	dc->hwss.crtc_switch_to_clk_src = dce112_crtc_switch_to_clk_src;
 	dc->hwss.enable_display_power_gating = dce112_enable_display_power_gating;
-	dc->hwss.clock_gating_power_up = dal_dc_clock_gating_dce112_power_up;
 
 	return true;
 }

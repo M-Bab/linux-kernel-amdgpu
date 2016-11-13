@@ -426,38 +426,32 @@ static struct stream_encoder *dce110_stream_encoder_create(
 	.reg_name[id] = mm ## block ## id ## _ ## reg_name
 
 #define HWSEQ_DCE11_REG_LIST_BASE() \
-		HWSEQ_DCEF_REG_LIST(),\
+		SR(DC_MEM_GLOBAL_PWR_REQ_CNTL), \
+		SR(DCFEV_CLOCK_CONTROL), \
+		SRII(DCFE_CLOCK_CONTROL, DCFE, 0), \
+		SRII(DCFE_CLOCK_CONTROL, DCFE, 1), \
 		SRII(CRTC_H_BLANK_START_END, CRTC, 0),\
 		SRII(CRTC_H_BLANK_START_END, CRTC, 1),\
 		SRII(BLND_V_UPDATE_LOCK, BLND, 0),\
 		SRII(BLND_V_UPDATE_LOCK, BLND, 1),\
 		SRII(BLND_CONTROL, BLND, 0),\
 		SRII(BLND_CONTROL, BLND, 1),\
-		.BLNDV_CONTROL = mmBLNDV_CONTROL
+		SR(BLNDV_CONTROL)
 
 static const struct dce_hwseq_registers hwseq_stoney_reg = {
-		HWSEQ_DCE11_REG_LIST_BASE(),
-		.CRTC_H_BLANK_START_END[2] = mmCRTCV_H_BLANK_START_END,
-		.BLND_V_UPDATE_LOCK[2] = mmBLNDV_V_UPDATE_LOCK,
-		.BLND_CONTROL[2] = mmBLNDV_CONTROL,
+		HWSEQ_ST_REG_LIST()
 };
 
 static const struct dce_hwseq_registers hwseq_cz_reg = {
-		HWSEQ_DCE11_REG_LIST_BASE(),
-		SRII(CRTC_H_BLANK_START_END, CRTC, 2),
-		SRII(BLND_V_UPDATE_LOCK, BLND, 2),
-		SRII(BLND_CONTROL, BLND, 2),
-		.CRTC_H_BLANK_START_END[3] = mmCRTCV_H_BLANK_START_END,
-		.BLND_V_UPDATE_LOCK[3] = mmBLNDV_V_UPDATE_LOCK,
-		.BLND_CONTROL[3] = mmBLNDV_CONTROL,
+		HWSEQ_CZ_REG_LIST()
 };
 
 static const struct dce_hwseq_shift hwseq_shift = {
-		HWSEQ_COMMON_MASK_SH_LIST_BASE(__SHIFT),
+		HWSEQ_DCE11_MASK_SH_LIST(__SHIFT),
 };
 
 static const struct dce_hwseq_mask hwseq_mask = {
-		HWSEQ_COMMON_MASK_SH_LIST_BASE(_MASK),
+		HWSEQ_DCE11_MASK_SH_LIST(_MASK),
 };
 
 static struct dce_hwseq *dce110_hwseq_create(

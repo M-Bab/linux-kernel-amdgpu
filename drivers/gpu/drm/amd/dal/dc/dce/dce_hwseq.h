@@ -41,7 +41,8 @@
 	SRII(DCFE_CLOCK_CONTROL, DCFE, 2), \
 	SRII(DCFE_CLOCK_CONTROL, DCFE, 3), \
 	SRII(DCFE_CLOCK_CONTROL, DCFE, 4), \
-	SRII(DCFE_CLOCK_CONTROL, DCFE, 5)
+	SRII(DCFE_CLOCK_CONTROL, DCFE, 5), \
+	SR(DC_MEM_GLOBAL_PWR_REQ_CNTL)
 
 #define HWSEQ_BLND_REG_LIST() \
 	SRII(BLND_V_UPDATE_LOCK, BLND, 0), \
@@ -57,9 +58,40 @@
 	SRII(BLND_CONTROL, BLND, 4), \
 	SRII(BLND_CONTROL, BLND, 5)
 
-#define HWSEQ_DCE8_REG_LIST_BASE() \
+#define HWSEQ_DCE11_REG_LIST_BASE() \
+	SR(DC_MEM_GLOBAL_PWR_REQ_CNTL), \
+	SR(DCFEV_CLOCK_CONTROL), \
+	SRII(DCFE_CLOCK_CONTROL, DCFE, 0), \
+	SRII(DCFE_CLOCK_CONTROL, DCFE, 1), \
+	SRII(CRTC_H_BLANK_START_END, CRTC, 0),\
+	SRII(CRTC_H_BLANK_START_END, CRTC, 1),\
+	SRII(BLND_V_UPDATE_LOCK, BLND, 0),\
+	SRII(BLND_V_UPDATE_LOCK, BLND, 1),\
+	SRII(BLND_CONTROL, BLND, 0),\
+	SRII(BLND_CONTROL, BLND, 1),\
+	SR(BLNDV_CONTROL)
+
+#define HWSEQ_DCE8_REG_LIST() \
 	HWSEQ_DCEF_REG_LIST_DCE8(), \
-	HWSEQ_BLND_REG_LIST(), \
+	HWSEQ_BLND_REG_LIST()
+
+#define HWSEQ_ST_REG_LIST() \
+	HWSEQ_DCE11_REG_LIST_BASE(), \
+	.DCFE_CLOCK_CONTROL[2] = mmDCFEV_CLOCK_CONTROL, \
+	.CRTC_H_BLANK_START_END[2] = mmCRTCV_H_BLANK_START_END, \
+	.BLND_V_UPDATE_LOCK[2] = mmBLNDV_V_UPDATE_LOCK, \
+	.BLND_CONTROL[2] = mmBLNDV_CONTROL,
+
+#define HWSEQ_CZ_REG_LIST() \
+	HWSEQ_DCE11_REG_LIST_BASE(), \
+	SRII(DCFE_CLOCK_CONTROL, DCFE, 2), \
+	SRII(CRTC_H_BLANK_START_END, CRTC, 2), \
+	SRII(BLND_V_UPDATE_LOCK, BLND, 2), \
+	SRII(BLND_CONTROL, BLND, 2), \
+	.DCFE_CLOCK_CONTROL[3] = mmDCFEV_CLOCK_CONTROL, \
+	.CRTC_H_BLANK_START_END[3] = mmCRTCV_H_BLANK_START_END, \
+	.BLND_V_UPDATE_LOCK[3] = mmBLNDV_V_UPDATE_LOCK, \
+	.BLND_CONTROL[3] = mmBLNDV_CONTROL
 
 #define HWSEQ_COMMON_REG_LIST_BASE() \
 	HWSEQ_DCEF_REG_LIST(), \
@@ -67,6 +99,8 @@
 
 struct dce_hwseq_registers {
 	uint32_t DCFE_CLOCK_CONTROL[6];
+	uint32_t DCFEV_CLOCK_CONTROL;
+	uint32_t DC_MEM_GLOBAL_PWR_REQ_CNTL;
 	uint32_t BLND_V_UPDATE_LOCK[6];
 	uint32_t BLND_CONTROL[6];
 	uint32_t BLNDV_CONTROL;
@@ -77,7 +111,8 @@ struct dce_hwseq_registers {
 	.field_name = blk_name ## reg_name ## __ ## field_name ## post_fix
 
 #define HWSEQ_DCEF_MASK_SH_LIST(mask_sh, blk)\
-	HWS_SF(blk, CLOCK_CONTROL, DCFE_CLOCK_ENABLE, mask_sh)
+	HWS_SF(blk, CLOCK_CONTROL, DCFE_CLOCK_ENABLE, mask_sh),\
+	SF(DC_MEM_GLOBAL_PWR_REQ_CNTL, DC_MEM_GLOBAL_PWR_REQ_DIS, mask_sh)
 
 #define HWSEQ_BLND_MASK_SH_LIST(mask_sh, blk)\
 	HWS_SF(blk, V_UPDATE_LOCK, BLND_DCP_GRPH_V_UPDATE_LOCK, mask_sh),\
@@ -90,19 +125,28 @@ struct dce_hwseq_registers {
 	HWS_SF(blk, CONTROL, BLND_MODE, mask_sh),\
 	HWS_SF(blk, CONTROL, BLND_MULTIPLIED_MODE, mask_sh)
 
-#define HWSEQ_DCE8_MASK_SH_LIST_BASE(mask_sh)\
+#define HWSEQ_DCE8_MASK_SH_LIST(mask_sh)\
 	.DCFE_CLOCK_ENABLE = CRTC_DCFE_CLOCK_CONTROL__CRTC_DCFE_CLOCK_ENABLE ## mask_sh, \
 	HWS_SF(BLND_, V_UPDATE_LOCK, BLND_DCP_GRPH_V_UPDATE_LOCK, mask_sh),\
 	HWS_SF(BLND_, V_UPDATE_LOCK, BLND_SCL_V_UPDATE_LOCK, mask_sh),\
 	HWS_SF(BLND_, V_UPDATE_LOCK, BLND_DCP_GRPH_SURF_V_UPDATE_LOCK, mask_sh),\
 	HWS_SF(BLND_, CONTROL, BLND_MODE, mask_sh)
 
-#define HWSEQ_COMMON_MASK_SH_LIST_BASE(mask_sh)\
+#define HWSEQ_DCE10_MASK_SH_LIST(mask_sh)\
 	HWSEQ_DCEF_MASK_SH_LIST(mask_sh, DCFE_),\
 	HWSEQ_BLND_MASK_SH_LIST(mask_sh, BLND_)
 
+#define HWSEQ_DCE11_MASK_SH_LIST(mask_sh)\
+	HWSEQ_DCE10_MASK_SH_LIST(mask_sh),\
+	SF(DCFEV_CLOCK_CONTROL, DCFEV_CLOCK_ENABLE, mask_sh)
+
+#define HWSEQ_DCE112_MASK_SH_LIST(mask_sh)\
+	HWSEQ_DCE10_MASK_SH_LIST(mask_sh)
+
 #define HWSEQ_REG_FIED_LIST(type) \
 	type DCFE_CLOCK_ENABLE; \
+	type DCFEV_CLOCK_ENABLE; \
+	type DC_MEM_GLOBAL_PWR_REQ_DIS; \
 	type BLND_DCP_GRPH_V_UPDATE_LOCK; \
 	type BLND_SCL_V_UPDATE_LOCK; \
 	type BLND_DCP_GRPH_SURF_V_UPDATE_LOCK; \
@@ -133,6 +177,12 @@ struct dce_hwseq {
 	struct dce_hwseq_wa wa;
 };
 
+enum blnd_mode {
+	BLND_MODE_CURRENT_PIPE = 0,/* Data from current pipe only */
+	BLND_MODE_OTHER_PIPE, /* Data from other pipe only */
+	BLND_MODE_BLENDING,/* Alpha blending - blend 'current' and 'other' */
+};
+
 void dce_enable_fe_clock(struct dce_hwseq *hwss,
 		unsigned int inst, bool enable);
 
@@ -141,12 +191,10 @@ void dce_pipe_control_lock(struct dce_hwseq *hws,
 		enum pipe_lock_control control_mask,
 		bool lock);
 
-enum blnd_mode {
-	BLND_MODE_CURRENT_PIPE = 0,/* Data from current pipe only */
-	BLND_MODE_OTHER_PIPE, /* Data from other pipe only */
-	BLND_MODE_BLENDING,/* Alpha blending - blend 'current' and 'other' */
-	BLND_MODE_STEREO
-};
 void dce_set_blender_mode(struct dce_hwseq *hws,
 	unsigned int blnd_inst, enum blnd_mode mode);
+
+void dce_clock_gating_power_up(struct dce_hwseq *hws,
+		bool enable);
+
 #endif   /*__DCE_HWSEQ_H__*/

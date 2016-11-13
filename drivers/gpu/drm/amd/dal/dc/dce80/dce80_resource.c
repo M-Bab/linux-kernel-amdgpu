@@ -442,15 +442,15 @@ static struct stream_encoder *dce80_stream_encoder_create(
 	.reg_name[id] = mm ## block ## id ## _ ## reg_name
 
 static const struct dce_hwseq_registers hwseq_reg = {
-		HWSEQ_DCE8_REG_LIST_BASE()
+		HWSEQ_DCE8_REG_LIST()
 };
 
 static const struct dce_hwseq_shift hwseq_shift = {
-		HWSEQ_DCE8_MASK_SH_LIST_BASE(__SHIFT)
+		HWSEQ_DCE8_MASK_SH_LIST(__SHIFT)
 };
 
 static const struct dce_hwseq_mask hwseq_mask = {
-		HWSEQ_DCE8_MASK_SH_LIST_BASE(_MASK)
+		HWSEQ_DCE8_MASK_SH_LIST(_MASK)
 };
 
 static struct dce_hwseq *dce80_hwseq_create(
