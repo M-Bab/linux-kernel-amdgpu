@@ -149,8 +149,7 @@ static void disable_sw_manual_control_light_sleep(void)
 	/* TODO: implement */
 }
 
-void dce_clock_gating_power_up(
-		struct dce_hwseq *hws,
+void dce_clock_gating_power_up(struct dce_hwseq *hws,
 		bool enable)
 {
 	if (enable) {
@@ -159,5 +158,38 @@ void dce_clock_gating_power_up(
 	} else {
 		dce_disable_sram_shut_down(hws);
 		dce_underlay_clock_enable(hws);
+	}
+}
+
+void dce_crtc_switch_to_clk_src(struct dce_hwseq *hws,
+		struct clock_source *clk_src,
+		unsigned int tg_inst)
+{
+	if (clk_src->id == CLOCK_SOURCE_ID_DP_DTO) {
+		REG_UPDATE(PIXEL_RATE_CNTL[tg_inst],
+				DP_DTO0_ENABLE, 1);
+
+	} else if (clk_src->id >= CLOCK_SOURCE_COMBO_PHY_PLL0) {
+		uint32_t rate_source = clk_src->id - CLOCK_SOURCE_COMBO_PHY_PLL0;
+
+		REG_UPDATE_2(PHYPLL_PIXEL_RATE_CNTL[tg_inst],
+				PHYPLL_PIXEL_RATE_SOURCE, rate_source,
+				PIXEL_RATE_PLL_SOURCE, 0);
+
+		REG_UPDATE(PIXEL_RATE_CNTL[tg_inst],
+				DP_DTO0_ENABLE, 0);
+
+	} else if (clk_src->id <= CLOCK_SOURCE_ID_PLL2) {
+		uint32_t rate_source = clk_src->id - CLOCK_SOURCE_ID_PLL0;
+
+		REG_UPDATE_2(PIXEL_RATE_CNTL[tg_inst],
+				PIXEL_RATE_SOURCE, rate_source,
+				DP_DTO0_ENABLE, 0);
+
+		if (REG(PHYPLL_PIXEL_RATE_CNTL[tg_inst]))
+			REG_UPDATE(PHYPLL_PIXEL_RATE_CNTL[tg_inst],
+					PIXEL_RATE_PLL_SOURCE, 1);
+	} else {
+		DC_ERR("unknown clock source");
 	}
 }

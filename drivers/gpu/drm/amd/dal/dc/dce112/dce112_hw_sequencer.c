@@ -66,40 +66,6 @@ static const struct dce112_hw_seq_reg_offsets reg_offsets[] = {
 /*******************************************************************************
  * Private definitions
  ******************************************************************************/
-/***************************PIPE_CONTROL***********************************/
-
-static void dce112_crtc_switch_to_clk_src(
-				struct clock_source *clk_src, uint8_t crtc_inst)
-{
-	uint32_t pixel_rate_cntl_value;
-	uint32_t phypll_pixel_rate_cntl_value = 0;
-	uint32_t addr, phypll_addr;
-
-	phypll_addr = mmCRTC0_PHYPLL_PIXEL_RATE_CNTL + crtc_inst *
-		(mmCRTC1_PHYPLL_PIXEL_RATE_CNTL - mmCRTC0_PHYPLL_PIXEL_RATE_CNTL);
-	addr = mmCRTC0_PIXEL_RATE_CNTL + crtc_inst *
-			(mmCRTC1_PIXEL_RATE_CNTL - mmCRTC0_PIXEL_RATE_CNTL);
-
-	pixel_rate_cntl_value = dm_read_reg(clk_src->ctx, addr);
-
-	if (clk_src->id == CLOCK_SOURCE_ID_DP_DTO)
-		set_reg_field_value(pixel_rate_cntl_value, 1,
-			CRTC0_PIXEL_RATE_CNTL, DP_DTO0_ENABLE);
-	else {
-
-		set_reg_field_value(pixel_rate_cntl_value,
-				clk_src->id - CLOCK_SOURCE_COMBO_PHY_PLL0,
-				CRTC0_PIXEL_RATE_CNTL,
-				CRTC0_PIXEL_RATE_SOURCE);
-
-		set_reg_field_value(phypll_pixel_rate_cntl_value,
-				clk_src->id - CLOCK_SOURCE_COMBO_PHY_PLL0,
-				CRTC0_PHYPLL_PIXEL_RATE_CNTL,
-				CRTC0_PHYPLL_PIXEL_RATE_SOURCE);
-		dm_write_reg(clk_src->ctx, phypll_addr, phypll_pixel_rate_cntl_value);
-	}
-	dm_write_reg(clk_src->ctx, addr, pixel_rate_cntl_value);
-}
 
 static void dce112_init_pte(struct dc_context *ctx)
 {
@@ -193,7 +159,6 @@ bool dce112_hw_sequencer_construct(struct core_dc *dc)
 	 * structure
 	 */
 	dce110_hw_sequencer_construct(dc);
-	dc->hwss.crtc_switch_to_clk_src = dce112_crtc_switch_to_clk_src;
 	dc->hwss.enable_display_power_gating = dce112_enable_display_power_gating;
 
 	return true;

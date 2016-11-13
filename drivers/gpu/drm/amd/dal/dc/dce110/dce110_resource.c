@@ -425,19 +425,6 @@ static struct stream_encoder *dce110_stream_encoder_create(
 #define SRII(reg_name, block, id)\
 	.reg_name[id] = mm ## block ## id ## _ ## reg_name
 
-#define HWSEQ_DCE11_REG_LIST_BASE() \
-		SR(DC_MEM_GLOBAL_PWR_REQ_CNTL), \
-		SR(DCFEV_CLOCK_CONTROL), \
-		SRII(DCFE_CLOCK_CONTROL, DCFE, 0), \
-		SRII(DCFE_CLOCK_CONTROL, DCFE, 1), \
-		SRII(CRTC_H_BLANK_START_END, CRTC, 0),\
-		SRII(CRTC_H_BLANK_START_END, CRTC, 1),\
-		SRII(BLND_V_UPDATE_LOCK, BLND, 0),\
-		SRII(BLND_V_UPDATE_LOCK, BLND, 1),\
-		SRII(BLND_CONTROL, BLND, 0),\
-		SRII(BLND_CONTROL, BLND, 1),\
-		SR(BLNDV_CONTROL)
-
 static const struct dce_hwseq_registers hwseq_stoney_reg = {
 		HWSEQ_ST_REG_LIST()
 };

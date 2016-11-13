@@ -58,6 +58,22 @@
 	SRII(BLND_CONTROL, BLND, 4), \
 	SRII(BLND_CONTROL, BLND, 5)
 
+#define HWSEQ_PIXEL_RATE_REG_LIST(blk) \
+	SRII(PIXEL_RATE_CNTL, blk, 0), \
+	SRII(PIXEL_RATE_CNTL, blk, 1), \
+	SRII(PIXEL_RATE_CNTL, blk, 2), \
+	SRII(PIXEL_RATE_CNTL, blk, 3), \
+	SRII(PIXEL_RATE_CNTL, blk, 4), \
+	SRII(PIXEL_RATE_CNTL, blk, 5)
+
+#define HWSEQ_PHYPLL_REG_LIST(blk) \
+	SRII(PHYPLL_PIXEL_RATE_CNTL, blk, 0), \
+	SRII(PHYPLL_PIXEL_RATE_CNTL, blk, 1), \
+	SRII(PHYPLL_PIXEL_RATE_CNTL, blk, 2), \
+	SRII(PHYPLL_PIXEL_RATE_CNTL, blk, 3), \
+	SRII(PHYPLL_PIXEL_RATE_CNTL, blk, 4), \
+	SRII(PHYPLL_PIXEL_RATE_CNTL, blk, 5)
+
 #define HWSEQ_DCE11_REG_LIST_BASE() \
 	SR(DC_MEM_GLOBAL_PWR_REQ_CNTL), \
 	SR(DCFEV_CLOCK_CONTROL), \
@@ -69,11 +85,18 @@
 	SRII(BLND_V_UPDATE_LOCK, BLND, 1),\
 	SRII(BLND_CONTROL, BLND, 0),\
 	SRII(BLND_CONTROL, BLND, 1),\
-	SR(BLNDV_CONTROL)
+	SR(BLNDV_CONTROL),\
+	HWSEQ_PIXEL_RATE_REG_LIST(CRTC)
 
 #define HWSEQ_DCE8_REG_LIST() \
 	HWSEQ_DCEF_REG_LIST_DCE8(), \
-	HWSEQ_BLND_REG_LIST()
+	HWSEQ_BLND_REG_LIST(), \
+	HWSEQ_PIXEL_RATE_REG_LIST(CRTC)
+
+#define HWSEQ_DCE10_REG_LIST() \
+	HWSEQ_DCEF_REG_LIST(), \
+	HWSEQ_BLND_REG_LIST(), \
+	HWSEQ_PIXEL_RATE_REG_LIST(CRTC)
 
 #define HWSEQ_ST_REG_LIST() \
 	HWSEQ_DCE11_REG_LIST_BASE(), \
@@ -93,9 +116,10 @@
 	.BLND_V_UPDATE_LOCK[3] = mmBLNDV_V_UPDATE_LOCK, \
 	.BLND_CONTROL[3] = mmBLNDV_CONTROL
 
-#define HWSEQ_COMMON_REG_LIST_BASE() \
-	HWSEQ_DCEF_REG_LIST(), \
-	HWSEQ_BLND_REG_LIST()
+#define HWSEQ_DCE112_REG_LIST() \
+	HWSEQ_DCE10_REG_LIST(), \
+	HWSEQ_PIXEL_RATE_REG_LIST(CRTC), \
+	HWSEQ_PHYPLL_REG_LIST(CRTC)
 
 struct dce_hwseq_registers {
 	uint32_t DCFE_CLOCK_CONTROL[6];
@@ -104,11 +128,18 @@ struct dce_hwseq_registers {
 	uint32_t BLND_V_UPDATE_LOCK[6];
 	uint32_t BLND_CONTROL[6];
 	uint32_t BLNDV_CONTROL;
+
 	uint32_t CRTC_H_BLANK_START_END[6];
+	uint32_t PIXEL_RATE_CNTL[6];
+	uint32_t PHYPLL_PIXEL_RATE_CNTL[6];
 };
  /* set field name */
 #define HWS_SF(blk_name, reg_name, field_name, post_fix)\
 	.field_name = blk_name ## reg_name ## __ ## field_name ## post_fix
+
+#define HWS_SF1(blk_name, reg_name, field_name, post_fix)\
+	.field_name = blk_name ## reg_name ## __ ## blk_name ## field_name ## post_fix
+
 
 #define HWSEQ_DCEF_MASK_SH_LIST(mask_sh, blk)\
 	HWS_SF(blk, CLOCK_CONTROL, DCFE_CLOCK_ENABLE, mask_sh),\
@@ -125,23 +156,35 @@ struct dce_hwseq_registers {
 	HWS_SF(blk, CONTROL, BLND_MODE, mask_sh),\
 	HWS_SF(blk, CONTROL, BLND_MULTIPLIED_MODE, mask_sh)
 
+#define HWSEQ_PIXEL_RATE_MASK_SH_LIST(mask_sh, blk)\
+	HWS_SF1(blk, PIXEL_RATE_CNTL, PIXEL_RATE_SOURCE, mask_sh),\
+	HWS_SF(blk, PIXEL_RATE_CNTL, DP_DTO0_ENABLE, mask_sh)
+
+#define HWSEQ_PHYPLL_MASK_SH_LIST(mask_sh, blk)\
+	HWS_SF1(blk, PHYPLL_PIXEL_RATE_CNTL, PHYPLL_PIXEL_RATE_SOURCE, mask_sh),\
+	HWS_SF1(blk, PHYPLL_PIXEL_RATE_CNTL, PIXEL_RATE_PLL_SOURCE, mask_sh)
+
 #define HWSEQ_DCE8_MASK_SH_LIST(mask_sh)\
 	.DCFE_CLOCK_ENABLE = CRTC_DCFE_CLOCK_CONTROL__CRTC_DCFE_CLOCK_ENABLE ## mask_sh, \
 	HWS_SF(BLND_, V_UPDATE_LOCK, BLND_DCP_GRPH_V_UPDATE_LOCK, mask_sh),\
 	HWS_SF(BLND_, V_UPDATE_LOCK, BLND_SCL_V_UPDATE_LOCK, mask_sh),\
 	HWS_SF(BLND_, V_UPDATE_LOCK, BLND_DCP_GRPH_SURF_V_UPDATE_LOCK, mask_sh),\
-	HWS_SF(BLND_, CONTROL, BLND_MODE, mask_sh)
+	HWS_SF(BLND_, CONTROL, BLND_MODE, mask_sh),\
+	HWSEQ_PIXEL_RATE_MASK_SH_LIST(mask_sh, CRTC0_)
 
 #define HWSEQ_DCE10_MASK_SH_LIST(mask_sh)\
 	HWSEQ_DCEF_MASK_SH_LIST(mask_sh, DCFE_),\
-	HWSEQ_BLND_MASK_SH_LIST(mask_sh, BLND_)
+	HWSEQ_BLND_MASK_SH_LIST(mask_sh, BLND_),\
+	HWSEQ_PIXEL_RATE_MASK_SH_LIST(mask_sh, CRTC0_)
 
 #define HWSEQ_DCE11_MASK_SH_LIST(mask_sh)\
 	HWSEQ_DCE10_MASK_SH_LIST(mask_sh),\
-	SF(DCFEV_CLOCK_CONTROL, DCFEV_CLOCK_ENABLE, mask_sh)
+	SF(DCFEV_CLOCK_CONTROL, DCFEV_CLOCK_ENABLE, mask_sh),\
+	HWSEQ_PIXEL_RATE_MASK_SH_LIST(mask_sh, CRTC0_)
 
 #define HWSEQ_DCE112_MASK_SH_LIST(mask_sh)\
-	HWSEQ_DCE10_MASK_SH_LIST(mask_sh)
+	HWSEQ_DCE10_MASK_SH_LIST(mask_sh),\
+	HWSEQ_PHYPLL_MASK_SH_LIST(mask_sh, CRTC0_)
 
 #define HWSEQ_REG_FIED_LIST(type) \
 	type DCFE_CLOCK_ENABLE; \
@@ -156,6 +199,10 @@ struct dce_hwseq_registers {
 	type BLND_ALPHA_MODE; \
 	type BLND_MODE; \
 	type BLND_MULTIPLIED_MODE; \
+	type DP_DTO0_ENABLE; \
+	type PIXEL_RATE_SOURCE; \
+	type PHYPLL_PIXEL_RATE_SOURCE; \
+	type PIXEL_RATE_PLL_SOURCE; \
 
 struct dce_hwseq_shift {
 	HWSEQ_REG_FIED_LIST(uint8_t)
@@ -197,4 +244,7 @@ void dce_set_blender_mode(struct dce_hwseq *hws,
 void dce_clock_gating_power_up(struct dce_hwseq *hws,
 		bool enable);
 
+void dce_crtc_switch_to_clk_src(struct dce_hwseq *hws,
+		struct clock_source *clk_src,
+		unsigned int tg_inst);
 #endif   /*__DCE_HWSEQ_H__*/

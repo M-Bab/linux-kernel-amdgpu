@@ -148,35 +148,6 @@ static void dce110_init_pte(struct dc_context *ctx)
 		dm_write_reg(ctx, addr, value);
 	}
 }
-
-static void dce110_crtc_switch_to_clk_src(
-				struct clock_source *clk_src, uint8_t crtc_inst)
-{
-	uint32_t pixel_rate_cntl_value;
-	uint32_t addr;
-
-	/* These addresses are the same across DCE8 - DCE11.2 */
-	addr = mmCRTC0_PIXEL_RATE_CNTL + crtc_inst *
-			(mmCRTC1_PIXEL_RATE_CNTL - mmCRTC0_PIXEL_RATE_CNTL);
-
-	pixel_rate_cntl_value = dm_read_reg(clk_src->ctx, addr);
-
-	if (clk_src->dp_clk_src)
-		set_reg_field_value(pixel_rate_cntl_value, 1,
-			CRTC0_PIXEL_RATE_CNTL, DP_DTO0_ENABLE);
-	else {
-		set_reg_field_value(pixel_rate_cntl_value,
-				0,
-				CRTC0_PIXEL_RATE_CNTL,
-				DP_DTO0_ENABLE);
-
-		set_reg_field_value(pixel_rate_cntl_value,
-				clk_src->id - CLOCK_SOURCE_ID_PLL0,
-				CRTC0_PIXEL_RATE_CNTL,
-				CRTC0_PIXEL_RATE_SOURCE);
-	}
-	dm_write_reg(clk_src->ctx, addr, pixel_rate_cntl_value);
-}
 /**************************************************************************/
 
 static void enable_display_pipe_clock_gating(
@@ -1037,7 +1008,8 @@ static void switch_dp_clock_sources(
 					res_ctx, pipe_ctx->clock_source);
 				pipe_ctx->clock_source = clk_src;
 				resource_reference_clock_source(res_ctx, clk_src);
-				dc->hwss.crtc_switch_to_clk_src(clk_src, i);
+
+				dce_crtc_switch_to_clk_src(dc->hwseq, clk_src, i);
 			}
 		}
 	}
@@ -1278,7 +1250,7 @@ enum dc_status dce110_apply_ctx_to_hw(
 
 		if (pipe_ctx->stream == pipe_ctx_old->stream) {
 			if (pipe_ctx_old->clock_source != pipe_ctx->clock_source)
-				dc->hwss.crtc_switch_to_clk_src(
+				dce_crtc_switch_to_clk_src(dc->hwseq,
 						pipe_ctx->clock_source, i);
 			continue;
 		}
@@ -1990,7 +1962,6 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.disable_stream = dce110_disable_stream,
 	.unblank_stream = dce110_unblank_stream,
 	.enable_display_pipe_clock_gating = enable_display_pipe_clock_gating,
-	.crtc_switch_to_clk_src = dce110_crtc_switch_to_clk_src,
 	.enable_display_power_gating = dce110_enable_display_power_gating,
 	.power_down_front_end = dce110_power_down_fe,
 	.pipe_control_lock = dce_pipe_control_lock,

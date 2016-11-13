@@ -451,7 +451,7 @@ static struct stream_encoder *dce100_stream_encoder_create(
 	.reg_name[id] = mm ## block ## id ## _ ## reg_name
 
 static const struct dce_hwseq_registers hwseq_reg = {
-		HWSEQ_COMMON_REG_LIST_BASE()
+		HWSEQ_DCE10_REG_LIST()
 };
 
 static const struct dce_hwseq_shift hwseq_shift = {

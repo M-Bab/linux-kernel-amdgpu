@@ -96,8 +96,6 @@ struct hw_sequencer_funcs {
 	void (*encoder_set_lcd_backlight_level)(
 		struct link_encoder *enc, uint32_t level);
 
-	void (*crtc_switch_to_clk_src)(struct clock_source *, uint8_t);
-
 	void (*enable_display_pipe_clock_gating)(
 					struct dc_context *ctx,
 					bool clock_gating);
