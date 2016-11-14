@@ -85,7 +85,7 @@ struct dce_mem_input_registers {
 		MI_DCP_MASK_SH_LIST(mask_sh, ),\
 		MI_GFX8_TILE_MASK_SH_LIST(mask_sh, )
 
-#define MI_REG_FIED_LIST(type) \
+#define MI_REG_FIELD_LIST(type) \
 	type GRPH_ENABLE; \
 	type GRPH_X_START; \
 	type GRPH_Y_START; \
@@ -115,11 +115,11 @@ struct dce_mem_input_registers {
 	type GRPH_NUM_PIPES; \
 
 struct dce_mem_input_shift {
-	MI_REG_FIED_LIST(uint8_t)
+	MI_REG_FIELD_LIST(uint8_t)
 };
 
 struct dce_mem_input_mask {
-	MI_REG_FIED_LIST(uint32_t)
+	MI_REG_FIELD_LIST(uint32_t)
 };
 
 struct mem_input;
