@@ -515,14 +515,6 @@ struct dce110_stream_enc_registers {
 	uint32_t HDMI_ACR_48_0;
 	uint32_t HDMI_ACR_48_1;
 	uint32_t TMDS_CNTL;
-	uint32_t DP_DB_CNTL;
-	uint32_t DP_MSA_MISC;
-	uint32_t DP_MSA_COLORIMETRY;
-	uint32_t DP_MSA_TIMING_PARAM1;
-	uint32_t DP_MSA_TIMING_PARAM2;
-	uint32_t DP_MSA_TIMING_PARAM3;
-	uint32_t DP_MSA_TIMING_PARAM4;
-	uint32_t HDMI_DB_CONTROL;
 };
 
 struct dce110_stream_encoder {

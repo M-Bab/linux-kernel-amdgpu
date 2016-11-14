@@ -231,9 +231,6 @@ static void dce110_stream_encoder_dp_set_stream_attribute(
 	uint32_t h_back_porch;
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
 
-	/* for bring up, disable dp double  TODO */
-	REG_UPDATE(DP_DB_CNTL, DP_DB_DISABLE, 1);
-
 	/* set pixel encoding */
 	switch (crtc_timing->pixel_encoding) {
 	case PIXEL_ENCODING_YCBCR422:
@@ -269,7 +266,6 @@ static void dce110_stream_encoder_dp_set_stream_attribute(
 		break;
 	}
 
-	misc1 = REG_READ(DP_MSA_MISC);
 	/* set color depth */
 
 	switch (crtc_timing->display_color_depth) {
