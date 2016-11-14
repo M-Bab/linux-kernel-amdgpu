@@ -70,10 +70,9 @@
 
 #endif /* CONFIG_DEBUG_KERNEL || CONFIG_DEBUG_DRIVER */
 
-
-#define DC_ERR(err_msg)  do { \
+#define DC_ERR(...)  do { \
+	dm_error(__VA_ARGS__); \
 	BREAK_TO_DEBUGGER(); \
-	dm_error(err_msg); \
 } while (0)
 
 #define dm_alloc(size) kzalloc(size, GFP_KERNEL)
@@ -202,7 +201,8 @@ uint32_t generic_reg_update_ex(const struct dc_context *ctx,
  */
 unsigned int generic_reg_wait(const struct dc_context *ctx,
 	uint32_t addr, uint32_t mask, uint32_t shift, uint32_t condition_value,
-	unsigned int delay_between_poll_us, unsigned int time_out_num_tries);
+	unsigned int delay_between_poll_us, unsigned int time_out_num_tries,
+	const char *func_name);
 
 /**************************************
  * Power Play (PP) interfaces

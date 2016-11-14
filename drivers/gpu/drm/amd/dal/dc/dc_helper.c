@@ -114,7 +114,8 @@ uint32_t generic_reg_get(const struct dc_context *ctx,
 
 uint32_t generic_reg_wait(const struct dc_context *ctx,
 	uint32_t addr, uint32_t shift, uint32_t mask, uint32_t condition_value,
-	unsigned int delay_between_poll_us, unsigned int time_out_num_tries)
+	unsigned int delay_between_poll_us, unsigned int time_out_num_tries,
+	const char *func_name)
 {
 	uint32_t field_value;
 	uint32_t reg_val;
@@ -137,6 +138,7 @@ uint32_t generic_reg_wait(const struct dc_context *ctx,
 			return reg_val;
 	}
 
-	BREAK_TO_DEBUGGER();
+	DC_ERR("REG_WAIT timeout %dus * %d tries - ",
+			delay_between_poll_us, time_out_num_tries, func_name);
 	return reg_val;
 }

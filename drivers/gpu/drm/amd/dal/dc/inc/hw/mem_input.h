@@ -48,6 +48,7 @@ struct mem_input {
 	const struct dce_mem_input_registers *regs;
 	const struct dce_mem_input_shift *shifts;
 	const struct dce_mem_input_mask *masks;
+	struct dce_mem_input_wa wa;
 };
 
 struct mem_input_funcs {

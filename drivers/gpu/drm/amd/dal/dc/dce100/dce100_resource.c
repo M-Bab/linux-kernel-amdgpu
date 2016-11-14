@@ -51,6 +51,10 @@
 #include "dce/dce_10_0_d.h"
 #include "dce/dce_10_0_sh_mask.h"
 
+#ifndef mmMC_HUB_RDREQ_DMIF_LIMIT
+#include "gmc/gmc_8_2_d.h"
+#include "gmc/gmc_8_2_sh_mask.h"
+#endif
 
 #ifndef mmDP_DPHY_INTERNAL_CTRL
 	#define mmDP_DPHY_INTERNAL_CTRL 0x4aa7
@@ -471,7 +475,10 @@ static const struct resource_create_funcs res_create_funcs = {
 	.create_hwseq = dce100_hwseq_create,
 };
 
-#define mi_inst_regs(id) { MI_REG_LIST(id) }
+#define mi_inst_regs(id) { \
+	MI_REG_LIST(id), \
+	.MC_HUB_RDREQ_DMIF_LIMIT = mmMC_HUB_RDREQ_DMIF_LIMIT \
+}
 static const struct dce_mem_input_registers mi_regs[] = {
 		mi_inst_regs(0),
 		mi_inst_regs(1),
@@ -482,11 +489,13 @@ static const struct dce_mem_input_registers mi_regs[] = {
 };
 
 static const struct dce_mem_input_shift mi_shifts = {
-		MI_DCE_MASK_SH_LIST(__SHIFT)
+		MI_DCE_MASK_SH_LIST(__SHIFT),
+		.ENABLE = MC_HUB_RDREQ_DMIF_LIMIT__ENABLE__SHIFT
 };
 
 static const struct dce_mem_input_mask mi_masks = {
-		MI_DCE_MASK_SH_LIST(_MASK)
+		MI_DCE_MASK_SH_LIST(_MASK),
+		.ENABLE = MC_HUB_RDREQ_DMIF_LIMIT__ENABLE_MASK
 };
 
 static struct mem_input *dce100_mem_input_create(
@@ -506,6 +515,7 @@ static struct mem_input *dce100_mem_input_create(
 		mi->regs = &mi_regs[inst];
 		mi->shifts = &mi_shifts;
 		mi->masks = &mi_masks;
+		mi->wa.single_head_rdreq_dmif_limit = 2;
 		return mi;
 	}
 

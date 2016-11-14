@@ -36,6 +36,78 @@
 	mi->shifts->field_name, mi->masks->field_name
 
 
+static void program_urgency_watermark(struct mem_input *mi,
+	uint32_t wm_select,
+	uint32_t urgency_low_wm,
+	uint32_t urgency_high_wm)
+{
+	REG_UPDATE(DPG_WATERMARK_MASK_CONTROL,
+		URGENCY_WATERMARK_MASK, wm_select);
+
+	REG_SET_2(DPG_PIPE_URGENCY_CONTROL, 0,
+		URGENCY_LOW_WATERMARK, urgency_low_wm,
+		URGENCY_HIGH_WATERMARK, urgency_high_wm);
+}
+
+static void program_nbp_watermark(struct mem_input *mi,
+	uint32_t wm_select,
+	uint32_t nbp_wm)
+{
+	if (REG(DPG_PIPE_NB_PSTATE_CHANGE_CONTROL)) {
+		REG_UPDATE(DPG_WATERMARK_MASK_CONTROL,
+				NB_PSTATE_CHANGE_WATERMARK_MASK, wm_select);
+
+		REG_UPDATE_3(DPG_PIPE_NB_PSTATE_CHANGE_CONTROL,
+				NB_PSTATE_CHANGE_ENABLE, 1,
+				NB_PSTATE_CHANGE_URGENT_DURING_REQUEST, 1,
+				NB_PSTATE_CHANGE_NOT_SELF_REFRESH_DURING_REQUEST, 1);
+
+		REG_UPDATE(DPG_PIPE_NB_PSTATE_CHANGE_CONTROL,
+				NB_PSTATE_CHANGE_WATERMARK, nbp_wm);
+	}
+}
+
+static void program_stutter_watermark(struct mem_input *mi,
+	uint32_t wm_select,
+	uint32_t stutter_mark)
+{
+	REG_UPDATE(DPG_WATERMARK_MASK_CONTROL,
+		STUTTER_EXIT_SELF_REFRESH_WATERMARK_MASK, wm_select);
+
+		REG_UPDATE(DPG_PIPE_STUTTER_CONTROL,
+				STUTTER_EXIT_SELF_REFRESH_WATERMARK, stutter_mark);
+}
+
+void dce_mem_input_program_display_marks(struct mem_input *mi,
+	struct bw_watermarks nbp,
+	struct bw_watermarks stutter,
+	struct bw_watermarks urgent,
+	uint32_t total_dest_line_time_ns)
+{
+	uint32_t stutter_en = mi->ctx->dc->debug.disable_stutter ? 0 : 1;
+
+	program_urgency_watermark(mi, 0, /* set a */
+			urgent.a_mark, total_dest_line_time_ns);
+	program_urgency_watermark(mi, 1, /* set b */
+			urgent.b_mark, total_dest_line_time_ns);
+	program_urgency_watermark(mi, 2, /* set c */
+			urgent.c_mark, total_dest_line_time_ns);
+	program_urgency_watermark(mi, 3, /* set d */
+			urgent.d_mark, total_dest_line_time_ns);
+
+	REG_UPDATE_2(DPG_PIPE_STUTTER_CONTROL,
+		STUTTER_ENABLE, stutter_en,
+		STUTTER_IGNORE_FBC, 1);
+	program_nbp_watermark(mi, 0, nbp.a_mark); /* set a */
+	program_nbp_watermark(mi, 1, nbp.b_mark); /* set b */
+	program_nbp_watermark(mi, 2, nbp.c_mark); /* set c */
+	program_nbp_watermark(mi, 3, nbp.d_mark); /* set d */
+
+	program_stutter_watermark(mi, 0, stutter.a_mark); /* set a */
+	program_stutter_watermark(mi, 1, stutter.b_mark); /* set b */
+	program_stutter_watermark(mi, 2, stutter.c_mark); /* set c */
+	program_stutter_watermark(mi, 3, stutter.d_mark); /* set d */
+}
 
 static void program_tiling(struct mem_input *mi,
 	const union dc_tiling_info *info)
@@ -190,4 +262,123 @@ bool dce_mem_input_program_surface_config(struct mem_input *mi,
 		program_grph_pixel_format(mi, format);
 
 	return true;
+}
+
+static uint32_t get_dmif_switch_time_us(
+	uint32_t h_total,
+	uint32_t v_total,
+	uint32_t pix_clk_khz)
+{
+	uint32_t frame_time;
+	uint32_t pixels_per_second;
+	uint32_t pixels_per_frame;
+	uint32_t refresh_rate;
+	const uint32_t us_in_sec = 1000000;
+	const uint32_t min_single_frame_time_us = 30000;
+	/*return double of frame time*/
+	const uint32_t single_frame_time_multiplier = 2;
+
+	if (!h_total || v_total || !pix_clk_khz)
+		return single_frame_time_multiplier * min_single_frame_time_us;
+
+	/*TODO: should we use pixel format normalized pixel clock here?*/
+	pixels_per_second = pix_clk_khz * 1000;
+	pixels_per_frame = h_total * v_total;
+
+	if (!pixels_per_second || !pixels_per_frame) {
+		/* avoid division by zero */
+		ASSERT(pixels_per_frame);
+		ASSERT(pixels_per_second);
+		return single_frame_time_multiplier * min_single_frame_time_us;
+	}
+
+	refresh_rate = pixels_per_second / pixels_per_frame;
+
+	if (!refresh_rate) {
+		/* avoid division by zero*/
+		ASSERT(refresh_rate);
+		return single_frame_time_multiplier * min_single_frame_time_us;
+	}
+
+	frame_time = us_in_sec / refresh_rate;
+
+	if (frame_time < min_single_frame_time_us)
+		frame_time = min_single_frame_time_us;
+
+	frame_time *= single_frame_time_multiplier;
+
+	return frame_time;
+}
+
+void dce_mem_input_allocate_dmif(struct mem_input *mi,
+	uint32_t h_total,
+	uint32_t v_total,
+	uint32_t pix_clk_khz,
+	uint32_t total_stream_num)
+{
+	const uint32_t retry_delay = 10;
+	uint32_t retry_count = get_dmif_switch_time_us(
+			h_total,
+			v_total,
+			pix_clk_khz) / retry_delay;
+
+	uint32_t pix_dur;
+	uint32_t buffers_allocated;
+	uint32_t dmif_buffer_control;
+
+	dmif_buffer_control = REG_GET(DMIF_BUFFER_CONTROL,
+			DMIF_BUFFERS_ALLOCATED, &buffers_allocated);
+
+	if (buffers_allocated == 2)
+		return;
+
+	REG_SET(DMIF_BUFFER_CONTROL, dmif_buffer_control,
+			DMIF_BUFFERS_ALLOCATED, 2);
+
+	REG_WAIT(DMIF_BUFFER_CONTROL,
+			DMIF_BUFFERS_ALLOCATION_COMPLETED, 1,
+			retry_delay, retry_count);
+
+	if (pix_clk_khz != 0) {
+		pix_dur = 1000000000ULL / pix_clk_khz;
+
+		REG_UPDATE(DPG_PIPE_ARBITRATION_CONTROL1,
+			PIXEL_DURATION, pix_dur);
+	}
+
+	if (mi->wa.single_head_rdreq_dmif_limit) {
+		uint32_t eanble =  (total_stream_num > 1) ? 0 :
+				mi->wa.single_head_rdreq_dmif_limit;
+
+		REG_UPDATE(MC_HUB_RDREQ_DMIF_LIMIT,
+				ENABLE, eanble);
+	}
+}
+
+void dce_mem_input_free_dmif(struct mem_input *mi,
+		uint32_t total_stream_num)
+{
+	uint32_t buffers_allocated;
+	uint32_t dmif_buffer_control;
+
+	dmif_buffer_control = REG_GET(DMIF_BUFFER_CONTROL,
+			DMIF_BUFFERS_ALLOCATED, &buffers_allocated);
+
+	if (buffers_allocated == 0)
+		return;
+
+	REG_SET(DMIF_BUFFER_CONTROL, dmif_buffer_control,
+			DMIF_BUFFERS_ALLOCATED, 0);
+
+	REG_WAIT(DMIF_BUFFER_CONTROL,
+			DMIF_BUFFERS_ALLOCATION_COMPLETED, 1,
+			10, 0xBB8);
+
+	if (mi->wa.single_head_rdreq_dmif_limit) {
+		uint32_t eanble =  (total_stream_num > 1) ? 0 :
+				mi->wa.single_head_rdreq_dmif_limit;
+
+		REG_UPDATE(MC_HUB_RDREQ_DMIF_LIMIT,
+				ENABLE, eanble);
+	}
 }
