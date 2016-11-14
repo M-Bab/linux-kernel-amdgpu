@@ -25,6 +25,8 @@
 #ifndef DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_INC_REG_HELPER_H_
 #define DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_INC_REG_HELPER_H_
 
+#include "dm_services.h"
+
 /* macro for register read/write
  * user of macro need to define
  *

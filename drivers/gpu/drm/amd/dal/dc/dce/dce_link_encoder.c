@@ -23,9 +23,8 @@
  *
  */
 
+#include "reg_helper.h"
 
-
-#include "dm_services.h"
 #include "core_types.h"
 #include "link_encoder.h"
 #include "dce_link_encoder.h"
@@ -38,7 +37,6 @@
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 #include "dce/dce_11_0_enum.h"
-#include "reg_helper.h"
 
 #ifndef ATOM_S2_CURRENT_BL_LEVEL_MASK
 #define ATOM_S2_CURRENT_BL_LEVEL_MASK   0x0000FF00L

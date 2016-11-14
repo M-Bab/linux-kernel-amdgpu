@@ -23,16 +23,13 @@
  *
  */
 
-#include "dm_services.h"
+#include "reg_helper.h"
 #include "dce_audio.h"
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
 #define DCE_AUD(audio)\
 	container_of(audio, struct dce_audio, base)
-
-
-#include "reg_helper.h"
 
 #define CTX \
 	aud->base.ctx
