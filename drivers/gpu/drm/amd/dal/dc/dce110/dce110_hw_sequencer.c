@@ -559,7 +559,7 @@ static void program_scaler(const struct core_dc *dc,
 
 	pipe_ctx->xfm->funcs->transform_set_pixel_storage_depth(
 		pipe_ctx->xfm,
-		pipe_ctx->scl_data.lb_bpp,
+		pipe_ctx->scl_data.lb_params.depth,
 		&pipe_ctx->stream->bit_depth_params);
 
 	if (pipe_ctx->tg->funcs->set_overscan_blank_color)
@@ -687,6 +687,7 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 				&stream->sink->link->public.cur_link_settings);
 	}
 
+	pipe_ctx->scl_data.lb_params.alpha_en = pipe_ctx->bottom_pipe != 0;
 	/* program_scaler and allocate_mem_input are not new asic */
 	if (!pipe_ctx_old || memcmp(&pipe_ctx_old->scl_data,
 				&pipe_ctx->scl_data,
@@ -1382,7 +1383,7 @@ static void set_default_colors(struct pipe_ctx *pipe_ctx)
 		pipe_ctx->stream->public.timing.display_color_depth;
 
 	/* Lb color depth */
-	default_adjust.lb_color_depth = pipe_ctx->scl_data.lb_bpp;
+	default_adjust.lb_color_depth = pipe_ctx->scl_data.lb_params.depth;
 
 	pipe_ctx->opp->funcs->opp_set_csc_default(
 					pipe_ctx->opp, &default_adjust);
@@ -1472,12 +1473,10 @@ static void set_plane_config(
 
 	pipe_ctx->xfm->funcs->transform_set_gamut_remap(pipe_ctx->xfm, &adjust);
 
+	pipe_ctx->scl_data.lb_params.alpha_en = pipe_ctx->bottom_pipe != 0;
 	program_scaler(dc, pipe_ctx);
 
 	program_blender(dc, pipe_ctx);
-
-	if (pipe_ctx->bottom_pipe)
-		pipe_ctx->xfm->funcs->transform_set_alpha(pipe_ctx->xfm, true);
 
 	mi->funcs->mem_input_program_surface_config(
 			mi,
@@ -1815,13 +1814,11 @@ static void dce110_program_front_end_for_pipe(
 
 	pipe_ctx->xfm->funcs->transform_set_gamut_remap(pipe_ctx->xfm, &adjust);
 
+	pipe_ctx->scl_data.lb_params.alpha_en = pipe_ctx->bottom_pipe != 0;
 	if (old_pipe && memcmp(&old_pipe->scl_data,
 				&pipe_ctx->scl_data,
 				sizeof(struct scaler_data)) != 0)
 		program_scaler(dc, pipe_ctx);
-
-	if (pipe_ctx->bottom_pipe)
-		pipe_ctx->xfm->funcs->transform_set_alpha(pipe_ctx->xfm, true);
 
 	mi->funcs->mem_input_program_surface_config(
 			mi,

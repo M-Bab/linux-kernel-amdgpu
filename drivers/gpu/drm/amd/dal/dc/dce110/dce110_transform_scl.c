@@ -42,6 +42,9 @@
 #define DCFE_REG(reg)\
 	(reg + xfm110->offsets.dcfe_offset)
 
+#define LB_REG(reg)\
+	(reg + xfm110->offsets.lb_offset)
+
 #define SCL_PHASES 16
 
 static const uint16_t filter_2tap_16p[18] = {
@@ -173,6 +176,21 @@ static void disable_enhanced_sharpness(struct dce110_transform *xfm110)
 
 	dm_write_reg(xfm110->base.ctx,
 			SCL_REG(mmSCL_F_SHARP_CONTROL), value);
+}
+
+static void dce110_transform_set_scaler_bypass(
+		struct transform *xfm,
+		const struct scaler_data *scl_data)
+{
+	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	uint32_t scl_mode;
+
+	disable_enhanced_sharpness(xfm110);
+
+	scl_mode = dm_read_reg(xfm->ctx, SCL_REG(mmSCL_MODE));
+	set_reg_field_value(scl_mode, 0, SCL_MODE, SCL_MODE);
+	set_reg_field_value(scl_mode, 0, SCL_MODE, SCL_PSCL_EN);
+	dm_write_reg(xfm->ctx, SCL_REG(mmSCL_MODE), scl_mode);
 }
 
 /*
@@ -588,7 +606,33 @@ static const uint16_t *get_filter_coeffs_16p(int taps, struct fixed31_32 ratio)
 	}
 }
 
-bool dce110_transform_set_scaler(
+
+static void dce110_transform_set_alpha(struct transform *xfm, bool enable)
+{
+	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	struct dc_context *ctx = xfm->ctx;
+	uint32_t value;
+	uint32_t addr = LB_REG(mmLB_DATA_FORMAT);
+
+	value = dm_read_reg(ctx, addr);
+
+	if (enable == 1)
+		set_reg_field_value(
+				value,
+				1,
+				LB_DATA_FORMAT,
+				ALPHA_EN);
+	else
+		set_reg_field_value(
+				value,
+				0,
+				LB_DATA_FORMAT,
+				ALPHA_EN);
+
+	dm_write_reg(ctx, addr, value);
+}
+
+void dce110_transform_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data)
 {
@@ -658,29 +702,7 @@ bool dce110_transform_set_scaler(
 	if (filter_updated)
 		set_coeff_update_complete(xfm110);
 
-	return true;
-}
-
-void dce110_transform_set_scaler_bypass(
-		struct transform *xfm,
-		const struct scaler_data *scl_data)
-{
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-	uint32_t scl_mode;
-
-	disable_enhanced_sharpness(xfm110);
-
-	scl_mode = dm_read_reg(xfm->ctx, SCL_REG(mmSCL_MODE));
-	set_reg_field_value(scl_mode, 0, SCL_MODE, SCL_MODE);
-	set_reg_field_value(scl_mode, 0, SCL_MODE, SCL_PSCL_EN);
-	dm_write_reg(xfm->ctx, SCL_REG(mmSCL_MODE), scl_mode);
-}
-
-void dce110_transform_set_scaler_filter(
-	struct transform *xfm,
-	struct scaler_filter *filter)
-{
-	xfm->filter = filter;
+	dce110_transform_set_alpha(xfm, data->lb_params.alpha_en);
 }
 
 #define IDENTITY_RATIO(ratio) (dal_fixed31_32_u2d19(ratio) == (1 << 19))
@@ -716,7 +738,7 @@ bool transform_get_optimal_number_of_taps_helper(
 
 	max_num_of_lines = dce110_transform_get_max_num_of_supported_lines(
 		xfm,
-		scl_data->lb_bpp,
+		scl_data->lb_params.depth,
 		pixel_width);
 
 	/* Fail if in_taps are impossible */

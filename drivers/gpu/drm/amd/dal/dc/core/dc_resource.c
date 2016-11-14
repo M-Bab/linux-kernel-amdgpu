@@ -528,7 +528,7 @@ bool resource_build_scaling_params(
 	 * Setting line buffer pixel depth to 24bpp yields banding
 	 * on certain displays, such as the Sharp 4k
 	 */
-	pipe_ctx->scl_data.lb_bpp = LB_PIXEL_DEPTH_30BPP;
+	pipe_ctx->scl_data.lb_params.depth = LB_PIXEL_DEPTH_30BPP;
 
 	pipe_ctx->scl_data.h_active = timing->h_addressable;
 	pipe_ctx->scl_data.v_active = timing->v_addressable;
@@ -539,7 +539,7 @@ bool resource_build_scaling_params(
 
 	if (!res) {
 		/* Try 24 bpp linebuffer */
-		pipe_ctx->scl_data.lb_bpp = LB_PIXEL_DEPTH_24BPP;
+		pipe_ctx->scl_data.lb_params.depth = LB_PIXEL_DEPTH_24BPP;
 
 		res = pipe_ctx->xfm->funcs->transform_get_optimal_number_of_taps(
 			pipe_ctx->xfm, &pipe_ctx->scl_data, &surface->scaling_quality);

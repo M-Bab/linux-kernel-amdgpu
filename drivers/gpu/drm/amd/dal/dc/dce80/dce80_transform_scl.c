@@ -64,6 +64,20 @@ static void disable_enhanced_sharpness(struct dce80_transform *xfm80)
 			SCL_REG(mmSCL_F_SHARP_CONTROL), value);
 }
 
+static void dce80_transform_set_scaler_bypass(
+		struct transform *xfm,
+		const struct scaler_data *scl_data)
+{
+	struct dce80_transform *xfm80 = TO_DCE80_TRANSFORM(xfm);
+	uint32_t sclv_mode;
+
+	disable_enhanced_sharpness(xfm80);
+
+	sclv_mode = dm_read_reg(xfm->ctx, SCL_REG(mmSCL_MODE));
+	set_reg_field_value(sclv_mode, 0, SCL_MODE, SCL_MODE);
+	dm_write_reg(xfm->ctx, SCL_REG(mmSCL_MODE), sclv_mode);
+}
+
 /**
 * Function:
 * void setup_scaling_configuration
@@ -626,7 +640,7 @@ static void program_scl_ratios_inits(
 	dm_write_reg(xfm80->base.ctx, addr, value);
 }
 
-bool dce80_transform_set_scaler(
+void dce80_transform_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data)
 {
@@ -668,7 +682,7 @@ bool dce80_transform_set_scaler(
 			if (!program_multi_taps_filter(xfm80, data, false)) {
 				dm_logger_write(ctx->logger, LOG_SCALER,
 					"Failed vertical taps programming\n");
-				return false;
+				return;
 			}
 		} else
 			program_two_taps_filter(xfm80, true, true);
@@ -680,7 +694,7 @@ bool dce80_transform_set_scaler(
 			if (!program_multi_taps_filter(xfm80, data, true)) {
 				dm_logger_write(ctx->logger, LOG_SCALER,
 					"Failed horizontal taps programming\n");
-				return false;
+				return;
 			}
 		} else
 			program_two_taps_filter(xfm80, true, false);
@@ -688,27 +702,4 @@ bool dce80_transform_set_scaler(
 
 	/* 7. Program the viewport */
 	program_viewport(xfm80, &data->viewport);
-
-	return true;
-}
-
-void dce80_transform_set_scaler_bypass(
-		struct transform *xfm,
-		const struct scaler_data *scl_data)
-{
-	struct dce80_transform *xfm80 = TO_DCE80_TRANSFORM(xfm);
-	uint32_t sclv_mode;
-
-	disable_enhanced_sharpness(xfm80);
-
-	sclv_mode = dm_read_reg(xfm->ctx, SCL_REG(mmSCL_MODE));
-	set_reg_field_value(sclv_mode, 0, SCL_MODE, SCL_MODE);
-	dm_write_reg(xfm->ctx, SCL_REG(mmSCL_MODE), sclv_mode);
-}
-
-void dce80_transform_set_scaler_filter(
-	struct transform *xfm,
-	struct scaler_filter *filter)
-{
-	xfm->filter = filter;
 }

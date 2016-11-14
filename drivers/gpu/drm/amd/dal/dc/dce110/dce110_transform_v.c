@@ -673,20 +673,6 @@ static void program_scl_ratios_inits(
 	dm_write_reg(ctx, addr, value);
 }
 
-static void dce110_transform_v_set_scalerv_bypass(
-		struct transform *xfm,
-		const struct scaler_data *scl_data)
-{
-	uint32_t addr = mmSCLV_MODE;
-	uint32_t value = dm_read_reg(xfm->ctx, addr);
-
-	set_reg_field_value(value, 0, SCLV_MODE, SCL_MODE);
-	set_reg_field_value(value, 0, SCLV_MODE, SCL_MODE_C);
-	set_reg_field_value(value, 0, SCLV_MODE, SCL_PSCL_EN);
-	set_reg_field_value(value, 0, SCLV_MODE, SCL_PSCL_EN_C);
-	dm_write_reg(xfm->ctx, addr, value);
-}
-
 static const uint16_t *get_filter_coeffs_64p(int taps, struct fixed31_32 ratio)
 {
 	if (taps == 4)
@@ -702,7 +688,7 @@ static const uint16_t *get_filter_coeffs_64p(int taps, struct fixed31_32 ratio)
 	}
 }
 
-static bool dce110_transform_v_set_scaler(
+static void dce110_transform_v_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data)
 {
@@ -786,8 +772,6 @@ static bool dce110_transform_v_set_scaler(
 	/* 8. Set bit to flip to new coefficient memory */
 	if (filter_updated)
 		set_coeff_update_complete(xfm110);
-
-	return true;
 }
 
 static bool dce110_transform_v_power_up_line_buffer(struct transform *xfm)
@@ -825,16 +809,10 @@ static const struct transform_funcs dce110_transform_v_funcs = {
 		dce110_transform_v_power_up_line_buffer,
 	.transform_set_scaler =
 		dce110_transform_v_set_scaler,
-	.transform_set_scaler_bypass =
-		dce110_transform_v_set_scalerv_bypass,
-	.transform_set_scaler_filter =
-		dce110_transform_set_scaler_filter,
 	.transform_set_gamut_remap =
 		dce110_transform_set_gamut_remap,
 	.transform_set_pixel_storage_depth =
 		dce110_transform_v_set_pixel_storage_depth,
-	.transform_get_current_pixel_storage_depth =
-		dce110_transform_v_get_current_pixel_storage_depth,
 	.transform_get_optimal_number_of_taps =
 			dce110_transform_get_optimal_number_of_taps
 };

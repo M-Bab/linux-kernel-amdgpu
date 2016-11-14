@@ -1035,9 +1035,7 @@ static bool construct(
 			dm_error("DC: failed to create transform!\n");
 			goto res_create_fail;
 		}
-		pool->base.transforms[i]->funcs->transform_set_scaler_filter(
-				pool->base.transforms[i],
-				pool->base.scaler_filter);
+		pool->base.transforms[i]->filter = pool->base.scaler_filter;
 
 		pool->base.opps[i] = dce80_opp_create(ctx, i);
 		if (pool->base.opps[i] == NULL) {

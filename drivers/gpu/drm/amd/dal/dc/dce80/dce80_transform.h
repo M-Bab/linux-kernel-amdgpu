@@ -55,13 +55,9 @@ bool dce80_transform_construct(struct dce80_transform *xfm80,
 bool dce80_transform_power_up(struct transform *xfm);
 
 /* SCALER RELATED */
-bool dce80_transform_set_scaler(
+void dce80_transform_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data);
-
-void dce80_transform_set_scaler_bypass(
-		struct transform *xfm,
-		const struct scaler_data *scl_data);
 
 void dce80_transform_set_scaler_filter(
 	struct transform *xfm,
@@ -77,9 +73,5 @@ bool dce80_transform_set_pixel_storage_depth(
 	struct transform *xfm,
 	enum lb_pixel_depth depth,
 	const struct bit_depth_reduction_params *bit_depth_params);
-
-bool dce80_transform_get_current_pixel_storage_depth(
-	struct transform *xfm,
-	enum lb_pixel_depth *depth);
 
 #endif

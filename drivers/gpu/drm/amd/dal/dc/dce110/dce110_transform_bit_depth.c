@@ -582,31 +582,6 @@ int32_t dce110_transform_get_max_num_of_supported_lines(
 	return (max_pixels_supports / pixel_width);
 }
 
-void dce110_transform_set_alpha(struct transform *xfm, bool enable)
-{
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-	struct dc_context *ctx = xfm->ctx;
-	uint32_t value;
-	uint32_t addr = LB_REG(mmLB_DATA_FORMAT);
-
-	value = dm_read_reg(ctx, addr);
-
-	if (enable == 1)
-		set_reg_field_value(
-				value,
-				1,
-				LB_DATA_FORMAT,
-				ALPHA_EN);
-	else
-		set_reg_field_value(
-				value,
-				0,
-				LB_DATA_FORMAT,
-				ALPHA_EN);
-
-	dm_write_reg(ctx, addr, value);
-}
-
 bool dce110_transform_is_prefetch_enabled(
 	struct dce110_transform *xfm110)
 {
@@ -617,44 +592,6 @@ bool dce110_transform_is_prefetch_enabled(
 		return true;
 
 	return false;
-}
-
-bool dce110_transform_get_current_pixel_storage_depth(
-	struct transform *xfm,
-	enum lb_pixel_depth *depth)
-{
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-	uint32_t value = 0;
-
-	if (depth == NULL)
-		return false;
-
-	value = dm_read_reg(
-			xfm->ctx,
-			LB_REG(mmLB_DATA_FORMAT));
-
-	switch (get_reg_field_value(value, LB_DATA_FORMAT, PIXEL_DEPTH)) {
-	case 0:
-		*depth = LB_PIXEL_DEPTH_30BPP;
-		break;
-	case 1:
-		*depth = LB_PIXEL_DEPTH_24BPP;
-		break;
-	case 2:
-		*depth = LB_PIXEL_DEPTH_18BPP;
-		break;
-	case 3:
-		*depth = LB_PIXEL_DEPTH_36BPP;
-		break;
-	default:
-		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
-			"%s: Invalid LB pixel depth",
-			__func__);
-		*depth = LB_PIXEL_DEPTH_30BPP;
-		break;
-	}
-	return true;
-
 }
 
 static void set_denormalization(
@@ -795,44 +732,6 @@ bool dce110_transform_power_up_line_buffer(struct transform *xfm)
 }
 
 /* Underlay pipe functions*/
-
-bool dce110_transform_v_get_current_pixel_storage_depth(
-	struct transform *xfm,
-	enum lb_pixel_depth *depth)
-{
-	uint32_t value = 0;
-
-	if (depth == NULL)
-		return false;
-
-	value = dm_read_reg(
-			xfm->ctx,
-			mmLBV_DATA_FORMAT);
-
-	switch (get_reg_field_value(value, LBV_DATA_FORMAT, PIXEL_DEPTH)) {
-	case 0:
-		*depth = LB_PIXEL_DEPTH_30BPP;
-		break;
-	case 1:
-		*depth = LB_PIXEL_DEPTH_24BPP;
-		break;
-	case 2:
-		*depth = LB_PIXEL_DEPTH_18BPP;
-		break;
-	case 3:
-		*depth = LB_PIXEL_DEPTH_36BPP;
-		break;
-	default:
-		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
-			"%s: Invalid LB pixel depth",
-			__func__);
-		*depth = LB_PIXEL_DEPTH_30BPP;
-		break;
-	}
-	return true;
-
-}
-
 bool dce110_transform_v_set_pixel_storage_depth(
 	struct transform *xfm,
 	enum lb_pixel_depth depth,

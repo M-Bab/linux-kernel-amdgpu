@@ -59,13 +59,9 @@ bool dce110_transform_construct(struct dce110_transform *xfm110,
 bool dce110_transform_power_up(struct transform *xfm);
 
 /* SCALER RELATED */
-bool dce110_transform_set_scaler(
+void dce110_transform_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data);
-
-void dce110_transform_set_scaler_bypass(
-		struct transform *xfm,
-		const struct scaler_data *scl_data);
 
 void dce110_transform_set_scaler_filter(
 	struct transform *xfm,
@@ -81,12 +77,6 @@ bool dce110_transform_set_pixel_storage_depth(
 	struct transform *xfm,
 	enum lb_pixel_depth depth,
 	const struct bit_depth_reduction_params *bit_depth_params);
-
-bool dce110_transform_get_current_pixel_storage_depth(
-	struct transform *xfm,
-	enum lb_pixel_depth *depth);
-
-void dce110_transform_set_alpha(struct transform *xfm, bool enable);
 
 bool dce110_transform_get_optimal_number_of_taps(
 	struct transform *xfm,

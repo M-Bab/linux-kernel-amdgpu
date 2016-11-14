@@ -76,17 +76,10 @@ static const struct transform_funcs dce110_transform_funcs = {
 		dce110_transform_power_up,
 	.transform_set_scaler =
 		dce110_transform_set_scaler,
-	.transform_set_scaler_bypass =
-		dce110_transform_set_scaler_bypass,
-	.transform_set_scaler_filter =
-		dce110_transform_set_scaler_filter,
 	.transform_set_gamut_remap =
 		dce110_transform_set_gamut_remap,
 	.transform_set_pixel_storage_depth =
 		dce110_transform_set_pixel_storage_depth,
-	.transform_get_current_pixel_storage_depth =
-		dce110_transform_get_current_pixel_storage_depth,
-	.transform_set_alpha = dce110_transform_set_alpha,
 	.transform_get_optimal_number_of_taps =
 		dce110_transform_get_optimal_number_of_taps
 };

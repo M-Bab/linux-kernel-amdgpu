@@ -563,44 +563,6 @@ bool dce80_transform_is_prefetch_enabled(
 	return false;
 }
 
-bool dce80_transform_get_current_pixel_storage_depth(
-	struct transform *xfm,
-	enum lb_pixel_depth *depth)
-{
-	struct dce80_transform *xfm80 = TO_DCE80_TRANSFORM(xfm);
-	uint32_t value = 0;
-
-	if (depth == NULL)
-		return false;
-
-	value = dm_read_reg(
-			xfm->ctx,
-			LB_REG(mmLB_DATA_FORMAT));
-
-	switch (get_reg_field_value(value, LB_DATA_FORMAT, PIXEL_DEPTH)) {
-	case 0:
-		*depth = LB_PIXEL_DEPTH_30BPP;
-		break;
-	case 1:
-		*depth = LB_PIXEL_DEPTH_24BPP;
-		break;
-	case 2:
-		*depth = LB_PIXEL_DEPTH_18BPP;
-		break;
-	case 3:
-		*depth = LB_PIXEL_DEPTH_36BPP;
-		break;
-	default:
-		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
-			"%s: Invalid LB pixel depth",
-			__func__);
-		*depth = LB_PIXEL_DEPTH_30BPP;
-		break;
-	}
-	return true;
-
-}
-
 static void set_denormalization(
 	struct dce80_transform *xfm80,
 	enum dc_color_depth depth)

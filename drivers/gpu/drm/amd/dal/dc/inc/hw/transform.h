@@ -144,6 +144,14 @@ struct sharpness_adj {
 	uint32_t vert;
 };
 
+struct line_buffer_params {
+	bool alpha_en;
+	bool pixel_expan_mode;
+	bool interleave_en;
+	uint32_t dynamic_pixel_depth;
+	enum lb_pixel_depth depth;
+};
+
 struct scaler_data {
 	uint32_t h_active;
 	uint32_t v_active;
@@ -153,15 +161,7 @@ struct scaler_data {
 	struct scaling_ratios ratios;
 	struct sharpness_adj sharpness;
 	enum pixel_format format;
-	enum lb_pixel_depth lb_bpp;
-};
-
-struct line_buffer_params {
-	bool alpha_en;
-	bool pixel_expan_mode;
-	bool interleave_en;
-	uint32_t dynamic_pixel_depth;
-	enum lb_pixel_depth depth;
+	struct line_buffer_params lb_params;
 };
 
 struct transform_funcs {
@@ -171,16 +171,9 @@ struct transform_funcs {
 	bool (*transform_power_up)(
 		struct transform *xfm);
 
-	bool (*transform_set_scaler)(
+	void (*transform_set_scaler)(
 		struct transform *xfm,
-		const struct scaler_data *data);
-
-	void (*transform_set_scaler_bypass)(
-		struct transform *xfm, const struct scaler_data *scl_data);
-
-	void (*transform_set_scaler_filter)(
-		struct transform *xfm,
-		struct scaler_filter *filter);
+		const struct scaler_data *scl_data);
 
 	void (*transform_set_gamut_remap)(
 		struct transform *xfm,
@@ -190,12 +183,6 @@ struct transform_funcs {
 		struct transform *xfm,
 		enum lb_pixel_depth depth,
 		const struct bit_depth_reduction_params *bit_depth_params);
-
-	bool (*transform_get_current_pixel_storage_depth)(
-		struct transform *xfm,
-		enum lb_pixel_depth *depth);
-
-	void (*transform_set_alpha)(struct transform *xfm, bool enable);
 
 	bool (*transform_get_optimal_number_of_taps)(
 		struct transform *xfm,
