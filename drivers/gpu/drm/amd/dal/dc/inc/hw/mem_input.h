@@ -29,6 +29,8 @@
 #include "include/grph_object_id.h"
 #include "inc/bandwidth_calcs.h"
 
+#include "dce/dce_mem_input.h" /* temporary */
+
 struct stutter_modes {
 	bool enhanced;
 	bool quad_dmif_buffer;
@@ -42,6 +44,10 @@ struct mem_input {
 	struct dc_plane_address current_address;
 	uint32_t inst;
 	struct stutter_modes stutter_mode;
+
+	const struct dce_mem_input_registers *regs;
+	const struct dce_mem_input_shift *shifts;
+	const struct dce_mem_input_mask *masks;
 };
 
 struct mem_input_funcs {

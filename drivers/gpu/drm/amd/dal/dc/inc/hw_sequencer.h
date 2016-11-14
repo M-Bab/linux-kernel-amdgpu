@@ -44,6 +44,8 @@ enum pipe_lock_control {
 	PIPE_LOCK_CONTROL_MODE = 1 << 4
 };
 
+struct dce_hwseq;
+
 struct hw_sequencer_funcs {
 
 	void (*init_hw)(struct core_dc *dc);

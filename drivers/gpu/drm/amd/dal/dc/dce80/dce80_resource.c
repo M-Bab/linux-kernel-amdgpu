@@ -474,6 +474,24 @@ static const struct resource_create_funcs res_create_funcs = {
 	.create_hwseq = dce80_hwseq_create,
 };
 
+#define mi_inst_regs(id) { MI_REG_LIST(id) }
+static const struct dce_mem_input_registers mi_regs[] = {
+		mi_inst_regs(0),
+		mi_inst_regs(1),
+		mi_inst_regs(2),
+		mi_inst_regs(3),
+		mi_inst_regs(4),
+		mi_inst_regs(5),
+};
+
+static const struct dce_mem_input_shift mi_shifts = {
+		MI_DCE_MASK_SH_LIST(__SHIFT)
+};
+
+static const struct dce_mem_input_mask mi_masks = {
+		MI_DCE_MASK_SH_LIST(_MASK)
+};
+
 static struct mem_input *dce80_mem_input_create(
 	struct dc_context *ctx,
 	uint32_t inst,
@@ -485,9 +503,14 @@ static struct mem_input *dce80_mem_input_create(
 	if (!mem_input80)
 		return NULL;
 
-	if (dce80_mem_input_construct(mem_input80,
-				      ctx, inst, offsets))
-		return &mem_input80->base;
+	if (dce80_mem_input_construct(mem_input80, ctx, inst, offsets)) {
+		struct mem_input *mi = &mem_input80->base;
+
+		mi->regs = &mi_regs[inst];
+		mi->shifts = &mi_shifts;
+		mi->masks = &mi_masks;
+		return mi;
+	}
 
 	BREAK_TO_DEBUGGER();
 	dm_free(mem_input80);
