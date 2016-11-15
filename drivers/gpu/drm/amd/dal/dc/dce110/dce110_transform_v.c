@@ -501,6 +501,24 @@ static const uint16_t *get_filter_coeffs_64p(int taps, struct fixed31_32 ratio)
 	}
 }
 
+static bool dce110_transform_v_power_up_line_buffer(struct transform *xfm)
+{
+	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	uint32_t value;
+
+	value = dm_read_reg(xfm110->base.ctx, mmLBV_MEMORY_CTRL);
+
+	/*Use all three pieces of memory always*/
+	set_reg_field_value(value, 0, LBV_MEMORY_CTRL, LB_MEMORY_CONFIG);
+	/*hard coded number DCE11 1712(0x6B0) Partitions: 720/960/1712*/
+	set_reg_field_value(value, xfm110->base.lb_memory_size, LBV_MEMORY_CTRL,
+			LB_MEMORY_SIZE);
+
+	dm_write_reg(xfm110->base.ctx, mmLBV_MEMORY_CTRL, value);
+
+	return true;
+}
+
 static void dce110_transform_v_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data)
@@ -512,6 +530,7 @@ static void dce110_transform_v_set_scaler(
 	struct rect luma_viewport = {0};
 	struct rect chroma_viewport = {0};
 
+	dce110_transform_v_power_up_line_buffer(xfm);
 	/* 1. Calculate viewport, viewport programming should happen after init
 	 * calculations as they may require an adjustment in the viewport.
 	 */
@@ -587,24 +606,6 @@ static void dce110_transform_v_set_scaler(
 		set_coeff_update_complete(xfm110);
 }
 
-static bool dce110_transform_v_power_up_line_buffer(struct transform *xfm)
-{
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-	uint32_t value;
-
-	value = dm_read_reg(xfm110->base.ctx, mmLBV_MEMORY_CTRL);
-
-	/*Use all three pieces of memory always*/
-	set_reg_field_value(value, 0, LBV_MEMORY_CTRL, LB_MEMORY_CONFIG);
-	/*hard coded number DCE11 1712(0x6B0) Partitions: 720/960/1712*/
-	set_reg_field_value(value, xfm110->base.lb_memory_size, LBV_MEMORY_CTRL,
-			LB_MEMORY_SIZE);
-
-	dm_write_reg(xfm110->base.ctx, mmLBV_MEMORY_CTRL, value);
-
-	return true;
-}
-
 static void dce110_transform_v_reset(struct transform *xfm)
 {
 	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
@@ -618,8 +619,6 @@ static void dce110_transform_v_reset(struct transform *xfm)
 static const struct transform_funcs dce110_transform_v_funcs = {
 	.transform_reset =
 			dce110_transform_v_reset,
-	.transform_power_up =
-		dce110_transform_v_power_up_line_buffer,
 	.transform_set_scaler =
 		dce110_transform_v_set_scaler,
 	.transform_set_gamut_remap =

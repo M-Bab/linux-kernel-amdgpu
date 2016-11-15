@@ -52,8 +52,6 @@ bool dce80_transform_construct(struct dce80_transform *xfm80,
 	uint32_t inst,
 	const struct dce80_transform_reg_offsets *offsets);
 
-bool dce80_transform_power_up(struct transform *xfm);
-
 /* SCALER RELATED */
 void dce80_transform_set_scaler(
 	struct transform *xfm,

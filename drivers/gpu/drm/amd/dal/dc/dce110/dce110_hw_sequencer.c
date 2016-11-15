@@ -1642,7 +1642,6 @@ static void init_hw(struct core_dc *dc)
 		dc->hwss.enable_display_power_gating(
 				dc, i, bp,
 				PIPE_GATING_CONTROL_DISABLE);
-		xfm->funcs->transform_power_up(xfm);
 		dc->hwss.enable_display_pipe_clock_gating(
 			dc->ctx,
 			true);

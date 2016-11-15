@@ -501,6 +501,33 @@ static void dce110_transform_set_alpha(struct transform *xfm, bool enable)
 	dm_write_reg(ctx, addr, value);
 }
 
+/* LB_MEMORY_CONFIG
+ *  00 - Use all three pieces of memory
+ *  01 - Use only one piece of memory of total 720x144 bits
+ *  10 - Use two pieces of memory of total 960x144 bits
+ *  11 - reserved
+ *
+ * LB_MEMORY_SIZE
+ *  Total entries of LB memory.
+ *  This number should be larger than 960. The default value is 1712(0x6B0) */
+static bool dce110_transform_power_up_line_buffer(struct transform *xfm)
+{
+	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	uint32_t value;
+
+	value = dm_read_reg(xfm110->base.ctx, LB_REG(mmLB_MEMORY_CTRL));
+
+	/*Use all three pieces of memory always*/
+	set_reg_field_value(value, 0, LB_MEMORY_CTRL, LB_MEMORY_CONFIG);
+	/*hard coded number DCE11 1712(0x6B0) Partitions: 720/960/1712*/
+	set_reg_field_value(value, xfm110->base.lb_memory_size, LB_MEMORY_CTRL,
+			LB_MEMORY_SIZE);
+
+	dm_write_reg(xfm110->base.ctx, LB_REG(mmLB_MEMORY_CTRL), value);
+
+	return true;
+}
+
 void dce110_transform_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data)
@@ -509,6 +536,8 @@ void dce110_transform_set_scaler(
 	bool is_scaling_required;
 	bool filter_updated = false;
 	const uint16_t *coeffs_v, *coeffs_h;
+
+	dce110_transform_power_up_line_buffer(xfm);
 
 	disable_enhanced_sharpness(xfm110);
 

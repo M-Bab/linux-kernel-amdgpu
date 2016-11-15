@@ -27,14 +27,10 @@
 
 #include "dce110_transform.h"
 
-bool dce110_transform_power_up_line_buffer(struct transform *xfm);
-
 bool dce110_transform_get_max_num_of_supported_lines(
 	struct transform *xfm,
 	enum lb_pixel_depth depth,
 	uint32_t pixel_width);
 
-bool dce110_transform_is_prefetch_enabled(
-	struct dce110_transform *xfm110);
 
 #endif

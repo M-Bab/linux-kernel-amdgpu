@@ -582,18 +582,6 @@ int32_t dce110_transform_get_max_num_of_supported_lines(
 	return (max_pixels_supports / pixel_width);
 }
 
-bool dce110_transform_is_prefetch_enabled(
-	struct dce110_transform *xfm110)
-{
-	uint32_t value = dm_read_reg(
-			xfm110->base.ctx, LB_REG(mmLB_DATA_FORMAT));
-
-	if (get_reg_field_value(value, LB_DATA_FORMAT, PREFETCH) == 1)
-		return true;
-
-	return false;
-}
-
 static void set_denormalization(
 	struct dce110_transform *xfm110,
 	enum dc_color_depth depth)
@@ -702,33 +690,6 @@ bool dce110_transform_set_pixel_storage_depth(
 	}
 
 	return ret;
-}
-
-/* LB_MEMORY_CONFIG
- *  00 - Use all three pieces of memory
- *  01 - Use only one piece of memory of total 720x144 bits
- *  10 - Use two pieces of memory of total 960x144 bits
- *  11 - reserved
- *
- * LB_MEMORY_SIZE
- *  Total entries of LB memory.
- *  This number should be larger than 960. The default value is 1712(0x6B0) */
-bool dce110_transform_power_up_line_buffer(struct transform *xfm)
-{
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-	uint32_t value;
-
-	value = dm_read_reg(xfm110->base.ctx, LB_REG(mmLB_MEMORY_CTRL));
-
-	/*Use all three pieces of memory always*/
-	set_reg_field_value(value, 0, LB_MEMORY_CTRL, LB_MEMORY_CONFIG);
-	/*hard coded number DCE11 1712(0x6B0) Partitions: 720/960/1712*/
-	set_reg_field_value(value, xfm110->base.lb_memory_size, LB_MEMORY_CTRL,
-			LB_MEMORY_SIZE);
-
-	dm_write_reg(xfm110->base.ctx, LB_REG(mmLB_MEMORY_CTRL), value);
-
-	return true;
 }
 
 /* Underlay pipe functions*/

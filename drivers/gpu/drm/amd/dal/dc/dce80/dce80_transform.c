@@ -62,8 +62,6 @@ static void dce80_transform_reset(struct transform *xfm)
 
 static const struct transform_funcs dce80_transform_funcs = {
 	.transform_reset = dce80_transform_reset,
-	.transform_power_up =
-		dce80_transform_power_up,
 	.transform_set_scaler =
 		dce80_transform_set_scaler,
 	.transform_set_gamut_remap =
@@ -103,9 +101,3 @@ bool dce80_transform_construct(
 
 	return true;
 }
-
-bool dce80_transform_power_up(struct transform *xfm)
-{
-	return dce80_transform_power_up_line_buffer(xfm);
-}
-

@@ -27,8 +27,6 @@
 
 #include "dce80_transform.h"
 
-bool dce80_transform_power_up_line_buffer(struct transform *xfm);
-
 void dce80_transform_enable_alpha(
 	struct dce80_transform *xfm80,
 	bool enable);

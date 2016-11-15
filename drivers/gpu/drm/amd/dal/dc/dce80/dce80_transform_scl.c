@@ -41,6 +41,9 @@
 #define DCFE_REG(reg)\
 	(reg + xfm80->offsets.crtc_offset)
 
+#define LB_REG(reg)\
+	(reg + xfm80->offsets.lb_offset)
+
 static void disable_enhanced_sharpness(struct dce80_transform *xfm80)
 {
 	uint32_t  value;
@@ -640,6 +643,33 @@ static void program_scl_ratios_inits(
 	dm_write_reg(xfm80->base.ctx, addr, value);
 }
 
+/* LB_MEMORY_CONFIG
+ *  00 - Use all three pieces of memory
+ *  01 - Use only one piece of memory of total 720x144 bits
+ *  10 - Use two pieces of memory of total 960x144 bits
+ *  11 - reserved
+ *
+ * LB_MEMORY_SIZE
+ *  Total entries of LB memory.
+ *  This number should be larger than 960. The default value is 1712(0x6B0) */
+static bool dce80_transform_power_up_line_buffer(struct transform *xfm)
+{
+	struct dce80_transform *xfm80 = TO_DCE80_TRANSFORM(xfm);
+	uint32_t value;
+
+	value = dm_read_reg(xfm80->base.ctx, LB_REG(mmLB_MEMORY_CTRL));
+
+	/*Use all three pieces of memory always*/
+	set_reg_field_value(value, 0, LB_MEMORY_CTRL, LB_MEMORY_CONFIG);
+	/*hard coded number DCE8 1712(0x6B0) Partitions: 720/960/1712*/
+	set_reg_field_value(value, xfm80->base.lb_memory_size, LB_MEMORY_CTRL,
+			LB_MEMORY_SIZE);
+
+	dm_write_reg(xfm80->base.ctx, LB_REG(mmLB_MEMORY_CTRL), value);
+
+	return true;
+}
+
 void dce80_transform_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data)
@@ -647,6 +677,8 @@ void dce80_transform_set_scaler(
 	struct dce80_transform *xfm80 = TO_DCE80_TRANSFORM(xfm);
 	bool is_scaling_required;
 	struct dc_context *ctx = xfm->ctx;
+
+	dce80_transform_power_up_line_buffer(xfm);
 
 	{
 		uint32_t addr = SCL_REG(mmSCL_BYPASS_CONTROL);

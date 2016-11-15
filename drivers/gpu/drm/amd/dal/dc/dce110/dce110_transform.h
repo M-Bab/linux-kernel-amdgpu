@@ -56,16 +56,10 @@ bool dce110_transform_construct(struct dce110_transform *xfm110,
 	uint32_t inst,
 	const struct dce110_transform_reg_offsets *reg_offsets);
 
-bool dce110_transform_power_up(struct transform *xfm);
-
 /* SCALER RELATED */
 void dce110_transform_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data);
-
-void dce110_transform_set_scaler_filter(
-	struct transform *xfm,
-	struct scaler_filter *filter);
 
 /* GAMUT RELATED */
 void dce110_transform_set_gamut_remap(

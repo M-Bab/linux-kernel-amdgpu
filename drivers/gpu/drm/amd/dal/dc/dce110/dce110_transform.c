@@ -72,8 +72,6 @@ static void dce110_transform_reset(struct transform *xfm)
 
 static const struct transform_funcs dce110_transform_funcs = {
 	.transform_reset = dce110_transform_reset,
-	.transform_power_up =
-		dce110_transform_power_up,
 	.transform_set_scaler =
 		dce110_transform_set_scaler,
 	.transform_set_gamut_remap =
@@ -112,9 +110,4 @@ bool dce110_transform_construct(
 	xfm110->base.lb_memory_size = 0x6B0; /*1712*/
 
 	return true;
-}
-
-bool dce110_transform_power_up(struct transform *xfm)
-{
-	return dce110_transform_power_up_line_buffer(xfm);
 }
