@@ -6,7 +6,7 @@
 #     offset/shift/mask stored in dce_hw struct
 
 DCE = dce_audio.o dce_stream_encoder.o dce_link_encoder.o dce_hwseq.o \
-dce_mem_input.o
+dce_mem_input.o dce_scl_filters.o
 
 AMD_DAL_DCE = $(addprefix $(AMDDALPATH)/dc/dce/,$(DCE))
 
