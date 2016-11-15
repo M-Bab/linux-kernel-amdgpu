@@ -2574,6 +2574,7 @@ int amdgpu_dm_atomic_commit(
 			acrtc->enabled = true;
 			acrtc->hw_mode = crtc->state->mode;
 			crtc->hwmode = crtc->state->mode;
+
 			break;
 		}
 
@@ -2612,17 +2613,32 @@ int amdgpu_dm_atomic_commit(
 			++commit_targets_count;
 		}
 	}
+
 	/*
 	 * Add streams after required streams from new and replaced targets
 	 * are removed from freesync module
 	 */
 	if (adev->dm.freesync_module) {
 		for (i = 0; i < new_crtcs_count; i++) {
+			struct amdgpu_connector *aconnector = NULL;
 			new_target = new_crtcs[i]->target;
+			aconnector =
+				amdgpu_dm_find_first_crct_matching_connector(
+					state,
+					&new_crtcs[i]->base,
+					false);
+			if (!aconnector) {
+				DRM_INFO(
+						"Atomic commit: Failed to find connector for acrtc id:%d "
+						"skipping freesync init\n",
+						new_crtcs[i]->crtc_id);
+				continue;
+			}
+
 			for (j = 0; j < new_target->stream_count; j++)
 				mod_freesync_add_stream(
 						adev->dm.freesync_module,
-						new_target->streams[j]);
+						new_target->streams[j], &aconnector->caps);
 		}
 	}
 
@@ -2829,14 +2845,17 @@ void dm_restore_drm_connector_state(struct drm_device *dev, struct drm_connector
 		}
 
 		if (adev->dm.freesync_module) {
+
 			for (i = 0; i < current_target->stream_count; i++)
 				mod_freesync_remove_stream(
 						adev->dm.freesync_module,
 						current_target->streams[i]);
+
 			for (i = 0; i < new_target->stream_count; i++)
 				mod_freesync_add_stream(
 						adev->dm.freesync_module,
-						new_target->streams[i]);
+						new_target->streams[i],
+						&aconnector->caps);
 		}
 		list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 			struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
@@ -3193,7 +3212,6 @@ void amdgpu_dm_add_sink_to_freesync_module(
 	struct detailed_timing *timing;
 	struct detailed_non_pixel *data;
 	struct detailed_data_monitor_range *range;
-	struct mod_freesync_caps caps = {0};
 	struct amdgpu_connector *amdgpu_connector =
 			to_amdgpu_connector(connector);
 
@@ -3245,18 +3263,17 @@ void amdgpu_dm_add_sink_to_freesync_module(
 				range->pixel_clock_mhz * 10;
 			break;
 		}
+
 		if (amdgpu_connector->max_vfreq -
 				amdgpu_connector->min_vfreq > 10) {
-			caps.supported = true;
-			caps.min_refresh_in_micro_hz =
+			amdgpu_connector->caps.supported = true;
+			amdgpu_connector->caps.min_refresh_in_micro_hz =
 					amdgpu_connector->min_vfreq * 1000000;
-			caps.max_refresh_in_micro_hz =
+			amdgpu_connector->caps.max_refresh_in_micro_hz =
 					amdgpu_connector->max_vfreq * 1000000;
-			val_capable = 1;
+				val_capable = 1;
 		}
 	}
-	mod_freesync_add_sink(adev->dm.freesync_module,
-			amdgpu_connector->dc_sink, &caps);
 	drm_object_property_set_value(&connector->base,
 				      adev->mode_info.freesync_capable_property,
 				      val_capable);
@@ -3282,8 +3299,8 @@ void amdgpu_dm_remove_sink_from_freesync_module(
 	amdgpu_connector->max_vfreq = 0;
 	amdgpu_connector->pixel_clock_mhz = 0;
 
-	mod_freesync_remove_sink(adev->dm.freesync_module,
-			amdgpu_connector->dc_sink);
+	memset(&amdgpu_connector->caps, 0, sizeof(amdgpu_connector->caps));
+
 	drm_object_property_set_value(&connector->base,
 				      adev->mode_info.freesync_capable_property,
 				      0);
