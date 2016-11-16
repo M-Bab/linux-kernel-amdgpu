@@ -8,13 +8,17 @@
 #include <stdarg.h>
 
 uint32_t generic_reg_update_ex(const struct dc_context *ctx,
-		uint32_t addr, uint32_t reg_val, int n, ...)
+		uint32_t addr, uint32_t reg_val, int n,
+		uint8_t shift1, uint32_t mask1, uint32_t field_value1,
+		...)
 {
 	uint32_t shift, mask, field_value;
-	int i = 0;
+	int i = 1;
 
 	va_list ap;
-	va_start(ap, n);
+	va_start(ap, field_value1);
+
+	reg_val = set_reg_field_value_ex(reg_val, field_value1, mask1, shift1);
 
 	while (i < n) {
 		shift = va_arg(ap, uint32_t);
