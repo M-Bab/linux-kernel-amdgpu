@@ -41,7 +41,7 @@
 #include "dce/dce_stream_encoder.h"
 #include "dce80/dce80_mem_input.h"
 #include "dce80/dce80_ipp.h"
-#include "dce80/dce80_transform.h"
+#include "dce110/dce110_transform.h"
 #include "dce80/dce80_opp.h"
 #include "dce110/dce110_ipp.h"
 #include "dce110/dce110_clock_source.h"
@@ -183,49 +183,6 @@ static const struct dce110_mem_input_reg_offsets dce80_mi_reg_offsets[] = {
 	}
 };
 
-static const struct dce80_transform_reg_offsets dce80_xfm_offsets[] = {
-{
-	.scl_offset = (mmSCL_CONTROL - mmSCL_CONTROL),
-	.crtc_offset = (mmDCFE_MEM_LIGHT_SLEEP_CNTL -
-					mmDCFE_MEM_LIGHT_SLEEP_CNTL),
-	.dcp_offset = (mmGRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{	.scl_offset = (mmSCL1_SCL_CONTROL - mmSCL_CONTROL),
-	.crtc_offset = (mmCRTC1_DCFE_MEM_LIGHT_SLEEP_CNTL -
-					mmDCFE_MEM_LIGHT_SLEEP_CNTL),
-	.dcp_offset = (mmDCP1_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB1_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{	.scl_offset = (mmSCL2_SCL_CONTROL - mmSCL_CONTROL),
-	.crtc_offset = (mmCRTC2_DCFE_MEM_LIGHT_SLEEP_CNTL -
-					mmDCFE_MEM_LIGHT_SLEEP_CNTL),
-	.dcp_offset = (mmDCP2_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB2_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{
-	.scl_offset = (mmSCL3_SCL_CONTROL - mmSCL_CONTROL),
-	.crtc_offset = (mmCRTC3_DCFE_MEM_LIGHT_SLEEP_CNTL -
-					mmDCFE_MEM_LIGHT_SLEEP_CNTL),
-	.dcp_offset = (mmDCP3_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB3_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{
-	.scl_offset = (mmSCL4_SCL_CONTROL - mmSCL_CONTROL),
-	.crtc_offset = (mmCRTC4_DCFE_MEM_LIGHT_SLEEP_CNTL -
-					mmDCFE_MEM_LIGHT_SLEEP_CNTL),
-	.dcp_offset = (mmDCP4_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB4_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{
-	.scl_offset = (mmSCL5_SCL_CONTROL - mmSCL_CONTROL),
-	.crtc_offset = (mmCRTC5_DCFE_MEM_LIGHT_SLEEP_CNTL -
-					mmDCFE_MEM_LIGHT_SLEEP_CNTL),
-	.dcp_offset = (mmDCP5_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB5_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-}
-};
-
 static const struct dce110_ipp_reg_offsets ipp_reg_offsets[] = {
 {
 	.dcp_offset = (mmDCP0_CUR_CONTROL - mmDCP0_CUR_CONTROL),
@@ -254,6 +211,28 @@ static const struct dce110_ipp_reg_offsets ipp_reg_offsets[] = {
 /* set register offset with instance */
 #define SRI(reg_name, block, id)\
 	.reg_name = mm ## block ## id ## _ ## reg_name
+
+#define transform_regs(id)\
+[id] = {\
+		XFM_COMMON_REG_LIST_DCE_BASE(id)\
+}
+
+static const struct dce110_transform_registers xfm_regs[] = {
+		transform_regs(0),
+		transform_regs(1),
+		transform_regs(2),
+		transform_regs(3),
+		transform_regs(4),
+		transform_regs(5)
+};
+
+static const struct dce110_transform_shift xfm_shift = {
+		XFM_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(__SHIFT)
+};
+
+static const struct dce110_transform_mask xfm_mask = {
+		XFM_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(_MASK)
+};
 
 #define aux_regs(id)\
 [id] = {\
@@ -519,23 +498,26 @@ static struct mem_input *dce80_mem_input_create(
 
 static void dce80_transform_destroy(struct transform **xfm)
 {
-	dm_free(TO_DCE80_TRANSFORM(*xfm));
+	dm_free(TO_DCE110_TRANSFORM(*xfm));
 	*xfm = NULL;
 }
 
 static struct transform *dce80_transform_create(
 	struct dc_context *ctx,
-	uint32_t inst,
-	const struct dce80_transform_reg_offsets *offsets)
+	uint32_t inst)
 {
-	struct dce80_transform *transform =
-		dm_alloc(sizeof(struct dce80_transform));
+	struct dce110_transform *transform =
+		dm_alloc(sizeof(struct dce110_transform));
 
 	if (!transform)
 		return NULL;
 
-	if (dce80_transform_construct(transform, ctx, inst, offsets))
+	if (dce110_transform_construct(transform, ctx, inst,
+			&xfm_regs[inst], &xfm_shift, &xfm_mask)) {
+		transform->prescaler_on = false;
+		transform->base.lb_memory_size = 0x6B0; /*1712*/
 		return &transform->base;
+	}
 
 	BREAK_TO_DEBUGGER();
 	dm_free(transform);
@@ -1028,8 +1010,7 @@ static bool construct(
 			goto res_create_fail;
 		}
 
-		pool->base.transforms[i] = dce80_transform_create(
-						ctx, i, &dce80_xfm_offsets[i]);
+		pool->base.transforms[i] = dce80_transform_create(ctx, i);
 		if (pool->base.transforms[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create transform!\n");

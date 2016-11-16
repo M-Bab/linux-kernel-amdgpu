@@ -684,13 +684,12 @@ bool dce110_transform_get_optimal_number_of_taps(
 	struct scaler_data *scl_data,
 	const struct scaling_taps *in_taps)
 {
-	uint32_t pixel_width;
+	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	int pixel_width = scl_data->viewport.width;
 
-
-	if (scl_data->viewport.width > scl_data->recout.width)
+	if (xfm110->prescaler_on &&
+			(scl_data->viewport.width > scl_data->recout.width))
 		pixel_width = scl_data->recout.width;
-	else
-		pixel_width = scl_data->viewport.width;
 
 	return transform_get_optimal_number_of_taps_helper(
 			xfm,
@@ -742,6 +741,7 @@ bool dce110_transform_construct(
 	xfm110->xfm_shift = xfm_shift;
 	xfm110->xfm_mask = xfm_mask;
 
+	xfm110->prescaler_on = true;
 	xfm110->lb_pixel_depth_supported =
 			LB_PIXEL_DEPTH_18BPP |
 			LB_PIXEL_DEPTH_24BPP |

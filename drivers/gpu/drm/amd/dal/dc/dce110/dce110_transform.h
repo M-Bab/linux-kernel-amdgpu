@@ -111,7 +111,6 @@
 	XFM_SF(GAMUT_REMAP_C33_C34, GAMUT_REMAP_C34, mask_sh), \
 	XFM_SF(GAMUT_REMAP_CONTROL, GRPH_GAMUT_REMAP_MODE, mask_sh), \
 	XFM_SF(SCL_MODE, SCL_MODE, mask_sh), \
-	XFM_SF(SCL_MODE, SCL_PSCL_EN, mask_sh), \
 	XFM_SF(SCL_TAP_CONTROL, SCL_H_NUM_OF_TAPS, mask_sh), \
 	XFM_SF(SCL_TAP_CONTROL, SCL_V_NUM_OF_TAPS, mask_sh), \
 	XFM_SF(SCL_CONTROL, SCL_BOUNDARY_MODE, mask_sh), \
@@ -146,7 +145,8 @@
 #define XFM_COMMON_MASK_SH_LIST_DCE110(mask_sh)\
 	XFM_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(mask_sh),\
 	XFM_SF(DCFE_MEM_PWR_CTRL, SCL_COEFF_MEM_PWR_DIS, mask_sh), \
-	XFM_SF(DCFE_MEM_PWR_STATUS, SCL_COEFF_MEM_PWR_STATE, mask_sh)
+	XFM_SF(DCFE_MEM_PWR_STATUS, SCL_COEFF_MEM_PWR_STATE, mask_sh), \
+	XFM_SF(SCL_MODE, SCL_PSCL_EN, mask_sh)
 
 
 struct dce110_transform_shift {
@@ -336,6 +336,7 @@ struct dce110_transform {
 	const uint16_t *filter_v_c;
 	const uint16_t *filter_h_c;
 	uint32_t lb_pixel_depth_supported;
+	bool prescaler_on;
 };
 
 bool dce110_transform_construct(struct dce110_transform *xfm110,
