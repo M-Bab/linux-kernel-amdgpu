@@ -43,8 +43,14 @@
 /*
  * Post-requisites: headers required by this unit
  */
-#include "dce/dce_11_0_d.h"
-#include "dce/dce_11_0_sh_mask.h"
+
+/*
+ * Temporarily adding ellesmere specific headers
+ * to get the right defined values
+ */
+#include "dce/dce_11_2_d.h"
+#include "dce/dce_11_2_sh_mask.h"
+
 #include "reg_helper.h"
 
 /*
