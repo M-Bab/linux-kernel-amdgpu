@@ -45,6 +45,8 @@
 #include <linux/hrtimer.h>
 #include "amdgpu_irq.h"
 
+#include "../dal/modules/inc/mod_freesync.h"
+
 struct amdgpu_bo;
 struct amdgpu_device;
 struct amdgpu_encoder;
@@ -593,6 +595,11 @@ struct amdgpu_connector {
 	int min_vfreq ;
 	int max_vfreq ;
 	int pixel_clock_mhz;
+
+	/*freesync caps*/
+	struct mod_freesync_caps caps;
+
+
 
 };
 
