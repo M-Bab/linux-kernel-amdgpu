@@ -34,9 +34,4 @@ bool dce110_transform_v_construct(
 	struct dce110_transform *xfm110,
 	struct dc_context *ctx);
 
-bool dce110_transform_v_set_pixel_storage_depth(
-	struct transform *xfm,
-	enum lb_pixel_depth depth,
-	const struct bit_depth_reduction_params *bit_depth_params);
-
 #endif

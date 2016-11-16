@@ -30,7 +30,6 @@
 #include "dce/dce_11_0_sh_mask.h"
 
 #include "dce110_transform.h"
-#include "dce110_transform_bit_depth.h"
 
 #define UP_SCALER_RATIO_MAX 16000
 #define DOWN_SCALER_RATIO_MAX 250
@@ -601,85 +600,4 @@ void dce110_transform_set_scaler(
 		set_coeff_update_complete(xfm110);
 
 	dce110_transform_set_alpha(xfm, data->lb_params.alpha_en);
-}
-
-#define IDENTITY_RATIO(ratio) (dal_fixed31_32_u2d19(ratio) == (1 << 19))
-
-static uint32_t decide_taps(struct fixed31_32 ratio, uint32_t in_taps, bool chroma)
-{
-	uint32_t taps;
-
-	if (IDENTITY_RATIO(ratio)) {
-		return 1;
-	} else if (in_taps != 0) {
-		taps = in_taps;
-	} else {
-		taps = 4;
-	}
-
-	if (chroma) {
-		taps /= 2;
-		if (taps < 2)
-			taps = 2;
-	}
-
-	return taps;
-}
-
-bool transform_get_optimal_number_of_taps_helper(
-	struct transform *xfm,
-	struct scaler_data *scl_data,
-	uint32_t pixel_width,
-	const struct scaling_taps *in_taps) {
-
-	int max_num_of_lines;
-
-	max_num_of_lines = dce110_transform_get_max_num_of_supported_lines(
-		xfm,
-		scl_data->lb_params.depth,
-		pixel_width);
-
-	/* Fail if in_taps are impossible */
-	if (in_taps->v_taps >= max_num_of_lines)
-		return false;
-
-	/*
-	 * Set taps according to this policy (in this order)
-	 * - Use 1 for no scaling
-	 * - Use input taps
-	 * - Use 4 and reduce as required by line buffer size
-	 * - Decide chroma taps if chroma is scaled
-	 *
-	 * Ignore input chroma taps. Decide based on non-chroma
-	 */
-	scl_data->taps.h_taps = decide_taps(scl_data->ratios.horz, in_taps->h_taps, false);
-	scl_data->taps.v_taps = decide_taps(scl_data->ratios.vert, in_taps->v_taps, false);
-	scl_data->taps.h_taps_c = decide_taps(scl_data->ratios.horz_c, in_taps->h_taps, true);
-	scl_data->taps.v_taps_c = decide_taps(scl_data->ratios.vert_c, in_taps->v_taps, true);
-
-	if (!IDENTITY_RATIO(scl_data->ratios.vert)) {
-		/* reduce v_taps if needed but ensure we have at least two */
-		if (in_taps->v_taps == 0
-				&& max_num_of_lines <= scl_data->taps.v_taps
-				&& scl_data->taps.v_taps > 1) {
-			scl_data->taps.v_taps = max_num_of_lines - 1;
-		}
-
-		if (scl_data->taps.v_taps <= 1)
-			return false;
-	}
-
-	if (!IDENTITY_RATIO(scl_data->ratios.vert_c)) {
-		/* reduce chroma v_taps if needed but ensure we have at least two */
-		if (max_num_of_lines <= scl_data->taps.v_taps_c && scl_data->taps.v_taps_c > 1) {
-			scl_data->taps.v_taps_c = max_num_of_lines - 1;
-		}
-
-		if (scl_data->taps.v_taps_c <= 1)
-			return false;
-	}
-
-	/* we've got valid taps */
-	return true;
-
 }

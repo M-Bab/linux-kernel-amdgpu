@@ -27,16 +27,19 @@
 #include "dc_types.h"
 #include "core_types.h"
 
+#include "basics/conversion.h"
 #include "dce110_transform.h"
 #include "dce110_transform_v.h"
 
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
-#define NOT_IMPLEMENTED()  DAL_LOGGER_NOT_IMPL(LOG_MINOR_COMPONENT_CONTROLLER,\
-			"TRANSFORM SCALER:%s()\n", __func__)
-
 #define SCLV_PHASES 64
+
+#define DCP_REG(reg)\
+	(reg + xfm110->offsets.dcp_offset)
+
+#define GAMUT_MATRIX_SIZE 12
 
 struct sclv_ratios_inits {
 	uint32_t h_int_scale_ratio_luma;
@@ -616,17 +619,215 @@ static void dce110_transform_v_reset(struct transform *xfm)
 	xfm110->filter_v_c = NULL;
 }
 
+static void program_gamut_remap(
+	struct dce110_transform *xfm110,
+	const uint16_t *reg_val)
+{
+	struct dc_context *ctx = xfm110->base.ctx;
+	uint32_t value = 0;
+	uint32_t addr = DCP_REG(mmGAMUT_REMAP_CONTROL);
+
+	/* the register controls ovl also */
+	value = dm_read_reg(ctx, addr);
+
+	if (reg_val) {
+		{
+			uint32_t reg_data = 0;
+			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C11_C12);
+
+			/* fixed S2.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[0],
+				GAMUT_REMAP_C11_C12,
+				GAMUT_REMAP_C11);
+			/* fixed S2.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[1],
+				GAMUT_REMAP_C11_C12,
+				GAMUT_REMAP_C12);
+
+			dm_write_reg(ctx, addr, reg_data);
+		}
+		{
+			uint32_t reg_data = 0;
+			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C13_C14);
+
+			/* fixed S2.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[2],
+				GAMUT_REMAP_C13_C14,
+				GAMUT_REMAP_C13);
+
+			/* fixed S0.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[3],
+				GAMUT_REMAP_C13_C14,
+				GAMUT_REMAP_C14);
+
+			dm_write_reg(ctx, addr, reg_data);
+		}
+		{
+			uint32_t reg_data = 0;
+			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C21_C22);
+
+			/* fixed S2.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[4],
+				GAMUT_REMAP_C21_C22,
+				GAMUT_REMAP_C21);
+
+			/* fixed S0.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[5],
+				GAMUT_REMAP_C21_C22,
+				GAMUT_REMAP_C22);
+
+			dm_write_reg(ctx, addr, reg_data);
+		}
+		{
+			uint32_t reg_data = 0;
+			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C23_C24);
+
+			/* fixed S2.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[6],
+				GAMUT_REMAP_C23_C24,
+				GAMUT_REMAP_C23);
+
+			/* fixed S0.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[7],
+				GAMUT_REMAP_C23_C24,
+				GAMUT_REMAP_C24);
+
+			dm_write_reg(ctx, addr, reg_data);
+		}
+		{
+			uint32_t reg_data = 0;
+			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C31_C32);
+
+			/* fixed S2.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[8],
+				GAMUT_REMAP_C31_C32,
+				GAMUT_REMAP_C31);
+
+			/* fixed S0.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[9],
+				GAMUT_REMAP_C31_C32,
+				GAMUT_REMAP_C32);
+
+			dm_write_reg(ctx, addr, reg_data);
+		}
+		{
+			uint32_t reg_data = 0;
+			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C33_C34);
+
+			/* fixed S2.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[10],
+				GAMUT_REMAP_C33_C34,
+				GAMUT_REMAP_C33);
+
+			/* fixed S0.13 format */
+			set_reg_field_value(
+				reg_data,
+				reg_val[11],
+				GAMUT_REMAP_C33_C34,
+				GAMUT_REMAP_C34);
+
+			dm_write_reg(ctx, addr, reg_data);
+		}
+
+		set_reg_field_value(
+			value,
+			1,
+			GAMUT_REMAP_CONTROL,
+			GRPH_GAMUT_REMAP_MODE);
+
+	} else
+		set_reg_field_value(
+			value,
+			0,
+			GAMUT_REMAP_CONTROL,
+			GRPH_GAMUT_REMAP_MODE);
+
+	addr = DCP_REG(mmGAMUT_REMAP_CONTROL);
+	dm_write_reg(ctx, addr, value);
+
+}
+
+/**
+ *****************************************************************************
+ *  Function: dal_transform_wide_gamut_set_gamut_remap
+ *
+ *  @param [in] const struct xfm_grph_csc_adjustment *adjust
+ *
+ *  @return
+ *     void
+ *
+ *  @note calculate and apply color temperature adjustment to in Rgb color space
+ *
+ *  @see
+ *
+ *****************************************************************************
+ */
+void dce110_transform_v_set_gamut_remap(
+	struct transform *xfm,
+	const struct xfm_grph_csc_adjustment *adjust)
+{
+	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+
+	if (adjust->gamut_adjust_type != GRAPHICS_GAMUT_ADJUST_TYPE_SW)
+		/* Bypass if type is bypass or hw */
+		program_gamut_remap(xfm110, NULL);
+	else {
+		struct fixed31_32 arr_matrix[GAMUT_MATRIX_SIZE];
+		uint16_t arr_reg_val[GAMUT_MATRIX_SIZE];
+
+		arr_matrix[0] = adjust->temperature_matrix[0];
+		arr_matrix[1] = adjust->temperature_matrix[1];
+		arr_matrix[2] = adjust->temperature_matrix[2];
+		arr_matrix[3] = dal_fixed31_32_zero;
+
+		arr_matrix[4] = adjust->temperature_matrix[3];
+		arr_matrix[5] = adjust->temperature_matrix[4];
+		arr_matrix[6] = adjust->temperature_matrix[5];
+		arr_matrix[7] = dal_fixed31_32_zero;
+
+		arr_matrix[8] = adjust->temperature_matrix[6];
+		arr_matrix[9] = adjust->temperature_matrix[7];
+		arr_matrix[10] = adjust->temperature_matrix[8];
+		arr_matrix[11] = dal_fixed31_32_zero;
+
+		convert_float_matrix(
+			arr_reg_val, arr_matrix, GAMUT_MATRIX_SIZE);
+
+		program_gamut_remap(xfm110, arr_reg_val);
+	}
+}
+
 static const struct transform_funcs dce110_transform_v_funcs = {
-	.transform_reset =
-			dce110_transform_v_reset,
-	.transform_set_scaler =
-		dce110_transform_v_set_scaler,
+	.transform_reset = dce110_transform_v_reset,
+	.transform_set_scaler = dce110_transform_v_set_scaler,
 	.transform_set_gamut_remap =
-		dce110_transform_set_gamut_remap,
+		dce110_transform_v_set_gamut_remap,
 	.transform_set_pixel_storage_depth =
-		dce110_transform_v_set_pixel_storage_depth,
+		dce110_transform_set_pixel_storage_depth,
 	.transform_get_optimal_number_of_taps =
-			dce110_transform_get_optimal_number_of_taps
+		dce110_transform_get_optimal_number_of_taps
 };
 /*****************************************/
 /* Constructor, Destructor               */
