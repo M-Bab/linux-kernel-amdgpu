@@ -39,14 +39,6 @@
 #define CTX \
 	xfm110->base.ctx
 
-static void dce110_transform_set_scaler_bypass(
-		struct transform *xfm,
-		const struct scaler_data *scl_data)
-{
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-
-	REG_UPDATE_2(SCL_MODE, SCL_MODE, 0, SCL_PSCL_EN, 0);
-}
 
 static bool setup_scaling_configuration(
 	struct dce110_transform *xfm110,
@@ -55,7 +47,8 @@ static bool setup_scaling_configuration(
 	struct dc_context *ctx = xfm110->base.ctx;
 
 	if (data->taps.h_taps + data->taps.v_taps <= 2) {
-		dce110_transform_set_scaler_bypass(&xfm110->base, NULL);
+		/* Set bypass */
+		REG_UPDATE_2(SCL_MODE, SCL_MODE, 0, SCL_PSCL_EN, 0);
 		return false;
 	}
 
