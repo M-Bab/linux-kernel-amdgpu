@@ -26,6 +26,7 @@
 #define __DAL_TRANSFORM_V_DCE110_H__
 
 #include "transform.h"
+#include "dce110_transform.h"
 
 #define LB_TOTAL_NUMBER_OF_ENTRIES 1712
 #define LB_BITS_PER_ENTRY 144

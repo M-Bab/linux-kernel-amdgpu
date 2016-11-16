@@ -24,140 +24,60 @@
  */
 
 #include "dm_services.h"
-
-/* include DCE11 register header files */
-#include "dce/dce_11_0_d.h"
-#include "dce/dce_11_0_sh_mask.h"
-
+#include "reg_helper.h"
 #include "dce110_transform.h"
-
-#define UP_SCALER_RATIO_MAX 16000
-#define DOWN_SCALER_RATIO_MAX 250
-#define SCALER_RATIO_DIVIDER 1000
-
-#define SCL_REG(reg)\
-	(reg + xfm110->offsets.scl_offset)
-
-#define DCFE_REG(reg)\
-	(reg + xfm110->offsets.dcfe_offset)
-
-#define LB_REG(reg)\
-	(reg + xfm110->offsets.lb_offset)
 
 #define SCL_PHASES 16
 
+#define REG(reg) \
+	(xfm110->regs->reg)
 
-static void disable_enhanced_sharpness(struct dce110_transform *xfm110)
-{
-	uint32_t  value;
+#undef FN
+#define FN(reg_name, field_name) \
+	xfm110->xfm_shift->field_name, xfm110->xfm_mask->field_name
 
-	value = dm_read_reg(xfm110->base.ctx,
-			SCL_REG(mmSCL_F_SHARP_CONTROL));
-
-	set_reg_field_value(value, 0,
-			SCL_F_SHARP_CONTROL, SCL_HF_SHARP_EN);
-
-	set_reg_field_value(value, 0,
-			SCL_F_SHARP_CONTROL, SCL_VF_SHARP_EN);
-
-	set_reg_field_value(value, 0,
-			SCL_F_SHARP_CONTROL, SCL_HF_SHARP_SCALE_FACTOR);
-
-	set_reg_field_value(value, 0,
-			SCL_F_SHARP_CONTROL, SCL_VF_SHARP_SCALE_FACTOR);
-
-	dm_write_reg(xfm110->base.ctx,
-			SCL_REG(mmSCL_F_SHARP_CONTROL), value);
-}
+#define CTX \
+	xfm110->base.ctx
 
 static void dce110_transform_set_scaler_bypass(
 		struct transform *xfm,
 		const struct scaler_data *scl_data)
 {
 	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-	uint32_t scl_mode;
 
-	disable_enhanced_sharpness(xfm110);
-
-	scl_mode = dm_read_reg(xfm->ctx, SCL_REG(mmSCL_MODE));
-	set_reg_field_value(scl_mode, 0, SCL_MODE, SCL_MODE);
-	set_reg_field_value(scl_mode, 0, SCL_MODE, SCL_PSCL_EN);
-	dm_write_reg(xfm->ctx, SCL_REG(mmSCL_MODE), scl_mode);
+	REG_UPDATE_2(SCL_MODE, SCL_MODE, 0, SCL_PSCL_EN, 0);
 }
 
-/*
- *	@Function:
- *		void setup_scaling_configuration
- *	@Purpose: setup scaling mode : bypass, RGb, YCbCr and number of taps
- *	@Input:   data
- *
- *	@Output: void
- */
 static bool setup_scaling_configuration(
 	struct dce110_transform *xfm110,
 	const struct scaler_data *data)
 {
 	struct dc_context *ctx = xfm110->base.ctx;
-	uint32_t addr;
-	uint32_t value;
-
-	addr = SCL_REG(mmSCL_BYPASS_CONTROL);
-	value = dm_read_reg(ctx, addr);
-	set_reg_field_value(
-		value,
-		0,
-		SCL_BYPASS_CONTROL,
-		SCL_BYPASS_MODE);
-	dm_write_reg(ctx, addr, value);
 
 	if (data->taps.h_taps + data->taps.v_taps <= 2) {
 		dce110_transform_set_scaler_bypass(&xfm110->base, NULL);
 		return false;
 	}
 
-	addr = SCL_REG(mmSCL_TAP_CONTROL);
-	value = dm_read_reg(ctx, addr);
-	set_reg_field_value(value, data->taps.h_taps - 1,
-			SCL_TAP_CONTROL, SCL_H_NUM_OF_TAPS);
-	set_reg_field_value(value, data->taps.v_taps - 1,
-			SCL_TAP_CONTROL, SCL_V_NUM_OF_TAPS);
-	dm_write_reg(ctx, addr, value);
+	REG_SET_2(SCL_TAP_CONTROL, 0,
+			SCL_H_NUM_OF_TAPS, data->taps.h_taps - 1,
+			SCL_V_NUM_OF_TAPS, data->taps.v_taps - 1);
 
-	addr = SCL_REG(mmSCL_MODE);
-	value = dm_read_reg(ctx, addr);
 	if (data->format <= PIXEL_FORMAT_GRPH_END)
-		set_reg_field_value(value, 1, SCL_MODE, SCL_MODE);
+		REG_UPDATE_2(SCL_MODE, SCL_MODE, 1, SCL_PSCL_EN, 1);
 	else
-		set_reg_field_value(value, 2, SCL_MODE, SCL_MODE);
-	set_reg_field_value(value, 1, SCL_MODE, SCL_PSCL_EN);
-	dm_write_reg(ctx, addr, value);
+		REG_UPDATE_2(SCL_MODE, SCL_MODE, 2, SCL_PSCL_EN, 1);
 
-	addr = SCL_REG(mmSCL_CONTROL);
-	value = dm_read_reg(ctx, addr);
-	 /* 1 - Replaced out of bound pixels with edge */
-	set_reg_field_value(value, 1, SCL_CONTROL, SCL_BOUNDARY_MODE);
-	dm_write_reg(ctx, addr, value);
+	/* 1 - Replace out of bound pixels with edge */
+	REG_SET(SCL_CONTROL, 0, SCL_BOUNDARY_MODE, 1);
 
 	return true;
 }
 
-/**
-* Function:
-* void program_overscan
-*
-* Purpose: Programs overscan border
-* Input:   overscan
-*
-* Output:
-   void
-*/
 static void program_overscan(
 		struct dce110_transform *xfm110,
 		const struct scaler_data *data)
 {
-	uint32_t overscan_left_right = 0;
-	uint32_t overscan_top_bottom = 0;
-
 	int overscan_right = data->h_active
 			- data->recout.x - data->recout.width;
 	int overscan_bottom = data->v_active
@@ -172,67 +92,12 @@ static void program_overscan(
 		overscan_bottom = 0;
 	}
 
-	set_reg_field_value(overscan_left_right, data->recout.x,
-			EXT_OVERSCAN_LEFT_RIGHT, EXT_OVERSCAN_LEFT);
-
-	set_reg_field_value(overscan_left_right, overscan_right,
-			EXT_OVERSCAN_LEFT_RIGHT, EXT_OVERSCAN_RIGHT);
-
-	set_reg_field_value(overscan_top_bottom, data->recout.y,
-			EXT_OVERSCAN_TOP_BOTTOM, EXT_OVERSCAN_TOP);
-
-	set_reg_field_value(overscan_top_bottom, overscan_bottom,
-			EXT_OVERSCAN_TOP_BOTTOM, EXT_OVERSCAN_BOTTOM);
-
-	dm_write_reg(xfm110->base.ctx,
-			SCL_REG(mmEXT_OVERSCAN_LEFT_RIGHT),
-			overscan_left_right);
-
-	dm_write_reg(xfm110->base.ctx,
-			SCL_REG(mmEXT_OVERSCAN_TOP_BOTTOM),
-			overscan_top_bottom);
-}
-
-static void program_two_taps_filter(
-	struct dce110_transform *xfm110,
-	bool enable,
-	bool vertical)
-{
-	uint32_t addr;
-	uint32_t value;
-	/* 1: Hard coded 2 tap filter
-	 * 0: Programmable 2 tap filter from coefficient RAM
-	 */
-	if (vertical) {
-		addr = SCL_REG(mmSCL_VERT_FILTER_CONTROL);
-		value = dm_read_reg(xfm110->base.ctx, addr);
-		set_reg_field_value(
-			value,
-			enable ? 1 : 0,
-				SCL_VERT_FILTER_CONTROL,
-				SCL_V_2TAP_HARDCODE_COEF_EN);
-
-	} else {
-		addr = SCL_REG(mmSCL_HORZ_FILTER_CONTROL);
-		value = dm_read_reg(xfm110->base.ctx, addr);
-		set_reg_field_value(
-			value,
-			enable ? 1 : 0,
-			SCL_HORZ_FILTER_CONTROL,
-			SCL_H_2TAP_HARDCODE_COEF_EN);
-	}
-
-	dm_write_reg(xfm110->base.ctx, addr, value);
-}
-
-static void set_coeff_update_complete(struct dce110_transform *xfm110)
-{
-	uint32_t value;
-	uint32_t addr = SCL_REG(mmSCL_UPDATE);
-
-	value = dm_read_reg(xfm110->base.ctx, addr);
-	set_reg_field_value(value, 1, SCL_UPDATE, SCL_COEF_UPDATE_COMPLETE);
-	dm_write_reg(xfm110->base.ctx, addr, value);
+	REG_SET_2(EXT_OVERSCAN_LEFT_RIGHT, 0,
+			EXT_OVERSCAN_LEFT, data->recout.x,
+			EXT_OVERSCAN_RIGHT, overscan_right);
+	REG_SET_2(EXT_OVERSCAN_TOP_BOTTOM, 0,
+			EXT_OVERSCAN_TOP, data->recout.y,
+			EXT_OVERSCAN_BOTTOM, overscan_bottom);
 }
 
 static void program_multi_taps_filter(
@@ -241,120 +106,65 @@ static void program_multi_taps_filter(
 	const uint16_t *coeffs,
 	enum ram_filter_type filter_type)
 {
-	struct dc_context *ctx = xfm110->base.ctx;
-	int i, phase, pair;
+	int phase, pair;
 	int array_idx = 0;
 	int taps_pairs = (taps + 1) / 2;
 	int phases_to_program = SCL_PHASES / 2 + 1;
 
-	uint32_t select = 0;
-	uint32_t power_ctl, power_ctl_off;
+	uint32_t power_ctl = 0;
 
 	if (!coeffs)
 		return;
 
 	/*We need to disable power gating on coeff memory to do programming*/
-	power_ctl = dm_read_reg(ctx, DCFE_REG(mmDCFE_MEM_PWR_CTRL));
-	power_ctl_off = power_ctl;
-	set_reg_field_value(power_ctl_off, 1, DCFE_MEM_PWR_CTRL, SCL_COEFF_MEM_PWR_DIS);
-	dm_write_reg(ctx, DCFE_REG(mmDCFE_MEM_PWR_CTRL), power_ctl_off);
+	if (REG(DCFE_MEM_PWR_CTRL)) {
+		power_ctl = REG_READ(DCFE_MEM_PWR_CTRL);
+		REG_SET(DCFE_MEM_PWR_CTRL, power_ctl, SCL_COEFF_MEM_PWR_DIS, 1);
 
-	/*Wait to disable gating:*/
-	for (i = 0; i < 10; i++) {
-		if (get_reg_field_value(
-				dm_read_reg(ctx, DCFE_REG(mmDCFE_MEM_PWR_STATUS)),
-				DCFE_MEM_PWR_STATUS,
-				SCL_COEFF_MEM_PWR_STATE) == 0)
-			break;
-
-		udelay(1);
+		REG_WAIT(DCFE_MEM_PWR_STATUS, SCL_COEFF_MEM_PWR_STATE, 0, 1, 10);
 	}
-
-	set_reg_field_value(select, filter_type, SCL_COEF_RAM_SELECT, SCL_C_RAM_FILTER_TYPE);
-
 	for (phase = 0; phase < phases_to_program; phase++) {
 		/*we always program N/2 + 1 phases, total phases N, but N/2-1 are just mirror
 		phase 0 is unique and phase N/2 is unique if N is even*/
-		set_reg_field_value(select, phase, SCL_COEF_RAM_SELECT, SCL_C_RAM_PHASE);
 		for (pair = 0; pair < taps_pairs; pair++) {
-			uint32_t data = 0;
+			uint16_t odd_coeff = 0;
 
-			set_reg_field_value(select, pair,
-					SCL_COEF_RAM_SELECT, SCL_C_RAM_TAP_PAIR_IDX);
+			REG_SET_3(SCL_COEF_RAM_SELECT, 0,
+					SCL_C_RAM_FILTER_TYPE, filter_type,
+					SCL_C_RAM_PHASE, phase,
+					SCL_C_RAM_TAP_PAIR_IDX, pair);
 
-			dm_write_reg(ctx, SCL_REG(mmSCL_COEF_RAM_SELECT), select);
-
-			set_reg_field_value(
-					data, 1,
-					SCL_COEF_RAM_TAP_DATA,
-					SCL_C_RAM_EVEN_TAP_COEF_EN);
-			set_reg_field_value(
-					data, coeffs[array_idx],
-					SCL_COEF_RAM_TAP_DATA,
-					SCL_C_RAM_EVEN_TAP_COEF);
-
-			if (taps % 2 && pair == taps_pairs - 1) {
-				set_reg_field_value(
-						data, 0,
-						SCL_COEF_RAM_TAP_DATA,
-						SCL_C_RAM_ODD_TAP_COEF_EN);
+			if (taps % 2 && pair == taps_pairs - 1)
 				array_idx++;
-			} else {
-				set_reg_field_value(
-						data, 1,
-						SCL_COEF_RAM_TAP_DATA,
-						SCL_C_RAM_ODD_TAP_COEF_EN);
-				set_reg_field_value(
-						data, coeffs[array_idx + 1],
-						SCL_COEF_RAM_TAP_DATA,
-						SCL_C_RAM_ODD_TAP_COEF);
-
+			else {
+				odd_coeff = coeffs[array_idx + 1];
 				array_idx += 2;
 			}
 
-			dm_write_reg(ctx, SCL_REG(mmSCL_COEF_RAM_TAP_DATA), data);
+			REG_SET_4(SCL_COEF_RAM_TAP_DATA, 0,
+					SCL_C_RAM_EVEN_TAP_COEF_EN, 1,
+					SCL_C_RAM_EVEN_TAP_COEF, coeffs[array_idx],
+					SCL_C_RAM_ODD_TAP_COEF_EN, 1,
+					SCL_C_RAM_ODD_TAP_COEF, odd_coeff);
 		}
 	}
 
 	/*We need to restore power gating on coeff memory to initial state*/
-	dm_write_reg(ctx, DCFE_REG(mmDCFE_MEM_PWR_CTRL), power_ctl);
+	if (REG(DCFE_MEM_PWR_CTRL))
+		REG_WRITE(DCFE_MEM_PWR_CTRL, power_ctl);
 }
 
 static void program_viewport(
 	struct dce110_transform *xfm110,
 	const struct rect *view_port)
 {
-	struct dc_context *ctx = xfm110->base.ctx;
-	uint32_t value = 0;
-	uint32_t addr = 0;
+	REG_SET_2(VIEWPORT_START, 0,
+			VIEWPORT_X_START, view_port->x,
+			VIEWPORT_Y_START, view_port->y);
 
-	addr = SCL_REG(mmVIEWPORT_START);
-	value = dm_read_reg(ctx, addr);
-	set_reg_field_value(
-		value,
-		view_port->x,
-		VIEWPORT_START,
-		VIEWPORT_X_START);
-	set_reg_field_value(
-		value,
-		view_port->y,
-		VIEWPORT_START,
-		VIEWPORT_Y_START);
-	dm_write_reg(ctx, addr, value);
-
-	addr = SCL_REG(mmVIEWPORT_SIZE);
-	value = dm_read_reg(ctx, addr);
-	set_reg_field_value(
-		value,
-		view_port->height,
-		VIEWPORT_SIZE,
-		VIEWPORT_HEIGHT);
-	set_reg_field_value(
-		value,
-		view_port->width,
-		VIEWPORT_SIZE,
-		VIEWPORT_WIDTH);
-	dm_write_reg(ctx, addr, value);
+	REG_SET_2(VIEWPORT_SIZE, 0,
+			VIEWPORT_HEIGHT, view_port->height,
+			VIEWPORT_WIDTH, view_port->width);
 
 	/* TODO: add stereo support */
 }
@@ -395,66 +205,22 @@ static void program_scl_ratios_inits(
 	struct dce110_transform *xfm110,
 	struct scl_ratios_inits *inits)
 {
-	uint32_t addr = SCL_REG(mmSCL_HORZ_FILTER_SCALE_RATIO);
-	uint32_t value = 0;
 
-	set_reg_field_value(
-		value,
-		inits->h_int_scale_ratio,
-		SCL_HORZ_FILTER_SCALE_RATIO,
-		SCL_H_SCALE_RATIO);
-	dm_write_reg(xfm110->base.ctx, addr, value);
+	REG_SET(SCL_HORZ_FILTER_SCALE_RATIO, 0,
+			SCL_H_SCALE_RATIO, inits->h_int_scale_ratio);
 
-	addr = SCL_REG(mmSCL_VERT_FILTER_SCALE_RATIO);
-	value = 0;
-	set_reg_field_value(
-		value,
-		inits->v_int_scale_ratio,
-		SCL_VERT_FILTER_SCALE_RATIO,
-		SCL_V_SCALE_RATIO);
-	dm_write_reg(xfm110->base.ctx, addr, value);
+	REG_SET(SCL_VERT_FILTER_SCALE_RATIO, 0,
+			SCL_V_SCALE_RATIO, inits->v_int_scale_ratio);
 
-	addr = SCL_REG(mmSCL_HORZ_FILTER_INIT);
-	value = 0;
-	set_reg_field_value(
-		value,
-		inits->h_init.integer,
-		SCL_HORZ_FILTER_INIT,
-		SCL_H_INIT_INT);
-	set_reg_field_value(
-		value,
-		inits->h_init.fraction,
-		SCL_HORZ_FILTER_INIT,
-		SCL_H_INIT_FRAC);
-	dm_write_reg(xfm110->base.ctx, addr, value);
+	REG_SET_2(SCL_HORZ_FILTER_INIT, 0,
+			SCL_H_INIT_INT, inits->h_init.integer,
+			SCL_H_INIT_FRAC, inits->h_init.fraction);
 
-	addr = SCL_REG(mmSCL_VERT_FILTER_INIT);
-	value = 0;
-	set_reg_field_value(
-		value,
-		inits->v_init.integer,
-		SCL_VERT_FILTER_INIT,
-		SCL_V_INIT_INT);
-	set_reg_field_value(
-		value,
-		inits->v_init.fraction,
-		SCL_VERT_FILTER_INIT,
-		SCL_V_INIT_FRAC);
-	dm_write_reg(xfm110->base.ctx, addr, value);
+	REG_SET_2(SCL_VERT_FILTER_INIT, 0,
+			SCL_V_INIT_INT, inits->v_init.integer,
+			SCL_V_INIT_FRAC, inits->v_init.fraction);
 
-	addr = SCL_REG(mmSCL_AUTOMATIC_MODE_CONTROL);
-	value = 0;
-	set_reg_field_value(
-		value,
-		0,
-		SCL_AUTOMATIC_MODE_CONTROL,
-		SCL_V_CALC_AUTO_RATIO_EN);
-	set_reg_field_value(
-		value,
-		0,
-		SCL_AUTOMATIC_MODE_CONTROL,
-		SCL_H_CALC_AUTO_RATIO_EN);
-	dm_write_reg(xfm110->base.ctx, addr, value);
+	REG_WRITE(SCL_AUTOMATIC_MODE_CONTROL, 0);
 }
 
 static const uint16_t *get_filter_coeffs_16p(int taps, struct fixed31_32 ratio)
@@ -474,59 +240,6 @@ static const uint16_t *get_filter_coeffs_16p(int taps, struct fixed31_32 ratio)
 	}
 }
 
-
-static void dce110_transform_set_alpha(struct transform *xfm, bool enable)
-{
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-	struct dc_context *ctx = xfm->ctx;
-	uint32_t value;
-	uint32_t addr = LB_REG(mmLB_DATA_FORMAT);
-
-	value = dm_read_reg(ctx, addr);
-
-	if (enable == 1)
-		set_reg_field_value(
-				value,
-				1,
-				LB_DATA_FORMAT,
-				ALPHA_EN);
-	else
-		set_reg_field_value(
-				value,
-				0,
-				LB_DATA_FORMAT,
-				ALPHA_EN);
-
-	dm_write_reg(ctx, addr, value);
-}
-
-/* LB_MEMORY_CONFIG
- *  00 - Use all three pieces of memory
- *  01 - Use only one piece of memory of total 720x144 bits
- *  10 - Use two pieces of memory of total 960x144 bits
- *  11 - reserved
- *
- * LB_MEMORY_SIZE
- *  Total entries of LB memory.
- *  This number should be larger than 960. The default value is 1712(0x6B0) */
-static bool dce110_transform_power_up_line_buffer(struct transform *xfm)
-{
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-	uint32_t value;
-
-	value = dm_read_reg(xfm110->base.ctx, LB_REG(mmLB_MEMORY_CTRL));
-
-	/*Use all three pieces of memory always*/
-	set_reg_field_value(value, 0, LB_MEMORY_CTRL, LB_MEMORY_CONFIG);
-	/*hard coded number DCE11 1712(0x6B0) Partitions: 720/960/1712*/
-	set_reg_field_value(value, xfm110->base.lb_memory_size, LB_MEMORY_CTRL,
-			LB_MEMORY_SIZE);
-
-	dm_write_reg(xfm110->base.ctx, LB_REG(mmLB_MEMORY_CTRL), value);
-
-	return true;
-}
-
 void dce110_transform_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data)
@@ -536,9 +249,10 @@ void dce110_transform_set_scaler(
 	bool filter_updated = false;
 	const uint16_t *coeffs_v, *coeffs_h;
 
-	dce110_transform_power_up_line_buffer(xfm);
-
-	disable_enhanced_sharpness(xfm110);
+	/*Use all three pieces of memory always*/
+	REG_SET_2(LB_MEMORY_CTRL, 0,
+			LB_MEMORY_CONFIG, 0,
+			LB_MEMORY_SIZE, xfm110->base.lb_memory_size);
 
 	/* 1. Program overscan */
 	program_overscan(xfm110, data);
@@ -560,7 +274,8 @@ void dce110_transform_set_scaler(
 		if (coeffs_v != xfm110->filter_v || coeffs_h != xfm110->filter_h) {
 			/* 4. Program vertical filters */
 			if (xfm110->filter_v == NULL)
-				program_two_taps_filter(xfm110, 0, true);
+				REG_SET(SCL_VERT_FILTER_CONTROL, 0,
+						SCL_V_2TAP_HARDCODE_COEF_EN, 0);
 			program_multi_taps_filter(
 					xfm110,
 					data->taps.v_taps,
@@ -574,7 +289,8 @@ void dce110_transform_set_scaler(
 
 			/* 5. Program horizontal filters */
 			if (xfm110->filter_h == NULL)
-				program_two_taps_filter(xfm110, 0, false);
+				REG_SET(SCL_HORZ_FILTER_CONTROL, 0,
+						SCL_H_2TAP_HARDCODE_COEF_EN, 0);
 			program_multi_taps_filter(
 					xfm110,
 					data->taps.h_taps,
@@ -597,7 +313,7 @@ void dce110_transform_set_scaler(
 
 	/* 7. Set bit to flip to new coefficient memory */
 	if (filter_updated)
-		set_coeff_update_complete(xfm110);
+		REG_UPDATE(SCL_UPDATE, SCL_COEF_UPDATE_COMPLETE, 1);
 
-	dce110_transform_set_alpha(xfm, data->lb_params.alpha_en);
+	REG_UPDATE(LB_DATA_FORMAT, ALPHA_EN, data->lb_params.alpha_en);
 }

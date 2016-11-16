@@ -179,41 +179,6 @@ static const struct dce110_clk_src_reg_offsets dce100_clk_src_reg_offsets[] = {
 	}
 };
 
-static const struct dce110_transform_reg_offsets dce100_xfm_offsets[] = {
-{
-	.scl_offset = (mmSCL0_SCL_CONTROL - mmSCL_CONTROL),
-	.dcfe_offset = (mmCRTC0_DCFE_MEM_PWR_CTRL - mmDCFE_MEM_PWR_CTRL),
-	.dcp_offset = (mmDCP0_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB0_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{	.scl_offset = (mmSCL1_SCL_CONTROL - mmSCL_CONTROL),
-	.dcfe_offset = (mmCRTC1_DCFE_MEM_PWR_CTRL - mmDCFE_MEM_PWR_CTRL),
-	.dcp_offset = (mmDCP1_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB1_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{	.scl_offset = (mmSCL2_SCL_CONTROL - mmSCL_CONTROL),
-	.dcfe_offset = (mmCRTC2_DCFE_MEM_PWR_CTRL - mmDCFE_MEM_PWR_CTRL),
-	.dcp_offset = (mmDCP2_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB2_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{
-	.scl_offset = (mmSCL3_SCL_CONTROL - mmSCL_CONTROL),
-	.dcfe_offset = (mmCRTC3_DCFE_MEM_PWR_CTRL - mmDCFE_MEM_PWR_CTRL),
-	.dcp_offset = (mmDCP3_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB3_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{	.scl_offset = (mmSCL4_SCL_CONTROL - mmSCL_CONTROL),
-	.dcfe_offset = (mmCRTC4_DCFE_MEM_PWR_CTRL - mmDCFE_MEM_PWR_CTRL),
-	.dcp_offset = (mmDCP4_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB4_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{	.scl_offset = (mmSCL5_SCL_CONTROL - mmSCL_CONTROL),
-	.dcfe_offset = (mmCRTC5_DCFE_MEM_PWR_CTRL - mmDCFE_MEM_PWR_CTRL),
-	.dcp_offset = (mmDCP5_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB5_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-}
-};
-
 static const struct dce110_ipp_reg_offsets dce100_ipp_reg_offsets[] = {
 {
 	.dcp_offset = (mmDCP0_CUR_CONTROL - mmCUR_CONTROL),
@@ -244,6 +209,29 @@ static const struct dce110_ipp_reg_offsets dce100_ipp_reg_offsets[] = {
 /* set register offset with instance */
 #define SRI(reg_name, block, id)\
 	.reg_name = mm ## block ## id ## _ ## reg_name
+
+
+#define transform_regs(id)\
+[id] = {\
+		XFM_COMMON_REG_LIST_DCE100(id)\
+}
+
+static const struct dce110_transform_registers xfm_regs[] = {
+		transform_regs(0),
+		transform_regs(1),
+		transform_regs(2),
+		transform_regs(3),
+		transform_regs(4),
+		transform_regs(5)
+};
+
+static const struct dce110_transform_shift xfm_shift = {
+		XFM_COMMON_MASK_SH_LIST_DCE110(__SHIFT)
+};
+
+static const struct dce110_transform_mask xfm_mask = {
+		XFM_COMMON_MASK_SH_LIST_DCE110(_MASK)
+};
 
 #define aux_regs(id)\
 [id] = {\
@@ -534,8 +522,7 @@ static void dce100_transform_destroy(struct transform **xfm)
 
 static struct transform *dce100_transform_create(
 	struct dc_context *ctx,
-	uint32_t inst,
-	const struct dce110_transform_reg_offsets *offsets)
+	uint32_t inst)
 {
 	struct dce110_transform *transform =
 		dm_alloc(sizeof(struct dce110_transform));
@@ -543,7 +530,8 @@ static struct transform *dce100_transform_create(
 	if (!transform)
 		return NULL;
 
-	if (dce110_transform_construct(transform, ctx, inst, offsets)) {
+	if (dce110_transform_construct(transform, ctx, inst,
+			&xfm_regs[inst], &xfm_shift, &xfm_mask)) {
 		transform->base.lb_memory_size = 0x6B0; /*1712*/
 		return &transform->base;
 	}
@@ -1030,8 +1018,7 @@ static bool construct(
 			goto res_create_fail;
 		}
 
-		pool->base.transforms[i] = dce100_transform_create(
-					ctx, i, &dce100_xfm_offsets[i]);
+		pool->base.transforms[i] = dce100_transform_create(ctx, i);
 		if (pool->base.transforms[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error(

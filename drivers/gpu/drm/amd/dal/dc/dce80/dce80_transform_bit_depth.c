@@ -617,13 +617,12 @@ static void set_denormalization(
 
 }
 
-bool dce80_transform_set_pixel_storage_depth(
+void dce80_transform_set_pixel_storage_depth(
 	struct transform *xfm,
 	enum lb_pixel_depth depth,
 	const struct bit_depth_reduction_params *bit_depth_params)
 {
 	struct dce80_transform *xfm80 = TO_DCE80_TRANSFORM(xfm);
-	bool ret = true;
 	uint32_t value;
 	enum dc_color_depth color_depth;
 
@@ -652,27 +651,21 @@ bool dce80_transform_set_pixel_storage_depth(
 		set_reg_field_value(value, 0, LB_DATA_FORMAT, PIXEL_EXPAN_MODE);
 		break;
 	default:
-		ret = false;
 		break;
 	}
 
-	if (ret == true) {
-		set_denormalization(xfm80, color_depth);
-		ret = program_bit_depth_reduction(xfm80, color_depth);
+	set_denormalization(xfm80, color_depth);
+	program_bit_depth_reduction(xfm80, color_depth);
 
-		set_reg_field_value(value, 0, LB_DATA_FORMAT, ALPHA_EN);
-		dm_write_reg(
-				xfm->ctx, LB_REG(mmLB_DATA_FORMAT), value);
-		if (!(xfm80->lb_pixel_depth_supported & depth)) {
-			/*we should use unsupported capabilities
-			 *  unless it is required by w/a*/
-			dm_logger_write(xfm->ctx->logger, LOG_WARNING,
-				"%s: Capability not supported",
-				__func__);
-		}
+	set_reg_field_value(value, 0, LB_DATA_FORMAT, ALPHA_EN);
+	dm_write_reg(xfm->ctx, LB_REG(mmLB_DATA_FORMAT), value);
+	if (!(xfm80->lb_pixel_depth_supported & depth)) {
+		/*we should use unsupported capabilities
+		 *  unless it is required by w/a*/
+		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
+			"%s: Capability not supported",
+			__func__);
 	}
-
-	return ret;
 }
 
 

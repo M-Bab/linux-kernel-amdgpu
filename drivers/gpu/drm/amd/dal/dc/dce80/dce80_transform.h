@@ -67,7 +67,7 @@ void dce80_transform_set_gamut_remap(
 	const struct xfm_grph_csc_adjustment *adjust);
 
 /* BIT DEPTH RELATED */
-bool dce80_transform_set_pixel_storage_depth(
+void dce80_transform_set_pixel_storage_depth(
 	struct transform *xfm,
 	enum lb_pixel_depth depth,
 	const struct bit_depth_reduction_params *bit_depth_params);

@@ -149,24 +149,6 @@ static const struct dce110_mem_input_reg_offsets dce110_mi_reg_offsets[] = {
 	}
 };
 
-static const struct dce110_transform_reg_offsets dce110_xfm_offsets[] = {
-{
-	.scl_offset = (mmSCL0_SCL_CONTROL - mmSCL_CONTROL),
-	.dcfe_offset = (mmDCFE0_DCFE_MEM_PWR_CTRL - mmDCFE_MEM_PWR_CTRL),
-	.dcp_offset = (mmDCP0_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB0_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{	.scl_offset = (mmSCL1_SCL_CONTROL - mmSCL_CONTROL),
-	.dcfe_offset = (mmDCFE1_DCFE_MEM_PWR_CTRL - mmDCFE_MEM_PWR_CTRL),
-	.dcp_offset = (mmDCP1_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB1_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-},
-{	.scl_offset = (mmSCL2_SCL_CONTROL - mmSCL_CONTROL),
-	.dcfe_offset = (mmDCFE2_DCFE_MEM_PWR_CTRL - mmDCFE_MEM_PWR_CTRL),
-	.dcp_offset = (mmDCP2_GRPH_CONTROL - mmGRPH_CONTROL),
-	.lb_offset = (mmLB2_LB_DATA_FORMAT - mmLB_DATA_FORMAT),
-}
-};
 
 static const struct dce110_ipp_reg_offsets dce110_ipp_reg_offsets[] = {
 {
@@ -201,6 +183,24 @@ static const struct dce110_ipp_reg_offsets dce110_ipp_reg_offsets[] = {
 	.reg_name = mm ## block ## id ## _ ## reg_name
 
 
+#define transform_regs(id)\
+[id] = {\
+		XFM_COMMON_REG_LIST_DCE110(id)\
+}
+
+static const struct dce110_transform_registers xfm_regs[] = {
+		transform_regs(0),
+		transform_regs(1),
+		transform_regs(2)
+};
+
+static const struct dce110_transform_shift xfm_shift = {
+		XFM_COMMON_MASK_SH_LIST_DCE110(__SHIFT)
+};
+
+static const struct dce110_transform_mask xfm_mask = {
+		XFM_COMMON_MASK_SH_LIST_DCE110(_MASK)
+};
 
 #define aux_regs(id)\
 [id] = {\
@@ -512,8 +512,7 @@ static void dce110_transform_destroy(struct transform **xfm)
 
 static struct transform *dce110_transform_create(
 	struct dc_context *ctx,
-	uint32_t inst,
-	const struct dce110_transform_reg_offsets *offsets)
+	uint32_t inst)
 {
 	struct dce110_transform *transform =
 		dm_alloc(sizeof(struct dce110_transform));
@@ -521,7 +520,8 @@ static struct transform *dce110_transform_create(
 	if (!transform)
 		return NULL;
 
-	if (dce110_transform_construct(transform, ctx, inst, offsets))
+	if (dce110_transform_construct(transform, ctx, inst,
+			&xfm_regs[inst], &xfm_shift, &xfm_mask))
 		return &transform->base;
 
 	BREAK_TO_DEBUGGER();
@@ -1336,8 +1336,7 @@ static bool construct(
 			goto res_create_fail;
 		}
 
-		pool->base.transforms[i] = dce110_transform_create(
-					ctx, i, &dce110_xfm_offsets[i]);
+		pool->base.transforms[i] = dce110_transform_create(ctx, i);
 		if (pool->base.transforms[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error(

@@ -25,9 +25,6 @@
 
 #include "dm_services.h"
 
-/* include DCE11 register header files */
-#include "dce/dce_11_0_d.h"
-#include "dce/dce_11_0_sh_mask.h"
 
 #include "dc_types.h"
 #include "core_types.h"
@@ -39,45 +36,20 @@
 
 #include "dce110_transform.h"
 
+#include "reg_helper.h"
 
-#define DCP_REG(reg)\
-	(reg + xfm110->offsets.dcp_offset)
+#define REG(reg) \
+	(xfm110->regs->reg)
 
-#define LB_REG(reg)\
-	(reg + xfm110->offsets.lb_offset)
+#undef FN
+#define FN(reg_name, field_name) \
+	xfm110->xfm_shift->field_name, xfm110->xfm_mask->field_name
+
+#define CTX \
+	xfm110->base.ctx
 
 #define IDENTITY_RATIO(ratio) (dal_fixed31_32_u2d19(ratio) == (1 << 19))
 #define GAMUT_MATRIX_SIZE 12
-
-#define DISP_BRIGHTNESS_DEFAULT_HW 0
-#define DISP_BRIGHTNESS_MIN_HW -25
-#define DISP_BRIGHTNESS_MAX_HW 25
-#define DISP_BRIGHTNESS_STEP_HW 1
-#define DISP_BRIGHTNESS_HW_DIVIDER 100
-
-#define DISP_HUE_DEFAULT_HW 0
-#define DISP_HUE_MIN_HW -30
-#define DISP_HUE_MAX_HW 30
-#define DISP_HUE_STEP_HW 1
-#define DISP_HUE_HW_DIVIDER 1
-
-#define DISP_CONTRAST_DEFAULT_HW 100
-#define DISP_CONTRAST_MIN_HW 50
-#define DISP_CONTRAST_MAX_HW 150
-#define DISP_CONTRAST_STEP_HW 1
-#define DISP_CONTRAST_HW_DIVIDER 100
-
-#define DISP_SATURATION_DEFAULT_HW 100
-#define DISP_SATURATION_MIN_HW 0
-#define DISP_SATURATION_MAX_HW 200
-#define DISP_SATURATION_STEP_HW 1
-#define DISP_SATURATION_HW_DIVIDER 100
-
-#define DISP_KELVIN_DEGRES_DEFAULT 6500
-#define DISP_KELVIN_DEGRES_MIN 4000
-#define DISP_KELVIN_DEGRES_MAX 10000
-#define DISP_KELVIN_DEGRES_STEP 100
-#define DISP_KELVIN_HW_DIVIDER 10000
 
 enum dcp_out_trunc_round_mode {
 	DCP_OUT_TRUNC_ROUND_MODE_TRUNCATE,
@@ -116,8 +88,7 @@ enum dcp_spatial_dither_depth {
 	DCP_SPATIAL_DITHER_DEPTH_24BPP
 };
 
-/**
- *******************************************************************************
+/*****************************************************************************
  * set_clamp
  *
  * @param depth : bit depth to set the clamp to (should match denorm)
@@ -125,16 +96,12 @@ enum dcp_spatial_dither_depth {
  * @brief
  *     Programs clamp according to panel bit depth.
  *
- * @return
- *     true if succeeds
- *
- *******************************************************************************
- */
-static bool set_clamp(
+ *******************************************************************************/
+static void set_clamp(
 	struct dce110_transform *xfm110,
 	enum dc_color_depth depth)
 {
-	uint32_t clamp_max = 0;
+	int clamp_max = 0;
 
 	/* At the clamp block the data will be MSB aligned, so we set the max
 	 * clamp accordingly.
@@ -159,75 +126,23 @@ static bool set_clamp(
 		clamp_max = 0x3FFF;
 		break;
 	default:
-		ASSERT_CRITICAL(false); /* Invalid clamp bit depth */
-		return false;
+		clamp_max = 0x3FC0;
+		BREAK_TO_DEBUGGER(); /* Invalid clamp bit depth */
 	}
+	REG_SET_2(OUT_CLAMP_CONTROL_B_CB, 0,
+			OUT_CLAMP_MIN_B_CB, 0,
+			OUT_CLAMP_MAX_B_CB, clamp_max);
 
-	{
-		uint32_t value = 0;
-		/*  always set min to 0 */
-			set_reg_field_value(
-			value,
-			0,
-			OUT_CLAMP_CONTROL_B_CB,
-			OUT_CLAMP_MIN_B_CB);
+	REG_SET_2(OUT_CLAMP_CONTROL_G_Y, 0,
+			OUT_CLAMP_MIN_G_Y, 0,
+			OUT_CLAMP_MAX_G_Y, clamp_max);
 
-		set_reg_field_value(
-			value,
-			clamp_max,
-			OUT_CLAMP_CONTROL_B_CB,
-			OUT_CLAMP_MAX_B_CB);
-
-		dm_write_reg(xfm110->base.ctx,
-			DCP_REG(mmOUT_CLAMP_CONTROL_B_CB),
-			value);
-	}
-
-	{
-		uint32_t value = 0;
-		/*  always set min to 0 */
-		set_reg_field_value(
-			value,
-			0,
-			OUT_CLAMP_CONTROL_G_Y,
-			OUT_CLAMP_MIN_G_Y);
-
-		set_reg_field_value(
-			value,
-			clamp_max,
-			OUT_CLAMP_CONTROL_G_Y,
-			OUT_CLAMP_MAX_G_Y);
-
-		dm_write_reg(xfm110->base.ctx,
-			DCP_REG(mmOUT_CLAMP_CONTROL_G_Y),
-			value);
-	}
-
-	{
-		uint32_t value = 0;
-		/*  always set min to 0 */
-		set_reg_field_value(
-			value,
-			0,
-			OUT_CLAMP_CONTROL_R_CR,
-			OUT_CLAMP_MIN_R_CR);
-
-		set_reg_field_value(
-			value,
-			clamp_max,
-			OUT_CLAMP_CONTROL_R_CR,
-			OUT_CLAMP_MAX_R_CR);
-
-		dm_write_reg(xfm110->base.ctx,
-			DCP_REG(mmOUT_CLAMP_CONTROL_R_CR),
-			value);
-	}
-
-	return true;
+	REG_SET_2(OUT_CLAMP_CONTROL_R_CR, 0,
+			OUT_CLAMP_MIN_R_CR, 0,
+			OUT_CLAMP_MAX_R_CR, clamp_max);
 }
 
-/**
- *******************************************************************************
+/*******************************************************************************
  * set_round
  *
  * @brief
@@ -258,19 +173,14 @@ static bool set_clamp(
       14 - round to u0.14
       15 - round to u0.13
 
- * @return
- *     true if succeeds.
- *******************************************************************************
- */
-static bool set_round(
+ ******************************************************************************/
+static void set_round(
 	struct dce110_transform *xfm110,
 	enum dcp_out_trunc_round_mode mode,
 	enum dcp_out_trunc_round_depth depth)
 {
-	uint32_t depth_bits = 0;
-	uint32_t mode_bit = 0;
-	/*  zero out all bits */
-	uint32_t value = 0;
+	int depth_bits = 0;
+	int mode_bit = 0;
 
 	/*  set up bit depth */
 	switch (depth) {
@@ -296,16 +206,9 @@ static bool set_round(
 		depth_bits = 4;
 		break;
 	default:
-		/* Invalid dcp_out_trunc_round_depth */
-		ASSERT_CRITICAL(false);
-		return false;
+		depth_bits = 4;
+		BREAK_TO_DEBUGGER(); /* Invalid dcp_out_trunc_round_depth */
 	}
-
-	set_reg_field_value(
-		value,
-		depth_bits,
-		OUT_ROUND_CONTROL,
-		OUT_ROUND_TRUNC_MODE);
 
 	/*  set up round or truncate */
 	switch (mode) {
@@ -316,29 +219,15 @@ static bool set_round(
 		mode_bit = 1;
 		break;
 	default:
-		/* Invalid dcp_out_trunc_round_mode */
-		ASSERT_CRITICAL(false);
-		return false;
+		BREAK_TO_DEBUGGER(); /* Invalid dcp_out_trunc_round_mode */
 	}
 
 	depth_bits |= mode_bit << 3;
 
-	set_reg_field_value(
-		value,
-		depth_bits,
-		OUT_ROUND_CONTROL,
-		OUT_ROUND_TRUNC_MODE);
-
-	/*  write the register */
-	dm_write_reg(xfm110->base.ctx,
-				DCP_REG(mmOUT_ROUND_CONTROL),
-				value);
-
-	return true;
+	REG_SET(OUT_ROUND_CONTROL, 0, OUT_ROUND_TRUNC_MODE, depth_bits);
 }
 
-/**
- *******************************************************************************
+/*****************************************************************************
  * set_dither
  *
  * @brief
@@ -351,12 +240,9 @@ static bool set_round(
  * @param [in] rgb_random_enable      : enable rgb random
  * @param [in] highpass_random_enable : enable highpass random
  *
- * @return
- *     true if succeeds.
- *******************************************************************************
- */
+ ******************************************************************************/
 
-static bool set_dither(
+static void set_dither(
 	struct dce110_transform *xfm110,
 	bool dither_enable,
 	enum dcp_spatial_dither_mode dither_mode,
@@ -365,18 +251,8 @@ static bool set_dither(
 	bool rgb_random_enable,
 	bool highpass_random_enable)
 {
-	uint32_t dither_depth_bits = 0;
-	uint32_t dither_mode_bits = 0;
-	/*  zero out all bits */
-	uint32_t value = 0;
-
-	/* set up the fields */
-	if (dither_enable)
-		set_reg_field_value(
-			value,
-			1,
-			DCP_SPATIAL_DITHER_CNTL,
-			DCP_SPATIAL_DITHER_EN);
+	int dither_depth_bits = 0;
+	int dither_mode_bits = 0;
 
 	switch (dither_mode) {
 	case DCP_SPATIAL_DITHER_MODE_AAAA:
@@ -393,15 +269,8 @@ static bool set_dither(
 		break;
 	default:
 		/* Invalid dcp_spatial_dither_mode */
-		ASSERT_CRITICAL(false);
-		return false;
-
+		BREAK_TO_DEBUGGER();
 	}
-	set_reg_field_value(
-		value,
-		dither_mode_bits,
-		DCP_SPATIAL_DITHER_CNTL,
-		DCP_SPATIAL_DITHER_MODE);
 
 	switch (dither_depth) {
 	case DCP_SPATIAL_DITHER_DEPTH_30BPP:
@@ -412,47 +281,20 @@ static bool set_dither(
 		break;
 	default:
 		/* Invalid dcp_spatial_dither_depth */
-		ASSERT_CRITICAL(false);
-		return false;
+		BREAK_TO_DEBUGGER();
 	}
 
-	set_reg_field_value(
-		value,
-		dither_depth_bits,
-		DCP_SPATIAL_DITHER_CNTL,
-		DCP_SPATIAL_DITHER_DEPTH);
-
-	if (frame_random_enable)
-		set_reg_field_value(
-			value,
-			1,
-			DCP_SPATIAL_DITHER_CNTL,
-			DCP_FRAME_RANDOM_ENABLE);
-
-	if (rgb_random_enable)
-		set_reg_field_value(
-			value,
-			1,
-			DCP_SPATIAL_DITHER_CNTL,
-			DCP_RGB_RANDOM_ENABLE);
-
-	if (highpass_random_enable)
-		set_reg_field_value(
-			value,
-			1,
-			DCP_SPATIAL_DITHER_CNTL,
-			DCP_HIGHPASS_RANDOM_ENABLE);
-
 	/*  write the register */
-	dm_write_reg(xfm110->base.ctx,
-				DCP_REG(mmDCP_SPATIAL_DITHER_CNTL),
-				value);
-
-	return true;
+	REG_SET_6(DCP_SPATIAL_DITHER_CNTL, 0,
+			DCP_SPATIAL_DITHER_EN, dither_enable,
+			DCP_SPATIAL_DITHER_MODE, dither_mode_bits,
+			DCP_SPATIAL_DITHER_DEPTH, dither_depth_bits,
+			DCP_FRAME_RANDOM_ENABLE, frame_random_enable,
+			DCP_RGB_RANDOM_ENABLE, rgb_random_enable,
+			DCP_HIGHPASS_RANDOM_ENABLE, highpass_random_enable);
 }
 
-/**
- *******************************************************************************
+/*****************************************************************************
  * dce110_transform_bit_depth_reduction_program
  *
  * @brief
@@ -461,11 +303,8 @@ static bool set_dither(
  *
  * @param depth : bit depth to set the clamp to (should match denorm)
  *
- * @return
- *     true if succeeds.
- *******************************************************************************
- */
-static bool program_bit_depth_reduction(
+ ******************************************************************************/
+static void program_bit_depth_reduction(
 	struct dce110_transform *xfm110,
 	enum dc_color_depth depth,
 	const struct bit_depth_reduction_params *bit_depth_params)
@@ -476,10 +315,7 @@ static bool program_bit_depth_reduction(
 	bool rgb_random_enable;
 	bool highpass_random_enable;
 
-	if (depth > COLOR_DEPTH_121212) {
-		ASSERT_CRITICAL(false); /* Invalid clamp bit depth */
-		return false;
-	}
+	ASSERT(depth < COLOR_DEPTH_121212); /* Invalid clamp bit depth */
 
 	if (bit_depth_params->flags.SPATIAL_DITHER_ENABLED) {
 		depth_reduction_mode = DCP_BIT_DEPTH_REDUCTION_MODE_DITHER;
@@ -496,11 +332,7 @@ static bool program_bit_depth_reduction(
 
 	spatial_dither_mode = DCP_SPATIAL_DITHER_MODE_A_AA_A;
 
-	if (!set_clamp(xfm110, depth)) {
-		/* Failure in set_clamp() */
-		ASSERT_CRITICAL(false);
-		return false;
-	}
+	set_clamp(xfm110, depth);
 
 	switch (depth_reduction_mode) {
 	case DCP_BIT_DEPTH_REDUCTION_MODE_DITHER:
@@ -548,11 +380,9 @@ static bool program_bit_depth_reduction(
 		break;
 	default:
 		/* Invalid DCP Depth reduction mode */
-		ASSERT_CRITICAL(false);
+		BREAK_TO_DEBUGGER();
 		break;
 	}
-
-	return true;
 }
 
 static int dce110_transform_get_max_num_of_supported_lines(
@@ -563,7 +393,7 @@ static int dce110_transform_get_max_num_of_supported_lines(
 	int pixels_per_entries = 0;
 	int max_pixels_supports = 0;
 
-	ASSERT_CRITICAL(pixel_width);
+	ASSERT(pixel_width);
 
 	/* Find number of pixels that can fit into a single LB entry and
 	 * take floor of the value since we cannot store a single pixel
@@ -589,11 +419,11 @@ static int dce110_transform_get_max_num_of_supported_lines(
 		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
 			"%s: Invalid LB pixel depth",
 			__func__);
-		ASSERT_CRITICAL(false);
+		BREAK_TO_DEBUGGER();
 		break;
 	}
 
-	ASSERT_CRITICAL(pixels_per_entries);
+	ASSERT(pixels_per_entries);
 
 	max_pixels_supports =
 			pixels_per_entries *
@@ -606,42 +436,25 @@ static void set_denormalization(
 	struct dce110_transform *xfm110,
 	enum dc_color_depth depth)
 {
-	uint32_t value = dm_read_reg(xfm110->base.ctx,
-			DCP_REG(mmDENORM_CONTROL));
+	int denorm_mode = 0;
 
 	switch (depth) {
 	case COLOR_DEPTH_666:
 		/* 63/64 for 6 bit output color depth */
-		set_reg_field_value(
-			value,
-			1,
-			DENORM_CONTROL,
-			DENORM_MODE);
+		denorm_mode = 1;
 		break;
 	case COLOR_DEPTH_888:
 		/* Unity for 8 bit output color depth
 		 * because prescale is disabled by default */
-		set_reg_field_value(
-			value,
-			0,
-			DENORM_CONTROL,
-			DENORM_MODE);
+		denorm_mode = 0;
 		break;
 	case COLOR_DEPTH_101010:
 		/* 1023/1024 for 10 bit output color depth */
-		set_reg_field_value(
-			value,
-			3,
-			DENORM_CONTROL,
-			DENORM_MODE);
+		denorm_mode = 3;
 		break;
 	case COLOR_DEPTH_121212:
 		/* 4095/4096 for 12 bit output color depth */
-		set_reg_field_value(
-			value,
-			5,
-			DENORM_CONTROL,
-			DENORM_MODE);
+		denorm_mode = 5;
 		break;
 	case COLOR_DEPTH_141414:
 	case COLOR_DEPTH_161616:
@@ -650,215 +463,90 @@ static void set_denormalization(
 		break;
 	}
 
-	dm_write_reg(xfm110->base.ctx,
-			DCP_REG(mmDENORM_CONTROL),
-			value);
-
+	REG_SET(DENORM_CONTROL, 0, DENORM_MODE, denorm_mode);
 }
 
-bool dce110_transform_set_pixel_storage_depth(
+static void dce110_transform_set_pixel_storage_depth(
 	struct transform *xfm,
 	enum lb_pixel_depth depth,
 	const struct bit_depth_reduction_params *bit_depth_params)
 {
 	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-	bool ret = true;
-	uint32_t value;
+	int pixel_depth, expan_mode;
 	enum dc_color_depth color_depth;
 
-	value = dm_read_reg(xfm->ctx, LB_REG(mmLB_DATA_FORMAT));
 	switch (depth) {
 	case LB_PIXEL_DEPTH_18BPP:
 		color_depth = COLOR_DEPTH_666;
-		set_reg_field_value(value, 2, LB_DATA_FORMAT, PIXEL_DEPTH);
-		set_reg_field_value(value, 1, LB_DATA_FORMAT, PIXEL_EXPAN_MODE);
+		pixel_depth = 2;
+		expan_mode  = 1;
 		break;
 	case LB_PIXEL_DEPTH_24BPP:
 		color_depth = COLOR_DEPTH_888;
-		set_reg_field_value(value, 1, LB_DATA_FORMAT, PIXEL_DEPTH);
-		set_reg_field_value(value, 1, LB_DATA_FORMAT, PIXEL_EXPAN_MODE);
+		pixel_depth = 1;
+		expan_mode  = 1;
 		break;
 	case LB_PIXEL_DEPTH_30BPP:
 		color_depth = COLOR_DEPTH_101010;
-		set_reg_field_value(value, 0, LB_DATA_FORMAT, PIXEL_DEPTH);
-		set_reg_field_value(value, 1, LB_DATA_FORMAT, PIXEL_EXPAN_MODE);
+		pixel_depth = 0;
+		expan_mode  = 1;
 		break;
 	case LB_PIXEL_DEPTH_36BPP:
 		color_depth = COLOR_DEPTH_121212;
-		set_reg_field_value(value, 3, LB_DATA_FORMAT, PIXEL_DEPTH);
-		set_reg_field_value(value, 0, LB_DATA_FORMAT, PIXEL_EXPAN_MODE);
+		pixel_depth = 3;
+		expan_mode  = 0;
 		break;
 	default:
-		ret = false;
+		color_depth = COLOR_DEPTH_101010;
+		pixel_depth = 0;
+		expan_mode  = 1;
+		BREAK_TO_DEBUGGER();
 		break;
 	}
 
-	if (ret == true) {
-		set_denormalization(xfm110, color_depth);
-		ret = program_bit_depth_reduction(xfm110, color_depth,
-				bit_depth_params);
+	set_denormalization(xfm110, color_depth);
+	program_bit_depth_reduction(xfm110, color_depth, bit_depth_params);
 
-		set_reg_field_value(value, 0, LB_DATA_FORMAT, ALPHA_EN);
-		dm_write_reg(xfm->ctx, LB_REG(mmLB_DATA_FORMAT), value);
-		if (!(xfm110->lb_pixel_depth_supported & depth)) {
-			/*we should use unsupported capabilities
-			 *  unless it is required by w/a*/
-			dm_logger_write(xfm->ctx->logger, LOG_WARNING,
-				"%s: Capability not supported",
-				__func__);
-		}
+	REG_UPDATE_2(LB_DATA_FORMAT,
+			PIXEL_DEPTH, pixel_depth,
+			PIXEL_EXPAN_MODE, expan_mode);
+
+	if (!(xfm110->lb_pixel_depth_supported & depth)) {
+		/*we should use unsupported capabilities
+		 *  unless it is required by w/a*/
+		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
+			"%s: Capability not supported",
+			__func__);
 	}
-
-	return ret;
 }
 
 static void program_gamut_remap(
 	struct dce110_transform *xfm110,
 	const uint16_t *reg_val)
 {
-	struct dc_context *ctx = xfm110->base.ctx;
-	uint32_t value = 0;
-	uint32_t addr = DCP_REG(mmGAMUT_REMAP_CONTROL);
-
-	/* the register controls ovl also */
-	value = dm_read_reg(ctx, addr);
-
 	if (reg_val) {
-		{
-			uint32_t reg_data = 0;
-			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C11_C12);
+		REG_SET_2(GAMUT_REMAP_C11_C12, 0,
+				GAMUT_REMAP_C11, reg_val[0],
+				GAMUT_REMAP_C12, reg_val[1]);
+		REG_SET_2(GAMUT_REMAP_C13_C14, 0,
+				GAMUT_REMAP_C13, reg_val[2],
+				GAMUT_REMAP_C14, reg_val[3]);
+		REG_SET_2(GAMUT_REMAP_C21_C22, 0,
+				GAMUT_REMAP_C21, reg_val[4],
+				GAMUT_REMAP_C22, reg_val[5]);
+		REG_SET_2(GAMUT_REMAP_C23_C24, 0,
+				GAMUT_REMAP_C23, reg_val[6],
+				GAMUT_REMAP_C24, reg_val[7]);
+		REG_SET_2(GAMUT_REMAP_C31_C32, 0,
+				GAMUT_REMAP_C31, reg_val[8],
+				GAMUT_REMAP_C32, reg_val[9]);
+		REG_SET_2(GAMUT_REMAP_C33_C34, 0,
+				GAMUT_REMAP_C33, reg_val[10],
+				GAMUT_REMAP_C34, reg_val[11]);
 
-			/* fixed S2.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[0],
-				GAMUT_REMAP_C11_C12,
-				GAMUT_REMAP_C11);
-			/* fixed S2.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[1],
-				GAMUT_REMAP_C11_C12,
-				GAMUT_REMAP_C12);
-
-			dm_write_reg(ctx, addr, reg_data);
-		}
-		{
-			uint32_t reg_data = 0;
-			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C13_C14);
-
-			/* fixed S2.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[2],
-				GAMUT_REMAP_C13_C14,
-				GAMUT_REMAP_C13);
-
-			/* fixed S0.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[3],
-				GAMUT_REMAP_C13_C14,
-				GAMUT_REMAP_C14);
-
-			dm_write_reg(ctx, addr, reg_data);
-		}
-		{
-			uint32_t reg_data = 0;
-			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C21_C22);
-
-			/* fixed S2.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[4],
-				GAMUT_REMAP_C21_C22,
-				GAMUT_REMAP_C21);
-
-			/* fixed S0.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[5],
-				GAMUT_REMAP_C21_C22,
-				GAMUT_REMAP_C22);
-
-			dm_write_reg(ctx, addr, reg_data);
-		}
-		{
-			uint32_t reg_data = 0;
-			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C23_C24);
-
-			/* fixed S2.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[6],
-				GAMUT_REMAP_C23_C24,
-				GAMUT_REMAP_C23);
-
-			/* fixed S0.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[7],
-				GAMUT_REMAP_C23_C24,
-				GAMUT_REMAP_C24);
-
-			dm_write_reg(ctx, addr, reg_data);
-		}
-		{
-			uint32_t reg_data = 0;
-			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C31_C32);
-
-			/* fixed S2.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[8],
-				GAMUT_REMAP_C31_C32,
-				GAMUT_REMAP_C31);
-
-			/* fixed S0.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[9],
-				GAMUT_REMAP_C31_C32,
-				GAMUT_REMAP_C32);
-
-			dm_write_reg(ctx, addr, reg_data);
-		}
-		{
-			uint32_t reg_data = 0;
-			uint32_t addr = DCP_REG(mmGAMUT_REMAP_C33_C34);
-
-			/* fixed S2.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[10],
-				GAMUT_REMAP_C33_C34,
-				GAMUT_REMAP_C33);
-
-			/* fixed S0.13 format */
-			set_reg_field_value(
-				reg_data,
-				reg_val[11],
-				GAMUT_REMAP_C33_C34,
-				GAMUT_REMAP_C34);
-
-			dm_write_reg(ctx, addr, reg_data);
-		}
-
-		set_reg_field_value(
-			value,
-			1,
-			GAMUT_REMAP_CONTROL,
-			GRPH_GAMUT_REMAP_MODE);
-
+		REG_SET(GAMUT_REMAP_CONTROL, 0, GRPH_GAMUT_REMAP_MODE, 1);
 	} else
-		set_reg_field_value(
-			value,
-			0,
-			GAMUT_REMAP_CONTROL,
-			GRPH_GAMUT_REMAP_MODE);
-
-	addr = DCP_REG(mmGAMUT_REMAP_CONTROL);
-	dm_write_reg(ctx, addr, value);
+		REG_SET(GAMUT_REMAP_CONTROL, 0, GRPH_GAMUT_REMAP_MODE, 0);
 
 }
 
@@ -1041,14 +729,18 @@ bool dce110_transform_construct(
 	struct dce110_transform *xfm110,
 	struct dc_context *ctx,
 	uint32_t inst,
-	const struct dce110_transform_reg_offsets *reg_offsets)
+	const struct dce110_transform_registers *regs,
+	const struct dce110_transform_shift *xfm_shift,
+	const struct dce110_transform_mask *xfm_mask)
 {
 	xfm110->base.ctx = ctx;
 
 	xfm110->base.inst = inst;
 	xfm110->base.funcs = &dce110_transform_funcs;
 
-	xfm110->offsets = *reg_offsets;
+	xfm110->regs = regs;
+	xfm110->xfm_shift = xfm_shift;
+	xfm110->xfm_mask = xfm_mask;
 
 	xfm110->lb_pixel_depth_supported =
 			LB_PIXEL_DEPTH_18BPP |

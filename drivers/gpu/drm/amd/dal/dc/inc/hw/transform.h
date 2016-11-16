@@ -52,69 +52,68 @@ enum lb_pixel_depth {
 };
 
 enum raw_gamma_ramp_type {
-       GAMMA_RAMP_TYPE_UNINITIALIZED,
-       GAMMA_RAMP_TYPE_DEFAULT,
-       GAMMA_RAMP_TYPE_RGB256,
-       GAMMA_RAMP_TYPE_FIXED_POINT
+	GAMMA_RAMP_TYPE_UNINITIALIZED,
+	GAMMA_RAMP_TYPE_DEFAULT,
+	GAMMA_RAMP_TYPE_RGB256,
+	GAMMA_RAMP_TYPE_FIXED_POINT
 };
 
 #define NUM_OF_RAW_GAMMA_RAMP_RGB_256 256
 
 /* Colorimetry */
 enum colorimetry {
-       COLORIMETRY_NO_DATA = 0,
-       COLORIMETRY_ITU601 = 1,
-       COLORIMETRY_ITU709 = 2,
-       COLORIMETRY_EXTENDED = 3
+	COLORIMETRY_NO_DATA = 0,
+	COLORIMETRY_ITU601 = 1,
+	COLORIMETRY_ITU709 = 2,
+	COLORIMETRY_EXTENDED = 3
 };
 
 enum active_format_info {
-       ACTIVE_FORMAT_NO_DATA = 0,
-       ACTIVE_FORMAT_VALID = 1
+	ACTIVE_FORMAT_NO_DATA = 0, ACTIVE_FORMAT_VALID = 1
 };
 
 /* Active format aspect ratio */
 enum active_format_aspect_ratio {
-       ACTIVE_FORMAT_ASPECT_RATIO_SAME_AS_PICTURE = 8,
-       ACTIVE_FORMAT_ASPECT_RATIO_4_3 = 9,
-       ACTIVE_FORMAT_ASPECT_RATIO_16_9 = 0XA,
-       ACTIVE_FORMAT_ASPECT_RATIO_14_9 = 0XB
+	ACTIVE_FORMAT_ASPECT_RATIO_SAME_AS_PICTURE = 8,
+	ACTIVE_FORMAT_ASPECT_RATIO_4_3 = 9,
+	ACTIVE_FORMAT_ASPECT_RATIO_16_9 = 0XA,
+	ACTIVE_FORMAT_ASPECT_RATIO_14_9 = 0XB
 };
 
 enum bar_info {
-       BAR_INFO_NOT_VALID = 0,
-       BAR_INFO_VERTICAL_VALID = 1,
-       BAR_INFO_HORIZONTAL_VALID = 2,
-       BAR_INFO_BOTH_VALID = 3
+	BAR_INFO_NOT_VALID = 0,
+	BAR_INFO_VERTICAL_VALID = 1,
+	BAR_INFO_HORIZONTAL_VALID = 2,
+	BAR_INFO_BOTH_VALID = 3
 };
 
 enum picture_scaling {
-       PICTURE_SCALING_UNIFORM = 0,
-       PICTURE_SCALING_HORIZONTAL = 1,
-       PICTURE_SCALING_VERTICAL = 2,
-       PICTURE_SCALING_BOTH = 3
+	PICTURE_SCALING_UNIFORM = 0,
+	PICTURE_SCALING_HORIZONTAL = 1,
+	PICTURE_SCALING_VERTICAL = 2,
+	PICTURE_SCALING_BOTH = 3
 };
 
 /* RGB quantization range */
 enum rgb_quantization_range {
-       RGB_QUANTIZATION_DEFAULT_RANGE = 0,
-       RGB_QUANTIZATION_LIMITED_RANGE = 1,
-       RGB_QUANTIZATION_FULL_RANGE = 2,
-       RGB_QUANTIZATION_RESERVED = 3
+	RGB_QUANTIZATION_DEFAULT_RANGE = 0,
+	RGB_QUANTIZATION_LIMITED_RANGE = 1,
+	RGB_QUANTIZATION_FULL_RANGE = 2,
+	RGB_QUANTIZATION_RESERVED = 3
 };
 
 /* YYC quantization range */
 enum yyc_quantization_range {
-       YYC_QUANTIZATION_LIMITED_RANGE = 0,
-       YYC_QUANTIZATION_FULL_RANGE = 1,
-       YYC_QUANTIZATION_RESERVED2 = 2,
-       YYC_QUANTIZATION_RESERVED3 = 3
+	YYC_QUANTIZATION_LIMITED_RANGE = 0,
+	YYC_QUANTIZATION_FULL_RANGE = 1,
+	YYC_QUANTIZATION_RESERVED2 = 2,
+	YYC_QUANTIZATION_RESERVED3 = 3
 };
 
 enum graphics_gamut_adjust_type {
 	GRAPHICS_GAMUT_ADJUST_TYPE_BYPASS = 0,
 	GRAPHICS_GAMUT_ADJUST_TYPE_HW, /* without adjustments */
-	GRAPHICS_GAMUT_ADJUST_TYPE_SW  /* use adjustments */
+	GRAPHICS_GAMUT_ADJUST_TYPE_SW /* use adjustments */
 };
 
 #define CSC_TEMPERATURE_MATRIX_SIZE 9
@@ -165,36 +164,33 @@ struct scaler_data {
 };
 
 struct transform_funcs {
-	void (*transform_reset)(
-		struct transform *xfm);
+	void (*transform_reset)(struct transform *xfm);
 
-	bool (*transform_power_up)(
-		struct transform *xfm);
+	bool (*transform_power_up)(struct transform *xfm);
 
-	void (*transform_set_scaler)(
-		struct transform *xfm,
-		const struct scaler_data *scl_data);
+	void (*transform_set_scaler)(struct transform *xfm,
+			const struct scaler_data *scl_data);
 
 	void (*transform_set_gamut_remap)(
-		struct transform *xfm,
-		const struct xfm_grph_csc_adjustment *adjust);
+			struct transform *xfm,
+			const struct xfm_grph_csc_adjustment *adjust);
 
-	bool (*transform_set_pixel_storage_depth)(
-		struct transform *xfm,
-		enum lb_pixel_depth depth,
-		const struct bit_depth_reduction_params *bit_depth_params);
+	void (*transform_set_pixel_storage_depth)(
+			struct transform *xfm,
+			enum lb_pixel_depth depth,
+			const struct bit_depth_reduction_params *bit_depth_params);
 
 	bool (*transform_get_optimal_number_of_taps)(
-		struct transform *xfm,
-		struct scaler_data *scl_data,
-		const struct scaling_taps *in_taps);
+			struct transform *xfm,
+			struct scaler_data *scl_data,
+			const struct scaling_taps *in_taps);
 };
 
 bool transform_get_optimal_number_of_taps_helper(
-	struct transform *xfm,
-	struct scaler_data *scl_data,
-	uint32_t pixel_width,
-	const struct scaling_taps *in_taps);
+		struct transform *xfm,
+		struct scaler_data *scl_data,
+		uint32_t pixel_width,
+		const struct scaling_taps *in_taps);
 
 extern const uint16_t filter_2tap_16p[18];
 extern const uint16_t filter_2tap_64p[66];
