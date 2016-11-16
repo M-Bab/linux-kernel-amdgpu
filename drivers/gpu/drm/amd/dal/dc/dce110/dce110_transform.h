@@ -142,143 +142,83 @@
 	XFM_SF(SCL_UPDATE, SCL_COEF_UPDATE_COMPLETE, mask_sh), \
 	XFM_SF(LB_DATA_FORMAT, ALPHA_EN, mask_sh)
 
-#define XFM_COMMON_MASK_SH_LIST_DCE110(mask_sh)\
-	XFM_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(mask_sh),\
+#define XFM_COMMON_MASK_SH_LIST_DCE110(mask_sh) \
+	XFM_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(mask_sh), \
 	XFM_SF(DCFE_MEM_PWR_CTRL, SCL_COEFF_MEM_PWR_DIS, mask_sh), \
 	XFM_SF(DCFE_MEM_PWR_STATUS, SCL_COEFF_MEM_PWR_STATE, mask_sh), \
 	XFM_SF(SCL_MODE, SCL_PSCL_EN, mask_sh)
 
+#define XFM_REG_FIELD_LIST(type) \
+	type OUT_CLAMP_MIN_B_CB; \
+	type OUT_CLAMP_MAX_B_CB; \
+	type OUT_CLAMP_MIN_G_Y; \
+	type OUT_CLAMP_MAX_G_Y; \
+	type OUT_CLAMP_MIN_R_CR; \
+	type OUT_CLAMP_MAX_R_CR; \
+	type OUT_ROUND_TRUNC_MODE; \
+	type DCP_SPATIAL_DITHER_EN; \
+	type DCP_SPATIAL_DITHER_MODE; \
+	type DCP_SPATIAL_DITHER_DEPTH; \
+	type DCP_FRAME_RANDOM_ENABLE; \
+	type DCP_RGB_RANDOM_ENABLE; \
+	type DCP_HIGHPASS_RANDOM_ENABLE; \
+	type DENORM_MODE; \
+	type PIXEL_DEPTH; \
+	type PIXEL_EXPAN_MODE; \
+	type GAMUT_REMAP_C11; \
+	type GAMUT_REMAP_C12; \
+	type GAMUT_REMAP_C13; \
+	type GAMUT_REMAP_C14; \
+	type GAMUT_REMAP_C21; \
+	type GAMUT_REMAP_C22; \
+	type GAMUT_REMAP_C23; \
+	type GAMUT_REMAP_C24; \
+	type GAMUT_REMAP_C31; \
+	type GAMUT_REMAP_C32; \
+	type GAMUT_REMAP_C33; \
+	type GAMUT_REMAP_C34; \
+	type GRPH_GAMUT_REMAP_MODE; \
+	type SCL_MODE; \
+	type SCL_PSCL_EN; \
+	type SCL_H_NUM_OF_TAPS; \
+	type SCL_V_NUM_OF_TAPS; \
+	type SCL_BOUNDARY_MODE; \
+	type EXT_OVERSCAN_LEFT; \
+	type EXT_OVERSCAN_RIGHT; \
+	type EXT_OVERSCAN_TOP; \
+	type EXT_OVERSCAN_BOTTOM; \
+	type SCL_COEFF_MEM_PWR_DIS; \
+	type SCL_COEFF_MEM_PWR_STATE; \
+	type SCL_C_RAM_FILTER_TYPE; \
+	type SCL_C_RAM_PHASE; \
+	type SCL_C_RAM_TAP_PAIR_IDX; \
+	type SCL_C_RAM_EVEN_TAP_COEF_EN; \
+	type SCL_C_RAM_EVEN_TAP_COEF; \
+	type SCL_C_RAM_ODD_TAP_COEF_EN; \
+	type SCL_C_RAM_ODD_TAP_COEF; \
+	type VIEWPORT_X_START; \
+	type VIEWPORT_Y_START; \
+	type VIEWPORT_HEIGHT; \
+	type VIEWPORT_WIDTH; \
+	type SCL_H_SCALE_RATIO; \
+	type SCL_V_SCALE_RATIO; \
+	type SCL_H_INIT_INT; \
+	type SCL_H_INIT_FRAC; \
+	type SCL_V_INIT_INT; \
+	type SCL_V_INIT_FRAC; \
+	type LB_MEMORY_CONFIG; \
+	type LB_MEMORY_SIZE; \
+	type SCL_V_2TAP_HARDCODE_COEF_EN; \
+	type SCL_H_2TAP_HARDCODE_COEF_EN; \
+	type SCL_COEF_UPDATE_COMPLETE; \
+	type ALPHA_EN
 
 struct dce110_transform_shift {
-	uint8_t OUT_CLAMP_MIN_B_CB;
-	uint8_t OUT_CLAMP_MAX_B_CB;
-	uint8_t OUT_CLAMP_MIN_G_Y;
-	uint8_t OUT_CLAMP_MAX_G_Y;
-	uint8_t OUT_CLAMP_MIN_R_CR;
-	uint8_t OUT_CLAMP_MAX_R_CR;
-	uint8_t OUT_ROUND_TRUNC_MODE;
-	uint8_t DCP_SPATIAL_DITHER_EN;
-	uint8_t DCP_SPATIAL_DITHER_MODE;
-	uint8_t DCP_SPATIAL_DITHER_DEPTH;
-	uint8_t DCP_FRAME_RANDOM_ENABLE;
-	uint8_t DCP_RGB_RANDOM_ENABLE;
-	uint8_t DCP_HIGHPASS_RANDOM_ENABLE;
-	uint8_t DENORM_MODE;
-	uint8_t PIXEL_DEPTH;
-	uint8_t PIXEL_EXPAN_MODE;
-	uint8_t GAMUT_REMAP_C11;
-	uint8_t GAMUT_REMAP_C12;
-	uint8_t GAMUT_REMAP_C13;
-	uint8_t GAMUT_REMAP_C14;
-	uint8_t GAMUT_REMAP_C21;
-	uint8_t GAMUT_REMAP_C22;
-	uint8_t GAMUT_REMAP_C23;
-	uint8_t GAMUT_REMAP_C24;
-	uint8_t GAMUT_REMAP_C31;
-	uint8_t GAMUT_REMAP_C32;
-	uint8_t GAMUT_REMAP_C33;
-	uint8_t GAMUT_REMAP_C34;
-	uint8_t GRPH_GAMUT_REMAP_MODE;
-	uint8_t SCL_MODE;
-	uint8_t SCL_PSCL_EN;
-	uint8_t SCL_H_NUM_OF_TAPS;
-	uint8_t SCL_V_NUM_OF_TAPS;
-	uint8_t SCL_BOUNDARY_MODE;
-	uint8_t EXT_OVERSCAN_LEFT;
-	uint8_t EXT_OVERSCAN_RIGHT;
-	uint8_t EXT_OVERSCAN_TOP;
-	uint8_t EXT_OVERSCAN_BOTTOM;
-	uint8_t SCL_COEFF_MEM_PWR_DIS;
-	uint8_t SCL_COEFF_MEM_PWR_STATE;
-	uint8_t SCL_C_RAM_FILTER_TYPE;
-	uint8_t SCL_C_RAM_PHASE;
-	uint8_t SCL_C_RAM_TAP_PAIR_IDX;
-	uint8_t SCL_C_RAM_EVEN_TAP_COEF_EN;
-	uint8_t SCL_C_RAM_EVEN_TAP_COEF;
-	uint8_t SCL_C_RAM_ODD_TAP_COEF_EN;
-	uint8_t SCL_C_RAM_ODD_TAP_COEF;
-	uint8_t VIEWPORT_X_START;
-	uint8_t VIEWPORT_Y_START;
-	uint8_t VIEWPORT_HEIGHT;
-	uint8_t VIEWPORT_WIDTH;
-	uint8_t SCL_H_SCALE_RATIO;
-	uint8_t SCL_V_SCALE_RATIO;
-	uint8_t SCL_H_INIT_INT;
-	uint8_t SCL_H_INIT_FRAC;
-	uint8_t SCL_V_INIT_INT;
-	uint8_t SCL_V_INIT_FRAC;
-	uint8_t LB_MEMORY_CONFIG;
-	uint8_t LB_MEMORY_SIZE;
-	uint8_t SCL_V_2TAP_HARDCODE_COEF_EN;
-	uint8_t SCL_H_2TAP_HARDCODE_COEF_EN;
-	uint8_t SCL_COEF_UPDATE_COMPLETE;
-	uint8_t ALPHA_EN;
+	XFM_REG_FIELD_LIST(uint8_t);
 };
 
 struct dce110_transform_mask {
-	uint32_t OUT_CLAMP_MIN_B_CB;
-	uint32_t OUT_CLAMP_MAX_B_CB;
-	uint32_t OUT_CLAMP_MIN_G_Y;
-	uint32_t OUT_CLAMP_MAX_G_Y;
-	uint32_t OUT_CLAMP_MIN_R_CR;
-	uint32_t OUT_CLAMP_MAX_R_CR;
-	uint32_t OUT_ROUND_TRUNC_MODE;
-	uint32_t DCP_SPATIAL_DITHER_EN;
-	uint32_t DCP_SPATIAL_DITHER_MODE;
-	uint32_t DCP_SPATIAL_DITHER_DEPTH;
-	uint32_t DCP_FRAME_RANDOM_ENABLE;
-	uint32_t DCP_RGB_RANDOM_ENABLE;
-	uint32_t DCP_HIGHPASS_RANDOM_ENABLE;
-	uint32_t DENORM_MODE;
-	uint32_t PIXEL_DEPTH;
-	uint32_t PIXEL_EXPAN_MODE;
-	uint32_t GAMUT_REMAP_C11;
-	uint32_t GAMUT_REMAP_C12;
-	uint32_t GAMUT_REMAP_C13;
-	uint32_t GAMUT_REMAP_C14;
-	uint32_t GAMUT_REMAP_C21;
-	uint32_t GAMUT_REMAP_C22;
-	uint32_t GAMUT_REMAP_C23;
-	uint32_t GAMUT_REMAP_C24;
-	uint32_t GAMUT_REMAP_C31;
-	uint32_t GAMUT_REMAP_C32;
-	uint32_t GAMUT_REMAP_C33;
-	uint32_t GAMUT_REMAP_C34;
-	uint32_t GRPH_GAMUT_REMAP_MODE;
-	uint32_t SCL_MODE;
-	uint32_t SCL_PSCL_EN;
-	uint32_t SCL_H_NUM_OF_TAPS;
-	uint32_t SCL_V_NUM_OF_TAPS;
-	uint32_t SCL_BOUNDARY_MODE;
-	uint32_t EXT_OVERSCAN_LEFT;
-	uint32_t EXT_OVERSCAN_RIGHT;
-	uint32_t EXT_OVERSCAN_TOP;
-	uint32_t EXT_OVERSCAN_BOTTOM;
-	uint32_t SCL_COEFF_MEM_PWR_DIS;
-	uint32_t SCL_COEFF_MEM_PWR_STATE;
-	uint32_t SCL_C_RAM_FILTER_TYPE;
-	uint32_t SCL_C_RAM_PHASE;
-	uint32_t SCL_C_RAM_TAP_PAIR_IDX;
-	uint32_t SCL_C_RAM_EVEN_TAP_COEF_EN;
-	uint32_t SCL_C_RAM_EVEN_TAP_COEF;
-	uint32_t SCL_C_RAM_ODD_TAP_COEF_EN;
-	uint32_t SCL_C_RAM_ODD_TAP_COEF;
-	uint32_t VIEWPORT_X_START;
-	uint32_t VIEWPORT_Y_START;
-	uint32_t VIEWPORT_HEIGHT;
-	uint32_t VIEWPORT_WIDTH;
-	uint32_t SCL_H_SCALE_RATIO;
-	uint32_t SCL_V_SCALE_RATIO;
-	uint32_t SCL_H_INIT_INT;
-	uint32_t SCL_H_INIT_FRAC;
-	uint32_t SCL_V_INIT_INT;
-	uint32_t SCL_V_INIT_FRAC;
-	uint32_t LB_MEMORY_CONFIG;
-	uint32_t LB_MEMORY_SIZE;
-	uint32_t SCL_V_2TAP_HARDCODE_COEF_EN;
-	uint32_t SCL_H_2TAP_HARDCODE_COEF_EN;
-	uint32_t SCL_COEF_UPDATE_COMPLETE;
-	uint32_t ALPHA_EN;
+	XFM_REG_FIELD_LIST(uint32_t);
 };
 
 struct dce110_transform_registers {
@@ -317,16 +257,9 @@ struct dce110_transform_registers {
 	uint32_t LB_MEMORY_CTRL;
 	uint32_t SCL_UPDATE;
 };
-struct dce110_transform_reg_offsets {
-	uint32_t scl_offset;
-	uint32_t dcfe_offset;
-	uint32_t dcp_offset;
-	uint32_t lb_offset;
-};
 
 struct dce110_transform {
 	struct transform base;
-	struct dce110_transform_reg_offsets offsets;
 	const struct dce110_transform_registers *regs;
 	const struct dce110_transform_shift *xfm_shift;
 	const struct dce110_transform_mask *xfm_mask;

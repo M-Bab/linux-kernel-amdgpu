@@ -621,13 +621,19 @@ static uint32_t decide_taps(struct fixed31_32 ratio, uint32_t in_taps, bool chro
 	return taps;
 }
 
-bool transform_get_optimal_number_of_taps_helper(
+
+bool dce110_transform_get_optimal_number_of_taps(
 	struct transform *xfm,
 	struct scaler_data *scl_data,
-	uint32_t pixel_width,
-	const struct scaling_taps *in_taps) {
-
+	const struct scaling_taps *in_taps)
+{
+	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	int pixel_width = scl_data->viewport.width;
 	int max_num_of_lines;
+
+	if (xfm110->prescaler_on &&
+			(scl_data->viewport.width > scl_data->recout.width))
+		pixel_width = scl_data->recout.width;
 
 	max_num_of_lines = dce110_transform_get_max_num_of_supported_lines(
 		xfm,
@@ -676,27 +682,6 @@ bool transform_get_optimal_number_of_taps_helper(
 
 	/* we've got valid taps */
 	return true;
-
-}
-
-bool dce110_transform_get_optimal_number_of_taps(
-	struct transform *xfm,
-	struct scaler_data *scl_data,
-	const struct scaling_taps *in_taps)
-{
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
-	int pixel_width = scl_data->viewport.width;
-
-	if (xfm110->prescaler_on &&
-			(scl_data->viewport.width > scl_data->recout.width))
-		pixel_width = scl_data->recout.width;
-
-	return transform_get_optimal_number_of_taps_helper(
-			xfm,
-			scl_data,
-			pixel_width,
-			in_taps);
-
 }
 
 static void dce110_transform_reset(struct transform *xfm)

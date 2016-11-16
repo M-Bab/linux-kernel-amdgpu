@@ -128,6 +128,7 @@ static void program_multi_taps_filter(
 		phase 0 is unique and phase N/2 is unique if N is even*/
 		for (pair = 0; pair < taps_pairs; pair++) {
 			uint16_t odd_coeff = 0;
+			uint16_t even_coeff = coeffs[array_idx];
 
 			REG_SET_3(SCL_COEF_RAM_SELECT, 0,
 					SCL_C_RAM_FILTER_TYPE, filter_type,
@@ -143,7 +144,7 @@ static void program_multi_taps_filter(
 
 			REG_SET_4(SCL_COEF_RAM_TAP_DATA, 0,
 					SCL_C_RAM_EVEN_TAP_COEF_EN, 1,
-					SCL_C_RAM_EVEN_TAP_COEF, coeffs[array_idx],
+					SCL_C_RAM_EVEN_TAP_COEF, even_coeff,
 					SCL_C_RAM_ODD_TAP_COEF_EN, 1,
 					SCL_C_RAM_ODD_TAP_COEF, odd_coeff);
 		}
