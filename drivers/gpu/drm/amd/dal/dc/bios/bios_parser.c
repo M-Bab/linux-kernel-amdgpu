@@ -3665,7 +3665,7 @@ static void bios_parser_post_init(struct dc_bios *dcb)
 static bool bios_parser_is_accelerated_mode(
 	struct dc_bios *dcb)
 {
-	bios_is_accelerated_mode(dcb);
+	return bios_is_accelerated_mode(dcb);
 }
 
 /**
