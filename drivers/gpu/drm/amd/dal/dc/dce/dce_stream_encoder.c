@@ -456,7 +456,7 @@ static void dce110_stream_encoder_set_mst_bandwidth(
 	/* i.e. DP_MSE_RATE_UPDATE_PENDING field (read only) */
 	/* is reset to 0 (not pending) */
 	REG_WAIT(DP_MSE_RATE_UPDATE, DP_MSE_RATE_UPDATE_PENDING,
-			1,
+			0,
 			10, DP_MST_UPDATE_MAX_RETRY);
 }
 
