@@ -30,6 +30,8 @@
 #include "calcs/scaler_filter.h"
 #include "dc_hw_types.h"
 
+#define CSC_TEMPERATURE_MATRIX_SIZE 9
+
 struct bit_depth_reduction_params;
 
 struct transform {
@@ -51,15 +53,6 @@ enum lb_pixel_depth {
 	LB_PIXEL_DEPTH_36BPP = 8
 };
 
-enum raw_gamma_ramp_type {
-	GAMMA_RAMP_TYPE_UNINITIALIZED,
-	GAMMA_RAMP_TYPE_DEFAULT,
-	GAMMA_RAMP_TYPE_RGB256,
-	GAMMA_RAMP_TYPE_FIXED_POINT
-};
-
-#define NUM_OF_RAW_GAMMA_RAMP_RGB_256 256
-
 /* Colorimetry */
 enum colorimetry {
 	COLORIMETRY_NO_DATA = 0,
@@ -69,7 +62,8 @@ enum colorimetry {
 };
 
 enum active_format_info {
-	ACTIVE_FORMAT_NO_DATA = 0, ACTIVE_FORMAT_VALID = 1
+	ACTIVE_FORMAT_NO_DATA = 0,
+	ACTIVE_FORMAT_VALID = 1
 };
 
 /* Active format aspect ratio */
@@ -115,8 +109,6 @@ enum graphics_gamut_adjust_type {
 	GRAPHICS_GAMUT_ADJUST_TYPE_HW, /* without adjustments */
 	GRAPHICS_GAMUT_ADJUST_TYPE_SW /* use adjustments */
 };
-
-#define CSC_TEMPERATURE_MATRIX_SIZE 9
 
 struct xfm_grph_csc_adjustment {
 	struct fixed31_32 temperature_matrix[CSC_TEMPERATURE_MATRIX_SIZE];
@@ -166,8 +158,6 @@ struct scaler_data {
 struct transform_funcs {
 	void (*transform_reset)(struct transform *xfm);
 
-	bool (*transform_power_up)(struct transform *xfm);
-
 	void (*transform_set_scaler)(struct transform *xfm,
 			const struct scaler_data *scl_data);
 
@@ -185,12 +175,6 @@ struct transform_funcs {
 			struct scaler_data *scl_data,
 			const struct scaling_taps *in_taps);
 };
-
-bool transform_get_optimal_number_of_taps_helper(
-		struct transform *xfm,
-		struct scaler_data *scl_data,
-		uint32_t pixel_width,
-		const struct scaling_taps *in_taps);
 
 extern const uint16_t filter_2tap_16p[18];
 extern const uint16_t filter_2tap_64p[66];
