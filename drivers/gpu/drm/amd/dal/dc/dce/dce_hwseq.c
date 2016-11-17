@@ -74,11 +74,11 @@ void dce_pipe_control_lock(struct dce_hwseq *hws,
 		update_lock_mode = lock_val;
 
 	REG_SET_5(BLND_V_UPDATE_LOCK[blnd_inst], val,
-			BLND_DCP_GRPH_V_UPDATE_LOCK, &dcp_grph,
-			BLND_SCL_V_UPDATE_LOCK, &scl,
-			BLND_DCP_GRPH_SURF_V_UPDATE_LOCK, &dcp_grph_surf,
-			BLND_BLND_V_UPDATE_LOCK, &blnd,
-			BLND_V_UPDATE_LOCK_MODE, &update_lock_mode);
+			BLND_DCP_GRPH_V_UPDATE_LOCK, dcp_grph,
+			BLND_SCL_V_UPDATE_LOCK, scl,
+			BLND_DCP_GRPH_SURF_V_UPDATE_LOCK, dcp_grph_surf,
+			BLND_BLND_V_UPDATE_LOCK, blnd,
+			BLND_V_UPDATE_LOCK_MODE, update_lock_mode);
 
 	if (hws->wa.blnd_crtc_trigger)
 		if (!lock && (control_mask & PIPE_LOCK_CONTROL_BLENDER)) {
