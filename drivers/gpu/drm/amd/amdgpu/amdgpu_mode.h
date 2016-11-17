@@ -45,7 +45,7 @@
 #include <linux/hrtimer.h>
 #include "amdgpu_irq.h"
 
-#include "../dal/modules/inc/mod_freesync.h"
+#include "modules/inc/mod_freesync.h"
 
 struct amdgpu_bo;
 struct amdgpu_device;
