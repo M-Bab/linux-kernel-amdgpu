@@ -1324,11 +1324,9 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 	struct validate_context *context = core_dc->temp_flip_context;
 	int i, j;
 	bool is_new_pipe_surface[MAX_SURFACES];
+	const struct dc_surface *new_surfaces[MAX_SURFACES] = { 0 };
 
 	update_surface_trace(dc, updates, surface_count);
-
-	for (j = 0; j < MAX_SURFACES; j++)
-		is_new_pipe_surface[j] = true;
 
 	*context = *core_dc->current_context;
 
@@ -1344,8 +1342,22 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 				&context->res_ctx.pipe_ctx[cur_pipe->bottom_pipe->pipe_idx];
 	}
 
+	for (j = 0; j < MAX_SURFACES; j++)
+		is_new_pipe_surface[j] = true;
+
+	for (i = 0 ; i < surface_count; i++) {
+		struct core_surface *surface = DC_SURFACE_TO_CORE(updates[i].surface);
+
+		new_surfaces[i] = updates[i].surface;
+		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
+			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
+
+			if (surface == pipe_ctx->surface)
+				is_new_pipe_surface[i] = false;
+		}
+	}
+
 	if (dc_target) {
-		const struct dc_surface *new_surfaces[MAX_SURFACES] = { 0 };
 		struct core_target *target = DC_TARGET_TO_CORE(dc_target);
 
 		if (core_dc->current_context->target_count == 0)
@@ -1357,18 +1369,6 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 				break;
 		if (i == core_dc->current_context->target_count)
 			return;
-
-		for (i = 0 ; i < surface_count; i++) {
-			struct core_surface *surface = DC_SURFACE_TO_CORE(updates[i].surface);
-
-			new_surfaces[i] = updates[i].surface;
-			for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
-				struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
-
-				if (surface == pipe_ctx->surface)
-					is_new_pipe_surface[i] = false;
-			}
-		}
 
 		if (!resource_attach_surfaces_to_context(
 				new_surfaces, surface_count, dc_target, context)) {
