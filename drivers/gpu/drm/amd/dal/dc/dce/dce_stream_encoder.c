@@ -225,10 +225,13 @@ static void dce110_stream_encoder_dp_set_stream_attribute(
 {
 	uint32_t h_active_start;
 	uint32_t v_active_start;
-	uint32_t misc0;
+	uint32_t misc0 = 0;
 	uint32_t misc1;
 	uint32_t h_blank;
 	uint32_t h_back_porch;
+	uint8_t synchronous_clock = 0; /* asynchronous mode */
+	uint8_t colorimetry_bpc;
+
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
 
 	/* set pixel encoding */
@@ -272,28 +275,28 @@ static void dce110_stream_encoder_dp_set_stream_attribute(
 	case COLOR_DEPTH_666:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				0);
-		misc0 = 0;
+		colorimetry_bpc = 0;
 		break;
 	case COLOR_DEPTH_888:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_8BPC);
-		misc0 = 1;
+		colorimetry_bpc = 1;
 		break;
 	case COLOR_DEPTH_101010:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_10BPC);
 
-		misc0 = 2;
+		colorimetry_bpc = 2;
 		break;
 	case COLOR_DEPTH_121212:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_12BPC);
-		misc0 = 3;
+		colorimetry_bpc = 3;
 		break;
 	default:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_6BPC);
-		misc0 = 0;
+		colorimetry_bpc = 0;
 		break;
 	}
 
