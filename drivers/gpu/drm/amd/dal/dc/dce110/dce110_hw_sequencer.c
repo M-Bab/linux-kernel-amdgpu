@@ -553,8 +553,9 @@ static void program_scaler(const struct core_dc *dc,
 	if (dc->public.debug.surface_visual_confirm)
 		get_surface_visual_confirm_color(pipe_ctx, &color);
 	else
-		color_space_to_black_color(pipe_ctx->stream->public.output_color_space,
-									&color);
+		color_space_to_black_color(dc,
+				pipe_ctx->stream->public.output_color_space,
+				&color);
 
 	pipe_ctx->xfm->funcs->transform_set_pixel_storage_depth(
 		pipe_ctx->xfm,
@@ -583,7 +584,8 @@ static enum dc_status prog_pixclk_crtc_otg(
 	if (!pipe_ctx_old->stream) {
 
 		/* program blank color */
-		color_space_to_black_color(stream->public.output_color_space, &black_color);
+		color_space_to_black_color(dc,
+				stream->public.output_color_space, &black_color);
 		pipe_ctx->tg->funcs->set_blank_color(
 				pipe_ctx->tg,
 				&black_color);
@@ -1712,7 +1714,8 @@ static void dce110_power_on_pipe_if_needed(
 				context->target_count);
 
 		/* TODO unhardcode*/
-		color_space_to_black_color(COLOR_SPACE_YCBCR601, &black_color);
+		color_space_to_black_color(dc,
+				COLOR_SPACE_YCBCR601, &black_color);
 		pipe_ctx->tg->funcs->set_blank_color(
 				pipe_ctx->tg,
 				&black_color);

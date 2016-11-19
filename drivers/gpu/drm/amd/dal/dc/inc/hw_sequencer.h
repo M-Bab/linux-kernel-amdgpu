@@ -149,7 +149,8 @@ struct hw_sequencer_funcs {
 };
 
 void color_space_to_black_color(
-		enum dc_color_space colorspace,
+	const struct core_dc *dc,
+	enum dc_color_space colorspace,
 	struct tg_color *black_color);
 
 #endif /* __DC_HW_SEQUENCER_H__ */

@@ -36,8 +36,7 @@ enum black_color_format {
 	BLACK_COLOR_FORMAT_YUV_TV,
 	BLACK_COLOR_FORMAT_YUV_CV,
 	BLACK_COLOR_FORMAT_YUV_SUPER_AA,
-
-	BLACK_COLOR_FORMAT_COUNT
+	BLACK_COLOR_FORMAT_DEBUG,
 };
 
 static const struct tg_color black_color_format[] = {
@@ -51,12 +50,21 @@ static const struct tg_color black_color_format[] = {
 	{0x1f4, 0x40, 0x1f4},
 	/* BlackColorFormat_YUV_SuperAA */
 	{0x1a2, 0x20, 0x1a2},
+	/* visual confirm debug */
+	{0xff, 0xff, 0},
 };
 
 void color_space_to_black_color(
-		enum dc_color_space colorspace,
+	const struct core_dc *dc,
+	enum dc_color_space colorspace,
 	struct tg_color *black_color)
 {
+	if (dc->public.debug.surface_visual_confirm) {
+		*black_color =
+			black_color_format[BLACK_COLOR_FORMAT_DEBUG];
+		return;
+	}
+
 	switch (colorspace) {
 	case COLOR_SPACE_YPBPR601:
 		*black_color = black_color_format[BLACK_COLOR_FORMAT_YUV_TV];
