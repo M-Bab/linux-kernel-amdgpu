@@ -646,9 +646,6 @@ static void destruct(struct dce110_resource_pool *pool)
 		dal_display_clock_destroy(&pool->base.display_clock);
 	}
 
-	if (pool->base.scaler_filter != NULL) {
-		dal_scaler_filter_destroy(&pool->base.scaler_filter);
-	}
 	if (pool->base.irqs != NULL) {
 		dal_irq_service_destroy(&pool->base.irqs);
 	}
@@ -979,13 +976,6 @@ static bool construct(
 			goto res_create_fail;
 	}
 
-	pool->base.scaler_filter = dal_scaler_filter_create(ctx);
-	if (pool->base.scaler_filter == NULL) {
-		BREAK_TO_DEBUGGER();
-		dm_error("DC: failed to create filter!\n");
-		goto res_create_fail;
-	}
-
 	for (i = 0; i < pool->base.pipe_count; i++) {
 		pool->base.timing_generators[i] = dce80_timing_generator_create(
 				ctx, i, &dce80_tg_offsets[i]);
@@ -1016,7 +1006,6 @@ static bool construct(
 			dm_error("DC: failed to create transform!\n");
 			goto res_create_fail;
 		}
-		pool->base.transforms[i]->filter = pool->base.scaler_filter;
 
 		pool->base.opps[i] = dce80_opp_create(ctx, i);
 		if (pool->base.opps[i] == NULL) {

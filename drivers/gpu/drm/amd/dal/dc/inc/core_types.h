@@ -236,8 +236,6 @@ struct audio_support{
 };
 
 struct resource_pool {
-	struct scaler_filter * scaler_filter;
-
 	struct mem_input *mis[MAX_PIPES];
 	struct input_pixel_processor *ipps[MAX_PIPES];
 	struct transform *transforms[MAX_PIPES];
