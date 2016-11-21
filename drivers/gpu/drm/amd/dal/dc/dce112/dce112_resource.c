@@ -36,7 +36,7 @@
 #include "dce112/dce112_mem_input.h"
 
 #include "irq/dce110/irq_service_dce110.h"
-#include "dce110/dce110_transform.h"
+#include "dce/dce_transform.h"
 #include "dce/dce_link_encoder.h"
 #include "dce/dce_stream_encoder.h"
 #include "dce/dce_audio.h"
@@ -210,7 +210,7 @@ static const struct dce110_ipp_reg_offsets ipp_reg_offsets[] = {
 		XFM_COMMON_REG_LIST_DCE110(id)\
 }
 
-static const struct dce110_transform_registers xfm_regs[] = {
+static const struct dce_transform_registers xfm_regs[] = {
 		transform_regs(0),
 		transform_regs(1),
 		transform_regs(2),
@@ -219,11 +219,11 @@ static const struct dce110_transform_registers xfm_regs[] = {
 		transform_regs(5)
 };
 
-static const struct dce110_transform_shift xfm_shift = {
+static const struct dce_transform_shift xfm_shift = {
 		XFM_COMMON_MASK_SH_LIST_DCE110(__SHIFT)
 };
 
-static const struct dce110_transform_mask xfm_mask = {
+static const struct dce_transform_mask xfm_mask = {
 		XFM_COMMON_MASK_SH_LIST_DCE110(_MASK)
 };
 
@@ -540,7 +540,7 @@ static struct mem_input *dce112_mem_input_create(
 
 static void dce112_transform_destroy(struct transform **xfm)
 {
-	dm_free(TO_DCE110_TRANSFORM(*xfm));
+	dm_free(TO_DCE_TRANSFORM(*xfm));
 	*xfm = NULL;
 }
 
@@ -548,13 +548,13 @@ static struct transform *dce112_transform_create(
 	struct dc_context *ctx,
 	uint32_t inst)
 {
-	struct dce110_transform *transform =
-		dm_alloc(sizeof(struct dce110_transform));
+	struct dce_transform *transform =
+		dm_alloc(sizeof(struct dce_transform));
 
 	if (!transform)
 		return NULL;
 
-	if (dce110_transform_construct(transform, ctx, inst,
+	if (dce_transform_construct(transform, ctx, inst,
 			&xfm_regs[inst], &xfm_shift, &xfm_mask)) {
 		transform->base.lb_memory_size = 0x1404; /*5124*/
 		return &transform->base;

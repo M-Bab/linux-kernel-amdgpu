@@ -22,12 +22,9 @@
  * Authors: AMD
  *
  */
-#include "dm_services.h"
 
-#include "dc_types.h"
-#include "core_types.h"
 #include "dce110_transform_v.h"
-
+#include "dm_services.h"
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
@@ -75,11 +72,11 @@ static void calculate_viewport(
 }
 
 static void program_viewport(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	struct rect *luma_view_port,
 	struct rect *chroma_view_port)
 {
-	struct dc_context *ctx = xfm110->base.ctx;
+	struct dc_context *ctx = xfm_dce->base.ctx;
 	uint32_t value = 0;
 	uint32_t addr = 0;
 
@@ -155,11 +152,11 @@ static void program_viewport(
  *  void
  */
 static bool setup_scaling_configuration(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	const struct scaler_data *data)
 {
 	bool is_scaling_needed = false;
-	struct dc_context *ctx = xfm110->base.ctx;
+	struct dc_context *ctx = xfm_dce->base.ctx;
 	uint32_t value = 0;
 
 	set_reg_field_value(value, data->taps.h_taps - 1,
@@ -226,7 +223,7 @@ static bool setup_scaling_configuration(
    void
 */
 static void program_overscan(
-		struct dce110_transform *xfm110,
+		struct dce_transform *xfm_dce,
 		const struct scaler_data *data)
 {
 	uint32_t overscan_left_right = 0;
@@ -256,32 +253,32 @@ static void program_overscan(
 	set_reg_field_value(overscan_top_bottom, overscan_bottom,
 			EXT_OVERSCAN_TOP_BOTTOM, EXT_OVERSCAN_BOTTOM);
 
-	dm_write_reg(xfm110->base.ctx,
+	dm_write_reg(xfm_dce->base.ctx,
 			mmSCLV_EXT_OVERSCAN_LEFT_RIGHT,
 			overscan_left_right);
 
-	dm_write_reg(xfm110->base.ctx,
+	dm_write_reg(xfm_dce->base.ctx,
 			mmSCLV_EXT_OVERSCAN_TOP_BOTTOM,
 			overscan_top_bottom);
 }
 
 static void set_coeff_update_complete(
-		struct dce110_transform *xfm110)
+		struct dce_transform *xfm_dce)
 {
 	uint32_t value;
 
-	value = dm_read_reg(xfm110->base.ctx, mmSCLV_UPDATE);
+	value = dm_read_reg(xfm_dce->base.ctx, mmSCLV_UPDATE);
 	set_reg_field_value(value, 1, SCLV_UPDATE, SCL_COEF_UPDATE_COMPLETE);
-	dm_write_reg(xfm110->base.ctx, mmSCLV_UPDATE, value);
+	dm_write_reg(xfm_dce->base.ctx, mmSCLV_UPDATE, value);
 }
 
 static void program_multi_taps_filter(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	int taps,
 	const uint16_t *coeffs,
 	enum ram_filter_type filter_type)
 {
-	struct dc_context *ctx = xfm110->base.ctx;
+	struct dc_context *ctx = xfm_dce->base.ctx;
 	int i, phase, pair;
 	int array_idx = 0;
 	int taps_pairs = (taps + 1) / 2;
@@ -361,7 +358,7 @@ static void program_multi_taps_filter(
 }
 
 static void calculate_inits(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	const struct scaler_data *data,
 	struct sclv_ratios_inits *inits,
 	struct rect *luma_viewport,
@@ -383,10 +380,10 @@ static void calculate_inits(
 }
 
 static void program_scl_ratios_inits(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	struct sclv_ratios_inits *inits)
 {
-	struct dc_context *ctx = xfm110->base.ctx;
+	struct dc_context *ctx = xfm_dce->base.ctx;
 	uint32_t addr = mmSCLV_HORZ_FILTER_SCALE_RATIO;
 	uint32_t value = 0;
 
@@ -498,18 +495,18 @@ static const uint16_t *get_filter_coeffs_64p(int taps, struct fixed31_32 ratio)
 
 static bool dce110_xfmv_power_up_line_buffer(struct transform *xfm)
 {
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	struct dce_transform *xfm_dce = TO_DCE_TRANSFORM(xfm);
 	uint32_t value;
 
-	value = dm_read_reg(xfm110->base.ctx, mmLBV_MEMORY_CTRL);
+	value = dm_read_reg(xfm_dce->base.ctx, mmLBV_MEMORY_CTRL);
 
 	/*Use all three pieces of memory always*/
 	set_reg_field_value(value, 0, LBV_MEMORY_CTRL, LB_MEMORY_CONFIG);
 	/*hard coded number DCE11 1712(0x6B0) Partitions: 720/960/1712*/
-	set_reg_field_value(value, xfm110->base.lb_memory_size, LBV_MEMORY_CTRL,
+	set_reg_field_value(value, xfm_dce->base.lb_memory_size, LBV_MEMORY_CTRL,
 			LB_MEMORY_SIZE);
 
-	dm_write_reg(xfm110->base.ctx, mmLBV_MEMORY_CTRL, value);
+	dm_write_reg(xfm_dce->base.ctx, mmLBV_MEMORY_CTRL, value);
 
 	return true;
 }
@@ -518,7 +515,7 @@ static void dce110_xfmv_set_scaler(
 	struct transform *xfm,
 	const struct scaler_data *data)
 {
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	struct dce_transform *xfm_dce = TO_DCE_TRANSFORM(xfm);
 	bool is_scaling_required = false;
 	bool filter_updated = false;
 	const uint16_t *coeffs_v, *coeffs_h, *coeffs_h_c, *coeffs_v_c;
@@ -533,10 +530,10 @@ static void dce110_xfmv_set_scaler(
 	calculate_viewport(data, &luma_viewport, &chroma_viewport);
 
 	/* 2. Program overscan */
-	program_overscan(xfm110, data);
+	program_overscan(xfm_dce, data);
 
 	/* 3. Program taps and configuration */
-	is_scaling_required = setup_scaling_configuration(xfm110, data);
+	is_scaling_required = setup_scaling_configuration(xfm_dce, data);
 
 	if (is_scaling_required) {
 		/* 4. Calculate and program ratio, filter initialization */
@@ -544,71 +541,71 @@ static void dce110_xfmv_set_scaler(
 		struct sclv_ratios_inits inits = { 0 };
 
 		calculate_inits(
-			xfm110,
+			xfm_dce,
 			data,
 			&inits,
 			&luma_viewport,
 			&chroma_viewport);
 
-		program_scl_ratios_inits(xfm110, &inits);
+		program_scl_ratios_inits(xfm_dce, &inits);
 
 		coeffs_v = get_filter_coeffs_64p(data->taps.v_taps, data->ratios.vert);
 		coeffs_h = get_filter_coeffs_64p(data->taps.h_taps, data->ratios.horz);
 		coeffs_v_c = get_filter_coeffs_64p(data->taps.v_taps_c, data->ratios.vert_c);
 		coeffs_h_c = get_filter_coeffs_64p(data->taps.h_taps_c, data->ratios.horz_c);
 
-		if (coeffs_v != xfm110->filter_v
-				|| coeffs_v_c != xfm110->filter_v_c
-				|| coeffs_h != xfm110->filter_h
-				|| coeffs_h_c != xfm110->filter_h_c) {
+		if (coeffs_v != xfm_dce->filter_v
+				|| coeffs_v_c != xfm_dce->filter_v_c
+				|| coeffs_h != xfm_dce->filter_h
+				|| coeffs_h_c != xfm_dce->filter_h_c) {
 		/* 5. Program vertical filters */
 			program_multi_taps_filter(
-					xfm110,
+					xfm_dce,
 					data->taps.v_taps,
 					coeffs_v,
 					FILTER_TYPE_RGB_Y_VERTICAL);
 			program_multi_taps_filter(
-					xfm110,
+					xfm_dce,
 					data->taps.v_taps_c,
 					coeffs_v_c,
 					FILTER_TYPE_CBCR_VERTICAL);
 
 		/* 6. Program horizontal filters */
 			program_multi_taps_filter(
-					xfm110,
+					xfm_dce,
 					data->taps.h_taps,
 					coeffs_h,
 					FILTER_TYPE_RGB_Y_HORIZONTAL);
 			program_multi_taps_filter(
-					xfm110,
+					xfm_dce,
 					data->taps.h_taps_c,
 					coeffs_h_c,
 					FILTER_TYPE_CBCR_HORIZONTAL);
 
-			xfm110->filter_v = coeffs_v;
-			xfm110->filter_v_c = coeffs_v_c;
-			xfm110->filter_h = coeffs_h;
-			xfm110->filter_h_c = coeffs_h_c;
+			xfm_dce->filter_v = coeffs_v;
+			xfm_dce->filter_v_c = coeffs_v_c;
+			xfm_dce->filter_h = coeffs_h;
+			xfm_dce->filter_h_c = coeffs_h_c;
 			filter_updated = true;
 		}
 	}
 
 	/* 7. Program the viewport */
-	program_viewport(xfm110, &luma_viewport, &chroma_viewport);
+	program_viewport(xfm_dce, &luma_viewport, &chroma_viewport);
 
 	/* 8. Set bit to flip to new coefficient memory */
 	if (filter_updated)
-		set_coeff_update_complete(xfm110);
+		set_coeff_update_complete(xfm_dce);
 }
 
 static void dce110_xfmv_reset(struct transform *xfm)
 {
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	struct dce_transform *xfm_dce = TO_DCE_TRANSFORM(xfm);
 
-	xfm110->filter_h = NULL;
-	xfm110->filter_v = NULL;
-	xfm110->filter_h_c = NULL;
-	xfm110->filter_v_c = NULL;
+	xfm_dce->filter_h = NULL;
+	xfm_dce->filter_v = NULL;
+	xfm_dce->filter_h_c = NULL;
+	xfm_dce->filter_v_c = NULL;
 }
 
 static void dce110_xfmv_set_gamut_remap(
@@ -623,7 +620,7 @@ static void dce110_xfmv_set_pixel_storage_depth(
 	enum lb_pixel_depth depth,
 	const struct bit_depth_reduction_params *bit_depth_params)
 {
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	struct dce_transform *xfm_dce = TO_DCE_TRANSFORM(xfm);
 	int pixel_depth, expan_mode;
 	uint32_t reg_data = 0;
 
@@ -663,7 +660,7 @@ static void dce110_xfmv_set_pixel_storage_depth(
 
 	dm_write_reg(xfm->ctx, mmLBV_DATA_FORMAT, reg_data);
 
-	if (!(xfm110->lb_pixel_depth_supported & depth)) {
+	if (!(xfm_dce->lb_pixel_depth_supported & depth)) {
 		/*we should use unsupported capabilities
 		 *  unless it is required by w/a*/
 		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
@@ -680,28 +677,28 @@ static const struct transform_funcs dce110_xfmv_funcs = {
 	.transform_set_pixel_storage_depth =
 			dce110_xfmv_set_pixel_storage_depth,
 	.transform_get_optimal_number_of_taps =
-		dce110_transform_get_optimal_number_of_taps
+		dce_transform_get_optimal_number_of_taps
 };
 /*****************************************/
 /* Constructor, Destructor               */
 /*****************************************/
 
 bool dce110_transform_v_construct(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	struct dc_context *ctx)
 {
-	xfm110->base.ctx = ctx;
+	xfm_dce->base.ctx = ctx;
 
-	xfm110->base.funcs = &dce110_xfmv_funcs;
+	xfm_dce->base.funcs = &dce110_xfmv_funcs;
 
-	xfm110->lb_pixel_depth_supported =
+	xfm_dce->lb_pixel_depth_supported =
 			LB_PIXEL_DEPTH_18BPP |
 			LB_PIXEL_DEPTH_24BPP |
 			LB_PIXEL_DEPTH_30BPP;
 
-	xfm110->prescaler_on = true;
-	xfm110->base.lb_bits_per_entry = LB_BITS_PER_ENTRY;
-	xfm110->base.lb_total_entries_num = LB_TOTAL_NUMBER_OF_ENTRIES;
+	xfm_dce->prescaler_on = true;
+	xfm_dce->base.lb_bits_per_entry = LB_BITS_PER_ENTRY;
+	xfm_dce->base.lb_total_entries_num = LB_TOTAL_NUMBER_OF_ENTRIES;
 
 	return true;
 }

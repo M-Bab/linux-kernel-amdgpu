@@ -1,4 +1,5 @@
-/* Copyright 2012-15 Advanced Micro Devices, Inc.
+/*
+ * Copyright 2012-16 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,13 +23,14 @@
  *
  */
 
-#ifndef __DAL_TRANSFORM_DCE110_H__
-#define __DAL_TRANSFORM_DCE110_H__
+#ifndef _DCE_DCE_TRANSFORM_H_
+#define _DCE_DCE_TRANSFORM_H_
+
 
 #include "transform.h"
 
-#define TO_DCE110_TRANSFORM(transform)\
-	container_of(transform, struct dce110_transform, base)
+#define TO_DCE_TRANSFORM(transform)\
+	container_of(transform, struct dce_transform, base)
 
 #define LB_TOTAL_NUMBER_OF_ENTRIES 1712
 #define LB_BITS_PER_ENTRY 144
@@ -213,15 +215,15 @@
 	type SCL_COEF_UPDATE_COMPLETE; \
 	type ALPHA_EN
 
-struct dce110_transform_shift {
+struct dce_transform_shift {
 	XFM_REG_FIELD_LIST(uint8_t);
 };
 
-struct dce110_transform_mask {
+struct dce_transform_mask {
 	XFM_REG_FIELD_LIST(uint32_t);
 };
 
-struct dce110_transform_registers {
+struct dce_transform_registers {
 	uint32_t LB_DATA_FORMAT;
 	uint32_t GAMUT_REMAP_CONTROL;
 	uint32_t GAMUT_REMAP_C11_C12;
@@ -258,11 +260,32 @@ struct dce110_transform_registers {
 	uint32_t SCL_UPDATE;
 };
 
-struct dce110_transform {
+struct init_int_and_frac {
+	uint32_t integer;
+	uint32_t fraction;
+};
+
+struct scl_ratios_inits {
+	uint32_t h_int_scale_ratio;
+	uint32_t v_int_scale_ratio;
+	struct init_int_and_frac h_init;
+	struct init_int_and_frac v_init;
+};
+
+enum ram_filter_type {
+	FILTER_TYPE_RGB_Y_VERTICAL	= 0, /* 0 - RGB/Y Vertical filter */
+	FILTER_TYPE_CBCR_VERTICAL	= 1, /* 1 - CbCr  Vertical filter */
+	FILTER_TYPE_RGB_Y_HORIZONTAL	= 2, /* 1 - RGB/Y Horizontal filter */
+	FILTER_TYPE_CBCR_HORIZONTAL	= 3, /* 3 - CbCr  Horizontal filter */
+	FILTER_TYPE_ALPHA_VERTICAL	= 4, /* 4 - Alpha Vertical filter. */
+	FILTER_TYPE_ALPHA_HORIZONTAL	= 5, /* 5 - Alpha Horizontal filter. */
+};
+
+struct dce_transform {
 	struct transform base;
-	const struct dce110_transform_registers *regs;
-	const struct dce110_transform_shift *xfm_shift;
-	const struct dce110_transform_mask *xfm_mask;
+	const struct dce_transform_registers *regs;
+	const struct dce_transform_shift *xfm_shift;
+	const struct dce_transform_mask *xfm_mask;
 
 	const uint16_t *filter_v;
 	const uint16_t *filter_h;
@@ -272,20 +295,17 @@ struct dce110_transform {
 	bool prescaler_on;
 };
 
-bool dce110_transform_construct(struct dce110_transform *xfm110,
+bool dce_transform_construct(struct dce_transform *xfm110,
 	struct dc_context *ctx,
 	uint32_t inst,
-	const struct dce110_transform_registers *regs,
-	const struct dce110_transform_shift *xfm_shift,
-	const struct dce110_transform_mask *xfm_mask);
+	const struct dce_transform_registers *regs,
+	const struct dce_transform_shift *xfm_shift,
+	const struct dce_transform_mask *xfm_mask);
 
-void dce110_transform_set_scaler(
-	struct transform *xfm,
-	const struct scaler_data *data);
-
-bool dce110_transform_get_optimal_number_of_taps(
+bool dce_transform_get_optimal_number_of_taps(
 	struct transform *xfm,
 	struct scaler_data *scl_data,
 	const struct scaling_taps *in_taps);
 
-#endif
+
+#endif /* _DCE_DCE_TRANSFORM_H_ */

@@ -26,6 +26,8 @@
 #ifndef __DAL_CONVERSION_H__
 #define __DAL_CONVERSION_H__
 
+#include "include/fixed31_32.h"
+
 uint16_t fixed_point_to_int_frac(
 	struct fixed31_32 arg,
 	uint8_t integer_bits,

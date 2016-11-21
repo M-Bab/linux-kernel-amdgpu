@@ -26,8 +26,8 @@
 #ifndef __DAL_TRANSFORM_H__
 #define __DAL_TRANSFORM_H__
 
-#include "include/scaler_types.h"
 #include "dc_hw_types.h"
+#include "fixed31_32.h"
 
 #define CSC_TEMPERATURE_MATRIX_SIZE 9
 
@@ -36,20 +36,11 @@ struct bit_depth_reduction_params;
 struct transform {
 	const struct transform_funcs *funcs;
 	struct dc_context *ctx;
-	uint32_t inst;
-	struct scaler_filter *filter;
+	int inst;
 
 	int lb_total_entries_num;
 	int lb_bits_per_entry;
 	unsigned int lb_memory_size;
-};
-
-enum lb_pixel_depth {
-	/* do not change the values because it is used as bit vector */
-	LB_PIXEL_DEPTH_18BPP = 1,
-	LB_PIXEL_DEPTH_24BPP = 2,
-	LB_PIXEL_DEPTH_30BPP = 4,
-	LB_PIXEL_DEPTH_36BPP = 8
 };
 
 /* Colorimetry */
@@ -114,12 +105,19 @@ struct xfm_grph_csc_adjustment {
 	enum graphics_gamut_adjust_type gamut_adjust_type;
 };
 
-/*overscan or window*/
+enum lb_pixel_depth {
+	/* do not change the values because it is used as bit vector */
+	LB_PIXEL_DEPTH_18BPP = 1,
+	LB_PIXEL_DEPTH_24BPP = 2,
+	LB_PIXEL_DEPTH_30BPP = 4,
+	LB_PIXEL_DEPTH_36BPP = 8
+};
+
 struct overscan_info {
-	uint32_t left;
-	uint32_t right;
-	uint32_t top;
-	uint32_t bottom;
+	int left;
+	int right;
+	int top;
+	int bottom;
 };
 
 struct scaling_ratios {
@@ -130,21 +128,21 @@ struct scaling_ratios {
 };
 
 struct sharpness_adj {
-	uint32_t horz;
-	uint32_t vert;
+	int horz;
+	int vert;
 };
 
 struct line_buffer_params {
 	bool alpha_en;
 	bool pixel_expan_mode;
 	bool interleave_en;
-	uint32_t dynamic_pixel_depth;
+	int dynamic_pixel_depth;
 	enum lb_pixel_depth depth;
 };
 
 struct scaler_data {
-	uint32_t h_active;
-	uint32_t v_active;
+	int h_active;
+	int v_active;
 	struct scaling_taps taps;
 	struct rect viewport;
 	struct rect recout;

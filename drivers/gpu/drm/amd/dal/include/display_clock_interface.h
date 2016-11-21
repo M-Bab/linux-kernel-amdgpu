@@ -29,7 +29,6 @@
 #include "hw_sequencer_types.h"
 #include "grph_object_defs.h"
 #include "signal_types.h"
-#include "scaler_types.h"
 
 /* Timing related information*/
 struct dc_timing_params {

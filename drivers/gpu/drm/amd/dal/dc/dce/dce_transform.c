@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-15 Advanced Micro Devices, Inc.
+ * Copyright 2012-16 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,33 +23,24 @@
  *
  */
 
-#include "dm_services.h"
-
-
-#include "dc_types.h"
-#include "core_types.h"
-
-#include "include/grph_object_id.h"
-#include "include/fixed31_32.h"
-#include "include/logger_interface.h"
+#include "dce_transform.h"
+#include "reg_helper.h"
+#include "opp.h"
 #include "basics/conversion.h"
 
-#include "dce110_transform.h"
-
-#include "reg_helper.h"
-
 #define REG(reg) \
-	(xfm110->regs->reg)
+	(xfm_dce->regs->reg)
 
 #undef FN
 #define FN(reg_name, field_name) \
-	xfm110->xfm_shift->field_name, xfm110->xfm_mask->field_name
+	xfm_dce->xfm_shift->field_name, xfm_dce->xfm_mask->field_name
 
 #define CTX \
-	xfm110->base.ctx
+	xfm_dce->base.ctx
 
 #define IDENTITY_RATIO(ratio) (dal_fixed31_32_u2d19(ratio) == (1 << 19))
 #define GAMUT_MATRIX_SIZE 12
+#define SCL_PHASES 16
 
 enum dcp_out_trunc_round_mode {
 	DCP_OUT_TRUNC_ROUND_MODE_TRUNCATE,
@@ -88,6 +79,278 @@ enum dcp_spatial_dither_depth {
 	DCP_SPATIAL_DITHER_DEPTH_24BPP
 };
 
+static bool setup_scaling_configuration(
+	struct dce_transform *xfm_dce,
+	const struct scaler_data *data)
+{
+	struct dc_context *ctx = xfm_dce->base.ctx;
+
+	if (data->taps.h_taps + data->taps.v_taps <= 2) {
+		/* Set bypass */
+		REG_UPDATE_2(SCL_MODE, SCL_MODE, 0, SCL_PSCL_EN, 0);
+		return false;
+	}
+
+	REG_SET_2(SCL_TAP_CONTROL, 0,
+			SCL_H_NUM_OF_TAPS, data->taps.h_taps - 1,
+			SCL_V_NUM_OF_TAPS, data->taps.v_taps - 1);
+
+	if (data->format <= PIXEL_FORMAT_GRPH_END)
+		REG_UPDATE_2(SCL_MODE, SCL_MODE, 1, SCL_PSCL_EN, 1);
+	else
+		REG_UPDATE_2(SCL_MODE, SCL_MODE, 2, SCL_PSCL_EN, 1);
+
+	/* 1 - Replace out of bound pixels with edge */
+	REG_SET(SCL_CONTROL, 0, SCL_BOUNDARY_MODE, 1);
+
+	return true;
+}
+
+static void program_overscan(
+		struct dce_transform *xfm_dce,
+		const struct scaler_data *data)
+{
+	int overscan_right = data->h_active
+			- data->recout.x - data->recout.width;
+	int overscan_bottom = data->v_active
+			- data->recout.y - data->recout.height;
+
+	if (overscan_right < 0) {
+		BREAK_TO_DEBUGGER();
+		overscan_right = 0;
+	}
+	if (overscan_bottom < 0) {
+		BREAK_TO_DEBUGGER();
+		overscan_bottom = 0;
+	}
+
+	REG_SET_2(EXT_OVERSCAN_LEFT_RIGHT, 0,
+			EXT_OVERSCAN_LEFT, data->recout.x,
+			EXT_OVERSCAN_RIGHT, overscan_right);
+	REG_SET_2(EXT_OVERSCAN_TOP_BOTTOM, 0,
+			EXT_OVERSCAN_TOP, data->recout.y,
+			EXT_OVERSCAN_BOTTOM, overscan_bottom);
+}
+
+static void program_multi_taps_filter(
+	struct dce_transform *xfm_dce,
+	int taps,
+	const uint16_t *coeffs,
+	enum ram_filter_type filter_type)
+{
+	int phase, pair;
+	int array_idx = 0;
+	int taps_pairs = (taps + 1) / 2;
+	int phases_to_program = SCL_PHASES / 2 + 1;
+
+	uint32_t power_ctl = 0;
+
+	if (!coeffs)
+		return;
+
+	/*We need to disable power gating on coeff memory to do programming*/
+	if (REG(DCFE_MEM_PWR_CTRL)) {
+		power_ctl = REG_READ(DCFE_MEM_PWR_CTRL);
+		REG_SET(DCFE_MEM_PWR_CTRL, power_ctl, SCL_COEFF_MEM_PWR_DIS, 1);
+
+		REG_WAIT(DCFE_MEM_PWR_STATUS, SCL_COEFF_MEM_PWR_STATE, 0, 1, 10);
+	}
+	for (phase = 0; phase < phases_to_program; phase++) {
+		/*we always program N/2 + 1 phases, total phases N, but N/2-1 are just mirror
+		phase 0 is unique and phase N/2 is unique if N is even*/
+		for (pair = 0; pair < taps_pairs; pair++) {
+			uint16_t odd_coeff = 0;
+			uint16_t even_coeff = coeffs[array_idx];
+
+			REG_SET_3(SCL_COEF_RAM_SELECT, 0,
+					SCL_C_RAM_FILTER_TYPE, filter_type,
+					SCL_C_RAM_PHASE, phase,
+					SCL_C_RAM_TAP_PAIR_IDX, pair);
+
+			if (taps % 2 && pair == taps_pairs - 1)
+				array_idx++;
+			else {
+				odd_coeff = coeffs[array_idx + 1];
+				array_idx += 2;
+			}
+
+			REG_SET_4(SCL_COEF_RAM_TAP_DATA, 0,
+					SCL_C_RAM_EVEN_TAP_COEF_EN, 1,
+					SCL_C_RAM_EVEN_TAP_COEF, even_coeff,
+					SCL_C_RAM_ODD_TAP_COEF_EN, 1,
+					SCL_C_RAM_ODD_TAP_COEF, odd_coeff);
+		}
+	}
+
+	/*We need to restore power gating on coeff memory to initial state*/
+	if (REG(DCFE_MEM_PWR_CTRL))
+		REG_WRITE(DCFE_MEM_PWR_CTRL, power_ctl);
+}
+
+static void program_viewport(
+	struct dce_transform *xfm_dce,
+	const struct rect *view_port)
+{
+	REG_SET_2(VIEWPORT_START, 0,
+			VIEWPORT_X_START, view_port->x,
+			VIEWPORT_Y_START, view_port->y);
+
+	REG_SET_2(VIEWPORT_SIZE, 0,
+			VIEWPORT_HEIGHT, view_port->height,
+			VIEWPORT_WIDTH, view_port->width);
+
+	/* TODO: add stereo support */
+}
+
+static void calculate_inits(
+	struct dce_transform *xfm_dce,
+	const struct scaler_data *data,
+	struct scl_ratios_inits *inits)
+{
+	struct fixed31_32 h_init;
+	struct fixed31_32 v_init;
+
+	inits->h_int_scale_ratio =
+		dal_fixed31_32_u2d19(data->ratios.horz) << 5;
+	inits->v_int_scale_ratio =
+		dal_fixed31_32_u2d19(data->ratios.vert) << 5;
+
+	h_init =
+		dal_fixed31_32_div_int(
+			dal_fixed31_32_add(
+				data->ratios.horz,
+				dal_fixed31_32_from_int(data->taps.h_taps + 1)),
+				2);
+	inits->h_init.integer = dal_fixed31_32_floor(h_init);
+	inits->h_init.fraction = dal_fixed31_32_u0d19(h_init) << 5;
+
+	v_init =
+		dal_fixed31_32_div_int(
+			dal_fixed31_32_add(
+				data->ratios.vert,
+				dal_fixed31_32_from_int(data->taps.v_taps + 1)),
+				2);
+	inits->v_init.integer = dal_fixed31_32_floor(v_init);
+	inits->v_init.fraction = dal_fixed31_32_u0d19(v_init) << 5;
+}
+
+static void program_scl_ratios_inits(
+	struct dce_transform *xfm_dce,
+	struct scl_ratios_inits *inits)
+{
+
+	REG_SET(SCL_HORZ_FILTER_SCALE_RATIO, 0,
+			SCL_H_SCALE_RATIO, inits->h_int_scale_ratio);
+
+	REG_SET(SCL_VERT_FILTER_SCALE_RATIO, 0,
+			SCL_V_SCALE_RATIO, inits->v_int_scale_ratio);
+
+	REG_SET_2(SCL_HORZ_FILTER_INIT, 0,
+			SCL_H_INIT_INT, inits->h_init.integer,
+			SCL_H_INIT_FRAC, inits->h_init.fraction);
+
+	REG_SET_2(SCL_VERT_FILTER_INIT, 0,
+			SCL_V_INIT_INT, inits->v_init.integer,
+			SCL_V_INIT_FRAC, inits->v_init.fraction);
+
+	REG_WRITE(SCL_AUTOMATIC_MODE_CONTROL, 0);
+}
+
+static const uint16_t *get_filter_coeffs_16p(int taps, struct fixed31_32 ratio)
+{
+	if (taps == 4)
+		return get_filter_4tap_16p(ratio);
+	else if (taps == 3)
+		return get_filter_3tap_16p(ratio);
+	else if (taps == 2)
+		return filter_2tap_16p;
+	else if (taps == 1)
+		return NULL;
+	else {
+		/* should never happen, bug */
+		BREAK_TO_DEBUGGER();
+		return NULL;
+	}
+}
+
+static void dce_transform_set_scaler(
+	struct transform *xfm,
+	const struct scaler_data *data)
+{
+	struct dce_transform *xfm_dce = TO_DCE_TRANSFORM(xfm);
+	bool is_scaling_required;
+	bool filter_updated = false;
+	const uint16_t *coeffs_v, *coeffs_h;
+
+	/*Use all three pieces of memory always*/
+	REG_SET_2(LB_MEMORY_CTRL, 0,
+			LB_MEMORY_CONFIG, 0,
+			LB_MEMORY_SIZE, xfm_dce->base.lb_memory_size);
+
+	/* 1. Program overscan */
+	program_overscan(xfm_dce, data);
+
+	/* 2. Program taps and configuration */
+	is_scaling_required = setup_scaling_configuration(xfm_dce, data);
+
+	if (is_scaling_required) {
+		/* 3. Calculate and program ratio, filter initialization */
+		struct scl_ratios_inits inits = { 0 };
+
+		calculate_inits(xfm_dce, data, &inits);
+
+		program_scl_ratios_inits(xfm_dce, &inits);
+
+		coeffs_v = get_filter_coeffs_16p(data->taps.v_taps, data->ratios.vert);
+		coeffs_h = get_filter_coeffs_16p(data->taps.h_taps, data->ratios.horz);
+
+		if (coeffs_v != xfm_dce->filter_v || coeffs_h != xfm_dce->filter_h) {
+			/* 4. Program vertical filters */
+			if (xfm_dce->filter_v == NULL)
+				REG_SET(SCL_VERT_FILTER_CONTROL, 0,
+						SCL_V_2TAP_HARDCODE_COEF_EN, 0);
+			program_multi_taps_filter(
+					xfm_dce,
+					data->taps.v_taps,
+					coeffs_v,
+					FILTER_TYPE_RGB_Y_VERTICAL);
+			program_multi_taps_filter(
+					xfm_dce,
+					data->taps.v_taps,
+					coeffs_v,
+					FILTER_TYPE_ALPHA_VERTICAL);
+
+			/* 5. Program horizontal filters */
+			if (xfm_dce->filter_h == NULL)
+				REG_SET(SCL_HORZ_FILTER_CONTROL, 0,
+						SCL_H_2TAP_HARDCODE_COEF_EN, 0);
+			program_multi_taps_filter(
+					xfm_dce,
+					data->taps.h_taps,
+					coeffs_h,
+					FILTER_TYPE_RGB_Y_HORIZONTAL);
+			program_multi_taps_filter(
+					xfm_dce,
+					data->taps.h_taps,
+					coeffs_h,
+					FILTER_TYPE_ALPHA_HORIZONTAL);
+
+			xfm_dce->filter_v = coeffs_v;
+			xfm_dce->filter_h = coeffs_h;
+			filter_updated = true;
+		}
+	}
+
+	/* 6. Program the viewport */
+	program_viewport(xfm_dce, &data->viewport);
+
+	/* 7. Set bit to flip to new coefficient memory */
+	if (filter_updated)
+		REG_UPDATE(SCL_UPDATE, SCL_COEF_UPDATE_COMPLETE, 1);
+
+	REG_UPDATE(LB_DATA_FORMAT, ALPHA_EN, data->lb_params.alpha_en);
+}
+
 /*****************************************************************************
  * set_clamp
  *
@@ -98,7 +361,7 @@ enum dcp_spatial_dither_depth {
  *
  *******************************************************************************/
 static void set_clamp(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	enum dc_color_depth depth)
 {
 	int clamp_max = 0;
@@ -175,7 +438,7 @@ static void set_clamp(
 
  ******************************************************************************/
 static void set_round(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	enum dcp_out_trunc_round_mode mode,
 	enum dcp_out_trunc_round_depth depth)
 {
@@ -243,7 +506,7 @@ static void set_round(
  ******************************************************************************/
 
 static void set_dither(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	bool dither_enable,
 	enum dcp_spatial_dither_mode dither_mode,
 	enum dcp_spatial_dither_depth dither_depth,
@@ -295,17 +558,17 @@ static void set_dither(
 }
 
 /*****************************************************************************
- * dce110_transform_bit_depth_reduction_program
+ * dce_transform_bit_depth_reduction_program
  *
  * @brief
  *     Programs the DCP bit depth reduction registers (Clamp, Round/Truncate,
- *      Dither) for dce110
+ *      Dither) for dce
  *
  * @param depth : bit depth to set the clamp to (should match denorm)
  *
  ******************************************************************************/
 static void program_bit_depth_reduction(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	enum dc_color_depth depth,
 	const struct bit_depth_reduction_params *bit_depth_params)
 {
@@ -332,37 +595,37 @@ static void program_bit_depth_reduction(
 
 	spatial_dither_mode = DCP_SPATIAL_DITHER_MODE_A_AA_A;
 
-	set_clamp(xfm110, depth);
+	set_clamp(xfm_dce, depth);
 
 	switch (depth_reduction_mode) {
 	case DCP_BIT_DEPTH_REDUCTION_MODE_DITHER:
 		/*  Spatial Dither: Set round/truncate to bypass (12bit),
 		 *  enable Dither (30bpp) */
-		set_round(xfm110,
+		set_round(xfm_dce,
 			DCP_OUT_TRUNC_ROUND_MODE_TRUNCATE,
 			DCP_OUT_TRUNC_ROUND_DEPTH_12BIT);
 
-		set_dither(xfm110, true, spatial_dither_mode,
+		set_dither(xfm_dce, true, spatial_dither_mode,
 			DCP_SPATIAL_DITHER_DEPTH_30BPP, frame_random_enable,
 			rgb_random_enable, highpass_random_enable);
 		break;
 	case DCP_BIT_DEPTH_REDUCTION_MODE_ROUND:
 		/*  Round: Enable round (10bit), disable Dither */
-		set_round(xfm110,
+		set_round(xfm_dce,
 			DCP_OUT_TRUNC_ROUND_MODE_ROUND,
 			DCP_OUT_TRUNC_ROUND_DEPTH_10BIT);
 
-		set_dither(xfm110, false, spatial_dither_mode,
+		set_dither(xfm_dce, false, spatial_dither_mode,
 			DCP_SPATIAL_DITHER_DEPTH_30BPP, frame_random_enable,
 			rgb_random_enable, highpass_random_enable);
 		break;
 	case DCP_BIT_DEPTH_REDUCTION_MODE_TRUNCATE: /*  Truncate */
 		/*  Truncate: Enable truncate (10bit), disable Dither */
-		set_round(xfm110,
+		set_round(xfm_dce,
 			DCP_OUT_TRUNC_ROUND_MODE_TRUNCATE,
 			DCP_OUT_TRUNC_ROUND_DEPTH_10BIT);
 
-		set_dither(xfm110, false, spatial_dither_mode,
+		set_dither(xfm_dce, false, spatial_dither_mode,
 			DCP_SPATIAL_DITHER_DEPTH_30BPP, frame_random_enable,
 			rgb_random_enable, highpass_random_enable);
 		break;
@@ -370,11 +633,11 @@ static void program_bit_depth_reduction(
 	case DCP_BIT_DEPTH_REDUCTION_MODE_DISABLED: /*  Disabled */
 		/*  Truncate: Set round/truncate to bypass (12bit),
 		 * disable Dither */
-		set_round(xfm110,
+		set_round(xfm_dce,
 			DCP_OUT_TRUNC_ROUND_MODE_TRUNCATE,
 			DCP_OUT_TRUNC_ROUND_DEPTH_12BIT);
 
-		set_dither(xfm110, false, spatial_dither_mode,
+		set_dither(xfm_dce, false, spatial_dither_mode,
 			DCP_SPATIAL_DITHER_DEPTH_30BPP, frame_random_enable,
 			rgb_random_enable, highpass_random_enable);
 		break;
@@ -385,7 +648,7 @@ static void program_bit_depth_reduction(
 	}
 }
 
-static int dce110_transform_get_max_num_of_supported_lines(
+static int dce_transform_get_max_num_of_supported_lines(
 	struct transform *xfm,
 	enum lb_pixel_depth depth,
 	int pixel_width)
@@ -433,7 +696,7 @@ static int dce110_transform_get_max_num_of_supported_lines(
 }
 
 static void set_denormalization(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	enum dc_color_depth depth)
 {
 	int denorm_mode = 0;
@@ -466,12 +729,12 @@ static void set_denormalization(
 	REG_SET(DENORM_CONTROL, 0, DENORM_MODE, denorm_mode);
 }
 
-static void dce110_transform_set_pixel_storage_depth(
+static void dce_transform_set_pixel_storage_depth(
 	struct transform *xfm,
 	enum lb_pixel_depth depth,
 	const struct bit_depth_reduction_params *bit_depth_params)
 {
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	struct dce_transform *xfm_dce = TO_DCE_TRANSFORM(xfm);
 	int pixel_depth, expan_mode;
 	enum dc_color_depth color_depth;
 
@@ -504,14 +767,14 @@ static void dce110_transform_set_pixel_storage_depth(
 		break;
 	}
 
-	set_denormalization(xfm110, color_depth);
-	program_bit_depth_reduction(xfm110, color_depth, bit_depth_params);
+	set_denormalization(xfm_dce, color_depth);
+	program_bit_depth_reduction(xfm_dce, color_depth, bit_depth_params);
 
 	REG_UPDATE_2(LB_DATA_FORMAT,
 			PIXEL_DEPTH, pixel_depth,
 			PIXEL_EXPAN_MODE, expan_mode);
 
-	if (!(xfm110->lb_pixel_depth_supported & depth)) {
+	if (!(xfm_dce->lb_pixel_depth_supported & depth)) {
 		/*we should use unsupported capabilities
 		 *  unless it is required by w/a*/
 		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
@@ -521,7 +784,7 @@ static void dce110_transform_set_pixel_storage_depth(
 }
 
 static void program_gamut_remap(
-	struct dce110_transform *xfm110,
+	struct dce_transform *xfm_dce,
 	const uint16_t *reg_val)
 {
 	if (reg_val) {
@@ -565,15 +828,15 @@ static void program_gamut_remap(
  *
  *****************************************************************************
  */
-void dce110_transform_set_gamut_remap(
+static void dce_transform_set_gamut_remap(
 	struct transform *xfm,
 	const struct xfm_grph_csc_adjustment *adjust)
 {
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	struct dce_transform *xfm_dce = TO_DCE_TRANSFORM(xfm);
 
 	if (adjust->gamut_adjust_type != GRAPHICS_GAMUT_ADJUST_TYPE_SW)
 		/* Bypass if type is bypass or hw */
-		program_gamut_remap(xfm110, NULL);
+		program_gamut_remap(xfm_dce, NULL);
 	else {
 		struct fixed31_32 arr_matrix[GAMUT_MATRIX_SIZE];
 		uint16_t arr_reg_val[GAMUT_MATRIX_SIZE];
@@ -596,7 +859,7 @@ void dce110_transform_set_gamut_remap(
 		convert_float_matrix(
 			arr_reg_val, arr_matrix, GAMUT_MATRIX_SIZE);
 
-		program_gamut_remap(xfm110, arr_reg_val);
+		program_gamut_remap(xfm_dce, arr_reg_val);
 	}
 }
 
@@ -622,20 +885,20 @@ static uint32_t decide_taps(struct fixed31_32 ratio, uint32_t in_taps, bool chro
 }
 
 
-bool dce110_transform_get_optimal_number_of_taps(
+bool dce_transform_get_optimal_number_of_taps(
 	struct transform *xfm,
 	struct scaler_data *scl_data,
 	const struct scaling_taps *in_taps)
 {
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	struct dce_transform *xfm_dce = TO_DCE_TRANSFORM(xfm);
 	int pixel_width = scl_data->viewport.width;
 	int max_num_of_lines;
 
-	if (xfm110->prescaler_on &&
+	if (xfm_dce->prescaler_on &&
 			(scl_data->viewport.width > scl_data->recout.width))
 		pixel_width = scl_data->recout.width;
 
-	max_num_of_lines = dce110_transform_get_max_num_of_supported_lines(
+	max_num_of_lines = dce_transform_get_max_num_of_supported_lines(
 		xfm,
 		scl_data->lb_params.depth,
 		pixel_width);
@@ -684,58 +947,58 @@ bool dce110_transform_get_optimal_number_of_taps(
 	return true;
 }
 
-static void dce110_transform_reset(struct transform *xfm)
+static void dce_transform_reset(struct transform *xfm)
 {
-	struct dce110_transform *xfm110 = TO_DCE110_TRANSFORM(xfm);
+	struct dce_transform *xfm_dce = TO_DCE_TRANSFORM(xfm);
 
-	xfm110->filter_h = NULL;
-	xfm110->filter_v = NULL;
+	xfm_dce->filter_h = NULL;
+	xfm_dce->filter_v = NULL;
 }
 
 
-static const struct transform_funcs dce110_transform_funcs = {
-	.transform_reset = dce110_transform_reset,
+static const struct transform_funcs dce_transform_funcs = {
+	.transform_reset = dce_transform_reset,
 	.transform_set_scaler =
-		dce110_transform_set_scaler,
+		dce_transform_set_scaler,
 	.transform_set_gamut_remap =
-		dce110_transform_set_gamut_remap,
+		dce_transform_set_gamut_remap,
 	.transform_set_pixel_storage_depth =
-		dce110_transform_set_pixel_storage_depth,
+		dce_transform_set_pixel_storage_depth,
 	.transform_get_optimal_number_of_taps =
-		dce110_transform_get_optimal_number_of_taps
+		dce_transform_get_optimal_number_of_taps
 };
 
 /*****************************************/
 /* Constructor, Destructor               */
 /*****************************************/
 
-bool dce110_transform_construct(
-	struct dce110_transform *xfm110,
+bool dce_transform_construct(
+	struct dce_transform *xfm_dce,
 	struct dc_context *ctx,
 	uint32_t inst,
-	const struct dce110_transform_registers *regs,
-	const struct dce110_transform_shift *xfm_shift,
-	const struct dce110_transform_mask *xfm_mask)
+	const struct dce_transform_registers *regs,
+	const struct dce_transform_shift *xfm_shift,
+	const struct dce_transform_mask *xfm_mask)
 {
-	xfm110->base.ctx = ctx;
+	xfm_dce->base.ctx = ctx;
 
-	xfm110->base.inst = inst;
-	xfm110->base.funcs = &dce110_transform_funcs;
+	xfm_dce->base.inst = inst;
+	xfm_dce->base.funcs = &dce_transform_funcs;
 
-	xfm110->regs = regs;
-	xfm110->xfm_shift = xfm_shift;
-	xfm110->xfm_mask = xfm_mask;
+	xfm_dce->regs = regs;
+	xfm_dce->xfm_shift = xfm_shift;
+	xfm_dce->xfm_mask = xfm_mask;
 
-	xfm110->prescaler_on = true;
-	xfm110->lb_pixel_depth_supported =
+	xfm_dce->prescaler_on = true;
+	xfm_dce->lb_pixel_depth_supported =
 			LB_PIXEL_DEPTH_18BPP |
 			LB_PIXEL_DEPTH_24BPP |
 			LB_PIXEL_DEPTH_30BPP;
 
-	xfm110->base.lb_bits_per_entry = LB_BITS_PER_ENTRY;
-	xfm110->base.lb_total_entries_num = LB_TOTAL_NUMBER_OF_ENTRIES;
+	xfm_dce->base.lb_bits_per_entry = LB_BITS_PER_ENTRY;
+	xfm_dce->base.lb_total_entries_num = LB_TOTAL_NUMBER_OF_ENTRIES;
 
-	xfm110->base.lb_memory_size = 0x6B0; /*1712*/
+	xfm_dce->base.lb_memory_size = 0x6B0; /*1712*/
 
 	return true;
 }

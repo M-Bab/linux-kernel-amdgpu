@@ -26,6 +26,8 @@
 #ifndef DC_HW_TYPES_H
 #define DC_HW_TYPES_H
 
+#include "os_types.h"
+
 /******************************************************************************
  * Data types for Virtual HW Layer of DAL3.
  * (see DAL3 design documents for HW Layer definition)
