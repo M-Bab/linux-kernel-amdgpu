@@ -23,6 +23,8 @@
  *
  */
 
+#include "dce/dce_8_0_d.h"
+#include "dce/dce_8_0_sh_mask.h"
 
 #include "dm_services.h"
 
@@ -49,9 +51,6 @@
 #include "dce80/dce80_hw_sequencer.h"
 
 #include "reg_helper.h"
-
-#include "dce/dce_8_0_d.h"
-#include "dce/dce_8_0_sh_mask.h"
 
 /* TODO remove this include */
 
