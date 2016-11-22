@@ -31,8 +31,18 @@
 #include "include/signal_types.h"
 #include "include/grph_object_ctrl_defs.h"
 #include "include/gpio_types.h"
-#include "include/adapter_service_types.h" /* for as_signal_type */
 #include "include/link_service_types.h"
+
+/* TODO: include signal_types.h and remove this enum */
+enum as_signal_type {
+	AS_SIGNAL_TYPE_NONE = 0L, /* no signal */
+	AS_SIGNAL_TYPE_DVI,
+	AS_SIGNAL_TYPE_HDMI,
+	AS_SIGNAL_TYPE_LVDS,
+	AS_SIGNAL_TYPE_DISPLAY_PORT,
+	AS_SIGNAL_TYPE_GPU_PLL,
+	AS_SIGNAL_TYPE_UNKNOWN
+};
 
 enum bp_result {
 	BP_RESULT_OK = 0, /* There was no error */

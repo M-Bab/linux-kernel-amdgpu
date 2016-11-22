@@ -26,8 +26,6 @@
 #ifndef __DAL_IRQ_SERVICE_INTERFACE_H__
 #define __DAL_IRQ_SERVICE_INTERFACE_H__
 
-#include "include/adapter_service_types.h"
-
 struct irq_service_init_data {
 	struct dc_context *ctx;
 };

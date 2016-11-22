@@ -27,7 +27,6 @@
 #include "dm_helpers.h"
 #include "dc.h"
 #include "core_dc.h"
-#include "adapter_service_interface.h"
 #include "grph_object_id.h"
 #include "gpio_service_interface.h"
 #include "core_status.h"

@@ -31,7 +31,6 @@
 #include "gmc/gmc_8_1_d.h"
 
 #include "include/logger_interface.h"
-#include "include/adapter_service_interface.h"
 
 #include "dce112_compressor.h"
 

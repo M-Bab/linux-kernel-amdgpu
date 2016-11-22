@@ -30,7 +30,6 @@
 
 #include "resource.h"
 #include "include/irq_service_interface.h"
-#include "include/adapter_service_interface.h"
 #include "dce110/dce110_resource.h"
 #include "dce110/dce110_timing_generator.h"
 #include "dce112/dce112_mem_input.h"

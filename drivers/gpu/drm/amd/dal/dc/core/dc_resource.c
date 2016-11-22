@@ -32,7 +32,6 @@
 #include "timing_generator.h"
 #include "transform.h"
 #include "set_mode_types.h"
-#include "adapter_service_interface.h"
 
 #include "virtual/virtual_stream_encoder.h"
 

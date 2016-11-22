@@ -25,7 +25,6 @@
 
 #include "dm_services.h"
 #include "dm_helpers.h"
-#include "include/adapter_service_interface.h"
 #include "gpio_service_interface.h"
 #include "include/ddc_service_types.h"
 #include "include/grph_object_id.h"

@@ -34,7 +34,6 @@
 #include "dc.h"
 
 #include "include/grph_object_id.h"
-#include "include/adapter_service_interface.h"
 #include "include/logger_interface.h"
 #include "dce110_timing_generator.h"
 

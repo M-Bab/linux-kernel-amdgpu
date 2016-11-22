@@ -28,7 +28,6 @@
 #include "dce/dce_11_0_d.h"
 #include "dce/dce_11_0_sh_mask.h"
 
-#include "include/adapter_service_interface.h"
 #include "include/bios_parser_interface.h"
 #include "include/fixed32_32.h"
 #include "include/logger_interface.h"
