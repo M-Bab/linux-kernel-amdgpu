@@ -39,7 +39,6 @@ static void calculate_bandwidth(
 
 {
 	const int32_t pixels_per_chunk = 512;
-	const int32_t max_chunks_non_fbc_mode = 16;
 	const int32_t high = 2;
 	const int32_t mid = 1;
 	const int32_t low = 0;
@@ -51,7 +50,6 @@ static void calculate_bandwidth(
 	const uint32_t s_mid5 = 5;
 	const uint32_t s_mid6 = 6;
 	const uint32_t s_high = 7;
-	const uint32_t vertical_front_porch = 450; /*us*/
 	const uint32_t bus_efficiency = 1;
 	const uint32_t dmif_chunk_buff_margin = 1;
 
