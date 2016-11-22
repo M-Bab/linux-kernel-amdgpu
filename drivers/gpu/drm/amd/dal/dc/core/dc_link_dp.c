@@ -2309,6 +2309,7 @@ bool dc_link_dp_set_test_pattern(
 	unsigned char link_qual_pattern[LANE_COUNT_DP_MAX] = {0};
 	union dpcd_training_pattern training_pattern;
 	union test_response test_response;
+	enum dpcd_phy_test_patterns pattern;
 
 	memset(&training_pattern, 0, sizeof(training_pattern));
 	memset(&test_response, 0, sizeof(test_response));
@@ -2375,8 +2376,6 @@ bool dc_link_dp_set_test_pattern(
 				dpcd_set_link_settings(core_link,
 						p_link_settings);
 		}
-
-		enum dpcd_phy_test_patterns pattern;
 
 		switch (test_pattern) {
 		case DP_TEST_PATTERN_VIDEO_MODE:
