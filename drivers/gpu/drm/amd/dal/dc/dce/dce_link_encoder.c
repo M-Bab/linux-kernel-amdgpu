@@ -964,8 +964,6 @@ bool dce110_link_encoder_construct(
 	const struct dce110_link_enc_aux_registers *aux_regs,
 	const struct dce110_link_enc_hpd_registers *hpd_regs)
 {
-	struct graphics_object_encoder_cap_info enc_cap_info = {0};
-
 	enc110->base.funcs = &dce110_lnk_enc_funcs;
 	enc110->base.ctx = init_data->ctx;
 	enc110->base.id = init_data->encoder;
