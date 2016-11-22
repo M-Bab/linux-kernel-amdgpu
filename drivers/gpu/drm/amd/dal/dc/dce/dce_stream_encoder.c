@@ -223,14 +223,6 @@ static void dce110_stream_encoder_dp_set_stream_attribute(
 	struct dc_crtc_timing *crtc_timing,
 	enum dc_color_space output_color_space)
 {
-	uint32_t h_active_start;
-	uint32_t v_active_start;
-	uint32_t misc0 = 0;
-	uint32_t misc1;
-	uint32_t h_blank;
-	uint32_t h_back_porch;
-	uint8_t synchronous_clock = 0; /* asynchronous mode */
-	uint8_t colorimetry_bpc;
 
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
 
@@ -275,28 +267,23 @@ static void dce110_stream_encoder_dp_set_stream_attribute(
 	case COLOR_DEPTH_666:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				0);
-		colorimetry_bpc = 0;
 		break;
 	case COLOR_DEPTH_888:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_8BPC);
-		colorimetry_bpc = 1;
 		break;
 	case COLOR_DEPTH_101010:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_10BPC);
 
-		colorimetry_bpc = 2;
 		break;
 	case COLOR_DEPTH_121212:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_12BPC);
-		colorimetry_bpc = 3;
 		break;
 	default:
 		REG_UPDATE(DP_PIXEL_FORMAT, DP_COMPONENT_DEPTH,
 				DP_COMPONENT_DEPTH_6BPC);
-		colorimetry_bpc = 0;
 		break;
 	}
 
@@ -438,8 +425,6 @@ static void dce110_stream_encoder_set_mst_bandwidth(
 	struct fixed31_32 avg_time_slots_per_mtp)
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
-	struct dc_context *ctx = enc110->base.ctx;
-	uint32_t retries = 0;
 	uint32_t x = dal_fixed31_32_floor(
 		avg_time_slots_per_mtp);
 	uint32_t y = dal_fixed31_32_ceil(
