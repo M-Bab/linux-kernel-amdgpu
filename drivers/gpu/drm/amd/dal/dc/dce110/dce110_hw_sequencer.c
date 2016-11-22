@@ -1284,32 +1284,22 @@ enum dc_status dce110_apply_ctx_to_hw(
 		if (pipe_ctx->top_pipe)
 			continue;
 
-		status = apply_single_controller_ctx_to_hw(
-				pipe_ctx,
-				context,
-				dc);
-
-		if (DC_OK != status)
-			return status;
-	}
-
-	/* Setup audio rate clock source */
-	/* Issue:
-	 * Audio lag happened on DP monitor when unplug a HDMI monitor
-	 *
-	 * Cause:
-	 * In case of DP and HDMI connected or HDMI only, DCCG_AUDIO_DTO_SEL
-	 * is set to either dto0 or dto1, audio should work fine.
-	 * In case of DP connected only, DCCG_AUDIO_DTO_SEL should be dto1,
-	 * set to dto0 will cause audio lag.
-	 *
-	 * Solution:
-	 * Not optimized audio wall dto setup. When mode set, iterate pipe_ctx,
-	 * find first available pipe with audio, setup audio wall DTO per topology
-	 * instead of per pipe.
-	 */
-	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		if (context->res_ctx.pipe_ctx[i].audio != NULL) {
+			/* Setup audio rate clock source */
+			/* Issue:
+			* Audio lag happened on DP monitor when unplug a HDMI monitor
+			*
+			* Cause:
+			* In case of DP and HDMI connected or HDMI only, DCCG_AUDIO_DTO_SEL
+			* is set to either dto0 or dto1, audio should work fine.
+			* In case of DP connected only, DCCG_AUDIO_DTO_SEL should be dto1,
+			* set to dto0 will cause audio lag.
+			*
+			* Solution:
+			* Not optimized audio wall dto setup. When mode set, iterate pipe_ctx,
+			* find first available pipe with audio, setup audio wall DTO per topology
+			* instead of per pipe.
+			*/
 			struct audio_output audio_output;
 			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
@@ -1342,6 +1332,14 @@ enum dc_status dce110_apply_ctx_to_hw(
 				programmed_audio_dto = true;
 			}
 		}
+
+		status = apply_single_controller_ctx_to_hw(
+				pipe_ctx,
+				context,
+				dc);
+
+		if (DC_OK != status)
+			return status;
 	}
 
 	dc->hwss.set_displaymarks(dc, context);
