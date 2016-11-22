@@ -1242,7 +1242,6 @@ static bool construct(
 	struct firmware_info info;
 	struct dc_bios *bp;
 	struct dm_pp_static_clock_info static_clk_info = {0};
-	struct resource_straps straps = {0};
 
 	ctx->dc_bios->regs = &bios_regs;
 
