@@ -449,7 +449,7 @@ static void destruct(struct core_dc *dc)
 	resource_validate_ctx_destruct(dc->current_context);
 
 	dm_free(dc->temp_flip_context);
-	dc->current_context = NULL;
+	dc->temp_flip_context = NULL;
 
 	destroy_links(dc);
 
