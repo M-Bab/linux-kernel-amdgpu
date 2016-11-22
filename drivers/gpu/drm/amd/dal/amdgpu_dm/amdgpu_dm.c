@@ -120,9 +120,7 @@ static int dm_wait_for_idle(void *handle)
 
 static bool dm_check_soft_reset(void *handle)
 {
-	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-
-	return amdgpu_display_is_display_hung(adev);
+	return false;
 }
 
 static int dm_soft_reset(void *handle)
@@ -1395,7 +1393,6 @@ static const struct amdgpu_display_funcs dm_dce_v8_0_display_funcs = {
 	.bandwidth_update = dm_bandwidth_update, /* called unconditionally */
 	.vblank_get_counter = dm_vblank_get_counter,/* called unconditionally */
 	.vblank_wait = NULL,
-	.is_display_hung = dce_v8_0_is_display_hung,
 	.backlight_set_level =
 		dm_set_backlight_level,/* called unconditionally */
 	.backlight_get_level =
@@ -1419,7 +1416,6 @@ static const struct amdgpu_display_funcs dm_dce_v10_0_display_funcs = {
 	.bandwidth_update = dm_bandwidth_update, /* called unconditionally */
 	.vblank_get_counter = dm_vblank_get_counter,/* called unconditionally */
 	.vblank_wait = NULL,
-	.is_display_hung = dce_v10_0_is_display_hung,
 	.backlight_set_level =
 		dm_set_backlight_level,/* called unconditionally */
 	.backlight_get_level =
@@ -1443,7 +1439,6 @@ static const struct amdgpu_display_funcs dm_dce_v11_0_display_funcs = {
 	.bandwidth_update = dm_bandwidth_update, /* called unconditionally */
 	.vblank_get_counter = dm_vblank_get_counter,/* called unconditionally */
 	.vblank_wait = NULL,
-	.is_display_hung = dce_v11_0_is_display_hung,
 	.backlight_set_level =
 		dm_set_backlight_level,/* called unconditionally */
 	.backlight_get_level =
