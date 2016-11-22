@@ -261,9 +261,11 @@ static bool set_backlight(struct dc *dc, unsigned int backlight_level,
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 	int i;
 
-	for (i = 0; i < core_dc->link_count; i++)
-		dc_link_set_backlight_level(&core_dc->links[i]->public,
-				backlight_level, frame_ramp, stream);
+	if (stream->sink->sink_signal == SIGNAL_TYPE_EDP) {
+		for (i = 0; i < core_dc->link_count; i++)
+			dc_link_set_backlight_level(&core_dc->links[i]->public,
+					backlight_level, frame_ramp, stream);
+	}
 
 	return true;
 
