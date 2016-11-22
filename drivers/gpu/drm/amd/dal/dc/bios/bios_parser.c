@@ -3661,12 +3661,6 @@ static void bios_parser_post_init(struct dc_bios *dcb)
 	process_ext_display_connection_info(bp);
 }
 
-static bool bios_parser_is_accelerated_mode(
-	struct dc_bios *dcb)
-{
-	return bios_is_accelerated_mode(dcb);
-}
-
 /**
  * bios_parser_set_scratch_critical_state
  *
