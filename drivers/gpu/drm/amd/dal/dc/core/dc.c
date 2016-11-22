@@ -455,8 +455,7 @@ static void destruct(struct core_dc *dc)
 
 	destroy_links(dc);
 
-	if (dc->res_pool)
-		dc->res_pool->funcs->destroy(&dc->res_pool);
+	dc_destroy_resource_pool(dc);
 
 	if (dc->ctx->gpio_service)
 		dal_gpio_service_destroy(&dc->ctx->gpio_service);
@@ -471,8 +470,9 @@ static void destruct(struct core_dc *dc)
 		dal_logger_destroy(&dc->ctx->logger);
 
 	dm_free(dc->current_context);
-	dm_free(dc->ctx);
+	dc->current_context = NULL;
 
+	dm_free(dc->ctx);
 	dc->ctx = NULL;
 }
 

@@ -98,6 +98,16 @@ struct resource_pool *dc_create_resource_pool(
 	return false;
 }
 
+void dc_destroy_resource_pool(struct core_dc *dc)
+{
+	if (dc) {
+		if (dc->res_pool)
+			dc->res_pool->funcs->destroy(&dc->res_pool);
+
+		if (dc->hwseq)
+			dm_free(dc->hwseq);
+	}
+}
 
 static void update_num_audio(
 	const struct resource_straps *straps,

@@ -76,8 +76,7 @@ struct resource_pool *dc_create_resource_pool(
 				enum dce_version dc_version,
 				struct hw_asic_id asic_id);
 
-void dc_destroy_resource_pool(struct resource_pool **pool,
-				enum dce_version dc_version);
+void dc_destroy_resource_pool(struct core_dc *dc);
 
 enum dc_status resource_map_pool_resources(
 		const struct core_dc *dc,
