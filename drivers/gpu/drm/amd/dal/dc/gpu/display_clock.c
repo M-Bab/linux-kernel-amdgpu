@@ -118,7 +118,7 @@ bool dal_display_clock_get_min_clocks_state(
 	enum clocks_state *clocks_state)
 {
 	if (!disp_clk->funcs->get_min_clocks_state)
-		false;
+		return false;
 
 	*clocks_state = disp_clk->funcs->get_min_clocks_state(disp_clk);
 	return true;
