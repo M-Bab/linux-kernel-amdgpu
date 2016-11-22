@@ -842,7 +842,6 @@ bool dal_display_clock_dce112_construct(
 	struct display_clock_dce112 *dc112,
 	struct dc_context *ctx)
 {
-	struct dm_pp_static_clock_info *static_clk_info = {0};
 	struct display_clock *dc_base = &dc112->disp_clk_base;
 
 	/*if (NULL == as)
