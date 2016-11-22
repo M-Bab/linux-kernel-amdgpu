@@ -1040,7 +1040,7 @@ static bool construct(
 
 	link->public.link_enc_hw_inst = link->link_enc->transmitter;
 
-	for (i = 0; ; i++) {
+	for (i = 0; i < 4; i++) {
 		if (BP_RESULT_OK !=
 				bp_funcs->get_device_tag(dc_ctx->dc_bios, link->link_id, i, &link->device_tag)) {
 			DC_ERROR("Failed to find device tag!\n");
