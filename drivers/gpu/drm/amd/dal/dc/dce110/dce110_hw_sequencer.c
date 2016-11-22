@@ -1161,7 +1161,6 @@ static enum dc_status apply_ctx_to_hw_fpga(
 {
 	enum dc_status status = DC_ERROR_UNEXPECTED;
 	int i;
-	struct dc_bios *dcb = dc->ctx->dc_bios;
 
 	for (i = 0; i < context->res_ctx.pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx_old =
@@ -1414,7 +1413,6 @@ static void set_plane_config(
 	struct resource_context *res_ctx)
 {
 	struct mem_input *mi = pipe_ctx->mi;
-	struct dc_context *ctx = pipe_ctx->stream->ctx;
 	struct core_surface *surface = pipe_ctx->surface;
 	struct xfm_grph_csc_adjustment adjust;
 	struct out_csc_color_matrix tbl_entry;
@@ -1750,7 +1748,6 @@ static void dce110_program_front_end_for_pipe(
 {
 	struct mem_input *mi = pipe_ctx->mi;
 	struct pipe_ctx *old_pipe = NULL;
-	struct dc_context *ctx = pipe_ctx->stream->ctx;
 	struct core_surface *surface = pipe_ctx->surface;
 	struct xfm_grph_csc_adjustment adjust;
 	struct out_csc_color_matrix tbl_entry;
