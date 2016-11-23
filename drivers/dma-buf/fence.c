@@ -368,6 +368,11 @@ fence_default_wait(struct fence *fence, bool intr, signed long timeout)
 		}
 	}
 
+	if (!timeout) {
+		ret = 0;
+		goto out;
+	}
+
 	cb.base.func = fence_default_wait_cb;
 	cb.task = current;
 	list_add(&cb.base.node, &fence->cb_list);
