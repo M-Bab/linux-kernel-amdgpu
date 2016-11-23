@@ -64,6 +64,7 @@ struct mod_freesync {
 };
 
 enum mod_freesync_state {
+	FREESYNC_STATE_NONE,
 	FREESYNC_STATE_FULLSCREEN,
 	FREESYNC_STATE_STATIC_SCREEN,
 	FREESYNC_STATE_VIDEO
@@ -93,6 +94,7 @@ struct mod_freesync_params {
 	enum mod_freesync_state state;
 	bool enable;
 	unsigned int update_duration_in_ns;
+	bool windowed_fullscreen;
 };
 
 /*

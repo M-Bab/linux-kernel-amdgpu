@@ -82,6 +82,7 @@ struct freesync_state {
 	bool video;
 
 	unsigned int nominal_refresh_rate_in_micro_hz;
+	bool windowed_fullscreen;
 
 	struct time_cache time;
 
@@ -710,6 +711,8 @@ void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 		case FREESYNC_STATE_FULLSCREEN:
 			state->fullscreen = freesync_params->enable;
 			freesync_program_required = true;
+			state->windowed_fullscreen =
+					freesync_params->windowed_fullscreen;
 			break;
 		case FREESYNC_STATE_STATIC_SCREEN:
 			/* Static screen ramp is only enabled for embedded
@@ -770,8 +773,10 @@ bool mod_freesync_get_state(struct mod_freesync *mod_freesync,
 	} else if (core_freesync->map[index].state.video) {
 		freesync_params->state = FREESYNC_STATE_VIDEO;
 		freesync_params->enable = true;
-	} else
+	} else {
+		freesync_params->state = FREESYNC_STATE_NONE;
 		freesync_params->enable = false;
+	}
 
 	freesync_params->update_duration_in_ns =
 		core_freesync->map[index].state.time.update_duration_in_ns;
