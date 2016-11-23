@@ -291,7 +291,9 @@ struct dce_transform {
 	const uint16_t *filter_h;
 	const uint16_t *filter_v_c;
 	const uint16_t *filter_h_c;
-	uint32_t lb_pixel_depth_supported;
+	int lb_pixel_depth_supported;
+	int lb_memory_size;
+	int lb_bits_per_entry;
 	bool prescaler_on;
 };
 

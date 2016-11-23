@@ -37,10 +37,6 @@ struct transform {
 	const struct transform_funcs *funcs;
 	struct dc_context *ctx;
 	int inst;
-
-	int lb_total_entries_num;
-	int lb_bits_per_entry;
-	unsigned int lb_memory_size;
 };
 
 /* Colorimetry */

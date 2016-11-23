@@ -285,7 +285,7 @@ static void dce_transform_set_scaler(
 	/*Use all three pieces of memory always*/
 	REG_SET_2(LB_MEMORY_CTRL, 0,
 			LB_MEMORY_CONFIG, 0,
-			LB_MEMORY_SIZE, xfm_dce->base.lb_memory_size);
+			LB_MEMORY_SIZE, xfm_dce->lb_memory_size);
 
 	/* 1. Program overscan */
 	program_overscan(xfm_dce, data);
@@ -649,7 +649,7 @@ static void program_bit_depth_reduction(
 }
 
 static int dce_transform_get_max_num_of_supported_lines(
-	struct transform *xfm,
+	struct dce_transform *xfm_dce,
 	enum lb_pixel_depth depth,
 	int pixel_width)
 {
@@ -663,23 +663,23 @@ static int dce_transform_get_max_num_of_supported_lines(
 	 * across multiple entries. */
 	switch (depth) {
 	case LB_PIXEL_DEPTH_18BPP:
-		pixels_per_entries = xfm->lb_bits_per_entry / 18;
+		pixels_per_entries = xfm_dce->lb_bits_per_entry / 18;
 		break;
 
 	case LB_PIXEL_DEPTH_24BPP:
-		pixels_per_entries = xfm->lb_bits_per_entry / 24;
+		pixels_per_entries = xfm_dce->lb_bits_per_entry / 24;
 		break;
 
 	case LB_PIXEL_DEPTH_30BPP:
-		pixels_per_entries = xfm->lb_bits_per_entry / 30;
+		pixels_per_entries = xfm_dce->lb_bits_per_entry / 30;
 		break;
 
 	case LB_PIXEL_DEPTH_36BPP:
-		pixels_per_entries = xfm->lb_bits_per_entry / 36;
+		pixels_per_entries = xfm_dce->lb_bits_per_entry / 36;
 		break;
 
 	default:
-		dm_logger_write(xfm->ctx->logger, LOG_WARNING,
+		dm_logger_write(xfm_dce->base.ctx->logger, LOG_WARNING,
 			"%s: Invalid LB pixel depth",
 			__func__);
 		BREAK_TO_DEBUGGER();
@@ -690,7 +690,7 @@ static int dce_transform_get_max_num_of_supported_lines(
 
 	max_pixels_supports =
 			pixels_per_entries *
-			xfm->lb_total_entries_num;
+			xfm_dce->lb_memory_size;
 
 	return (max_pixels_supports / pixel_width);
 }
@@ -899,7 +899,7 @@ bool dce_transform_get_optimal_number_of_taps(
 		pixel_width = scl_data->recout.width;
 
 	max_num_of_lines = dce_transform_get_max_num_of_supported_lines(
-		xfm,
+		xfm_dce,
 		scl_data->lb_params.depth,
 		pixel_width);
 
@@ -995,10 +995,8 @@ bool dce_transform_construct(
 			LB_PIXEL_DEPTH_24BPP |
 			LB_PIXEL_DEPTH_30BPP;
 
-	xfm_dce->base.lb_bits_per_entry = LB_BITS_PER_ENTRY;
-	xfm_dce->base.lb_total_entries_num = LB_TOTAL_NUMBER_OF_ENTRIES;
-
-	xfm_dce->base.lb_memory_size = 0x6B0; /*1712*/
+	xfm_dce->lb_bits_per_entry = LB_BITS_PER_ENTRY;
+	xfm_dce->lb_memory_size = LB_TOTAL_NUMBER_OF_ENTRIES; /*0x6B0*/
 
 	return true;
 }

@@ -541,7 +541,6 @@ static struct transform *dce100_transform_create(
 
 	if (dce_transform_construct(transform, ctx, inst,
 			&xfm_regs[inst], &xfm_shift, &xfm_mask)) {
-		transform->base.lb_memory_size = 0x6B0; /*1712*/
 		return &transform->base;
 	}
 
