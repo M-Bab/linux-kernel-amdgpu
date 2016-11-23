@@ -2041,6 +2041,8 @@ void amdgpu_dm_connector_init_helper(
 	aconnector->base.dpms = DRM_MODE_DPMS_OFF;
 	aconnector->hpd.hpd = AMDGPU_HPD_NONE; /* not used */
 
+	mutex_init(&aconnector->hpd_lock);
+
 	/*configure suport HPD hot plug connector_>polled default value is 0
 	 * which means HPD hot plug not supported*/
 	switch (connector_type) {

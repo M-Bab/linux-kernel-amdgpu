@@ -826,6 +826,7 @@ static void handle_hpd_irq(void *param)
 	/* In case of failure or MST no need to update connector status or notify the OS
 	 * since (for MST case) MST does this in it's own context.
 	 */
+	mutex_lock(&aconnector->hpd_lock);
 	if (dc_link_detect(aconnector->dc_link, false)) {
 		amdgpu_dm_update_connector_after_detect(aconnector);
 
@@ -837,6 +838,7 @@ static void handle_hpd_irq(void *param)
 		if (aconnector->base.force == DRM_FORCE_UNSPECIFIED)
 			drm_kms_helper_hotplug_event(dev);
 	}
+	mutex_unlock(&aconnector->hpd_lock);
 
 }
 
@@ -927,6 +929,13 @@ static void handle_hpd_rx_irq(void *param)
 	const struct dc_link *dc_link = aconnector->dc_link;
 	bool is_mst_root_connector = aconnector->mst_mgr.mst_state;
 
+	/* TODO:Temporary add mutex to protect hpd interrupt not have a gpio
+	 * conflict, after implement i2c helper, this mutex should be
+	 * retired.
+	 */
+	if (aconnector->dc_link->type != dc_connection_mst_branch)
+		mutex_lock(&aconnector->hpd_lock);
+
 	if (dc_link_handle_hpd_rx_irq(aconnector->dc_link) &&
 			!is_mst_root_connector) {
 		/* Downstream Port status changed. */
@@ -944,6 +953,9 @@ static void handle_hpd_rx_irq(void *param)
 	if ((dc_link->cur_link_settings.lane_count != LANE_COUNT_UNKNOWN) ||
 				(dc_link->type == dc_connection_mst_branch))
 		dm_handle_hpd_rx_irq(aconnector);
+
+	if (aconnector->dc_link->type != dc_connection_mst_branch)
+		mutex_unlock(&aconnector->hpd_lock);
 }
 
 static void register_hpd_handlers(struct amdgpu_device *adev)
