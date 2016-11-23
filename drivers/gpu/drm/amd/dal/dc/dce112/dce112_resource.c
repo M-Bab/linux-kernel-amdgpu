@@ -902,7 +902,7 @@ enum dc_status dce112_validate_bandwidth(
 	return result;
 }
 
-static enum dc_status map_clock_resources(
+enum dc_status resource_map_phy_clock_resources(
 		const struct core_dc *dc,
 		struct validate_context *context)
 {
@@ -1001,7 +1001,7 @@ enum dc_status dce112_validate_with_context(
 	result = resource_map_pool_resources(dc, context);
 
 	if (result == DC_OK)
-		result = map_clock_resources(dc, context);
+		result = resource_map_phy_clock_resources(dc, context);
 
 	if (!resource_validate_attach_surfaces(
 			set, set_count, dc->current_context, context)) {
@@ -1037,7 +1037,7 @@ enum dc_status dce112_validate_guaranteed(
 	result = resource_map_pool_resources(dc, context);
 
 	if (result == DC_OK)
-		result = resource_map_clock_resources(dc, context);
+		result = resource_map_phy_clock_resources(dc, context);
 
 	if (result == DC_OK)
 		result = validate_mapped_resource(dc, context);

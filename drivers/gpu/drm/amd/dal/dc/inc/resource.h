@@ -152,6 +152,10 @@ enum dc_status resource_map_clock_resources(
 		const struct core_dc *dc,
 		struct validate_context *context);
 
+enum dc_status resource_map_phy_clock_resources(
+		const struct core_dc *dc,
+		struct validate_context *context);
+
 bool pipe_need_reprogram(
 		struct pipe_ctx *pipe_ctx_old,
 		struct pipe_ctx *pipe_ctx);
