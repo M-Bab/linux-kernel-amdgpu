@@ -599,7 +599,7 @@ struct amdgpu_connector {
 	/*freesync caps*/
 	struct mod_freesync_caps caps;
 
-
+	struct mutex hpd_lock;
 
 };
 
