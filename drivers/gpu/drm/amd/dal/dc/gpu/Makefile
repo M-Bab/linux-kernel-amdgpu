@@ -3,7 +3,7 @@
 # It provides the control and status of HW adapter resources,
 # that are global for the ASIC and sharable between pipes.
 
-GPU = dc_clock_generator.o display_clock.o divider_range.o
+GPU = display_clock.o divider_range.o
 
 AMD_DAL_GPU = $(addprefix $(AMDDALPATH)/dc/gpu/,$(GPU))
 
