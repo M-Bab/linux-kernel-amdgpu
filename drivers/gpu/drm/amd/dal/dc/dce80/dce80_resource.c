@@ -45,7 +45,7 @@
 #include "dce/dce_transform.h"
 #include "dce80/dce80_opp.h"
 #include "dce110/dce110_ipp.h"
-#include "dce110/dce110_clock_source.h"
+#include "dce/dce_clock_source.h"
 #include "dce/dce_audio.h"
 #include "dce/dce_hwseq.h"
 #include "dce80/dce80_hw_sequencer.h"
@@ -326,19 +326,24 @@ static const struct dce_aduio_mask audio_mask = {
 		AUD_COMMON_MASK_SH_LIST(_MASK)
 };
 
-static const struct dce110_clk_src_reg_offsets dce80_clk_src_reg_offsets[] = {
-	{
-		.pll_cntl = mmDCCG_PLL0_PLL_CNTL,
-		.pixclk_resync_cntl  = mmPIXCLK0_RESYNC_CNTL
-	},
-	{
-		.pll_cntl = mmDCCG_PLL1_PLL_CNTL,
-		.pixclk_resync_cntl  = mmPIXCLK1_RESYNC_CNTL
-	},
-	{
-		.pll_cntl = mmDCCG_PLL2_PLL_CNTL,
-		.pixclk_resync_cntl  = mmPIXCLK2_RESYNC_CNTL
-	}
+#define clk_src_regs(id)\
+[id] = {\
+	CS_COMMON_REG_LIST_DCE_80(id),\
+}
+
+
+static const struct dce110_clk_src_regs clk_src_regs[] = {
+	clk_src_regs(0),
+	clk_src_regs(1),
+	clk_src_regs(2)
+};
+
+static const struct dce110_clk_src_shift cs_shift = {
+		CS_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(__SHIFT)
+};
+
+static const struct dce110_clk_src_mask cs_mask = {
+		CS_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(_MASK)
 };
 
 static const struct bios_registers bios_regs = {
@@ -581,7 +586,7 @@ struct clock_source *dce80_clock_source_create(
 	struct dc_context *ctx,
 	struct dc_bios *bios,
 	enum clock_source_id id,
-	const struct dce110_clk_src_reg_offsets *offsets,
+	const struct dce110_clk_src_regs *regs,
 	bool dp_clk_src)
 {
 	struct dce110_clk_src *clk_src =
@@ -590,7 +595,8 @@ struct clock_source *dce80_clock_source_create(
 	if (!clk_src)
 		return NULL;
 
-	if (dce110_clk_src_construct(clk_src, ctx, bios, id, offsets)) {
+	if (dce110_clk_src_construct(clk_src, ctx, bios, id,
+			regs, &cs_shift, &cs_mask)) {
 		clk_src->base.dp_clk_src = dp_clk_src;
 		return &clk_src->base;
 	}
@@ -927,21 +933,21 @@ static bool construct(
 				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_EXTERNAL, NULL, true);
 
 		pool->base.clock_sources[0] =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL0, &dce80_clk_src_reg_offsets[0], false);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL0, &clk_src_regs[0], false);
 		pool->base.clock_sources[1] =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL1, &dce80_clk_src_reg_offsets[1], false);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL1, &clk_src_regs[1], false);
 		pool->base.clock_sources[2] =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL2, &dce80_clk_src_reg_offsets[2], false);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL2, &clk_src_regs[2], false);
 		pool->base.clk_src_count = 3;
 
 	} else {
 		pool->base.dp_clock_source =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL0, &dce80_clk_src_reg_offsets[0], true);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL0, &clk_src_regs[0], true);
 
 		pool->base.clock_sources[0] =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL1, &dce80_clk_src_reg_offsets[1], false);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL1, &clk_src_regs[1], false);
 		pool->base.clock_sources[1] =
-				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL2, &dce80_clk_src_reg_offsets[2], false);
+				dce80_clock_source_create(ctx, bp, CLOCK_SOURCE_ID_PLL2, &clk_src_regs[2], false);
 		pool->base.clk_src_count = 2;
 	}
 

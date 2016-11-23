@@ -41,7 +41,7 @@
 #include "dce/dce_audio.h"
 #include "dce112/dce112_opp.h"
 #include "dce110/dce110_ipp.h"
-#include "dce112/dce112_clock_source.h"
+#include "dce/dce_clock_source.h"
 
 #include "dce/dce_hwseq.h"
 #include "dce112/dce112_hw_sequencer.h"
@@ -350,25 +350,26 @@ static const struct dce110_opp_reg_offsets dce112_opp_reg_offsets[] = {
 }
 };
 
-static const struct dce112_clk_src_reg_offsets dce112_clk_src_reg_offsets[] = {
-	{
-		.pixclk_resync_cntl  = mmPHYPLLA_PIXCLK_RESYNC_CNTL
-	},
-	{
-		.pixclk_resync_cntl  = mmPHYPLLB_PIXCLK_RESYNC_CNTL
-	},
-	{
-		.pixclk_resync_cntl  = mmPHYPLLC_PIXCLK_RESYNC_CNTL
-	},
-	{
-		.pixclk_resync_cntl  = mmPHYPLLD_PIXCLK_RESYNC_CNTL
-	},
-	{
-		.pixclk_resync_cntl  = mmPHYPLLE_PIXCLK_RESYNC_CNTL
-	},
-	{
-		.pixclk_resync_cntl  = mmPHYPLLF_PIXCLK_RESYNC_CNTL
-	}
+#define clk_src_regs(index, id)\
+[index] = {\
+	CS_COMMON_REG_LIST_DCE_112(id),\
+}
+
+static const struct dce110_clk_src_regs clk_src_regs[] = {
+	clk_src_regs(0, A),
+	clk_src_regs(1, B),
+	clk_src_regs(2, C),
+	clk_src_regs(3, D),
+	clk_src_regs(4, E),
+	clk_src_regs(5, F)
+};
+
+static const struct dce110_clk_src_shift cs_shift = {
+		CS_COMMON_MASK_SH_LIST_DCE_112(__SHIFT)
+};
+
+static const struct dce110_clk_src_mask cs_mask = {
+		CS_COMMON_MASK_SH_LIST_DCE_112(_MASK)
 };
 
 static const struct bios_registers bios_regs = {
@@ -662,16 +663,17 @@ struct clock_source *dce112_clock_source_create(
 	struct dc_context *ctx,
 	struct dc_bios *bios,
 	enum clock_source_id id,
-	const struct dce112_clk_src_reg_offsets *offsets,
+	const struct dce110_clk_src_regs *regs,
 	bool dp_clk_src)
 {
-	struct dce112_clk_src *clk_src =
-		dm_alloc(sizeof(struct dce112_clk_src));
+	struct dce110_clk_src *clk_src =
+		dm_alloc(sizeof(struct dce110_clk_src));
 
 	if (!clk_src)
 		return NULL;
 
-	if (dce112_clk_src_construct(clk_src, ctx, bios, id, offsets)) {
+	if (dce110_clk_src_construct(clk_src, ctx, bios, id,
+			regs, &cs_shift, &cs_mask)) {
 		clk_src->base.dp_clk_src = dp_clk_src;
 		return &clk_src->base;
 	}
@@ -682,7 +684,7 @@ struct clock_source *dce112_clock_source_create(
 
 void dce112_clock_source_destroy(struct clock_source **clk_src)
 {
-	dm_free(TO_DCE112_CLK_SRC(*clk_src));
+	dm_free(TO_DCE110_CLK_SRC(*clk_src));
 	*clk_src = NULL;
 }
 
@@ -1254,37 +1256,37 @@ static bool construct(
 			dce112_clock_source_create(
 				ctx, ctx->dc_bios,
 				CLOCK_SOURCE_COMBO_PHY_PLL0,
-				&dce112_clk_src_reg_offsets[0], false);
+				&clk_src_regs[0], false);
 	pool->base.clock_sources[DCE112_CLK_SRC_PLL1] =
 			dce112_clock_source_create(
 				ctx, ctx->dc_bios,
 				CLOCK_SOURCE_COMBO_PHY_PLL1,
-				&dce112_clk_src_reg_offsets[1], false);
+				&clk_src_regs[1], false);
 	pool->base.clock_sources[DCE112_CLK_SRC_PLL2] =
 			dce112_clock_source_create(
 				ctx, ctx->dc_bios,
 				CLOCK_SOURCE_COMBO_PHY_PLL2,
-				&dce112_clk_src_reg_offsets[2], false);
+				&clk_src_regs[2], false);
 	pool->base.clock_sources[DCE112_CLK_SRC_PLL3] =
 			dce112_clock_source_create(
 				ctx, ctx->dc_bios,
 				CLOCK_SOURCE_COMBO_PHY_PLL3,
-				&dce112_clk_src_reg_offsets[3], false);
+				&clk_src_regs[3], false);
 	pool->base.clock_sources[DCE112_CLK_SRC_PLL4] =
 			dce112_clock_source_create(
 				ctx, ctx->dc_bios,
 				CLOCK_SOURCE_COMBO_PHY_PLL4,
-				&dce112_clk_src_reg_offsets[4], false);
+				&clk_src_regs[4], false);
 	pool->base.clock_sources[DCE112_CLK_SRC_PLL5] =
 			dce112_clock_source_create(
 				ctx, ctx->dc_bios,
 				CLOCK_SOURCE_COMBO_PHY_PLL5,
-				&dce112_clk_src_reg_offsets[5], false);
+				&clk_src_regs[5], false);
 	pool->base.clk_src_count = DCE112_CLK_SRC_TOTAL;
 
 	pool->base.dp_clock_source =  dce112_clock_source_create(
 		ctx, ctx->dc_bios,
-		CLOCK_SOURCE_ID_DP_DTO, &dce112_clk_src_reg_offsets[0], true);
+		CLOCK_SOURCE_ID_DP_DTO, &clk_src_regs[0], true);
 
 
 	for (i = 0; i < pool->base.clk_src_count; i++) {

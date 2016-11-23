@@ -22,22 +22,65 @@
  *
  */
 
-#ifndef __DC_CLOCK_SOURCE_DCE110_H__
-#define __DC_CLOCK_SOURCE_DCE110_H__
+#ifndef __DC_CLOCK_SOURCE_DCE_H__
+#define __DC_CLOCK_SOURCE_DCE_H__
 
 #include "../inc/clock_source.h"
 
 #define TO_DCE110_CLK_SRC(clk_src)\
 	container_of(clk_src, struct dce110_clk_src, base)
 
-struct dce110_clk_src_reg_offsets {
-	uint32_t pll_cntl;
-	uint32_t pixclk_resync_cntl;
+#define CS_COMMON_REG_LIST_DCE_100_110(id) \
+		SRI(RESYNC_CNTL, PIXCLK, id), \
+		SRI(PLL_CNTL, BPHYC_PLL, id)
+
+#define CS_COMMON_REG_LIST_DCE_80(id) \
+		SRI(RESYNC_CNTL, PIXCLK, id), \
+		SRI(PLL_CNTL, DCCG_PLL, id)
+
+#define CS_COMMON_REG_LIST_DCE_112(id) \
+		SRI(PIXCLK_RESYNC_CNTL, PHYPLL, id)
+
+#define CS_SF(reg_name, field_name, post_fix)\
+	.field_name = reg_name ## __ ## field_name ## post_fix
+
+#define CS_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(mask_sh)\
+	CS_SF(PLL_CNTL, PLL_REF_DIV_SRC, mask_sh),\
+	CS_SF(PIXCLK1_RESYNC_CNTL, DCCG_DEEP_COLOR_CNTL1, mask_sh),\
+	CS_SF(PLL_POST_DIV, PLL_POST_DIV_PIXCLK, mask_sh),\
+	CS_SF(PLL_REF_DIV, PLL_REF_DIV, mask_sh),\
+
+#define CS_COMMON_MASK_SH_LIST_DCE_112(mask_sh)\
+	CS_SF(PHYPLLA_PIXCLK_RESYNC_CNTL, PHYPLLA_DCCG_DEEP_COLOR_CNTL, mask_sh),\
+	CS_SF(PHYPLLA_PIXCLK_RESYNC_CNTL, PHYPLLA_PIXCLK_DOUBLE_RATE_ENABLE, mask_sh),\
+
+#define CS_REG_FIELD_LIST(type) \
+	type PLL_REF_DIV_SRC; \
+	type DCCG_DEEP_COLOR_CNTL1; \
+	type PHYPLLA_DCCG_DEEP_COLOR_CNTL; \
+	type PHYPLLA_PIXCLK_DOUBLE_RATE_ENABLE; \
+	type PLL_POST_DIV_PIXCLK; \
+	type PLL_REF_DIV; \
+
+struct dce110_clk_src_shift {
+	CS_REG_FIELD_LIST(uint8_t)
+};
+
+struct dce110_clk_src_mask{
+	CS_REG_FIELD_LIST(uint32_t)
+};
+
+struct dce110_clk_src_regs {
+	uint32_t RESYNC_CNTL;
+	uint32_t PIXCLK_RESYNC_CNTL;
+	uint32_t PLL_CNTL;
 };
 
 struct dce110_clk_src {
 	struct clock_source base;
-	struct dce110_clk_src_reg_offsets offsets;
+	const struct dce110_clk_src_regs *regs;
+	const struct dce110_clk_src_mask *cs_mask;
+	const struct dce110_clk_src_shift *cs_shift;
 	struct dc_bios *bios;
 
 	struct spread_spectrum_data *dp_ss_params;
@@ -59,6 +102,8 @@ bool dce110_clk_src_construct(
 	struct dc_context *ctx,
 	struct dc_bios *bios,
 	enum clock_source_id,
-	const struct dce110_clk_src_reg_offsets *reg_offsets);
+	const struct dce110_clk_src_regs *regs,
+	const struct dce110_clk_src_shift *cs_shift,
+	const struct dce110_clk_src_mask *cs_mask);
 
 #endif
