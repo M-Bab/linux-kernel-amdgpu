@@ -1558,13 +1558,24 @@ void dc_flip_surface_addrs(
 		struct dc_flip_addrs flip_addrs[],
 		uint32_t count)
 {
-	int i;
-	struct dc_surface_update updates[MAX_SURFACE_NUM] = { { 0 } };
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	int i, j;
+
 	for (i = 0; i < count; i++) {
-		updates[i].flip_addr = &flip_addrs[i];
-		updates[i].surface = surfaces[i];
+		struct core_surface *surface = DC_SURFACE_TO_CORE(surfaces[i]);
+
+		surface->public.address = flip_addrs[i].address;
+		surface->public.flip_immediate = flip_addrs[i].flip_immediate;
+
+		for (j = 0; j < core_dc->res_pool->pipe_count; j++) {
+			struct pipe_ctx *pipe_ctx = &core_dc->current_context->res_ctx.pipe_ctx[j];
+
+			if (pipe_ctx->surface != surface)
+				continue;
+
+			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
+		}
 	}
-	dc_update_surfaces_for_target(dc, updates, count, NULL);
 }
 
 enum dc_irq_source dc_interrupt_to_irq_source(
