@@ -61,6 +61,7 @@
 	SRI(DP_CONFIG, DP, id), \
 	SRI(DP_DPHY_CNTL, DP, id), \
 	SRI(DP_DPHY_PRBS_CNTL, DP, id), \
+	SRI(DP_DPHY_SCRAM_CNTL, DP, id),\
 	SRI(DP_DPHY_SYM0, DP, id), \
 	SRI(DP_DPHY_SYM1, DP, id), \
 	SRI(DP_DPHY_SYM2, DP, id), \
@@ -97,6 +98,7 @@
 		SRI(DP_DPHY_INTERNAL_CTRL, DP, id), \
 		SR(BL1_PWM_USER_LEVEL), \
 		LE_COMMON_REG_LIST_BASE(id)
+
 
 struct dce110_link_enc_aux_registers {
 	uint32_t AUX_CONTROL;
@@ -142,6 +144,7 @@ struct dce110_link_enc_registers {
 	uint32_t DP_DPHY_CNTL;
 	uint32_t DP_DPHY_INTERNAL_CTRL;
 	uint32_t DP_DPHY_PRBS_CNTL;
+	uint32_t DP_DPHY_SCRAM_CNTL;
 	uint32_t DP_DPHY_SYM0;
 	uint32_t DP_DPHY_SYM1;
 	uint32_t DP_DPHY_SYM2;

@@ -455,6 +455,9 @@ static void set_dp_phy_pattern_hbr2_compliance(
 
 	dal_write_reg(ctx, addr, value);
 	 */
+	/* swap every BS with SR */
+
+	REG_UPDATE(DP_DPHY_SCRAM_CNTL, DPHY_SCRAMBLER_BS_COUNT, 0);
 
 	/*TODO add support for this test pattern
 	 * support_dp_hbr2_eye_pattern
@@ -496,6 +499,8 @@ static void set_dp_phy_pattern_passthrough_mode(
 
 		REG_WRITE(DP_DPHY_INTERNAL_CTRL, value);
 	}
+
+	REG_UPDATE(DP_DPHY_SCRAM_CNTL, DPHY_SCRAMBLER_BS_COUNT, 0x1FF);
 
 	/* set link training complete */
 
@@ -543,6 +548,8 @@ static void configure_encoder(
 	REG_SET(DP_CONFIG, 0,
 			DP_UDI_LANES, link_settings->lane_count - LANE_COUNT_ONE);
 
+	/* setup scrambler */
+	REG_UPDATE(DP_DPHY_SCRAM_CNTL, DPHY_SCRAMBLER_ADVANCE, 1);
 }
 
 static bool is_panel_powered_on(struct dce110_link_encoder *enc110)
