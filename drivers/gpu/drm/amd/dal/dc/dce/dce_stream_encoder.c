@@ -59,11 +59,6 @@ DP_COMPONENT_DEPTH_RESERVED              = 0x00000005,
 #define DP_BLANK_MAX_RETRY 20
 #define HDMI_CLOCK_CHANNEL_RATE_MORE_340M 340000
 
-#ifndef HDMI_CONTROL__HDMI_DATA_SCRAMBLE_EN_MASK
-	#define HDMI_CONTROL__HDMI_DATA_SCRAMBLE_EN_MASK 0x2
-	#define HDMI_CONTROL__HDMI_DATA_SCRAMBLE_EN__SHIFT 0x1
-#endif
-
 #ifndef TMDS_CNTL__TMDS_PIXEL_ENCODING_MASK
 	#define TMDS_CNTL__TMDS_PIXEL_ENCODING_MASK       0x00000010L
 	#define TMDS_CNTL__TMDS_COLOR_FORMAT_MASK         0x00000300L
@@ -347,11 +342,19 @@ static void dce110_stream_encoder_hdmi_set_stream_attribute(
 
 	dce110_stream_encoder_set_stream_attribute_helper(enc110, crtc_timing);
 
-	if (enc110->regs->DIG_FE_CNTL) {
+	/* setup HDMI engine */
+	if (!enc110->se_mask->HDMI_DATA_SCRAMBLE_EN) {
 		REG_UPDATE_3(HDMI_CONTROL,
 			HDMI_PACKET_GEN_VERSION, 1,
 			HDMI_KEEPOUT_MODE, 1,
 			HDMI_DEEP_COLOR_ENABLE, 0);
+	} else if (enc110->regs->DIG_FE_CNTL) {
+		REG_UPDATE_5(HDMI_CONTROL,
+			HDMI_PACKET_GEN_VERSION, 1,
+			HDMI_KEEPOUT_MODE, 1,
+			HDMI_DEEP_COLOR_ENABLE, 0,
+			HDMI_DATA_SCRAMBLE_EN, 0,
+			HDMI_CLOCK_CHANNEL_RATE, 0);
 	}
 
 	switch (crtc_timing->display_color_depth) {
@@ -375,6 +378,30 @@ static void dce110_stream_encoder_hdmi_set_stream_attribute(
 		break;
 	default:
 		break;
+	}
+
+	if (enc110->se_mask->HDMI_DATA_SCRAMBLE_EN) {
+		if (actual_pix_clk_khz >= HDMI_CLOCK_CHANNEL_RATE_MORE_340M) {
+			/* enable HDMI data scrambler
+			 * HDMI_CLOCK_CHANNEL_RATE_MORE_340M
+			 * Clock channel frequency is 1/4 of character rate.
+			 */
+			REG_UPDATE_2(HDMI_CONTROL,
+				HDMI_DATA_SCRAMBLE_EN, 1,
+				HDMI_CLOCK_CHANNEL_RATE, 1);
+		} else if (crtc_timing->flags.LTE_340MCSC_SCRAMBLE) {
+
+			/* TODO: New feature for DCE11, still need to implement */
+
+			/* enable HDMI data scrambler
+			 * HDMI_CLOCK_CHANNEL_FREQ_EQUAL_TO_CHAR_RATE
+			 * Clock channel frequency is the same
+			 * as character rate
+			 */
+			REG_UPDATE_2(HDMI_CONTROL,
+				HDMI_DATA_SCRAMBLE_EN, 1,
+				HDMI_CLOCK_CHANNEL_RATE, 0);
+		}
 	}
 
 	REG_UPDATE_3(HDMI_VBI_PACKET_CONTROL,
