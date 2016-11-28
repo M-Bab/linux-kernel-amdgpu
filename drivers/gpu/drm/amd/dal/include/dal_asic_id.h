@@ -31,7 +31,6 @@
  */
 
 /* DCE80 (based on ci_id.h in Perforce) */
-
 #define	CI_BONAIRE_M_A0 0x14
 #define	CI_BONAIRE_M_A1	0x15
 #define	CI_HAWAII_P_A0	0x28
