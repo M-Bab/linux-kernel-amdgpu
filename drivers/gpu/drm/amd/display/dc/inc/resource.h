@@ -22,8 +22,8 @@
  * Authors: AMD
  */
 
-#ifndef DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_INC_RESOURCE_H_
-#define DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_INC_RESOURCE_H_
+#ifndef DRIVERS_GPU_DRM_AMD_DC_DEV_DC_INC_RESOURCE_H_
+#define DRIVERS_GPU_DRM_AMD_DC_DEV_DC_INC_RESOURCE_H_
 
 #include "core_types.h"
 #include "core_status.h"
@@ -161,4 +161,4 @@ bool pipe_need_reprogram(
 		struct pipe_ctx *pipe_ctx);
 
 
-#endif /* DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_INC_RESOURCE_H_ */
+#endif /* DRIVERS_GPU_DRM_AMD_DC_DEV_DC_INC_RESOURCE_H_ */

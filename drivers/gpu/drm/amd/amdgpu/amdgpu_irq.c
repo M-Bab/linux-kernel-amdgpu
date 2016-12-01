@@ -36,7 +36,7 @@
 
 #include <linux/pm_runtime.h>
 
-#ifdef CONFIG_DRM_AMD_DAL
+#ifdef CONFIG_DRM_AMD_DC
 #include "amdgpu_dm_irq.h"
 #endif
 

@@ -1,18 +1,17 @@
 menu "Display Engine Configuration"
-	depends on DRM && (DRM_AMDSOC || DRM_AMDGPU)
+	depends on DRM && DRM_AMDGPU
 
-config DRM_AMD_DAL
-        bool "AMD DAL - Enable new display engine (will be deprecated when the development is done)"
+config DRM_AMD_DC
+        bool "AMD DC - Enable new display engine (will be deprecated when the development is done)"
         help
           Choose this option if you want to use the new display engine
-          support for AMD SOC.
+          support for AMDGPU.
 
-          Will be deprecated when the DAL component becomes stable and
-          AMDSOC will fully switch to it.
+          Will be deprecated when the DC component is upstream.
 
-config DEBUG_KERNEL_DAL
-        bool "Enable kgdb break in DAL"
-        depends on DRM_AMD_DAL
+config DEBUG_KERNEL_DC
+        bool "Enable kgdb break in DC"
+        depends on DRM_AMD_DC
         help
          Choose this option
          if you want to hit

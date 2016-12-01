@@ -1774,7 +1774,7 @@ amdgpu_cs_find_mapping(struct amdgpu_cs_parser *parser,
 		       uint64_t addr, struct amdgpu_bo **bo);
 int amdgpu_cs_sysvm_access_required(struct amdgpu_cs_parser *parser);
 
-#if defined(CONFIG_DRM_AMD_DAL)
+#if defined(CONFIG_DRM_AMD_DC)
 int amdgpu_dm_display_resume(struct amdgpu_device *adev );
 #else
 static inline int amdgpu_dm_display_resume(struct amdgpu_device *adev) { return 0; }

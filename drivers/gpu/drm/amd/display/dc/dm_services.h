@@ -59,7 +59,7 @@
 } while (0)
 #endif
 
-#if defined(CONFIG_DEBUG_KERNEL_DAL)
+#if defined(CONFIG_DEBUG_KERNEL_DC)
 #define ASSERT(expr) ASSERT_CRITICAL(expr)
 
 #else

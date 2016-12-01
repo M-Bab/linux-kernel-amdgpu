@@ -117,7 +117,7 @@ amdgpu-$(CONFIG_VGA_SWITCHEROO) += amdgpu_atpx_handler.o
 amdgpu-$(CONFIG_ACPI) += amdgpu_acpi.o
 amdgpu-$(CONFIG_MMU_NOTIFIER) += amdgpu_mn.o
 
-ifneq ($(CONFIG_DRM_AMD_DAL),)
+ifneq ($(CONFIG_DRM_AMD_DC),)
 
 RELATIVE_AMD_DISPLAY_PATH = ../$(DISPLAY_FOLDER_NAME)
 include $(FULL_AMD_DISPLAY_PATH)/Makefile

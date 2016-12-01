@@ -1574,19 +1574,19 @@ static int amdgpu_resume(struct amdgpu_device *adev)
 bool amdgpu_device_asic_has_dal_support(enum amd_asic_type asic_type)
 {
 	switch (asic_type) {
-#if defined(CONFIG_DRM_AMD_DAL)
+#if defined(CONFIG_DRM_AMD_DC)
 	case CHIP_BONAIRE:
 	case CHIP_HAWAII:
 		return amdgpu_dal != 0;
 #endif
-#if defined(CONFIG_DRM_AMD_DAL)
+#if defined(CONFIG_DRM_AMD_DC)
 	case CHIP_CARRIZO:
 	case CHIP_STONEY:
 	case CHIP_POLARIS11:
 	case CHIP_POLARIS10:
 		return amdgpu_dal != 0;
 #endif
-#if defined(CONFIG_DRM_AMD_DAL)
+#if defined(CONFIG_DRM_AMD_DC)
 	case CHIP_TONGA:
 	case CHIP_FIJI:
 		return amdgpu_dal != 0;

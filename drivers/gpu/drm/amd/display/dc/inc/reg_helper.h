@@ -22,8 +22,8 @@
  * Authors: AMD
  */
 
-#ifndef DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_INC_REG_HELPER_H_
-#define DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_INC_REG_HELPER_H_
+#ifndef DRIVERS_GPU_DRM_AMD_DC_DEV_DC_INC_REG_HELPER_H_
+#define DRIVERS_GPU_DRM_AMD_DC_DEV_DC_INC_REG_HELPER_H_
 
 #include "dm_services.h"
 
@@ -287,4 +287,4 @@ uint32_t generic_reg_get5(const struct dc_context *ctx, uint32_t addr,
 		uint8_t shift4, uint32_t mask4, uint32_t *field_value4,
 		uint8_t shift5, uint32_t mask5, uint32_t *field_value5);
 
-#endif /* DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_INC_REG_HELPER_H_ */
+#endif /* DRIVERS_GPU_DRM_AMD_DC_DEV_DC_INC_REG_HELPER_H_ */

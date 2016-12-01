@@ -23,8 +23,8 @@
  *
  */
 
-#ifndef DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_GPIO_HPD_REGS_H_
-#define DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_GPIO_HPD_REGS_H_
+#ifndef DRIVERS_GPU_DRM_AMD_DC_DEV_DC_GPIO_HPD_REGS_H_
+#define DRIVERS_GPU_DRM_AMD_DC_DEV_DC_GPIO_HPD_REGS_H_
 
 #include "gpio_regs.h"
 
@@ -76,4 +76,4 @@ struct hpd_sh_mask {
 };
 
 
-#endif /* DRIVERS_GPU_DRM_AMD_DAL_DEV_DC_GPIO_HPD_REGS_H_ */
+#endif /* DRIVERS_GPU_DRM_AMD_DC_DEV_DC_GPIO_HPD_REGS_H_ */

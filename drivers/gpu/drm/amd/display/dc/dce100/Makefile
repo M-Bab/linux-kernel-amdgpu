@@ -12,7 +12,7 @@ AMD_DISPLAY_FILES += $(AMD_DAL_DCE100)
 ###############################################################################
 # DCE 10x
 ###############################################################################
-ifdef 0#CONFIG_DRM_AMD_DAL_DCE11_0
+ifdef 0#CONFIG_DRM_AMD_DC_DCE11_0
 TG_DCE100 = dce100_resource.o
 
 AMD_DAL_TG_DCE100 = $(addprefix \

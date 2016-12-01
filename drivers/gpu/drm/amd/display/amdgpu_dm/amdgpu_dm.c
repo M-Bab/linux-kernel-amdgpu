@@ -1469,7 +1469,7 @@ static const struct amdgpu_display_funcs dm_dce_v11_0_display_funcs = {
 
 };
 
-#if defined(CONFIG_DEBUG_KERNEL_DAL)
+#if defined(CONFIG_DEBUG_KERNEL_DC)
 
 static ssize_t s3_debug_store(
 	struct device *device,
@@ -1562,7 +1562,7 @@ static int dm_early_init(void *handle)
 	/* Note: Do NOT change adev->audio_endpt_rreg and
 	 * adev->audio_endpt_wreg because they are initialised in
 	 * amdgpu_device_init() */
-#if defined(CONFIG_DEBUG_KERNEL_DAL)
+#if defined(CONFIG_DEBUG_KERNEL_DC)
 	device_create_file(
 		adev->ddev->dev,
 		&dev_attr_s3_debug);

@@ -6,7 +6,7 @@
 
 AMDGPUDM = amdgpu_dm_types.o amdgpu_dm.o amdgpu_dm_irq.o amdgpu_dm_mst_types.o
 
-ifneq ($(CONFIG_DRM_AMD_DAL),)
+ifneq ($(CONFIG_DRM_AMD_DC),)
 AMDGPUDM += amdgpu_dm_services.o amdgpu_dm_helpers.o
 endif
 
