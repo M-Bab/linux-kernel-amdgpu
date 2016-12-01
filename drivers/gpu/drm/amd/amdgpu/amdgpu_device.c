@@ -1571,25 +1571,25 @@ static int amdgpu_resume(struct amdgpu_device *adev)
 	return 0;
 }
 
-bool amdgpu_device_asic_has_dal_support(enum amd_asic_type asic_type)
+bool amdgpu_device_asic_has_dc_support(enum amd_asic_type asic_type)
 {
 	switch (asic_type) {
 #if defined(CONFIG_DRM_AMD_DC)
 	case CHIP_BONAIRE:
 	case CHIP_HAWAII:
-		return amdgpu_dal != 0;
+		return amdgpu_dc != 0;
 #endif
 #if defined(CONFIG_DRM_AMD_DC)
 	case CHIP_CARRIZO:
 	case CHIP_STONEY:
 	case CHIP_POLARIS11:
 	case CHIP_POLARIS10:
-		return amdgpu_dal != 0;
+		return amdgpu_dc != 0;
 #endif
 #if defined(CONFIG_DRM_AMD_DC)
 	case CHIP_TONGA:
 	case CHIP_FIJI:
-		return amdgpu_dal != 0;
+		return amdgpu_dc != 0;
 #endif
 	default:
 		return false;
@@ -1597,15 +1597,15 @@ bool amdgpu_device_asic_has_dal_support(enum amd_asic_type asic_type)
 }
 
 /**
- * amdgpu_device_has_dal_support - check if dal is supported
+ * amdgpu_device_has_dc_support - check if dc is supported
  *
  * @adev: amdgpu_device_pointer
  *
  * Returns true for supported, false for not supported
  */
-bool amdgpu_device_has_dal_support(struct amdgpu_device *adev)
+bool amdgpu_device_has_dc_support(struct amdgpu_device *adev)
 {
-	return amdgpu_device_asic_has_dal_support(adev->asic_type);
+	return amdgpu_device_asic_has_dc_support(adev->asic_type);
 }
 
 static void amdgpu_device_detect_sriov_bios(struct amdgpu_device *adev)
@@ -1796,7 +1796,7 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	}
 
 	/* init i2c buses */
-	if (!amdgpu_device_has_dal_support(adev))
+	if (!amdgpu_device_has_dc_support(adev))
 		amdgpu_atombios_i2c_init(adev);
 
 	/* Fence driver */
@@ -1914,7 +1914,7 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
 	r = amdgpu_fini(adev);
 	adev->accel_working = false;
 	/* free i2c buses */
-	if (!amdgpu_device_has_dal_support(adev))
+	if (!amdgpu_device_has_dc_support(adev))
 		amdgpu_i2c_fini(adev);
 	amdgpu_atombios_fini(adev);
 	kfree(adev->bios);
@@ -1967,7 +1967,7 @@ int amdgpu_device_suspend(struct drm_device *dev, bool suspend, bool fbcon)
 
 	drm_kms_helper_poll_disable(dev);
 
-	if (!amdgpu_device_has_dal_support(adev)) {
+	if (!amdgpu_device_has_dc_support(adev)) {
 		/* turn off display hw */
 		drm_modeset_lock_all(dev);
 		list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
@@ -2118,7 +2118,7 @@ int amdgpu_device_resume(struct drm_device *dev, bool resume, bool fbcon)
 
 	/* blat the mode back in */
 	if (fbcon) {
-		if (!amdgpu_device_has_dal_support(adev)) {
+		if (!amdgpu_device_has_dc_support(adev)) {
 			/* pre DCE11 */
 			drm_helper_resume_force_mode(dev);
 
@@ -2153,7 +2153,7 @@ int amdgpu_device_resume(struct drm_device *dev, bool resume, bool fbcon)
 #ifdef CONFIG_PM
 	dev->dev->power.disable_depth++;
 #endif
-	if (!amdgpu_device_has_dal_support(adev))
+	if (!amdgpu_device_has_dc_support(adev))
 		drm_helper_hpd_irq_event(dev);
 	else
 		drm_kms_helper_hotplug_event(dev);
@@ -2323,7 +2323,7 @@ int amdgpu_gpu_reset(struct amdgpu_device *adev)
 	/* block TTM */
 	resched = ttm_bo_lock_delayed_workqueue(&adev->mman.bdev);
 	/* store modesetting */
-	if (amdgpu_device_has_dal_support(adev))
+	if (amdgpu_device_has_dc_support(adev))
 		state = drm_atomic_helper_suspend(adev->ddev);
 
 	/* block scheduler */
@@ -2434,7 +2434,7 @@ retry:
 		}
 	}
 
-	if (amdgpu_device_has_dal_support(adev)) {
+	if (amdgpu_device_has_dc_support(adev)) {
 		r = drm_atomic_helper_resume(adev->ddev, state);
 		amdgpu_dm_display_resume(adev);
 	} else

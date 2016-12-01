@@ -90,7 +90,7 @@ extern int amdgpu_vm_size;
 extern int amdgpu_vm_block_size;
 extern int amdgpu_vm_fault_stop;
 extern int amdgpu_vm_debug;
-extern int amdgpu_dal;
+extern int amdgpu_dc;
 extern int amdgpu_sched_jobs;
 extern int amdgpu_sched_hw_submission;
 extern int amdgpu_powerplay;
@@ -1502,8 +1502,8 @@ void amdgpu_io_wreg(struct amdgpu_device *adev, u32 reg, u32 v);
 
 u32 amdgpu_mm_rdoorbell(struct amdgpu_device *adev, u32 index);
 void amdgpu_mm_wdoorbell(struct amdgpu_device *adev, u32 index, u32 v);
-bool amdgpu_device_asic_has_dal_support(enum amd_asic_type asic_type);
-bool amdgpu_device_has_dal_support(struct amdgpu_device *adev);
+bool amdgpu_device_asic_has_dc_support(enum amd_asic_type asic_type);
+bool amdgpu_device_has_dc_support(struct amdgpu_device *adev);
 /*
  * Registers read & write functions.
  */
