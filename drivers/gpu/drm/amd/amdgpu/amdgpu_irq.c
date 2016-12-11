@@ -36,7 +36,7 @@
 
 #include <linux/pm_runtime.h>
 
-#ifdef CONFIG_DRM_AMD_DAL
+#ifdef CONFIG_DRM_AMD_DC
 #include "amdgpu_dm_irq.h"
 #endif
 
@@ -231,7 +231,7 @@ int amdgpu_irq_init(struct amdgpu_device *adev)
 		}
 	}
 
-	if (!amdgpu_device_has_dal_support(adev)) {
+	if (!amdgpu_device_has_dc_support(adev)) {
 		r = drm_vblank_init(adev->ddev, adev->mode_info.num_crtc);
 		if (r)
 			return r;
@@ -431,15 +431,6 @@ int amdgpu_irq_get(struct amdgpu_device *adev, struct amdgpu_irq_src *src,
 		return amdgpu_irq_update(adev, src, type);
 
 	return 0;
-}
-
-bool amdgpu_irq_get_delayed(struct amdgpu_device *adev,
-			struct amdgpu_irq_src *src,
-			unsigned type)
-{
-	if ((type >= src->num_types) || !src->enabled_types)
-		return false;
-	return atomic_inc_return(&src->enabled_types[type]) == 1;
 }
 
 /**

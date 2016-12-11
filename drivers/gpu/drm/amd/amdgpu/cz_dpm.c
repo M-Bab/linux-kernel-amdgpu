@@ -438,7 +438,7 @@ static int cz_dpm_init(struct amdgpu_device *adev)
 		pi->caps_td_ramping = true;
 		pi->caps_tcp_ramping = true;
 	}
-	if (amdgpu_sclk_deep_sleep_en)
+	if (amdgpu_pp_feature_mask & SCLK_DEEP_SLEEP_MASK)
 		pi->caps_sclk_ds = true;
 	else
 		pi->caps_sclk_ds = false;
@@ -1597,7 +1597,7 @@ static int cz_dpm_set_deep_sleep_sclk_threshold(struct amdgpu_device *adev)
 	return 0;
 }
 
-/* ?? without dal support, is this still needed in setpowerstate list*/
+/* ?? without dc support, is this still needed in setpowerstate list*/
 static int cz_dpm_set_watermark_threshold(struct amdgpu_device *adev)
 {
 	struct cz_power_info *pi = cz_get_pi(adev);
@@ -1614,7 +1614,7 @@ static int cz_dpm_enable_nbdpm(struct amdgpu_device *adev)
 	int ret = 0;
 	struct cz_power_info *pi = cz_get_pi(adev);
 
-	/* also depend on dal NBPStateDisableRequired */
+	/* also depend on dc NBPStateDisableRequired */
 	if (pi->nb_dpm_enabled_by_driver && !pi->nb_dpm_enabled) {
 		ret = cz_send_msg_to_smc_with_parameter(adev,
 				PPSMC_MSG_EnableAllSmuFeatures,
@@ -2047,7 +2047,7 @@ static int cz_dpm_force_dpm_level(struct amdgpu_device *adev,
 }
 
 /* fix me, display configuration change lists here
- * mostly dal related*/
+ * mostly dc related*/
 static void cz_dpm_display_configuration_changed(struct amdgpu_device *adev)
 {
 }
@@ -2111,9 +2111,8 @@ static void cz_dpm_powergate_uvd(struct amdgpu_device *adev, bool gate)
 
 	if (gate) {
 		if (pi->caps_uvd_pg) {
-			/* disable clockgating so we can properly shut down the block */
 			ret = amdgpu_set_clockgating_state(adev, AMD_IP_BLOCK_TYPE_UVD,
-							    AMD_CG_STATE_UNGATE);
+							    AMD_CG_STATE_GATE);
 			if (ret) {
 				DRM_ERROR("UVD DPM Power Gating failed to set clockgating state\n");
 				return;
@@ -2159,9 +2158,8 @@ static void cz_dpm_powergate_uvd(struct amdgpu_device *adev, bool gate)
 				return;
 			}
 
-			/* enable clockgating. hw will dynamically gate/ungate clocks on the fly */
 			ret = amdgpu_set_clockgating_state(adev, AMD_IP_BLOCK_TYPE_UVD,
-							    AMD_CG_STATE_GATE);
+							    AMD_CG_STATE_UNGATE);
 			if (ret) {
 				DRM_ERROR("UVD DPM Power Gating Failed to set clockgating state\n");
 				return;

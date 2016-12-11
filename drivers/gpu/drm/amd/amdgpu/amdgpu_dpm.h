@@ -52,6 +52,8 @@ enum amdgpu_dpm_event_src {
 	AMDGPU_DPM_EVENT_SRC_DIGIAL_OR_EXTERNAL = 4
 };
 
+#define SCLK_DEEP_SLEEP_MASK 0x8
+
 struct amdgpu_ps {
 	u32 caps; /* vbios flags */
 	u32 class; /* vbios flags */
@@ -317,6 +319,11 @@ struct amdgpu_dpm_funcs {
 	      (adev)->powerplay.pp_funcs->get_fan_speed_percent((adev)->powerplay.pp_handle, (s)) : \
 	      (adev)->pm.funcs->get_fan_speed_percent((adev), (s)))
 
+#define amdgpu_dpm_get_fan_speed_rpm(adev, s) \
+	((adev)->pp_enabled ?						\
+	      (adev)->powerplay.pp_funcs->get_fan_speed_rpm((adev)->powerplay.pp_handle, (s)) : \
+	      -EINVAL)
+
 #define amdgpu_dpm_get_sclk(adev, l) \
 	((adev)->pp_enabled ?						\
 	      (adev)->powerplay.pp_funcs->get_sclk((adev)->powerplay.pp_handle, (l)) : \
@@ -460,7 +467,7 @@ struct amdgpu_pm {
 	const struct amdgpu_dpm_funcs *funcs;
 	uint32_t                pcie_gen_mask;
 	uint32_t                pcie_mlw_mask;
-	struct amd_pp_display_configuration pm_display_cfg;/* set by DAL */
+	struct amd_pp_display_configuration pm_display_cfg;/* set by dc */
 };
 
 #define R600_SSTU_DFLT                               0

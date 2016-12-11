@@ -218,7 +218,7 @@ int amdgpu_crtc_page_flip(struct drm_crtc *crtc,
 		goto cleanup;
 	}
 
-	r = amdgpu_bo_pin_restricted(new_abo, AMDGPU_GEM_DOMAIN_VRAM, 0, 0, &base);
+	r = amdgpu_bo_pin(new_abo, AMDGPU_GEM_DOMAIN_VRAM, &base);
 	if (unlikely(r != 0)) {
 		r = -EINVAL;
 		DRM_ERROR("failed to pin new abo buffer before flip\n");
@@ -664,7 +664,7 @@ int amdgpu_modeset_create_props(struct amdgpu_device *adev)
 					 "dither",
 					 amdgpu_dither_enum_list, sz);
 
-	if (amdgpu_device_has_dal_support(adev)) {
+	if (amdgpu_device_has_dc_support(adev)) {
 		adev->mode_info.freesync_property =
 			drm_property_create_bool(adev->ddev, 0, "freesync");
 		if (!adev->mode_info.freesync_property)
