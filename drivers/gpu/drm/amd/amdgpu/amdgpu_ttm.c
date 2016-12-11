@@ -1172,6 +1172,10 @@ int amdgpu_ttm_init(struct amdgpu_device *adev)
 		adev->mman.guard.lru[j] = NULL;
 	adev->mman.guard.swap_lru = NULL;
 
+	for (j = 0; j < TTM_NUM_MEM_TYPES; ++j)
+		adev->mman.guard.lru[j] = NULL;
+	adev->mman.guard.swap_lru = NULL;
+
 	adev->mman.initialized = true;
 	r = ttm_bo_init_mm(&adev->mman.bdev, TTM_PL_VRAM,
 				adev->mc.real_vram_size >> PAGE_SHIFT);
