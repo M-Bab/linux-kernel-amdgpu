@@ -41,6 +41,7 @@
 #include "hwmgr.h"
 #include "smu7_hwmgr.h"
 #include "smu7_smumgr.h"
+#include "smu_ucode_xfer_vi.h"
 #include "smu7_powertune.h"
 #include "smu7_dyn_defaults.h"
 #include "smu7_thermal.h"
