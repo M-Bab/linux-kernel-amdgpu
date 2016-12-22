@@ -36,10 +36,6 @@
 #include "amdgpu_dm_types.h"
 #include "amdgpu_pm.h"
 
-#define dm_alloc(size) kzalloc(size, GFP_KERNEL)
-#define dm_realloc(ptr, size) krealloc(ptr, size, GFP_KERNEL)
-#define dm_free(ptr) kfree(ptr)
-
 /******************************************************************************
  * IRQ Interfaces.
  *****************************************************************************/
@@ -80,13 +76,6 @@ void dal_isr_release_lock(struct dc_context *ctx)
 /******************************************************************************
  * End-of-IRQ Interfaces.
  *****************************************************************************/
-
-bool dm_get_platform_info(struct dc_context *ctx,
-			struct platform_info_params *params)
-{
-	/*TODO*/
-	return false;
-}
 
 bool dm_write_persistent_data(struct dc_context *ctx,
 		const struct dc_sink *sink,
@@ -438,26 +427,3 @@ bool dm_pp_get_static_clocks(
 }
 
 /**** end of power component interfaces ****/
-
-/* Calls to notification */
-
-void dal_notify_setmode_complete(struct dc_context *ctx,
-	uint32_t h_total,
-	uint32_t v_total,
-	uint32_t h_active,
-	uint32_t v_active,
-	uint32_t pix_clk_in_khz)
-{
-	/*TODO*/
-}
-/* End of calls to notification */
-
-long dm_get_pid(void)
-{
-	return current->pid;
-}
-
-long dm_get_tgid(void)
-{
-	return current->tgid;
-}

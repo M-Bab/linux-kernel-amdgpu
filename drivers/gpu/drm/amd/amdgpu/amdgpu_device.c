@@ -74,6 +74,7 @@ static const char *amdgpu_asic_name[] = {
 	"STONEY",
 	"POLARIS10",
 	"POLARIS11",
+	"POLARIS12",
 	"LAST",
 };
 
@@ -1278,6 +1279,7 @@ static int amdgpu_early_init(struct amdgpu_device *adev)
 	case CHIP_FIJI:
 	case CHIP_POLARIS11:
 	case CHIP_POLARIS10:
+	case CHIP_POLARIS12:
 	case CHIP_CARRIZO:
 	case CHIP_STONEY:
 		if (adev->asic_type == CHIP_CARRIZO || adev->asic_type == CHIP_STONEY)
@@ -1578,15 +1580,12 @@ bool amdgpu_device_asic_has_dc_support(enum amd_asic_type asic_type)
 	case CHIP_BONAIRE:
 	case CHIP_HAWAII:
 		return amdgpu_dc != 0;
-#endif
-#if defined(CONFIG_DRM_AMD_DC)
 	case CHIP_CARRIZO:
 	case CHIP_STONEY:
 	case CHIP_POLARIS11:
 	case CHIP_POLARIS10:
+	case CHIP_POLARIS12:
 		return amdgpu_dc != 0;
-#endif
-#if defined(CONFIG_DRM_AMD_DC)
 	case CHIP_TONGA:
 	case CHIP_FIJI:
 		return amdgpu_dc != 0;
@@ -1641,7 +1640,6 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	adev->pdev = pdev;
 	adev->flags = flags;
 	adev->asic_type = flags & AMD_ASIC_MASK;
-	adev->is_atom_bios = false;
 	adev->usec_timeout = AMDGPU_MAX_USEC_TIMEOUT;
 	adev->mc.gtt_size = 512 * 1024 * 1024;
 	adev->accel_working = false;
@@ -1756,12 +1754,7 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 		r = -EINVAL;
 		goto failed;
 	}
-	/* Must be an ATOMBIOS */
-	if (!adev->is_atom_bios) {
-		dev_err(adev->dev, "Expecting atombios for GPU\n");
-		r = -EINVAL;
-		goto failed;
-	}
+
 	r = amdgpu_atombios_init(adev);
 	if (r) {
 		dev_err(adev->dev, "amdgpu_atombios_init failed\n");

@@ -13,6 +13,7 @@
 #include "dm_helpers.h"
 #include "dce/dce_link_encoder.h"
 #include "dce/dce_stream_encoder.h"
+#include "dpcd_defs.h"
 
 enum dc_status core_link_read_dpcd(
 	struct core_link* link,
@@ -48,7 +49,7 @@ void dp_receiver_power_ctrl(struct core_link *link, bool on)
 
 	state = on ? DP_POWER_STATE_D0 : DP_POWER_STATE_D3;
 
-	core_link_write_dpcd(link, DPCD_ADDRESS_POWER_STATE, &state,
+	core_link_write_dpcd(link, DP_SET_POWER, &state,
 			sizeof(state));
 }
 

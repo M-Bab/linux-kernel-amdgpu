@@ -94,12 +94,12 @@ static void dce110_update_generic_info_packet(
 		/* poll dig_update_lock is not locked -> asic internal signal
 		 * assume otg master lock will unlock it
 		 */
-		REG_WAIT(AFMT_VBI_PACKET_CONTROL, AFMT_GENERIC_LOCK_STATUS,
-				1, 10, max_retries);
+/*		REG_WAIT(AFMT_VBI_PACKET_CONTROL, AFMT_GENERIC_LOCK_STATUS,
+				0, 10, max_retries);*/
 
 		/* check if HW reading GSP memory */
 		REG_WAIT(AFMT_VBI_PACKET_CONTROL, AFMT_GENERIC_CONFLICT,
-				1, 10, max_retries);
+				0, 10, max_retries);
 
 		/* HW does is not reading GSP memory not reading too long ->
 		 * something wrong. clear GPS memory access and notify?
@@ -635,7 +635,7 @@ static void dce110_stream_encoder_dp_blank(
 	*/
 
 	REG_WAIT(DP_VID_STREAM_CNTL, DP_VID_STREAM_STATUS,
-			1,
+			0,
 			10, max_retries);
 
 	ASSERT(retries <= max_retries);

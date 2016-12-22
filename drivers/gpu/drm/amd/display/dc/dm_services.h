@@ -109,12 +109,6 @@ static inline uint32_t dm_read_reg_func(
 
 	value = cgs_read_register(ctx->cgs_device, address);
 
-#if defined(__DAL_REGISTER_LOGGER__)
-	if (true == dal_reg_logger_should_dump_register()) {
-		dal_reg_logger_rw_count_increment();
-		DRM_INFO("%s DC_READ_REG: 0x%x 0x%x\n", func_name, address, value);
-	}
-#endif
 	return value;
 }
 
@@ -127,13 +121,6 @@ static inline void dm_write_reg_func(
 	uint32_t value,
 	const char *func_name)
 {
-#if defined(__DAL_REGISTER_LOGGER__)
-	if (true == dal_reg_logger_should_dump_register()) {
-		dal_reg_logger_rw_count_increment();
-		DRM_INFO("%s DC_WRITE_REG: 0x%x 0x%x\n", func_name, address, value);
-	}
-#endif
-
 	if (address == 0) {
 		DC_ERR("invalid register write. address = 0");
 		return;
@@ -295,38 +282,6 @@ bool dm_pp_get_static_clocks(
 
 /****** end of PP interfaces ******/
 
-enum platform_method {
-	PM_GET_AVAILABLE_METHODS = 1 << 0,
-	PM_GET_LID_STATE = 1 << 1,
-	PM_GET_EXTENDED_BRIGHNESS_CAPS = 1 << 2
-};
-
-struct platform_info_params {
-	enum platform_method method;
-	void *data;
-};
-
-struct platform_info_brightness_caps {
-	uint8_t ac_level_percentage;
-	uint8_t dc_level_percentage;
-};
-
-struct platform_info_ext_brightness_caps {
-	struct platform_info_brightness_caps basic_caps;
-	struct data_point {
-		uint8_t luminance;
-		uint8_t	signal_level;
-	} data_points[99];
-
-	uint8_t	data_points_num;
-	uint8_t	min_input_signal;
-	uint8_t	max_input_signal;
-};
-
-bool dm_get_platform_info(
-	struct dc_context *ctx,
-	struct platform_info_params *params);
-
 struct persistent_data_flag {
 	bool save_per_link;
 	bool save_per_edid;
@@ -417,8 +372,5 @@ bool dm_dmcu_set_pipe(struct dc_context *ctx, unsigned int controller_id);
  */
 #define dm_log_to_buffer(buffer, size, fmt, args)\
 	vsnprintf(buffer, size, fmt, args)
-
-long dm_get_pid(void);
-long dm_get_tgid(void);
 
 #endif /* __DM_SERVICES_H__ */

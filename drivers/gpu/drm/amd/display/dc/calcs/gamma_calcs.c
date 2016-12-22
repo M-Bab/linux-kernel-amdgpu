@@ -245,6 +245,8 @@ static bool build_hw_curve_configuration(
 	uint32_t segments = 0;
 	uint32_t max_number;
 
+	int8_t num_regions = 0;
+
 	bool result = false;
 
 	if (!number_of_points) {
@@ -273,6 +275,7 @@ static bool build_hw_curve_configuration(
 		ASSERT(curve_config->segments[i] >= 0);
 
 		segments += (1 << curve_config->segments[i]);
+		++num_regions;
 
 		++i;
 	}
@@ -289,7 +292,7 @@ static bool build_hw_curve_configuration(
 
 		while ((index < max_number) &&
 			(region_number < max_regions_number) &&
-			(i <= 1)) {
+			(i < (begin + num_regions))) {
 			int32_t j = 0;
 
 			segments = curve_config->segments[region_number];
@@ -345,8 +348,7 @@ static bool build_hw_curve_configuration(
 				divisor);
 
 			points[index].x = region1;
-
-			round_custom_float_6_12(points + index);
+			points[index].adjusted_x = region1;
 
 			++index;
 			++region_number;
@@ -367,8 +369,7 @@ static bool build_hw_curve_configuration(
 		}
 
 		points[index].x = region1;
-
-		round_custom_float_6_12(points + index);
+		points[index].adjusted_x = region1;
 
 		*number_of_points = index;
 
@@ -385,6 +386,49 @@ static bool build_hw_curve_configuration(
 	curve_points[2].offset = dal_fixed31_32_zero;
 
 	return result;
+}
+
+static bool setup_distribution_points_pq(
+		struct gamma_curve *arr_curve_points,
+		struct curve_points *arr_points,
+		uint32_t *hw_points_num,
+		struct hw_x_point *coordinates_x,
+		enum surface_pixel_format format)
+{
+	struct curve_config cfg;
+
+	cfg.offset = 0;
+	cfg.segments[0] = 2;
+	cfg.segments[1] = 2;
+	cfg.segments[2] = 2;
+	cfg.segments[3] = 2;
+	cfg.segments[4] = 2;
+	cfg.segments[5] = 2;
+	cfg.segments[6] = 3;
+	cfg.segments[7] = 4;
+	cfg.segments[8] = 4;
+	cfg.segments[9] = 4;
+	cfg.segments[10] = 4;
+	cfg.segments[11] = 5;
+	cfg.segments[12] = 5;
+	cfg.segments[13] = 5;
+	cfg.segments[14] = 5;
+	cfg.segments[15] = 5;
+
+	if (format == SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616F ||
+			format == SURFACE_PIXEL_FORMAT_GRPH_ABGR16161616F)
+		cfg.begin = -11;
+	else
+		cfg.begin = -16;
+
+	if (!build_hw_curve_configuration(
+		&cfg, arr_curve_points,
+		arr_points,
+		coordinates_x, hw_points_num)) {
+		ASSERT_CRITICAL(false);
+		return false;
+	}
+	return true;
 }
 
 static bool setup_distribution_points(
@@ -791,6 +835,82 @@ static inline struct fixed31_32 calculate_oem_mapped_value(
 			max_index);
 }
 
+static void compute_pq(struct fixed31_32 in_x, struct fixed31_32 *out_y)
+{
+	/* consts for PQ gamma formula. */
+	const struct fixed31_32 m1 =
+		dal_fixed31_32_from_fraction(159301758, 1000000000);
+	const struct fixed31_32 m2 =
+		dal_fixed31_32_from_fraction(7884375, 100000);
+	const struct fixed31_32 c1 =
+		dal_fixed31_32_from_fraction(8359375, 10000000);
+	const struct fixed31_32 c2 =
+		dal_fixed31_32_from_fraction(188515625, 10000000);
+	const struct fixed31_32 c3 =
+		dal_fixed31_32_from_fraction(186875, 10000);
+
+	struct fixed31_32 l_pow_m1;
+	struct fixed31_32 base;
+
+	if (dal_fixed31_32_lt(in_x, dal_fixed31_32_zero))
+		in_x = dal_fixed31_32_zero;
+
+	l_pow_m1 = dal_fixed31_32_pow(in_x, m1);
+	base = dal_fixed31_32_div(
+			dal_fixed31_32_add(c1,
+					(dal_fixed31_32_mul(c2, l_pow_m1))),
+			dal_fixed31_32_add(dal_fixed31_32_one,
+					(dal_fixed31_32_mul(c3, l_pow_m1))));
+	*out_y = dal_fixed31_32_pow(base, m2);
+}
+
+static void build_regamma_curve_pq(struct pwl_float_data_ex *rgb_regamma,
+		struct pwl_float_data *rgb_oem,
+		struct pixel_gamma_point *coeff128_oem,
+		const struct core_gamma *ramp,
+		const struct core_surface *surface,
+		uint32_t hw_points_num,
+		const struct hw_x_point *coordinate_x,
+		const struct gamma_pixel *axis_x,
+		struct dividers dividers)
+{
+	uint32_t i;
+
+	struct pwl_float_data_ex *rgb = rgb_regamma;
+	const struct hw_x_point *coord_x = coordinate_x;
+	struct fixed31_32 x;
+	struct fixed31_32 output;
+	struct fixed31_32 scaling_factor =
+			dal_fixed31_32_from_fraction(8, 1000);
+
+	/* use coord_x to retrieve coordinates chosen base on given user curve
+	 * the x values are exponentially distributed and currently it is hard
+	 * coded, the user curve shape is ignored. Need to recalculate coord_x
+	 * based on input curve, translation from 256/1025 to 128 PWL points.
+	 */
+	for (i = 0; i <= hw_points_num; i++) {
+		/* Multiply 0.008 as regamma is 0-1 and FP16 input is 0-125.
+		 * FP 1.0 = 80nits
+		 */
+		x = dal_fixed31_32_mul(coord_x->adjusted_x, scaling_factor);
+
+		compute_pq(x, &output);
+
+		/* should really not happen? */
+		if (dal_fixed31_32_lt(output, dal_fixed31_32_zero))
+			output = dal_fixed31_32_zero;
+		else if (dal_fixed31_32_lt(dal_fixed31_32_one, output))
+			output = dal_fixed31_32_one;
+
+		rgb->r = output;
+		rgb->g = output;
+		rgb->b = output;
+
+		++coord_x;
+		++rgb;
+	}
+}
+
 static void build_regamma_curve(struct pwl_float_data_ex *rgb_regamma,
 		struct pwl_float_data *rgb_oem,
 		struct pixel_gamma_point *coeff128_oem,
@@ -1094,17 +1214,14 @@ static void rebuild_curve_configuration_magic(
 		struct curve_points *arr_points,
 		struct pwl_result_data *rgb_resulted,
 		const struct hw_x_point *coordinates_x,
-		uint32_t hw_points_num)
+		uint32_t hw_points_num,
+		enum dc_transfer_func_predefined tf)
 {
-	const struct fixed31_32 magic_number =
-		dal_fixed31_32_from_fraction(249, 1000);
-
 	struct fixed31_32 y_r;
 	struct fixed31_32 y_g;
 	struct fixed31_32 y_b;
 
 	struct fixed31_32 y1_min;
-	struct fixed31_32 y2_max;
 	struct fixed31_32 y3_max;
 
 	y_r = rgb_resulted[0].red;
@@ -1119,29 +1236,43 @@ static void rebuild_curve_configuration_magic(
 					arr_points[0].y,
 					arr_points[0].x);
 
-	arr_points[1].x = dal_fixed31_32_add(
-			coordinates_x[hw_points_num - 1].adjusted_x,
-			magic_number);
-
-	arr_points[2].x = arr_points[1].x;
-
-	y_r = rgb_resulted[hw_points_num - 1].red;
-	y_g = rgb_resulted[hw_points_num - 1].green;
-	y_b = rgb_resulted[hw_points_num - 1].blue;
-
-	y2_max = dal_fixed31_32_max(y_r, dal_fixed31_32_max(y_g, y_b));
-
-	arr_points[1].y = y2_max;
+	/* this should be cleaned up as it's confusing my understanding (KK) is
+	 * that REGAMMA_CNTLA_EXP_REGION_END is the X value for the region end
+	 * REGAMMA_CNTLA_EXP_REGION_END_BASE is Y value for the above X
+	 * REGAMMA_CNTLA_EXP_REGION_END_SLOPE is the slope beyond (X,Y) above
+	 * currently when programming REGION_END = m_arrPoints[1].x,
+	 * REGION_END_BASE = m_arrPoints[1].y, REGION_END_SLOPE=1
+	 * we don't use m_arrPoints[2] at all after this function,
+	 * and its purpose isn't clear to me
+	 */
+	arr_points[1].x = coordinates_x[hw_points_num].adjusted_x;
+	arr_points[2].x = coordinates_x[hw_points_num].adjusted_x;
 
 	y_r = rgb_resulted[hw_points_num].red;
 	y_g = rgb_resulted[hw_points_num].green;
 	y_b = rgb_resulted[hw_points_num].blue;
 
+	/* see comment above, m_arrPoints[1].y should be the Y value for the
+	 * region end (m_numOfHwPoints), not last HW point(m_numOfHwPoints - 1)
+	 */
 	y3_max = dal_fixed31_32_max(y_r, dal_fixed31_32_max(y_g, y_b));
 
+	arr_points[1].y = y3_max;
 	arr_points[2].y = y3_max;
 
-	arr_points[2].slope = dal_fixed31_32_one;
+	arr_points[2].slope = dal_fixed31_32_zero;
+
+	/* for PQ, we want to have a straight line from last HW X point, and the
+	 * slope to be such that we hit 1.0 at 10000 nits.
+	 */
+	if (tf == TRANSFER_FUNCTION_PQ) {
+		const struct fixed31_32 end_value =
+				dal_fixed31_32_from_int(125);
+
+		arr_points[2].slope = dal_fixed31_32_div(
+			dal_fixed31_32_sub(dal_fixed31_32_one, arr_points[1].y),
+			dal_fixed31_32_sub(end_value, arr_points[1].x));
+	}
 }
 
 static bool convert_to_custom_float_format(
@@ -1286,7 +1417,8 @@ static bool convert_to_custom_float(
 
 bool calculate_regamma_params(struct pwl_params *params,
 		const struct core_gamma *ramp,
-		const struct core_surface *surface)
+		const struct core_surface *surface,
+		const struct core_stream *stream)
 {
 	struct gamma_curve *arr_curve_points = params->arr_curve_points;
 	struct curve_points *arr_points = params->arr_points;
@@ -1301,6 +1433,7 @@ bool calculate_regamma_params(struct pwl_params *params,
 	struct pixel_gamma_point *coeff128_oem = NULL;
 	struct pixel_gamma_point *coeff128 = NULL;
 
+	enum dc_transfer_func_predefined tf = TRANSFER_FUNCTION_SRGB;
 
 	bool ret = false;
 
@@ -1330,6 +1463,9 @@ bool calculate_regamma_params(struct pwl_params *params,
 	dividers.divider2 = dal_fixed31_32_from_int(2);
 	dividers.divider3 = dal_fixed31_32_from_fraction(5, 2);
 
+	if (stream->public.out_transfer_func)
+		tf = stream->public.out_transfer_func->tf;
+
 	build_evenly_distributed_points(
 			axix_x_256,
 			256,
@@ -1338,12 +1474,20 @@ bool calculate_regamma_params(struct pwl_params *params,
 
 	scale_gamma(rgb_user, ramp, dividers);
 
-	setup_distribution_points(arr_curve_points, arr_points,
-			&params->hw_points_num, coordinates_x);
-
-	build_regamma_curve(rgb_regamma, rgb_oem, coeff128_oem,
-			ramp, surface, params->hw_points_num,
-			coordinates_x, axix_x_256, dividers);
+	if (tf == TRANSFER_FUNCTION_PQ) {
+		setup_distribution_points_pq(arr_curve_points, arr_points,
+				&params->hw_points_num, coordinates_x,
+				surface->public.format);
+		build_regamma_curve_pq(rgb_regamma, rgb_oem, coeff128_oem,
+				ramp, surface, params->hw_points_num,
+				coordinates_x, axix_x_256, dividers);
+	} else {
+		setup_distribution_points(arr_curve_points, arr_points,
+				&params->hw_points_num, coordinates_x);
+		build_regamma_curve(rgb_regamma, rgb_oem, coeff128_oem,
+				ramp, surface, params->hw_points_num,
+				coordinates_x, axix_x_256, dividers);
+	}
 
 	map_regamma_hw_to_x_user(coeff128, rgb_oem, rgb_resulted, rgb_user,
 			coordinates_x, axix_x_256, &ramp->public, rgb_regamma,
@@ -1355,7 +1499,8 @@ bool calculate_regamma_params(struct pwl_params *params,
 			arr_points,
 			rgb_resulted,
 			coordinates_x,
-			params->hw_points_num);
+			params->hw_points_num,
+			tf);
 
 	convert_to_custom_float(rgb_resulted, arr_points,
 			params->hw_points_num);

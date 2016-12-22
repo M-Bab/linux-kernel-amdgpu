@@ -231,15 +231,69 @@ static void build_prescale_params(struct ipp_prescale_params *prescale_params,
 	}
 }
 
-static bool set_gamma_ramp(
-	struct input_pixel_processor *ipp,
-	struct output_pixel_processor *opp,
-	const struct core_gamma *ramp,
+static bool dce110_set_degamma(
+	struct pipe_ctx *pipe_ctx,
 	const struct core_surface *surface)
 {
+	struct input_pixel_processor *ipp = pipe_ctx->ipp;
+	const struct core_transfer_func *tf = NULL;
+	struct ipp_prescale_params prescale_params = { 0 };
+	bool result = true;
+
+	if (ipp == NULL)
+		return false;
+
+	if (surface->public.in_transfer_func)
+		tf = DC_TRANSFER_FUNC_TO_CORE(surface->public.in_transfer_func);
+
+	build_prescale_params(&prescale_params, surface);
+	ipp->funcs->ipp_program_prescale(ipp, &prescale_params);
+
+	if (tf == NULL) {
+		/* Default case if no input transfer function specified */
+		ipp->funcs->ipp_set_degamma(ipp,
+				IPP_DEGAMMA_MODE_BYPASS);
+	} else if (tf->public.type == TF_TYPE_PREDEFINED) {
+		switch (tf->public.tf) {
+		case TRANSFER_FUNCTION_SRGB:
+			ipp->funcs->ipp_set_degamma(ipp,
+					IPP_DEGAMMA_MODE_HW_sRGB);
+			break;
+		case TRANSFER_FUNCTION_BT709:
+			ipp->funcs->ipp_set_degamma(ipp,
+					IPP_DEGAMMA_MODE_HW_xvYCC);
+			break;
+		case TRANSFER_FUNCTION_LINEAR:
+			ipp->funcs->ipp_set_degamma(ipp,
+					IPP_DEGAMMA_MODE_BYPASS);
+			break;
+		case TRANSFER_FUNCTION_PQ:
+			result = false;
+			break;
+		default:
+			result = false;
+		}
+	} else {
+		/*TF_TYPE_DISTRIBUTED_POINTS - Not supported in DCE 11*/
+		result = false;
+	}
+
+	return result;
+}
+
+static bool dce110_set_output_transfer_func(
+	struct pipe_ctx *pipe_ctx,
+	const struct core_surface *surface, /* Surface - To be removed */
+	const struct core_stream *stream)
+{
+	struct output_pixel_processor *opp = pipe_ctx->opp;
+	const struct core_gamma *ramp = NULL;
 	struct ipp_prescale_params prescale_params = { 0 };
 	struct pwl_params *regamma_params;
 	bool result = false;
+
+	if (surface->public.gamma_correction)
+		ramp = DC_GAMMA_TO_CORE(surface->public.gamma_correction);
 
 	regamma_params = dm_alloc(sizeof(struct pwl_params));
 	if (regamma_params == NULL)
@@ -249,20 +303,11 @@ static bool set_gamma_ramp(
 
 	opp->funcs->opp_power_on_regamma_lut(opp, true);
 
-	if (ipp) {
-		build_prescale_params(&prescale_params, surface);
-		ipp->funcs->ipp_program_prescale(ipp, &prescale_params);
-	}
-
-	if (ramp && calculate_regamma_params(regamma_params, ramp, surface)) {
-
+	if (ramp && calculate_regamma_params(
+				regamma_params, ramp, surface, stream)) {
 		opp->funcs->opp_program_regamma_pwl(opp, regamma_params);
-		if (ipp)
-			ipp->funcs->ipp_set_degamma(ipp, IPP_DEGAMMA_MODE_HW_sRGB);
 		opp->funcs->opp_set_regamma_mode(opp, OPP_REGAMMA_USER);
 	} else {
-		if (ipp)
-			ipp->funcs->ipp_set_degamma(ipp, IPP_DEGAMMA_MODE_BYPASS);
 		opp->funcs->opp_set_regamma_mode(opp, OPP_REGAMMA_BYPASS);
 	}
 
@@ -1842,33 +1887,13 @@ static void dce110_program_front_end_for_pipe(
 			pipe_ctx->scl_data.recout.y);
 }
 
-
-
-static void dce110_prepare_pipe_for_surface_commit(
-		struct core_dc *dc,
-		struct pipe_ctx *pipe_ctx,
-		struct validate_context *context) {
-	struct core_gamma *gamma = NULL;
-
-	dc->hwss.increase_watermarks_for_pipe(dc, pipe_ctx, context);
-
-	if (pipe_ctx->surface->public.gamma_correction)
-		gamma = DC_GAMMA_TO_CORE(
-			pipe_ctx->surface->public.gamma_correction);
-
-	dc->hwss.set_gamma_correction(
-			pipe_ctx->ipp,
-			pipe_ctx->opp,
-			gamma, pipe_ctx->surface);
-}
-
 static void dce110_prepare_pipe_for_context(
 		struct core_dc *dc,
 		struct pipe_ctx *pipe_ctx,
 		struct validate_context *context)
 {
 	dce110_power_on_pipe_if_needed(dc, pipe_ctx, context);
-	dce110_prepare_pipe_for_surface_commit(dc, pipe_ctx, context);
+	dc->hwss.increase_watermarks_for_pipe(dc, pipe_ctx, context);
 }
 
 static void dce110_apply_ctx_for_surface(
@@ -1892,7 +1917,6 @@ static void dce110_apply_ctx_for_surface(
 		program_blender(dc, pipe_ctx);
 
 	}
-
 }
 
 static void dce110_power_down_fe(struct core_dc *dc, struct pipe_ctx *pipe)
@@ -1921,7 +1945,8 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.set_plane_config = set_plane_config,
 	.update_plane_addr = update_plane_addr,
 	.update_pending_status = dce110_update_pending_status,
-	.set_gamma_correction = set_gamma_ramp,
+	.set_input_transfer_func = dce110_set_degamma,
+	.set_output_transfer_func = dce110_set_output_transfer_func,
 	.power_down = dce110_power_down,
 	.enable_accelerated_mode = dce110_enable_accelerated_mode,
 	.enable_timing_synchronization = dce110_enable_timing_synchronization,

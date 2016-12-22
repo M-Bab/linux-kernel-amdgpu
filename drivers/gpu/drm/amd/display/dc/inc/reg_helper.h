@@ -112,6 +112,31 @@
 				FN(reg, f6), v6,\
 				FN(reg, f7), v7)
 
+#define REG_SET_8(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4,	\
+		f5, v5, f6, v6, f7, v7, f8, v8)	\
+		REG_SET_N(reg, 8, init_value, \
+				FN(reg, f1), v1,\
+				FN(reg, f2), v2,\
+				FN(reg, f3), v3,\
+				FN(reg, f4), v4,\
+				FN(reg, f5), v5,\
+				FN(reg, f6), v6,\
+				FN(reg, f7), v7,\
+				FN(reg, f8), v8)
+
+#define REG_SET_9(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4, f5, \
+		v5, f6, v6, f7, v7, f8, v8, f9, v9)	\
+		REG_SET_N(reg, 9, init_value, \
+				FN(reg, f1), v1,\
+				FN(reg, f2), v2, \
+				FN(reg, f3), v3, \
+				FN(reg, f4), v4, \
+				FN(reg, f5), v5, \
+				FN(reg, f6), v6, \
+				FN(reg, f7), v7, \
+				FN(reg, f8), v8, \
+				FN(reg, f9), v9)
+
 #define REG_SET_10(reg, init_value, f1, v1, f2, v2, f3, v3, f4, v4, f5, \
 		v5, f6, v6, f7, v7, f8, v8, f9, v9, f10, v10)	\
 		REG_SET_N(reg, 10, init_value, \
@@ -142,6 +167,13 @@
 				FN(reg_name, f1), v1, \
 				FN(reg_name, f2), v2, \
 				FN(reg_name, f3), v3)
+
+#define REG_GET_4(reg_name, f1, v1, f2, v2, f3, v3, f4, v4)	\
+		generic_reg_get4(CTX, REG(reg_name), \
+				FN(reg_name, f1), v1, \
+				FN(reg_name, f2), v2, \
+				FN(reg_name, f3), v3, \
+				FN(reg_name, f4), v4)
 
 #define REG_GET_5(reg_name, f1, v1, f2, v2, f3, v3, f4, v4, f5, v5)	\
 		generic_reg_get5(CTX, REG(reg_name), \
@@ -279,6 +311,12 @@ uint32_t generic_reg_get3(const struct dc_context *ctx, uint32_t addr,
 		uint8_t shift1, uint32_t mask1, uint32_t *field_value1,
 		uint8_t shift2, uint32_t mask2, uint32_t *field_value2,
 		uint8_t shift3, uint32_t mask3, uint32_t *field_value3);
+
+uint32_t generic_reg_get4(const struct dc_context *ctx, uint32_t addr,
+		uint8_t shift1, uint32_t mask1, uint32_t *field_value1,
+		uint8_t shift2, uint32_t mask2, uint32_t *field_value2,
+		uint8_t shift3, uint32_t mask3, uint32_t *field_value3,
+		uint8_t shift4, uint32_t mask4, uint32_t *field_value4);
 
 uint32_t generic_reg_get5(const struct dc_context *ctx, uint32_t addr,
 		uint8_t shift1, uint32_t mask1, uint32_t *field_value1,

@@ -22,6 +22,7 @@
  */
 #include <linux/types.h>
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/slab.h>
 #include <drm/amdgpu_drm.h>
 #include "pp_instance.h"
@@ -29,6 +30,17 @@
 #include "cgs_common.h"
 #include "linux/delay.h"
 
+MODULE_FIRMWARE("amdgpu/topaz_smc.bin");
+MODULE_FIRMWARE("amdgpu/topaz_k_smc.bin");
+MODULE_FIRMWARE("amdgpu/tonga_smc.bin");
+MODULE_FIRMWARE("amdgpu/tonga_k_smc.bin");
+MODULE_FIRMWARE("amdgpu/fiji_smc.bin");
+MODULE_FIRMWARE("amdgpu/polaris10_smc.bin");
+MODULE_FIRMWARE("amdgpu/polaris10_smc_sk.bin");
+MODULE_FIRMWARE("amdgpu/polaris11_smc.bin");
+MODULE_FIRMWARE("amdgpu/polaris11_smc_sk.bin");
+MODULE_FIRMWARE("amdgpu/polaris12_smc.bin");
+MODULE_FIRMWARE("amdgpu/polaris12_smc_sk.bin");
 
 int smum_init(struct amd_pp_init *pp_init, struct pp_instance *handle)
 {
@@ -65,6 +77,7 @@ int smum_init(struct amd_pp_init *pp_init, struct pp_instance *handle)
 			break;
 		case CHIP_POLARIS11:
 		case CHIP_POLARIS10:
+		case CHIP_POLARIS12:
 			polaris10_smum_init(smumgr);
 			break;
 		default:

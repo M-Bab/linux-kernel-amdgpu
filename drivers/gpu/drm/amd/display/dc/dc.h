@@ -27,7 +27,6 @@
 #define DC_INTERFACE_H_
 
 #include "dc_types.h"
-#include "dpcd_defs.h"
 #include "grph_object_defs.h"
 #include "logger_types.h"
 #include "gpio_types.h"
@@ -140,12 +139,14 @@ struct dc_debug {
 	bool max_disp_clk;
 	bool target_trace;
 	bool surface_trace;
+	bool timing_trace;
 	bool validation_trace;
 	bool disable_stutter;
 	bool disable_dcc;
 	bool disable_dfs_bypass;
 	bool disable_power_gate;
 	bool disable_clock_gate;
+	bool disable_dmcu;
 };
 
 struct dc {
@@ -155,21 +156,6 @@ struct dc {
 	struct dc_link_funcs link_funcs;
 	struct dc_config config;
 	struct dc_debug debug;
-};
-
-enum frame_buffer_mode {
-	FRAME_BUFFER_MODE_LOCAL_ONLY = 0,
-	FRAME_BUFFER_MODE_ZFB_ONLY,
-	FRAME_BUFFER_MODE_MIXED_ZFB_AND_LOCAL,
-} ;
-
-struct dchub_init_data {
-	bool dchub_initialzied;
-	bool dchub_info_valid;
-	int64_t zfb_phys_addr_base;
-	int64_t zfb_mc_base_addr;
-	uint64_t zfb_size_in_byte;
-	enum frame_buffer_mode fb_mode;
 };
 
 struct dc_init_data {
@@ -192,15 +178,14 @@ struct dc *dc_create(const struct dc_init_data *init_params);
 
 void dc_destroy(struct dc **dc);
 
-bool dc_init_dchub(struct dc *dc, struct dchub_init_data *dh_data);
-
 /*******************************************************************************
  * Surface Interfaces
  ******************************************************************************/
 
 enum {
 	RGB_256X3X16 = 256,
-	FLOAT_GAMMA_RAMP_MAX = 1025
+	FLOAT_GAMMA_RAMP_MAX = 1025,
+	TRANSFER_FUNC_POINTS = 1025
 };
 
 enum dc_gamma_ramp_type {
@@ -235,6 +220,32 @@ struct dc_gamma {
 	uint32_t size;
 };
 
+enum dc_transfer_func_type {
+	TF_TYPE_PREDEFINED,
+	TF_TYPE_DISTRIBUTED_POINTS,
+};
+
+struct dc_transfer_func_distributed_points {
+	uint16_t red[TRANSFER_FUNC_POINTS];
+	uint16_t green[TRANSFER_FUNC_POINTS];
+	uint16_t blue[TRANSFER_FUNC_POINTS];
+	uint16_t end_exponent;
+	uint16_t x_point_at_y1;
+};
+
+enum dc_transfer_func_predefined {
+	TRANSFER_FUNCTION_SRGB,
+	TRANSFER_FUNCTION_BT709,
+	TRANSFER_FUNCTION_PQ,
+	TRANSFER_FUNCTION_LINEAR,
+};
+
+struct dc_transfer_func {
+	enum dc_transfer_func_type type;
+	enum dc_transfer_func_predefined tf;
+	struct dc_transfer_func_distributed_points tf_pts;
+};
+
 struct dc_surface {
 	bool visible;
 	bool flip_immediate;
@@ -255,7 +266,10 @@ struct dc_surface {
 	bool horizontal_mirror;
 	enum plane_stereo_format stereo_format;
 
+	/* TO BE REMOVED AFTER BELOW TRANSFER FUNCTIONS IMPLEMENTED */
 	const struct dc_gamma *gamma_correction;
+
+	const struct dc_transfer_func *in_transfer_func;
 };
 
 struct dc_plane_info {
@@ -286,7 +300,11 @@ struct dc_surface_update {
 	/* following updates require alloc/sleep/spin that is not isr safe,
 	 * null means no updates
 	 */
+	/* gamma TO BE REMOVED */
 	struct dc_gamma *gamma;
+
+	struct dc_transfer_func *in_transfer_func;
+	struct dc_transfer_func *out_transfer_func;
 
 
 };
@@ -311,8 +329,13 @@ const struct dc_surface_status *dc_surface_get_status(
 void dc_surface_retain(const struct dc_surface *dc_surface);
 void dc_surface_release(const struct dc_surface *dc_surface);
 
+void dc_gamma_retain(const struct dc_gamma *dc_gamma);
 void dc_gamma_release(const struct dc_gamma *dc_gamma);
 struct dc_gamma *dc_create_gamma(const struct dc *dc);
+
+void dc_transfer_func_retain(const struct dc_transfer_func *dc_tf);
+void dc_transfer_func_release(const struct dc_transfer_func *dc_tf);
+struct dc_transfer_func *dc_create_transfer_func(const struct dc *dc);
 
 /*
  * This structure holds a surface address.  There could be multiple addresses
@@ -486,10 +509,11 @@ struct dc_stream {
 
 	struct freesync_context freesync_ctx;
 
-	/* TODO: dithering */
-	/* TODO: transfer function (CSC/regamma/gamut remap) */
+	const struct dc_transfer_func *out_transfer_func;
 	struct colorspace_transform gamut_remap_matrix;
 	struct csc_transform csc_color_matrix;
+
+	/* TODO: dithering */
 	/* TODO: custom INFO packets */
 	/* TODO: ABM info (DMCU) */
 	/* TODO: PSR info */

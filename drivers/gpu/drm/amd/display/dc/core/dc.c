@@ -1302,8 +1302,8 @@ bool dc_commit_surfaces_to_target(
 
 	for (i = 0; i < new_surface_count; i++) {
 		updates[i].surface = new_surfaces[i];
-		updates[i].gamma = (struct dc_gamma *)new_surfaces[i]->gamma_correction;
-
+		updates[i].gamma =
+			(struct dc_gamma *)new_surfaces[i]->gamma_correction;
 		flip_addr[i].address = new_surfaces[i]->address;
 		flip_addr[i].flip_immediate = new_surfaces[i]->flip_immediate;
 		plane_info[i].color_space = new_surfaces[i]->color_space;
@@ -1394,6 +1394,7 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 
 		for (j = 0; j < context->res_ctx.pool->pipe_count; j++) {
 			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
+			struct core_stream *stream = pipe_ctx->stream;
 
 			if (pipe_ctx->surface != surface)
 				continue;
@@ -1444,6 +1445,44 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 					pipe_ctx->scl_data.recout.width -= 2;
 				}
 			}
+
+			if (updates[i].gamma && updates[i].gamma !=
+				surface->public.gamma_correction) {
+				if (surface->public.gamma_correction != NULL)
+					dc_gamma_release(surface->public.
+							gamma_correction);
+
+				dc_gamma_retain(updates[i].gamma);
+				surface->public.gamma_correction =
+							updates[i].gamma;
+			}
+
+			if (updates[i].in_transfer_func &&
+					updates[i].in_transfer_func !=
+					surface->public.in_transfer_func) {
+				if (surface->public.in_transfer_func != NULL)
+					dc_transfer_func_release(
+							surface->public.
+							in_transfer_func);
+
+				dc_transfer_func_retain(
+						updates[i].in_transfer_func);
+				surface->public.in_transfer_func =
+						updates[i].in_transfer_func;
+			}
+
+			if (updates[i].out_transfer_func &&
+					updates[i].out_transfer_func !=
+					stream->public.out_transfer_func) {
+				if (stream->public.out_transfer_func != NULL)
+					dc_transfer_func_release(
+							stream->public.
+							out_transfer_func);
+				dc_transfer_func_retain(
+						updates[i].out_transfer_func);
+				stream->public.out_transfer_func =
+						updates[i].out_transfer_func;
+			}
 		}
 	}
 
@@ -1458,24 +1497,17 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 				continue;
 
 			if (updates[i].flip_addr) {
-				core_dc->hwss.pipe_control_lock(
-							core_dc->hwseq,
-							pipe_ctx->pipe_idx,
-							PIPE_LOCK_CONTROL_SURFACE,
-							true);
 				core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
 			}
 
 			if (updates[i].plane_info || updates[i].scaling_info
 					|| is_new_pipe_surface[j]) {
-
 				apply_ctx = true;
 
 				if (!pipe_ctx->tg->funcs->is_blanked(pipe_ctx->tg)) {
 					core_dc->hwss.pipe_control_lock(
 							core_dc->hwseq,
 							pipe_ctx->pipe_idx,
-							PIPE_LOCK_CONTROL_SURFACE |
 							PIPE_LOCK_CONTROL_GRAPHICS |
 							PIPE_LOCK_CONTROL_SCL |
 							PIPE_LOCK_CONTROL_BLENDER |
@@ -1484,12 +1516,24 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 				}
 			}
 
-			if (updates[i].gamma)
-				core_dc->hwss.prepare_pipe_for_context(
-						core_dc, pipe_ctx, context);
+			if (is_new_pipe_surface[j] ||
+					updates[i].in_transfer_func)
+				core_dc->hwss.set_input_transfer_func(
+						pipe_ctx, pipe_ctx->surface);
+
+			if (is_new_pipe_surface[j] ||
+					updates[i].gamma ||
+					updates[i].out_transfer_func)
+				core_dc->hwss.set_output_transfer_func(
+						pipe_ctx,
+						pipe_ctx->surface,
+						pipe_ctx->stream);
+
 		}
-		if (apply_ctx)
+		if (apply_ctx) {
 			core_dc->hwss.apply_ctx_for_surface(core_dc, surface, context);
+			context_timing_trace(dc, &context->res_ctx);
+		}
 	}
 
 	for (i = context->res_ctx.pool->pipe_count - 1; i >= 0; i--) {
@@ -1503,8 +1547,7 @@ void dc_update_surfaces_for_target(struct dc *dc, struct dc_surface_update *upda
 							pipe_ctx->pipe_idx,
 							PIPE_LOCK_CONTROL_GRAPHICS |
 							PIPE_LOCK_CONTROL_SCL |
-							PIPE_LOCK_CONTROL_BLENDER |
-							PIPE_LOCK_CONTROL_SURFACE,
+							PIPE_LOCK_CONTROL_BLENDER,
 							false);
 				}
 				break;
@@ -1826,32 +1869,5 @@ const struct dc_stream_status *dc_stream_get_status(
 	struct core_stream *stream = DC_STREAM_TO_CORE(dc_stream);
 
 	return &stream->status;
-}
-
-bool dc_init_dchub(struct dc *dc, struct dchub_init_data *dh_data)
-{
-	int i;
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-	struct mem_input *mi = NULL;
-
-	for (i = 0; i < core_dc->res_pool->pipe_count; i++) {
-		if (core_dc->res_pool->mis[i] != NULL) {
-			mi = core_dc->res_pool->mis[i];
-			break;
-		}
-	}
-	if (mi == NULL) {
-		dm_error("no mem_input!\n");
-		return false;
-	}
-
-	if (mi->funcs->mem_input_update_dchub)
-		mi->funcs->mem_input_update_dchub(mi, dh_data);
-	else
-		ASSERT(mi->funcs->mem_input_update_dchub);
-
-
-	return true;
-
 }
 
