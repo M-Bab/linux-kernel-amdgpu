@@ -1862,6 +1862,9 @@ static int dce_v6_0_cursor_move_locked(struct drm_crtc *crtc,
 	amdgpu_crtc->cursor_x = x;
 	amdgpu_crtc->cursor_y = y;
 
+	amdgpu_crtc->cursor_x = x;
+	amdgpu_crtc->cursor_y = y;
+
 	/* avivo cursor are offset into the total surface */
 	x += crtc->x;
 	y += crtc->y;
@@ -1953,6 +1956,8 @@ static int dce_v6_0_crtc_cursor_set2(struct drm_crtc *crtc,
 
 		dce_v6_0_cursor_move_locked(crtc, x, y);
 
+		amdgpu_crtc->cursor_width = width;
+		amdgpu_crtc->cursor_height = height;
 		amdgpu_crtc->cursor_hot_x = hot_x;
 		amdgpu_crtc->cursor_hot_y = hot_y;
 	}
