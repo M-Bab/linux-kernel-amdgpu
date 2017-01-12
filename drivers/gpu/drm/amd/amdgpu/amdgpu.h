@@ -196,6 +196,7 @@ int amdgpu_set_clockgating_state(struct amdgpu_device *adev,
 int amdgpu_set_powergating_state(struct amdgpu_device *adev,
 				  enum amd_ip_block_type block_type,
 				  enum amd_powergating_state state);
+void amdgpu_get_clockgating_state(struct amdgpu_device *adev, u32 *flags);
 int amdgpu_wait_for_idle(struct amdgpu_device *adev,
 			 enum amd_ip_block_type block_type);
 bool amdgpu_is_idle(struct amdgpu_device *adev,
@@ -1038,6 +1039,7 @@ struct amdgpu_uvd {
 	bool			use_ctx_buf;
 	struct amd_sched_entity entity;
 	uint32_t                srbm_soft_reset;
+	bool			is_powergated;
 };
 
 /*
@@ -1066,6 +1068,7 @@ struct amdgpu_vce {
 	struct amd_sched_entity	entity;
 	uint32_t                srbm_soft_reset;
 	unsigned		num_rings;
+	bool			is_powergated;
 };
 
 /*
