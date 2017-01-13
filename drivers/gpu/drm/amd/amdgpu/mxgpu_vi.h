@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-16 Advanced Micro Devices, Inc.
+ * Copyright 2017 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -18,41 +18,38 @@
  * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
- *
- * Authors: AMD
- *
  */
 
-#ifndef _OS_TYPES_H_
-#define _OS_TYPES_H_
+#ifndef __MXGPU_VI_H__
+#define __MXGPU_VI_H__
 
-#if defined __KERNEL__
+#define VI_MAILBOX_TIMEDOUT	150
+#define VI_MAILBOX_RESET_TIME	12
 
-#include <asm/byteorder.h>
-#include <linux/types.h>
-#include <drm/drmP.h>
+/* VI mailbox messages request */
+enum idh_request {
+	IDH_REQ_GPU_INIT_ACCESS	= 1,
+	IDH_REL_GPU_INIT_ACCESS,
+	IDH_REQ_GPU_FINI_ACCESS,
+	IDH_REL_GPU_FINI_ACCESS,
+	IDH_REQ_GPU_RESET_ACCESS
+};
 
-#include "cgs_linux.h"
+/* VI mailbox messages data */
+enum idh_event {
+	IDH_CLR_MSG_BUF = 0,
+	IDH_READY_TO_ACCESS_GPU,
+	IDH_FLR_NOTIFICATION,
+	IDH_FLR_NOTIFICATION_CMPL,
+	IDH_EVENT_MAX
+};
 
-#if defined(__BIG_ENDIAN) && !defined(BIGENDIAN_CPU)
-#define BIGENDIAN_CPU
-#elif defined(__LITTLE_ENDIAN) && !defined(LITTLEENDIAN_CPU)
-#define LITTLEENDIAN_CPU
+extern const struct amdgpu_virt_ops xgpu_vi_virt_ops;
+
+void xgpu_vi_init_golden_registers(struct amdgpu_device *adev);
+void xgpu_vi_mailbox_set_irq_funcs(struct amdgpu_device *adev);
+int xgpu_vi_mailbox_add_irq_id(struct amdgpu_device *adev);
+int xgpu_vi_mailbox_get_irq(struct amdgpu_device *adev);
+void xgpu_vi_mailbox_put_irq(struct amdgpu_device *adev);
+
 #endif
-
-#undef READ
-#undef WRITE
-#undef FRAME_SIZE
-
-#define dm_output_to_console(fmt, ...) DRM_INFO(fmt, ##__VA_ARGS__)
-
-#define dm_error(fmt, ...) DRM_ERROR(fmt, ##__VA_ARGS__)
-
-#define dm_debug(fmt, ...) DRM_DEBUG_KMS(fmt, ##__VA_ARGS__)
-
-#define dm_vlog(fmt, args) vprintk(fmt, args)
-
-#endif
-
-
-#endif /* _OS_TYPES_H_ */

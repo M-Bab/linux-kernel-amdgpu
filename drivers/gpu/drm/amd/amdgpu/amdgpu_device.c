@@ -95,6 +95,11 @@ uint32_t amdgpu_mm_rreg(struct amdgpu_device *adev, uint32_t reg,
 {
 	uint32_t ret;
 
+	if (amdgpu_sriov_runtime(adev)) {
+		BUG_ON(in_interrupt());
+		return amdgpu_virt_kiq_rreg(adev, reg);
+	}
+
 	if ((reg * 4) < adev->rmmio_size && !always_indirect)
 		ret = readl(((void __iomem *)adev->rmmio) + (reg * 4));
 	else {
@@ -113,6 +118,11 @@ void amdgpu_mm_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v,
 		    bool always_indirect)
 {
 	trace_amdgpu_mm_wreg(adev->pdev->device, reg, v);
+
+	if (amdgpu_sriov_runtime(adev)) {
+		BUG_ON(in_interrupt());
+		return amdgpu_virt_kiq_wreg(adev, reg, v);
+	}
 
 	if ((reg * 4) < adev->rmmio_size && !always_indirect)
 		writel(v, ((void __iomem *)adev->rmmio) + (reg * 4));
@@ -1336,6 +1346,12 @@ static int amdgpu_early_init(struct amdgpu_device *adev)
 		return -EINVAL;
 	}
 
+	if (amdgpu_sriov_vf(adev)) {
+		r = amdgpu_virt_request_full_gpu(adev, true);
+		if (r)
+			return r;
+	}
+
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if ((amdgpu_ip_block_mask & (1 << i)) == 0) {
 			DRM_ERROR("disabled ip block: %d\n", i);
@@ -1396,6 +1412,15 @@ static int amdgpu_init(struct amdgpu_device *adev)
 				return r;
 			}
 			adev->ip_blocks[i].status.hw = true;
+
+			/* right after GMC hw init, we create CSA */
+			if (amdgpu_sriov_vf(adev)) {
+				r = amdgpu_allocate_static_csa(adev);
+				if (r) {
+					DRM_ERROR("allocate CSA failed %d\n", r);
+					return r;
+				}
+			}
 		}
 	}
 
@@ -1529,6 +1554,11 @@ static int amdgpu_fini(struct amdgpu_device *adev)
 		adev->ip_blocks[i].status.late_initialized = false;
 	}
 
+	if (amdgpu_sriov_vf(adev)) {
+		amdgpu_bo_free_kernel(&adev->virt.csa_obj, &adev->virt.csa_vmid0_addr, NULL);
+		amdgpu_virt_release_full_gpu(adev, false);
+	}
+
 	return 0;
 }
 
@@ -1622,6 +1652,9 @@ bool amdgpu_device_asic_has_dc_support(enum amd_asic_type asic_type)
  */
 bool amdgpu_device_has_dc_support(struct amdgpu_device *adev)
 {
+	if (amdgpu_sriov_vf(adev))
+		return false;
+
 	return amdgpu_device_asic_has_dc_support(adev->asic_type);
 }
 
@@ -2316,6 +2349,9 @@ int amdgpu_gpu_reset(struct amdgpu_device *adev)
 	int i, r;
 	int resched;
 	bool need_full_reset;
+
+	if (amdgpu_sriov_vf(adev))
+		return 0;
 
 	if (!amdgpu_check_soft_reset(adev)) {
 		DRM_INFO("No hardware hang detected. Did some blocks stall?\n");

@@ -623,7 +623,7 @@ static void program_scaler(const struct core_dc *dc,
 		&pipe_ctx->scl_data);
 }
 
-static enum dc_status prog_pixclk_crtc_otg(
+static enum dc_status dce110_prog_pixclk_crtc_otg(
 		struct pipe_ctx *pipe_ctx,
 		struct validate_context *context,
 		struct core_dc *dc)
@@ -641,6 +641,7 @@ static enum dc_status prog_pixclk_crtc_otg(
 		pipe_ctx->tg->funcs->set_blank_color(
 				pipe_ctx->tg,
 				&black_color);
+
 		/*
 		 * Must blank CRTC after disabling power gating and before any
 		 * programming, otherwise CRTC will be hung in bad state
@@ -752,7 +753,7 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 					stream->public.timing.h_total,
 					stream->public.timing.v_total,
 					stream->public.timing.pix_clk_khz,
-					context->target_count);
+					context->stream_count);
 
 	return DC_OK;
 }
@@ -1047,13 +1048,14 @@ static void reset_single_pipe_hw_ctx(
 		struct validate_context *context)
 {
 	core_link_disable_stream(pipe_ctx);
-	if (!pipe_ctx->tg->funcs->set_blank(pipe_ctx->tg, true)) {
+	pipe_ctx->tg->funcs->set_blank(pipe_ctx->tg, true);
+	if (!hwss_wait_for_blank_complete(pipe_ctx->tg)) {
 		dm_error("DC: failed to blank crtc!\n");
 		BREAK_TO_DEBUGGER();
 	}
 	pipe_ctx->tg->funcs->disable_crtc(pipe_ctx->tg);
 	pipe_ctx->mi->funcs->free_mem_input(
-				pipe_ctx->mi, context->target_count);
+				pipe_ctx->mi, context->stream_count);
 	resource_unreference_clock_source(
 			&context->res_ctx, &pipe_ctx->clock_source);
 
@@ -1252,7 +1254,7 @@ enum dc_status dce110_apply_ctx_to_hw(
 	dc->hwss.reset_hw_ctx_wrap(dc, context);
 
 	/* Skip applying if no targets */
-	if (context->target_count <= 0)
+	if (context->stream_count <= 0)
 		return DC_OK;
 
 	if (IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment)) {
@@ -1409,20 +1411,52 @@ static void set_default_colors(struct pipe_ctx *pipe_ctx)
 					pipe_ctx->opp, &default_adjust);
 }
 
-static void program_blender(const struct core_dc *dc,
+
+/*******************************************************************************
+ * In order to turn on/off specific surface we will program
+ * Blender + CRTC
+ *
+ * In case that we have two surfaces and they have a different visibility
+ * we can't turn off the CRTC since it will turn off the entire display
+ *
+ * |----------------------------------------------- |
+ * |bottom pipe|curr pipe  |              |         |
+ * |Surface    |Surface    | Blender      |  CRCT   |
+ * |visibility |visibility | Configuration|         |
+ * |------------------------------------------------|
+ * |   off     |    off    | CURRENT_PIPE | blank   |
+ * |   off     |    on     | CURRENT_PIPE | unblank |
+ * |   on      |    off    | OTHER_PIPE   | unblank |
+ * |   on      |    on     | BLENDING     | unblank |
+ * -------------------------------------------------|
+ *
+ ******************************************************************************/
+static void program_surface_visibility(const struct core_dc *dc,
 		struct pipe_ctx *pipe_ctx)
 {
 	enum blnd_mode blender_mode = BLND_MODE_CURRENT_PIPE;
+	bool blank_target = false;
 
 	if (pipe_ctx->bottom_pipe) {
+
+		/* For now we are supporting only two pipes */
+		ASSERT(pipe_ctx->bottom_pipe->bottom_pipe == NULL);
+
 		if (pipe_ctx->bottom_pipe->surface->public.visible) {
 			if (pipe_ctx->surface->public.visible)
 				blender_mode = BLND_MODE_BLENDING;
 			else
 				blender_mode = BLND_MODE_OTHER_PIPE;
-		}
-	}
+
+		} else if (!pipe_ctx->surface->public.visible)
+			blank_target = true;
+
+	} else if (!pipe_ctx->surface->public.visible)
+		blank_target = true;
+
 	dce_set_blender_mode(dc->hwseq, pipe_ctx->pipe_idx, blender_mode);
+	pipe_ctx->tg->funcs->set_blank(pipe_ctx->tg, blank_target);
+
 }
 
 /**
@@ -1495,7 +1529,7 @@ static void set_plane_config(
 	pipe_ctx->scl_data.lb_params.alpha_en = pipe_ctx->bottom_pipe != 0;
 	program_scaler(dc, pipe_ctx);
 
-	program_blender(dc, pipe_ctx);
+	program_surface_visibility(dc, pipe_ctx);
 
 	mi->funcs->mem_input_program_surface_config(
 			mi,
@@ -1504,7 +1538,8 @@ static void set_plane_config(
 			&surface->public.plane_size,
 			surface->public.rotation,
 			NULL,
-			false);
+			false,
+			pipe_ctx->surface->public.visible);
 
 	if (dc->public.config.gpu_vm_support)
 		mi->funcs->mem_input_program_pte_vm(
@@ -1528,9 +1563,6 @@ static void update_plane_addr(const struct core_dc *dc,
 			surface->public.flip_immediate);
 
 	surface->status.requested_address = surface->public.address;
-
-	if (surface->public.visible)
-		pipe_ctx->tg->funcs->set_blank(pipe_ctx->tg, false);
 }
 
 void dce110_update_pending_status(struct pipe_ctx *pipe_ctx)
@@ -1686,6 +1718,7 @@ static void init_hw(struct core_dc *dc)
 		/* Blank controller using driver code instead of
 		 * command table. */
 		tg->funcs->set_blank(tg, true);
+		hwss_wait_for_blank_complete(tg);
 	}
 
 	for (i = 0; i < dc->res_pool->audio_count; i++) {
@@ -1728,7 +1761,7 @@ static void dce110_power_on_pipe_if_needed(
 				pipe_ctx->stream->public.timing.h_total,
 				pipe_ctx->stream->public.timing.v_total,
 				pipe_ctx->stream->public.timing.pix_clk_khz,
-				context->target_count);
+				context->stream_count);
 
 		/* TODO unhardcode*/
 		color_space_to_black_color(dc,
@@ -1845,8 +1878,9 @@ static void dce110_program_front_end_for_pipe(
 			&surface->public.tiling_info,
 			&surface->public.plane_size,
 			surface->public.rotation,
+			NULL,
 			false,
-			false);
+			pipe_ctx->surface->public.visible);
 
 	if (dc->public.config.gpu_vm_support)
 		mi->funcs->mem_input_program_pte_vm(
@@ -1920,7 +1954,7 @@ static void dce110_apply_ctx_for_surface(
 			continue;
 
 		dce110_program_front_end_for_pipe(dc, pipe_ctx);
-		program_blender(dc, pipe_ctx);
+		program_surface_visibility(dc, pipe_ctx);
 
 	}
 }
@@ -1970,7 +2004,7 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.set_drr = set_drr,
 	.set_static_screen_control = set_static_screen_control,
 	.reset_hw_ctx_wrap = reset_hw_ctx_wrap,
-	.prog_pixclk_crtc_otg = prog_pixclk_crtc_otg,
+	.prog_pixclk_crtc_otg = dce110_prog_pixclk_crtc_otg,
 };
 
 bool dce110_hw_sequencer_construct(struct core_dc *dc)
