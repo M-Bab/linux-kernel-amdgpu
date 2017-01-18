@@ -175,15 +175,15 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned num_ibs,
 	if (ring->funcs->emit_hdp_flush)
 		amdgpu_ring_emit_hdp_flush(ring);
 
-	/* always set cond_exec_polling to CONTINUE */
-	*ring->cond_exe_cpu_addr = 1;
-
 	skip_preamble = ring->current_ctx == fence_ctx;
 	need_ctx_switch = ring->current_ctx != fence_ctx;
 	if (job && ring->funcs->emit_cntxcntl) {
 		if (need_ctx_switch)
 			status |= AMDGPU_HAVE_CTX_SWITCH;
 		status |= job->preamble_status;
+
+		if (vm)
+			status |= AMDGPU_VM_DOMAIN;
 		amdgpu_ring_emit_cntxcntl(ring, status);
 	}
 
@@ -193,7 +193,8 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned num_ibs,
 		/* drop preamble IBs if we don't have a context switch */
 		if ((ib->flags & AMDGPU_IB_FLAG_PREAMBLE) &&
 			skip_preamble &&
-			!(status & AMDGPU_PREAMBLE_IB_PRESENT_FIRST))
+			!(status & AMDGPU_PREAMBLE_IB_PRESENT_FIRST) &&
+			!amdgpu_sriov_vf(adev)) /* for SRIOV preemption, Preamble CE ib must be inserted anyway */
 			continue;
 
 		amdgpu_ring_emit_ib(ring, ib, job ? job->vm_id : 0,
@@ -223,7 +224,7 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned num_ibs,
 		amdgpu_ring_patch_cond_exec(ring, patch_offset);
 
 	ring->current_ctx = fence_ctx;
-	if (ring->funcs->emit_switch_buffer)
+	if (vm && ring->funcs->emit_switch_buffer)
 		amdgpu_ring_emit_switch_buffer(ring);
 	amdgpu_ring_commit(ring);
 	return 0;

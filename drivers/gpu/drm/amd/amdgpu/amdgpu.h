@@ -796,8 +796,7 @@ struct amdgpu_kiq {
 struct amdgpu_scratch {
 	unsigned		num_reg;
 	uint32_t                reg_base;
-	bool			free[32];
-	uint32_t		reg[32];
+	uint32_t		free_mask;
 };
 
 /*
@@ -953,6 +952,7 @@ struct amdgpu_cs_parser {
 #define AMDGPU_PREAMBLE_IB_PRESENT          (1 << 0) /* bit set means command submit involves a preamble IB */
 #define AMDGPU_PREAMBLE_IB_PRESENT_FIRST    (1 << 1) /* bit set means preamble IB is first presented in belonging context */
 #define AMDGPU_HAVE_CTX_SWITCH              (1 << 2) /* bit set means context switch occured */
+#define AMDGPU_VM_DOMAIN                    (1 << 3) /* bit set means in virtual memory context */
 
 struct amdgpu_job {
 	struct amd_sched_job    base;
@@ -1597,6 +1597,37 @@ static inline void amdgpu_ring_write(struct amdgpu_ring *ring, uint32_t v)
 	ring->ring[ring->wptr++] = v;
 	ring->wptr &= ring->ptr_mask;
 	ring->count_dw--;
+}
+
+static inline void amdgpu_ring_write_multiple(struct amdgpu_ring *ring, void *src, int count_dw)
+{
+	unsigned occupied, chunk1, chunk2;
+	void *dst;
+
+	if (ring->count_dw < count_dw) {
+		DRM_ERROR("amdgpu: writing more dwords to the ring than expected!\n");
+	} else {
+		occupied = ring->wptr & ring->ptr_mask;
+		dst = (void *)&ring->ring[occupied];
+		chunk1 = ring->ptr_mask + 1 - occupied;
+		chunk1 = (chunk1 >= count_dw) ? count_dw: chunk1;
+		chunk2 = count_dw - chunk1;
+		chunk1 <<= 2;
+		chunk2 <<= 2;
+
+		if (chunk1)
+			memcpy(dst, src, chunk1);
+
+		if (chunk2) {
+			src += chunk1;
+			dst = (void *)ring->ring;
+			memcpy(dst, src, chunk2);
+		}
+
+		ring->wptr += count_dw;
+		ring->wptr &= ring->ptr_mask;
+		ring->count_dw -= count_dw;
+	}
 }
 
 static inline struct amdgpu_sdma_instance *
