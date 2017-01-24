@@ -38,7 +38,6 @@
 #include "hw_sequencer.h"
 #include "resource.h"
 #include "fixed31_32.h"
-#include "include/asic_capability_interface.h"
 #include "dpcd_defs.h"
 
 #include "dce/dce_11_0_d.h"
@@ -1051,9 +1050,6 @@ static bool construct(
 			continue;
 		if (link->device_tag.dev_id.device_type == DEVICE_TYPE_LCD
 			&& link->public.connector_signal == SIGNAL_TYPE_RGB)
-			continue;
-		if (link->device_tag.dev_id.device_type == DEVICE_TYPE_WIRELESS
-			&& link->public.connector_signal != SIGNAL_TYPE_WIRELESS)
 			continue;
 		break;
 	}

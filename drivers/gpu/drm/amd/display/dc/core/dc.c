@@ -621,7 +621,7 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 	core_dc->hwss.init_hw(core_dc);
 
 	full_pipe_count = core_dc->res_pool->pipe_count;
-	if (core_dc->res_pool->underlay_pipe_index >= 0)
+	if (core_dc->res_pool->underlay_pipe_index != NO_UNDERLAY_PIPE)
 		full_pipe_count--;
 	core_dc->public.caps.max_streams = min(
 			full_pipe_count,
@@ -1007,7 +1007,7 @@ bool dc_commit_streams(
 	struct dc_bios *dcb = core_dc->ctx->dc_bios;
 	enum dc_status result = DC_ERROR_UNEXPECTED;
 	struct validate_context *context;
-	struct dc_validation_set set[MAX_STREAMS];
+	struct dc_validation_set set[MAX_STREAMS] = { 0 };
 	int i, j, k;
 
 	if (false == streams_changed(core_dc, streams, stream_count))
@@ -1018,13 +1018,20 @@ bool dc_commit_streams(
 
 	for (i = 0; i < stream_count; i++) {
 		const struct dc_stream *stream = streams[i];
+		const struct dc_stream_status *status = dc_stream_get_status(stream);
+		int j;
 
 		dc_stream_log(stream,
 				core_dc->ctx->logger,
 				LOG_DC);
 
 		set[i].stream = stream;
-		set[i].surface_count = 0;
+
+		if (status) {
+			set[i].surface_count = status->surface_count;
+			for (j = 0; j < status->surface_count; j++)
+				set[i].surfaces[j] = status->surfaces[j];
+		}
 
 	}
 
@@ -1422,6 +1429,8 @@ void dc_update_surfaces_for_stream(struct dc *dc, struct dc_surface_update *upda
 						updates[i].plane_info->tiling_info;
 					surface->public.visible =
 						updates[i].plane_info->visible;
+					surface->public.dcc =
+						updates[i].plane_info->dcc;
 				}
 
 				if (updates[i].scaling_info) {
@@ -1519,22 +1528,22 @@ void dc_update_surfaces_for_stream(struct dc *dc, struct dc_surface_update *upda
 			if (dc->debug.disable_color_module)
 				continue;  /* skip below color updates */
 
-			if (updates[i].hdr_static_metadata) {
-				resource_build_info_frame(pipe_ctx);
-				core_dc->hwss.update_info_frame(pipe_ctx);
-			}
 			if (is_new_pipe_surface[j] ||
 					updates[i].in_transfer_func)
 				core_dc->hwss.set_input_transfer_func(
 						pipe_ctx, pipe_ctx->surface);
 
 			if (is_new_pipe_surface[j] ||
-					updates[i].gamma ||
 					updates[i].out_transfer_func)
 				core_dc->hwss.set_output_transfer_func(
 						pipe_ctx,
 						pipe_ctx->surface,
 						pipe_ctx->stream);
+
+			if (updates[i].hdr_static_metadata) {
+				resource_build_info_frame(pipe_ctx);
+				core_dc->hwss.update_info_frame(pipe_ctx);
+			}
 
 		}
 		if (apply_ctx) {

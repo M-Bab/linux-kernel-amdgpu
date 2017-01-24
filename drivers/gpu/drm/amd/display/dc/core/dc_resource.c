@@ -341,7 +341,7 @@ static enum pixel_format convert_pixel_format_to_dalsurface(
 	case SURFACE_PIXEL_FORMAT_GRPH_ARGB8888:
 		dal_pixel_format = PIXEL_FORMAT_ARGB8888;
 		break;
-	case SURFACE_PIXEL_FORMAT_GRPH_BGRA8888:
+	case SURFACE_PIXEL_FORMAT_GRPH_ABGR8888:
 		dal_pixel_format = PIXEL_FORMAT_ARGB8888;
 		break;
 	case SURFACE_PIXEL_FORMAT_GRPH_ARGB2101010:
@@ -585,7 +585,7 @@ enum dc_status resource_build_scaling_params_for_context(
 			if (!resource_build_scaling_params(
 				&context->res_ctx.pipe_ctx[i].surface->public,
 				&context->res_ctx.pipe_ctx[i]))
-				return DC_FAIL_BANDWIDTH_VALIDATE;
+				return DC_FAIL_SCALING;
 	}
 
 	return DC_OK;
@@ -1211,70 +1211,27 @@ void validate_guaranteed_copy_streams(
 	}
 }
 
-static void translate_info_frame(const struct hw_info_frame *hw_info_frame,
-	struct encoder_info_frame *encoder_info_frame)
+static void patch_gamut_packet_checksum(
+		struct encoder_info_packet *gamut_packet)
 {
-	memset(
-		encoder_info_frame, 0, sizeof(struct encoder_info_frame));
-
 	/* For gamut we recalc checksum */
-	if (hw_info_frame->gamut_packet.valid) {
+	if (gamut_packet->valid) {
 		uint8_t chk_sum = 0;
 		uint8_t *ptr;
 		uint8_t i;
 
-		memmove(
-						&encoder_info_frame->gamut,
-						&hw_info_frame->gamut_packet,
-						sizeof(struct hw_info_packet));
-
 		/*start of the Gamut data. */
-		ptr = &encoder_info_frame->gamut.sb[3];
+		ptr = &gamut_packet->sb[3];
 
-		for (i = 0; i <= encoder_info_frame->gamut.sb[1]; i++)
+		for (i = 0; i <= gamut_packet->sb[1]; i++)
 			chk_sum += ptr[i];
 
-		encoder_info_frame->gamut.sb[2] = (uint8_t) (0x100 - chk_sum);
-	}
-
-	if (hw_info_frame->avi_info_packet.valid) {
-		memmove(
-						&encoder_info_frame->avi,
-						&hw_info_frame->avi_info_packet,
-						sizeof(struct hw_info_packet));
-	}
-
-	if (hw_info_frame->vendor_info_packet.valid) {
-		memmove(
-						&encoder_info_frame->vendor,
-						&hw_info_frame->vendor_info_packet,
-						sizeof(struct hw_info_packet));
-	}
-
-	if (hw_info_frame->spd_packet.valid) {
-		memmove(
-						&encoder_info_frame->spd,
-						&hw_info_frame->spd_packet,
-						sizeof(struct hw_info_packet));
-	}
-
-	if (hw_info_frame->vsc_packet.valid) {
-		memmove(
-						&encoder_info_frame->vsc,
-						&hw_info_frame->vsc_packet,
-						sizeof(struct hw_info_packet));
-	}
-
-	if (hw_info_frame->hdrsmd_packet.valid) {
-		memmove(
-						&encoder_info_frame->hdrsmd,
-						&hw_info_frame->hdrsmd_packet,
-						sizeof(struct hw_info_packet));
+		gamut_packet->sb[2] = (uint8_t) (0x100 - chk_sum);
 	}
 }
 
 static void set_avi_info_frame(
-	struct hw_info_packet *info_packet,
+		struct encoder_info_packet *info_packet,
 		struct pipe_ctx *pipe_ctx)
 {
 	struct core_stream *stream = pipe_ctx->stream;
@@ -1287,9 +1244,6 @@ static void set_avi_info_frame(
 	uint8_t cn0_cn1 = 0;
 	uint8_t *check_sum = NULL;
 	uint8_t byte_index = 0;
-
-	if (info_packet == NULL)
-		return;
 
 	color_space = pipe_ctx->stream->public.output_color_space;
 
@@ -1355,6 +1309,20 @@ static void set_avi_info_frame(
 	else
 		info_frame.avi_info_packet.info_packet_hdmi.bits.C0_C1 =
 				COLORIMETRY_NO_DATA;
+
+	if (color_space == COLOR_SPACE_2020_RGB_FULLRANGE ||
+		color_space == COLOR_SPACE_2020_RGB_LIMITEDRANGE ||
+		color_space == COLOR_SPACE_2020_YCBCR) {
+		info_frame.avi_info_packet.info_packet_hdmi.bits.EC0_EC2 =
+				COLORIMETRYEX_BT2020RGBYCBCR;
+		info_frame.avi_info_packet.info_packet_hdmi.bits.C0_C1 =
+				COLORIMETRY_EXTENDED;
+	} else if (color_space == COLOR_SPACE_ADOBERGB) {
+		info_frame.avi_info_packet.info_packet_hdmi.bits.EC0_EC2 =
+				COLORIMETRYEX_ADOBERGB;
+		info_frame.avi_info_packet.info_packet_hdmi.bits.C0_C1 =
+				COLORIMETRY_EXTENDED;
+	}
 
 	/* TODO: un-hardcode aspect ratio */
 	aspect = stream->public.timing.aspect_ratio;
@@ -1458,17 +1426,15 @@ static void set_avi_info_frame(
 	info_packet->valid = true;
 }
 
-static void set_vendor_info_packet(struct core_stream *stream,
-		struct hw_info_packet *info_packet)
+static void set_vendor_info_packet(
+		struct encoder_info_packet *info_packet,
+		struct core_stream *stream)
 {
 	uint32_t length = 0;
 	bool hdmi_vic_mode = false;
 	uint8_t checksum = 0;
 	uint32_t i = 0;
 	enum dc_timing_3d_format format;
-
-	ASSERT_CRITICAL(stream != NULL);
-	ASSERT_CRITICAL(info_packet != NULL);
 
 	format = stream->public.timing.timing_3d_format;
 
@@ -1567,8 +1533,9 @@ static void set_vendor_info_packet(struct core_stream *stream,
 	info_packet->valid = true;
 }
 
-static void set_spd_info_packet(struct core_stream *stream,
-		struct hw_info_packet *info_packet)
+static void set_spd_info_packet(
+		struct encoder_info_packet *info_packet,
+		struct core_stream *stream)
 {
 	/* SPD info packet for FreeSync */
 
@@ -1688,9 +1655,9 @@ static void set_spd_info_packet(struct core_stream *stream,
 }
 
 static void set_hdr_static_info_packet(
+		struct encoder_info_packet *info_packet,
 		struct core_surface *surface,
-		struct core_stream *stream,
-		struct hw_info_packet *info_packet)
+		struct core_stream *stream)
 {
 	uint16_t i = 0;
 	enum signal_type signal = stream->signal;
@@ -1791,8 +1758,9 @@ static void set_hdr_static_info_packet(
 	}
 }
 
-static void set_vsc_info_packet(struct core_stream *stream,
-		struct hw_info_packet *info_packet)
+static void set_vsc_info_packet(
+		struct encoder_info_packet *info_packet,
+		struct core_stream *stream)
 {
 	unsigned int vscPacketRevision = 0;
 	unsigned int i;
@@ -1894,36 +1862,38 @@ struct clock_source *dc_resource_find_first_free_pll(
 void resource_build_info_frame(struct pipe_ctx *pipe_ctx)
 {
 	enum signal_type signal = SIGNAL_TYPE_NONE;
-	struct hw_info_frame info_frame = { { 0 } };
+	struct encoder_info_frame *info = &pipe_ctx->encoder_info_frame;
 
 	/* default all packets to invalid */
-	info_frame.avi_info_packet.valid = false;
-	info_frame.gamut_packet.valid = false;
-	info_frame.vendor_info_packet.valid = false;
-	info_frame.spd_packet.valid = false;
-	info_frame.vsc_packet.valid = false;
-	info_frame.hdrsmd_packet.valid = false;
+	info->avi.valid = false;
+	info->gamut.valid = false;
+	info->vendor.valid = false;
+	info->hdrsmd.valid = false;
+	info->vsc.valid = false;
 
 	signal = pipe_ctx->stream->signal;
 
 	/* HDMi and DP have different info packets*/
 	if (dc_is_hdmi_signal(signal)) {
-		set_avi_info_frame(
-			&info_frame.avi_info_packet, pipe_ctx);
-		set_vendor_info_packet(
-			pipe_ctx->stream, &info_frame.vendor_info_packet);
-		set_spd_info_packet(pipe_ctx->stream, &info_frame.spd_packet);
-		set_hdr_static_info_packet(pipe_ctx->surface,
-				pipe_ctx->stream, &info_frame.hdrsmd_packet);
+		set_avi_info_frame(&info->avi, pipe_ctx);
+
+		set_vendor_info_packet(&info->vendor, pipe_ctx->stream);
+
+		set_spd_info_packet(&info->spd, pipe_ctx->stream);
+
+		set_hdr_static_info_packet(&info->hdrsmd,
+				pipe_ctx->surface, pipe_ctx->stream);
+
 	} else if (dc_is_dp_signal(signal)) {
-		set_vsc_info_packet(pipe_ctx->stream, &info_frame.vsc_packet);
-		set_spd_info_packet(pipe_ctx->stream, &info_frame.spd_packet);
-		set_hdr_static_info_packet(pipe_ctx->surface,
-				pipe_ctx->stream, &info_frame.hdrsmd_packet);
+		set_vsc_info_packet(&info->vsc, pipe_ctx->stream);
+
+		set_spd_info_packet(&info->spd, pipe_ctx->stream);
+
+		set_hdr_static_info_packet(&info->hdrsmd,
+				pipe_ctx->surface, pipe_ctx->stream);
 	}
 
-	translate_info_frame(&info_frame,
-			&pipe_ctx->encoder_info_frame);
+	patch_gamut_packet_checksum(&info->gamut);
 }
 
 enum dc_status resource_map_clock_resources(
