@@ -548,6 +548,8 @@ static int amdgpu_ttm_io_mem_reserve(struct ttm_bo_device *bdev, struct ttm_mem_
 			mem->bus.addr =
 				ioremap_nocache(mem->bus.base + mem->bus.offset,
 						mem->bus.size);
+		if (!mem->bus.addr)
+			return -ENOMEM;
 
 		/*
 		 * Alpha: Use just the bus offset plus
@@ -1294,7 +1296,7 @@ int amdgpu_copy_buffer(struct amdgpu_ring *ring,
 	WARN_ON(job->ibs[0].length_dw > num_dw);
 	if (direct_submit) {
 		r = amdgpu_ib_schedule(ring, job->num_ibs, job->ibs,
-				       NULL, NULL, fence);
+				       NULL, fence);
 		job->fence = fence_get(*fence);
 		if (r)
 			DRM_ERROR("Error scheduling IBs (%d)\n", r);

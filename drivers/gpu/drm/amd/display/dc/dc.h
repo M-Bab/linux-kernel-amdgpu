@@ -145,11 +145,8 @@ struct dc_debug {
 	bool disable_stutter;
 	bool disable_dcc;
 	bool disable_dfs_bypass;
-	bool disable_dpp_power_gate;
-	bool disable_hubp_power_gate;
 	bool disable_clock_gate;
 	bool disable_dmcu;
-	bool disable_color_module;
 };
 
 struct dc {
@@ -337,7 +334,6 @@ struct dc_transfer_func *dc_create_transfer_func(void);
 struct dc_flip_addrs {
 	struct dc_plane_address address;
 	bool flip_immediate;
-	/* TODO: DCC format info */
 	/* TODO: add flip duration for FreeSync */
 };
 

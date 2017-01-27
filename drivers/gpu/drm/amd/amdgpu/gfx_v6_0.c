@@ -25,7 +25,7 @@
 #include "amdgpu_ih.h"
 #include "amdgpu_gfx.h"
 #include "amdgpu_ucode.h"
-#include "si/clearstate_si.h"
+#include "clearstate_si.h"
 #include "bif/bif_3_0_d.h"
 #include "bif/bif_3_0_sh_mask.h"
 #include "oss/oss_1_0_d.h"
@@ -1970,7 +1970,7 @@ static int gfx_v6_0_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 	ib.ptr[2] = 0xDEADBEEF;
 	ib.length_dw = 3;
 
-	r = amdgpu_ib_schedule(ring, 1, &ib, NULL, NULL, &f);
+	r = amdgpu_ib_schedule(ring, 1, &ib, NULL, &f);
 	if (r)
 		goto err2;
 
