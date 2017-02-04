@@ -240,47 +240,6 @@ static void stream_update_scaling(
 	}
 }
 
-static bool set_backlight(struct dc *dc, unsigned int backlight_level,
-			unsigned int frame_ramp, const struct dc_stream *stream)
-{
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-	int i;
-
-	if (stream->sink->sink_signal == SIGNAL_TYPE_EDP) {
-		for (i = 0; i < core_dc->link_count; i++)
-			dc_link_set_backlight_level(&core_dc->links[i]->public,
-					backlight_level, frame_ramp, stream);
-	}
-
-	return true;
-
-}
-
-static bool init_dmcu_backlight_settings(struct dc *dc)
-{
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-	int i;
-
-	for (i = 0; i < core_dc->link_count; i++)
-		dc_link_init_dmcu_backlight_settings
-			(&core_dc->links[i]->public);
-
-	return true;
-}
-
-
-static bool set_abm_level(struct dc *dc, unsigned int abm_level)
-{
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-	int i;
-
-	for (i = 0; i < core_dc->link_count; i++)
-		dc_link_set_abm_level(&core_dc->links[i]->public,
-				abm_level);
-
-	return true;
-}
-
 static bool set_psr_enable(struct dc *dc, bool enable)
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
@@ -402,15 +361,6 @@ static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 
 	core_dc->public.stream_funcs.set_gamut_remap =
 			set_gamut_remap;
-
-	core_dc->public.stream_funcs.set_backlight =
-			set_backlight;
-
-	core_dc->public.stream_funcs.init_dmcu_backlight_settings =
-			init_dmcu_backlight_settings;
-
-	core_dc->public.stream_funcs.set_abm_level =
-			set_abm_level;
 
 	core_dc->public.stream_funcs.set_psr_enable =
 			set_psr_enable;
@@ -1115,7 +1065,8 @@ bool dc_pre_update_surfaces_to_stream(
 {
 	int i, j;
 	struct core_dc *core_dc = DC_TO_CORE(dc);
-	uint32_t prev_disp_clk = core_dc->current_context->bw_results.dispclk_khz;
+	int prev_disp_clk = core_dc->current_context->bw_results.dispclk_khz;
+	int new_disp_clk;
 	struct dc_stream_status *stream_status = NULL;
 	struct validate_context *context;
 	struct validate_context *temp_context;
@@ -1195,35 +1146,23 @@ bool dc_pre_update_surfaces_to_stream(
 			}
 		}
 
-	if (core_dc->res_pool->funcs->validate_bandwidth(core_dc, context) != DC_OK) {
-		BREAK_TO_DEBUGGER();
-		ret = false;
-		goto unexpected_fail;
-	}
-
-	if (core_dc->res_pool->funcs->apply_clk_constraints) {
-		temp_context = core_dc->res_pool->funcs->apply_clk_constraints(
-				core_dc,
-				context);
-		if (!temp_context) {
-			dm_error("%s:failed apply clk constraints\n", __func__);
+	if (core_dc->res_pool->funcs->validate_bandwidth)
+		if (core_dc->res_pool->funcs->validate_bandwidth(core_dc, context) != DC_OK) {
+			BREAK_TO_DEBUGGER();
 			ret = false;
 			goto unexpected_fail;
 		}
-		resource_validate_ctx_destruct(context);
-		ASSERT(core_dc->scratch_val_ctx == temp_context);
-		core_dc->scratch_val_ctx = context;
-		context = temp_context;
-	}
+	new_disp_clk = context->bw_results.dispclk_khz;
 
-	if (prev_disp_clk < context->bw_results.dispclk_khz) {
+	if (!IS_FPGA_MAXIMUS_DC(core_dc->ctx->dce_environment)
+			&& prev_disp_clk < new_disp_clk) {
 		pplib_apply_display_requirements(core_dc, context,
 						&context->pp_display_cfg);
 		context->res_ctx.pool->display_clock->funcs->set_clock(
 				context->res_ctx.pool->display_clock,
-				context->bw_results.dispclk_khz * 115 / 100);
-		core_dc->current_context->bw_results.dispclk_khz =
-				context->bw_results.dispclk_khz;
+				new_disp_clk * 115 / 100);
+		core_dc->current_context->bw_results.dispclk_khz = new_disp_clk;
+		core_dc->current_context->dispclk_khz = new_disp_clk;
 	}
 
 	for (i = 0; i < new_surface_count; i++)
@@ -1254,15 +1193,17 @@ bool dc_post_update_surfaces_to_stream(struct dc *dc)
 	post_surface_trace(dc);
 
 	for (i = 0; i < core_dc->current_context->res_ctx.pool->pipe_count; i++)
-		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == NULL)
+		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream == NULL) {
+			core_dc->current_context->res_ctx.pipe_ctx[i].pipe_idx = i;
 			core_dc->hwss.power_down_front_end(
-				core_dc, &core_dc->current_context->res_ctx.pipe_ctx[i]);
-
-	if (core_dc->res_pool->funcs->validate_bandwidth(core_dc, core_dc->current_context)
-			!= DC_OK) {
-		BREAK_TO_DEBUGGER();
-		return false;
-	}
+					core_dc, &core_dc->current_context->res_ctx.pipe_ctx[i]);
+		}
+	if (core_dc->res_pool->funcs->validate_bandwidth)
+		if (core_dc->res_pool->funcs->validate_bandwidth(
+				core_dc, core_dc->current_context) != DC_OK) {
+			BREAK_TO_DEBUGGER();
+			return false;
+		}
 
 	core_dc->hwss.set_bandwidth(core_dc);
 

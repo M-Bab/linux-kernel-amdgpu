@@ -1,5 +1,4 @@
-/*
-* Copyright 2012-15 Advanced Micro Devices, Inc.
+/* Copyright 2012-15 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,43 +22,24 @@
  *
  */
 
-#ifndef __DC_HWSS_DCE110_H__
-#define __DC_HWSS_DCE110_H__
+#ifndef __DC_ABM_H__
+#define __DC_ABM_H__
 
-#include "core_types.h"
+#include "dm_services_types.h"
 
-#define GAMMA_HW_POINTS_NUM 256
-struct core_dc;
+struct abm {
+	struct dc_context *ctx;
+	const struct abm_funcs *funcs;
+};
 
-bool dce110_hw_sequencer_construct(struct core_dc *dc);
+struct abm_funcs {
+	void (*abm_init)(struct abm *abm);
+	bool (*set_abm_level)(struct abm *abm, unsigned int abm_level);
+	bool (*init_backlight)(struct abm *abm);
+	bool (*set_backlight_level)(struct abm *abm,
+			unsigned int backlight_level,
+			unsigned int frame_ramp,
+			unsigned int controller_id);
+};
 
-enum dc_status dce110_apply_ctx_to_hw(
-		struct core_dc *dc,
-		struct validate_context *context);
-
-void dce110_set_display_clock(struct validate_context *context);
-
-void dce110_set_displaymarks(
-	const struct core_dc *dc,
-	struct validate_context *context);
-
-void dce110_enable_stream(struct pipe_ctx *pipe_ctx);
-
-void dce110_disable_stream(struct pipe_ctx *pipe_ctx);
-
-void dce110_unblank_stream(struct pipe_ctx *pipe_ctx,
-		struct dc_link_settings *link_settings);
-
-void dce110_update_info_frame(struct pipe_ctx *pipe_ctx);
-
-void dce110_enable_accelerated_mode(struct core_dc *dc);
-
-void dce110_power_down(struct core_dc *dc);
-
-void dce110_update_pending_status(struct pipe_ctx *pipe_ctx);
-
-bool dce110_translate_regamma_to_hw_format(const struct dc_transfer_func
-		*output_tf, struct pwl_params *regamma_params);
-
-#endif /* __DC_HWSS_DCE110_H__ */
-
+#endif

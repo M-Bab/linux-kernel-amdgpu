@@ -259,6 +259,9 @@ struct resource_pool {
 	struct display_clock *display_clock;
 	struct irq_service *irqs;
 
+	struct abm *abm;
+	struct dmcu *dmcu;
+
 	const struct resource_funcs *funcs;
 	const struct resource_caps *res_cap;
 };
@@ -313,6 +316,7 @@ struct validate_context {
 	struct bw_calcs_output bw_results;
 	/* Note: these are big structures, do *not* put on stack! */
 	struct dm_pp_display_configuration pp_display_cfg;
+	int dispclk_khz;
 };
 
 #endif /* _CORE_TYPES_H_ */
