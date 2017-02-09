@@ -46,10 +46,11 @@ struct amdgpu_virt {
 	uint64_t			csa_vmid0_addr;
 	bool chained_ib_support;
 	uint32_t			reg_val_offs;
-	struct mutex			lock;
+	struct mutex			lock_kiq;
+	struct mutex                    lock_reset;
 	struct amdgpu_irq_src		ack_irq;
 	struct amdgpu_irq_src		rcv_irq;
-	struct delayed_work		flr_work;
+	struct work_struct		flr_work;
 	const struct amdgpu_virt_ops	*ops;
 };
 
@@ -89,5 +90,6 @@ void amdgpu_virt_kiq_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v);
 int amdgpu_virt_request_full_gpu(struct amdgpu_device *adev, bool init);
 int amdgpu_virt_release_full_gpu(struct amdgpu_device *adev, bool init);
 int amdgpu_virt_reset_gpu(struct amdgpu_device *adev);
+int amdgpu_sriov_gpu_reset(struct amdgpu_device *adev, bool voluntary);
 
 #endif

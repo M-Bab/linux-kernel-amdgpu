@@ -91,16 +91,16 @@ bool amdgpu_device_is_px(struct drm_device *dev)
  * MMIO register access helper functions.
  */
 uint32_t amdgpu_mm_rreg(struct amdgpu_device *adev, uint32_t reg,
-			bool always_indirect)
+			uint32_t acc_flags)
 {
 	uint32_t ret;
 
-	if (amdgpu_sriov_runtime(adev)) {
+	if (!(acc_flags & AMDGPU_REGS_NO_KIQ) && amdgpu_sriov_runtime(adev)) {
 		BUG_ON(in_interrupt());
 		return amdgpu_virt_kiq_rreg(adev, reg);
 	}
 
-	if ((reg * 4) < adev->rmmio_size && !always_indirect)
+	if ((reg * 4) < adev->rmmio_size && !(acc_flags & AMDGPU_REGS_IDX))
 		ret = readl(((void __iomem *)adev->rmmio) + (reg * 4));
 	else {
 		unsigned long flags;
@@ -115,16 +115,16 @@ uint32_t amdgpu_mm_rreg(struct amdgpu_device *adev, uint32_t reg,
 }
 
 void amdgpu_mm_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v,
-		    bool always_indirect)
+		    uint32_t acc_flags)
 {
 	trace_amdgpu_mm_wreg(adev->pdev->device, reg, v);
 
-	if (amdgpu_sriov_runtime(adev)) {
+	if (!(acc_flags & AMDGPU_REGS_NO_KIQ) && amdgpu_sriov_runtime(adev)) {
 		BUG_ON(in_interrupt());
 		return amdgpu_virt_kiq_wreg(adev, reg, v);
 	}
 
-	if ((reg * 4) < adev->rmmio_size && !always_indirect)
+	if ((reg * 4) < adev->rmmio_size && !(acc_flags & AMDGPU_REGS_IDX))
 		writel(v, ((void __iomem *)adev->rmmio) + (reg * 4));
 	else {
 		unsigned long flags;
@@ -1604,6 +1604,53 @@ int amdgpu_suspend(struct amdgpu_device *adev)
 	return 0;
 }
 
+static int amdgpu_sriov_resume_early(struct amdgpu_device *adev)
+{
+	int i, r;
+
+	for (i = 0; i < adev->num_ip_blocks; i++) {
+		if (!adev->ip_blocks[i].status.valid)
+			continue;
+
+		if (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_COMMON ||
+				adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_GMC ||
+				adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_IH)
+			r = adev->ip_blocks[i].version->funcs->resume(adev);
+
+		if (r) {
+			DRM_ERROR("resume of IP block <%s> failed %d\n",
+				  adev->ip_blocks[i].version->funcs->name, r);
+			return r;
+		}
+	}
+
+	return 0;
+}
+
+static int amdgpu_sriov_resume_late(struct amdgpu_device *adev)
+{
+	int i, r;
+
+	for (i = 0; i < adev->num_ip_blocks; i++) {
+		if (!adev->ip_blocks[i].status.valid)
+			continue;
+
+		if (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_COMMON ||
+				adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_GMC ||
+				adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_IH )
+			continue;
+
+		r = adev->ip_blocks[i].version->funcs->resume(adev);
+		if (r) {
+			DRM_ERROR("resume of IP block <%s> failed %d\n",
+				  adev->ip_blocks[i].version->funcs->name, r);
+			return r;
+		}
+	}
+
+	return 0;
+}
+
 static int amdgpu_resume(struct amdgpu_device *adev)
 {
 	int i, r;
@@ -1871,8 +1918,6 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	/* Get a log2 for easy divisions. */
 	adev->mm_stats.log2_max_MBps = ilog2(max(1u, max_MBps));
 
-	amdgpu_fbdev_init(adev);
-
 	r = amdgpu_ib_pool_init(adev);
 	if (r) {
 		dev_err(adev->dev, "IB initialization failed (%d).\n", r);
@@ -1883,21 +1928,19 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	if (r)
 		DRM_ERROR("ib ring test failed (%d).\n", r);
 
+	amdgpu_fbdev_init(adev);
+
 	r = amdgpu_gem_debugfs_init(adev);
-	if (r) {
+	if (r)
 		DRM_ERROR("registering gem debugfs failed (%d).\n", r);
-	}
 
 	r = amdgpu_debugfs_regs_init(adev);
-	if (r) {
+	if (r)
 		DRM_ERROR("registering register debugfs failed (%d).\n", r);
-	}
 
 	r = amdgpu_debugfs_firmware_init(adev);
-	if (r) {
+	if (r)
 		DRM_ERROR("registering firmware debugfs failed (%d).\n", r);
-		return r;
-	}
 
 	if ((amdgpu_testing & 1)) {
 		if (adev->accel_working)
@@ -2343,6 +2386,117 @@ err:
 }
 
 /**
+ * amdgpu_sriov_gpu_reset - reset the asic
+ *
+ * @adev: amdgpu device pointer
+ * @voluntary: if this reset is requested by guest.
+ *             (true means by guest and false means by HYPERVISOR )
+ *
+ * Attempt the reset the GPU if it has hung (all asics).
+ * for SRIOV case.
+ * Returns 0 for success or an error on failure.
+ */
+int amdgpu_sriov_gpu_reset(struct amdgpu_device *adev, bool voluntary)
+{
+	int i, r = 0;
+	int resched;
+	struct amdgpu_bo *bo, *tmp;
+	struct amdgpu_ring *ring;
+	struct fence *fence = NULL, *next = NULL;
+
+	mutex_lock(&adev->virt.lock_reset);
+	atomic_inc(&adev->gpu_reset_counter);
+	adev->gfx.in_reset = true;
+
+	/* block TTM */
+	resched = ttm_bo_lock_delayed_workqueue(&adev->mman.bdev);
+
+	/* block scheduler */
+	for (i = 0; i < AMDGPU_MAX_RINGS; ++i) {
+		ring = adev->rings[i];
+
+		if (!ring || !ring->sched.thread)
+			continue;
+
+		kthread_park(ring->sched.thread);
+		amd_sched_hw_job_reset(&ring->sched);
+	}
+
+	/* after all hw jobs are reset, hw fence is meaningless, so force_completion */
+	amdgpu_fence_driver_force_completion(adev);
+
+	/* request to take full control of GPU before re-initialization  */
+	if (voluntary)
+		amdgpu_virt_reset_gpu(adev);
+	else
+		amdgpu_virt_request_full_gpu(adev, true);
+
+
+	/* Resume IP prior to SMC */
+	amdgpu_sriov_resume_early(adev);
+
+	/* we need recover gart prior to run SMC/CP/SDMA resume */
+	amdgpu_ttm_recover_gart(adev);
+
+	/* now we are okay to resume SMC/CP/SDMA */
+	amdgpu_sriov_resume_late(adev);
+
+	amdgpu_irq_gpu_reset_resume_helper(adev);
+
+	if (amdgpu_ib_ring_tests(adev))
+		dev_err(adev->dev, "[GPU_RESET] ib ring test failed (%d).\n", r);
+
+	/* release full control of GPU after ib test */
+	amdgpu_virt_release_full_gpu(adev, true);
+
+	DRM_INFO("recover vram bo from shadow\n");
+
+	ring = adev->mman.buffer_funcs_ring;
+	mutex_lock(&adev->shadow_list_lock);
+	list_for_each_entry_safe(bo, tmp, &adev->shadow_list, shadow_list) {
+		amdgpu_recover_vram_from_shadow(adev, ring, bo, &next);
+		if (fence) {
+			r = fence_wait(fence, false);
+			if (r) {
+				WARN(r, "recovery from shadow isn't completed\n");
+				break;
+			}
+		}
+
+		fence_put(fence);
+		fence = next;
+	}
+	mutex_unlock(&adev->shadow_list_lock);
+
+	if (fence) {
+		r = fence_wait(fence, false);
+		if (r)
+			WARN(r, "recovery from shadow isn't completed\n");
+	}
+	fence_put(fence);
+
+	for (i = 0; i < AMDGPU_MAX_RINGS; ++i) {
+		struct amdgpu_ring *ring = adev->rings[i];
+		if (!ring || !ring->sched.thread)
+			continue;
+
+		amd_sched_job_recovery(&ring->sched);
+		kthread_unpark(ring->sched.thread);
+	}
+
+	drm_helper_resume_force_mode(adev->ddev);
+	ttm_bo_unlock_delayed_workqueue(&adev->mman.bdev, resched);
+	if (r) {
+		/* bad news, how to tell it to userspace ? */
+		dev_info(adev->dev, "GPU reset failed\n");
+	}
+
+	adev->gfx.in_reset = false;
+	mutex_unlock(&adev->virt.lock_reset);
+	return r;
+}
+
+/**
  * amdgpu_gpu_reset - reset the asic
  *
  * @adev: amdgpu device pointer
@@ -2358,7 +2512,7 @@ int amdgpu_gpu_reset(struct amdgpu_device *adev)
 	bool need_full_reset;
 
 	if (amdgpu_sriov_vf(adev))
-		return 0;
+		return amdgpu_sriov_gpu_reset(adev, true);
 
 	if (!amdgpu_check_soft_reset(adev)) {
 		DRM_INFO("No hardware hang detected. Did some blocks stall?\n");
@@ -2448,7 +2602,7 @@ retry:
 				if (fence) {
 					r = fence_wait(fence, false);
 					if (r) {
-						WARN(r, "recovery from shadow isn't comleted\n");
+						WARN(r, "recovery from shadow isn't completed\n");
 						break;
 					}
 				}
@@ -2460,7 +2614,7 @@ retry:
 			if (fence) {
 				r = fence_wait(fence, false);
 				if (r)
-					WARN(r, "recovery from shadow isn't comleted\n");
+					WARN(r, "recovery from shadow isn't completed\n");
 			}
 			fence_put(fence);
 		}
