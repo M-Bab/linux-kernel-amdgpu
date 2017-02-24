@@ -785,7 +785,7 @@ struct amdgpu_mec {
 	u32 num_pipe;
 	u32 num_mec;
 	u32 num_queue;
-	struct vi_mqd	*mqd_backup[AMDGPU_MAX_COMPUTE_RINGS + 1];
+	void			*mqd_backup[AMDGPU_MAX_COMPUTE_RINGS + 1];
 };
 
 struct amdgpu_kiq {
@@ -817,7 +817,7 @@ struct amdgpu_rb_config {
 	uint32_t raster_config_1;
 };
 
-struct amdgpu_gca_config {
+struct amdgpu_gfx_config {
 	unsigned max_shader_engines;
 	unsigned max_tile_pipes;
 	unsigned max_cu_per_sh;
@@ -847,6 +847,9 @@ struct amdgpu_gca_config {
 	uint32_t macrotile_mode_array[16];
 
 	struct amdgpu_rb_config rb_config[AMDGPU_GFX_MAX_SE][AMDGPU_GFX_MAX_SH_PER_SE];
+
+	/* gfx configure feature */
+	uint32_t double_offchip_lds_buf;
 };
 
 struct amdgpu_cu_info {
@@ -866,7 +869,7 @@ struct amdgpu_gfx_funcs {
 
 struct amdgpu_gfx {
 	struct mutex			gpu_clock_mutex;
-	struct amdgpu_gca_config	config;
+	struct amdgpu_gfx_config	config;
 	struct amdgpu_rlc		rlc;
 	struct amdgpu_mec		mec;
 	struct amdgpu_kiq		kiq;
@@ -1498,6 +1501,9 @@ struct amdgpu_device {
 	spinlock_t			gtt_list_lock;
 	struct list_head                gtt_list;
 
+	/* record hw reset is performed */
+	bool has_hw_reset;
+
 };
 
 static inline struct amdgpu_device *amdgpu_ttm_adev(struct ttm_bo_device *bdev)
@@ -1724,7 +1730,7 @@ amdgpu_get_sdma_instance(struct amdgpu_ring *ring)
 int amdgpu_gpu_reset(struct amdgpu_device *adev);
 bool amdgpu_need_backup(struct amdgpu_device *adev);
 void amdgpu_pci_config_reset(struct amdgpu_device *adev);
-bool amdgpu_card_posted(struct amdgpu_device *adev);
+bool amdgpu_need_post(struct amdgpu_device *adev);
 void amdgpu_update_display_priority(struct amdgpu_device *adev);
 
 int amdgpu_cs_parser_init(struct amdgpu_cs_parser *p, void *data);
