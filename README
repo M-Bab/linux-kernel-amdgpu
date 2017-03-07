@@ -1,4 +1,9 @@
-        Linux kernel release 4.x <http://kernel.org/>
+The amd-staging-4.9 linux kernel, forward-patched to the latest security level and configured.
+
+More information and amd64 builds available here:
+https://github.com/M-Bab/linux-kernel-amdgpu-binaries
+
+Linux kernel release 4.x <http://kernel.org/>
 
 These are the release notes for Linux version 4.  Read them carefully,
 as they tell you what this is all about, explain how to install the
