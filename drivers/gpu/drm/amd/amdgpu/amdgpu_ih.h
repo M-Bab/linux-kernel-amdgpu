@@ -26,6 +26,10 @@
 
 struct amdgpu_device;
 
+#define AMDGPU_IH_CLIENTID_LEGACY 0
+
+#define AMDGPU_IH_CLIENTID_MAX 0x1f
+
 /*
  * R6xx+ IH ring
  */
@@ -46,11 +50,15 @@ struct amdgpu_ih_ring {
 	dma_addr_t		rb_dma_addr; /* only used when use_bus_addr = true */
 };
 
+#define AMDGPU_IH_SRC_DATA_MAX_SIZE_DW 4
+
 struct amdgpu_iv_entry {
+	unsigned client_id;
 	unsigned src_id;
-	unsigned src_data;
+	unsigned src_data[AMDGPU_IH_SRC_DATA_MAX_SIZE_DW];
 	unsigned ring_id;
 	unsigned vm_id;
+	unsigned vm_id_src;
 	unsigned pas_id;
 	const uint32_t *iv_entry;
 };
