@@ -1193,6 +1193,7 @@ static int amdgpu_freesync_update_property_atomic(
 	dev  = connector->dev;
 	adev = dev->dev_private;
 
+	drm_modeset_lock(&dev->mode_config.connection_mutex, NULL);
 	ret = drm_object_property_get_value(
 			&connector->base,
 			adev->mode_info.freesync_property,
@@ -1202,6 +1203,8 @@ static int amdgpu_freesync_update_property_atomic(
 				&connector->base,
 				adev->mode_info.freesync_property,
 				val_capable);
+	drm_modeset_unlock(&dev->mode_config.connection_mutex);
+
 	return ret;
 
 }
