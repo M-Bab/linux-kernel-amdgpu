@@ -27,7 +27,7 @@
 
 #include "dc.h"
 #include "include/grph_object_id.h"
-#include "inc/bandwidth_calcs.h"
+#include "inc/dce_calcs.h"
 
 #include "dce/dce_mem_input.h" /* temporary */
 
@@ -100,6 +100,8 @@ struct mem_input_funcs {
 
 	bool (*mem_input_is_flip_pending)(struct mem_input *mem_input);
 
+	void (*mem_input_update_dchub)(struct mem_input *mem_input,
+			struct dchub_init_data *dh_data);
 };
 
 #endif

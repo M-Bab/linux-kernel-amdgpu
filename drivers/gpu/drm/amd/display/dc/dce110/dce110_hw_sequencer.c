@@ -1396,9 +1396,12 @@ static uint32_t get_max_pixel_clock_for_all_paths(
 	return max_pix_clk;
 }
 
-/*
- * Find clock state based on clock requested. if clock value is 0, simply
+/* Find clock state based on clock requested. if clock value is 0, simply
  * set clock state as requested without finding clock state by clock value
+ *TODO: when dce120_hw_sequencer.c is created, override apply_min_clock.
+ *
+ * TODOFPGA  remove TODO after implement dal_display_clock_get_cur_clocks_value
+ * etc support for dcn1.0
  */
 static void apply_min_clocks(
 	struct core_dc *dc,
@@ -1424,7 +1427,28 @@ static void apply_min_clocks(
 			return;
 		}
 
-		/* TODOFPGA */
+		/* TODO: This is incorrect. Figure out how to fix. */
+		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
+				pipe_ctx->dis_clk,
+				DM_PP_CLOCK_TYPE_DISPLAY_CLK,
+				pipe_ctx->dis_clk->cur_clocks_value.dispclk_in_khz,
+				pre_mode_set,
+				false);
+
+		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
+				pipe_ctx->dis_clk,
+				DM_PP_CLOCK_TYPE_PIXELCLK,
+				pipe_ctx->dis_clk->cur_clocks_value.max_pixelclk_in_khz,
+				pre_mode_set,
+				false);
+
+		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
+				pipe_ctx->dis_clk,
+				DM_PP_CLOCK_TYPE_DISPLAYPHYCLK,
+				pipe_ctx->dis_clk->cur_clocks_value.max_non_dp_phyclk_in_khz,
+				pre_mode_set,
+				false);
+		return;
 	}
 
 	/* get the required state based on state dependent clocks:
@@ -1441,6 +1465,26 @@ static void apply_min_clocks(
 		pipe_ctx->dis_clk->funcs->set_min_clocks_state(
 			pipe_ctx->dis_clk, *clocks_state);
 	} else {
+		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
+				pipe_ctx->dis_clk,
+				DM_PP_CLOCK_TYPE_DISPLAY_CLK,
+				req_clocks.display_clk_khz,
+				pre_mode_set,
+				false);
+
+		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
+				pipe_ctx->dis_clk,
+				DM_PP_CLOCK_TYPE_PIXELCLK,
+				req_clocks.pixel_clk_khz,
+				pre_mode_set,
+				false);
+
+		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
+				pipe_ctx->dis_clk,
+				DM_PP_CLOCK_TYPE_DISPLAYPHYCLK,
+				req_clocks.pixel_clk_khz,
+				pre_mode_set,
+				false);
 	}
 }
 
@@ -1677,6 +1721,9 @@ enum dc_status dce110_apply_ctx_to_hw(
 				pipe_ctx,
 				context,
 				dc);
+
+		if (dc->hwss.power_on_front_end)
+			dc->hwss.power_on_front_end(dc, pipe_ctx, context);
 
 		if (DC_OK != status)
 			return status;
@@ -2050,51 +2097,7 @@ static void init_hw(struct core_dc *dc)
 	}
 }
 
-static void dce110_power_on_pipe_if_needed(
-		struct core_dc *dc,
-		struct pipe_ctx *pipe_ctx,
-		struct validate_context *context)
-{
-	struct pipe_ctx *old_pipe_ctx = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
-	struct dc_bios *dcb = dc->ctx->dc_bios;
-	struct tg_color black_color = {0};
-
-	if (!old_pipe_ctx->stream && pipe_ctx->stream) {
-		dc->hwss.enable_display_power_gating(
-				dc,
-				pipe_ctx->pipe_idx,
-				dcb, PIPE_GATING_CONTROL_DISABLE);
-
-		/*
-		 * This is for powering on underlay, so crtc does not
-		 * need to be enabled
-		 */
-
-		pipe_ctx->tg->funcs->program_timing(pipe_ctx->tg,
-				&pipe_ctx->stream->public.timing,
-				false);
-
-		pipe_ctx->tg->funcs->enable_advanced_request(
-				pipe_ctx->tg,
-				true,
-				&pipe_ctx->stream->public.timing);
-
-		pipe_ctx->mi->funcs->allocate_mem_input(pipe_ctx->mi,
-				pipe_ctx->stream->public.timing.h_total,
-				pipe_ctx->stream->public.timing.v_total,
-				pipe_ctx->stream->public.timing.pix_clk_khz,
-				context->stream_count);
-
-		/* TODO unhardcode*/
-		color_space_to_black_color(dc,
-				COLOR_SPACE_YCBCR601, &black_color);
-		pipe_ctx->tg->funcs->set_blank_color(
-				pipe_ctx->tg,
-				&black_color);
-	}
-}
-
-static void fill_display_configs(
+void dce110_fill_display_configs(
 	const struct validate_context *context,
 	struct dm_pp_display_configuration *pp_display_cfg)
 {
@@ -2143,7 +2146,7 @@ static void fill_display_configs(
 	pp_display_cfg->display_count = num_cfgs;
 }
 
-static uint32_t get_min_vblank_time_us(const struct validate_context *context)
+uint32_t dce110_get_min_vblank_time_us(const struct validate_context *context)
 {
 	uint8_t j;
 	uint32_t min_vertical_blank_time = -1;
@@ -2221,13 +2224,13 @@ static void pplib_apply_display_requirements(
 			= context->bw_results.required_sclk_deep_sleep;
 
 	pp_display_cfg->avail_mclk_switch_time_us =
-						get_min_vblank_time_us(context);
+						dce110_get_min_vblank_time_us(context);
 	/* TODO: dce11.2*/
 	pp_display_cfg->avail_mclk_switch_time_in_disp_active_us = 0;
 
 	pp_display_cfg->disp_clk_khz = context->dispclk_khz;
 
-	fill_display_configs(context, pp_display_cfg);
+	dce110_fill_display_configs(context, pp_display_cfg);
 
 	/* TODO: is this still applicable?*/
 	if (pp_display_cfg->display_count == 1) {
@@ -2437,7 +2440,6 @@ static void dce110_power_down_fe(struct core_dc *dc, struct pipe_ctx *pipe)
 static const struct hw_sequencer_funcs dce110_funcs = {
 	.init_hw = init_hw,
 	.apply_ctx_to_hw = dce110_apply_ctx_to_hw,
-	.prepare_pipe_for_context = dce110_power_on_pipe_if_needed,
 	.apply_ctx_for_surface = dce110_apply_ctx_for_surface,
 	.set_plane_config = set_plane_config,
 	.update_plane_addr = update_plane_addr,

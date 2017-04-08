@@ -108,6 +108,7 @@ struct dce110_timing_generator {
 	uint32_t min_h_front_porch;
 	uint32_t min_h_back_porch;
 
+	/* DCE 12 */
 	uint32_t min_h_sync_width;
 	uint32_t min_v_sync_width;
 	uint32_t min_v_blank;
@@ -269,5 +270,8 @@ void dce110_tg_wait_for_state(struct timing_generator *tg,
 void dce110_tg_set_colors(struct timing_generator *tg,
 	const struct tg_color *blank_color,
 	const struct tg_color *overscan_color);
+
+bool dce110_arm_vert_intr(
+		struct timing_generator *tg, uint8_t width);
 
 #endif /* __DC_TIMING_GENERATOR_DCE110_H__ */

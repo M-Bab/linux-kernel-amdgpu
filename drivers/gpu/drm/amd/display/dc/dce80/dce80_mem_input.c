@@ -31,7 +31,7 @@
 #include "gmc/gmc_7_1_sh_mask.h"
 
 #include "include/logger_interface.h"
-#include "inc/bandwidth_calcs.h"
+#include "inc/dce_calcs.h"
 
 #include "../dce110/dce110_mem_input.h"
 #include "dce80_mem_input.h"
@@ -54,6 +54,7 @@ static struct mem_input_funcs dce80_mem_input_funcs = {
 			dce_mem_input_program_surface_config,
 	.mem_input_is_flip_pending =
 			dce110_mem_input_is_flip_pending,
+	.mem_input_update_dchub = NULL
 };
 
 /*****************************************/

@@ -31,6 +31,11 @@
 #define TO_DCE110_LINK_ENC(link_encoder)\
 	container_of(link_encoder, struct dce110_link_encoder, base)
 
+/* Not found regs in dce120 spec
+ * BIOS_SCRATCH_2
+ * DP_DPHY_INTERNAL_CTRL
+ */
+
 #define AUX_REG_LIST(id)\
 	SRI(AUX_CONTROL, DP_AUX, id), \
 	SRI(AUX_DPHY_RX_CONTROL0, DP_AUX, id)
@@ -73,16 +78,28 @@
 	SRI(DP_DPHY_INTERNAL_CTRL, DP, id), \
 	SR(DCI_MEM_PWR_STATUS)
 
-#define LE_DCE110_REG_LIST(id)\
+#define LE_DCE100_REG_LIST(id)\
 	LE_COMMON_REG_LIST_BASE(id), \
 	SRI(DP_DPHY_BS_SR_SWAP_CNTL, DP, id), \
 	SRI(DP_DPHY_INTERNAL_CTRL, DP, id), \
 	SR(DCI_MEM_PWR_STATUS)
 
-	#define LE_DCE80_REG_LIST(id)\
-		SRI(DP_DPHY_INTERNAL_CTRL, DP, id), \
-		LE_COMMON_REG_LIST_BASE(id)
+#define LE_DCE110_REG_LIST(id)\
+	LE_COMMON_REG_LIST_BASE(id), \
+	SRI(DP_DPHY_BS_SR_SWAP_CNTL, DP, id), \
+	SRI(DP_DPHY_INTERNAL_CTRL, DP, id), \
+	SRI(DP_DPHY_HBR2_PATTERN_CONTROL, DP, id), \
+	SR(DCI_MEM_PWR_STATUS)
 
+#define LE_DCE120_REG_LIST(id)\
+	LE_COMMON_REG_LIST_BASE(id), \
+	SRI(DP_DPHY_BS_SR_SWAP_CNTL, DP, id), \
+	SRI(DP_DPHY_HBR2_PATTERN_CONTROL, DP, id), \
+	SR(DCI_MEM_PWR_STATUS)
+
+#define LE_DCE80_REG_LIST(id)\
+	SRI(DP_DPHY_INTERNAL_CTRL, DP, id), \
+	LE_COMMON_REG_LIST_BASE(id)
 
 struct dce110_link_enc_aux_registers {
 	uint32_t AUX_CONTROL;
@@ -134,6 +151,7 @@ struct dce110_link_enc_registers {
 	uint32_t DP_VID_STREAM_CNTL;
 	uint32_t DP_DPHY_FAST_TRAINING;
 	uint32_t DP_DPHY_BS_SR_SWAP_CNTL;
+	uint32_t DP_DPHY_HBR2_PATTERN_CONTROL;
 	uint32_t DP_SEC_CNTL1;
 };
 

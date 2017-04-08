@@ -41,6 +41,7 @@
 #include "amdgpu_i2c.h"
 #include "atom.h"
 #include "amdgpu_atombios.h"
+#include "amdgpu_atomfirmware.h"
 #include "amd_pcie.h"
 #ifdef CONFIG_DRM_AMDGPU_SI
 #include "si.h"
@@ -49,6 +50,7 @@
 #include "cik.h"
 #endif
 #include "vi.h"
+#include "soc15.h"
 #include "bif/bif_4_1_d.h"
 #include <linux/pci.h>
 #include <linux/firmware.h>
@@ -75,6 +77,7 @@ static const char *amdgpu_asic_name[] = {
 	"POLARIS10",
 	"POLARIS11",
 	"POLARIS12",
+	"VEGA10",
 	"LAST",
 };
 
@@ -513,7 +516,7 @@ static int amdgpu_wb_init(struct amdgpu_device *adev)
 	int r;
 
 	if (adev->wb.wb_obj == NULL) {
-		r = amdgpu_bo_create_kernel(adev, AMDGPU_MAX_WB * 4,
+		r = amdgpu_bo_create_kernel(adev, AMDGPU_MAX_WB * sizeof(uint32_t),
 					    PAGE_SIZE, AMDGPU_GEM_DOMAIN_GTT,
 					    &adev->wb.wb_obj, &adev->wb.gpu_addr,
 					    (void **)&adev->wb.wb);
@@ -526,7 +529,7 @@ static int amdgpu_wb_init(struct amdgpu_device *adev)
 		memset(&adev->wb.used, 0, sizeof(adev->wb.used));
 
 		/* clear wb memory */
-		memset((char *)adev->wb.wb, 0, AMDGPU_GPU_PAGE_SIZE);
+		memset((char *)adev->wb.wb, 0, AMDGPU_MAX_WB * sizeof(uint32_t));
 	}
 
 	return 0;
@@ -715,7 +718,7 @@ bool amdgpu_need_post(struct amdgpu_device *adev)
 	/* then check MEM_SIZE, in case the crtcs are off */
 	reg = amdgpu_asic_get_config_memsize(adev);
 
-	if (reg)
+	if ((reg != 0) && (reg != 0xffffffff))
 		return false;
 
 	return true;
@@ -992,8 +995,13 @@ static int amdgpu_atombios_init(struct amdgpu_device *adev)
 	}
 
 	mutex_init(&adev->mode_info.atom_context->mutex);
-	amdgpu_atombios_scratch_regs_init(adev);
-	amdgpu_atom_allocate_fb_scratch(adev->mode_info.atom_context);
+	if (adev->is_atom_fw) {
+		amdgpu_atomfirmware_scratch_regs_init(adev);
+		amdgpu_atomfirmware_allocate_fb_scratch(adev);
+	} else {
+		amdgpu_atombios_scratch_regs_init(adev);
+		amdgpu_atombios_allocate_fb_scratch(adev);
+	}
 	return 0;
 }
 
@@ -1031,6 +1039,75 @@ static bool amdgpu_check_pot_argument(int arg)
 	return (arg & (arg - 1)) == 0;
 }
 
+static void amdgpu_get_block_size(struct amdgpu_device *adev)
+{
+	/* from AI, asic starts to support multiple level VMPT */
+	if (adev->asic_type >= CHIP_VEGA10) {
+		if (amdgpu_vm_block_size != 9)
+			dev_warn(adev->dev,
+				 "Multi-VMPT limits block size to one page!\n");
+		amdgpu_vm_block_size = 9;
+		return;
+	}
+	/* defines number of bits in page table versus page directory,
+	 * a page is 4KB so we have 12 bits offset, minimum 9 bits in the
+	 * page table and the remaining bits are in the page directory */
+	if (amdgpu_vm_block_size == -1) {
+
+		/* Total bits covered by PD + PTs */
+		unsigned bits = ilog2(amdgpu_vm_size) + 18;
+
+		/* Make sure the PD is 4K in size up to 8GB address space.
+		   Above that split equal between PD and PTs */
+		if (amdgpu_vm_size <= 8)
+			amdgpu_vm_block_size = bits - 9;
+		else
+			amdgpu_vm_block_size = (bits + 3) / 2;
+
+	} else if (amdgpu_vm_block_size < 9) {
+		dev_warn(adev->dev, "VM page table size (%d) too small\n",
+			 amdgpu_vm_block_size);
+		amdgpu_vm_block_size = 9;
+	}
+
+	if (amdgpu_vm_block_size > 24 ||
+	    (amdgpu_vm_size * 1024) < (1ull << amdgpu_vm_block_size)) {
+		dev_warn(adev->dev, "VM page table size (%d) too large\n",
+			 amdgpu_vm_block_size);
+		amdgpu_vm_block_size = 9;
+	}
+}
+
+static void amdgpu_check_vm_size(struct amdgpu_device *adev)
+{
+	if (!amdgpu_check_pot_argument(amdgpu_vm_size)) {
+		dev_warn(adev->dev, "VM size (%d) must be a power of 2\n",
+			 amdgpu_vm_size);
+		goto def_value;
+	}
+
+	if (amdgpu_vm_size < 1) {
+		dev_warn(adev->dev, "VM size (%d) too small, min is 1GB\n",
+			 amdgpu_vm_size);
+		goto def_value;
+	}
+
+	/*
+	 * Max GPUVM size for Cayman, SI, CI VI are 40 bits.
+	 */
+	if (amdgpu_vm_size > 1024) {
+		dev_warn(adev->dev, "VM size (%d) too large, max is 1TB\n",
+			 amdgpu_vm_size);
+		goto def_value;
+	}
+
+	return;
+
+def_value:
+	amdgpu_vm_size = 8;
+	dev_info(adev->dev, "set default VM size %dGB\n", amdgpu_vm_size);
+}
+
 /**
  * amdgpu_check_arguments - validate module params
  *
@@ -1060,54 +1137,9 @@ static void amdgpu_check_arguments(struct amdgpu_device *adev)
 		}
 	}
 
-	if (!amdgpu_check_pot_argument(amdgpu_vm_size)) {
-		dev_warn(adev->dev, "VM size (%d) must be a power of 2\n",
-			 amdgpu_vm_size);
-		amdgpu_vm_size = 8;
-	}
+	amdgpu_check_vm_size(adev);
 
-	if (amdgpu_vm_size < 1) {
-		dev_warn(adev->dev, "VM size (%d) too small, min is 1GB\n",
-			 amdgpu_vm_size);
-		amdgpu_vm_size = 8;
-	}
-
-	/*
-	 * Max GPUVM size for Cayman, SI and CI are 40 bits.
-	 */
-	if (amdgpu_vm_size > 1024) {
-		dev_warn(adev->dev, "VM size (%d) too large, max is 1TB\n",
-			 amdgpu_vm_size);
-		amdgpu_vm_size = 8;
-	}
-
-	/* defines number of bits in page table versus page directory,
-	 * a page is 4KB so we have 12 bits offset, minimum 9 bits in the
-	 * page table and the remaining bits are in the page directory */
-	if (amdgpu_vm_block_size == -1) {
-
-		/* Total bits covered by PD + PTs */
-		unsigned bits = ilog2(amdgpu_vm_size) + 18;
-
-		/* Make sure the PD is 4K in size up to 8GB address space.
-		   Above that split equal between PD and PTs */
-		if (amdgpu_vm_size <= 8)
-			amdgpu_vm_block_size = bits - 9;
-		else
-			amdgpu_vm_block_size = (bits + 3) / 2;
-
-	} else if (amdgpu_vm_block_size < 9) {
-		dev_warn(adev->dev, "VM page table size (%d) too small\n",
-			 amdgpu_vm_block_size);
-		amdgpu_vm_block_size = 9;
-	}
-
-	if (amdgpu_vm_block_size > 24 ||
-	    (amdgpu_vm_size * 1024) < (1ull << amdgpu_vm_block_size)) {
-		dev_warn(adev->dev, "VM page table size (%d) too large\n",
-			 amdgpu_vm_block_size);
-		amdgpu_vm_block_size = 9;
-	}
+	amdgpu_get_block_size(adev);
 
 	if (amdgpu_vram_page_split != -1 && (amdgpu_vram_page_split < 16 ||
 	    !amdgpu_check_pot_argument(amdgpu_vram_page_split))) {
@@ -1426,6 +1458,13 @@ static int amdgpu_early_init(struct amdgpu_device *adev)
 			return r;
 		break;
 #endif
+	case CHIP_VEGA10:
+		adev->family = AMDGPU_FAMILY_AI;
+
+		r = soc15_set_ip_blocks(adev);
+		if (r)
+			return r;
+		break;
 	default:
 		/* FIXME: not supported yet */
 		return -EINVAL;
@@ -1755,8 +1794,13 @@ static int amdgpu_resume(struct amdgpu_device *adev)
 
 static void amdgpu_device_detect_sriov_bios(struct amdgpu_device *adev)
 {
-	if (amdgpu_atombios_has_gpu_virtualization_table(adev))
-		adev->virt.caps |= AMDGPU_SRIOV_CAPS_SRIOV_VBIOS;
+	if (adev->is_atom_fw) {
+		if (amdgpu_atomfirmware_gpu_supports_virtualization(adev))
+			adev->virt.caps |= AMDGPU_SRIOV_CAPS_SRIOV_VBIOS;
+	} else {
+		if (amdgpu_atombios_has_gpu_virtualization_table(adev))
+			adev->virt.caps |= AMDGPU_SRIOV_CAPS_SRIOV_VBIOS;
+	}
 }
 
 bool amdgpu_device_asic_has_dc_support(enum amd_asic_type asic_type)
@@ -1765,15 +1809,14 @@ bool amdgpu_device_asic_has_dc_support(enum amd_asic_type asic_type)
 #if defined(CONFIG_DRM_AMD_DC)
 	case CHIP_BONAIRE:
 	case CHIP_HAWAII:
-		return amdgpu_dc != 0;
 	case CHIP_CARRIZO:
 	case CHIP_STONEY:
 	case CHIP_POLARIS11:
 	case CHIP_POLARIS10:
 	case CHIP_POLARIS12:
-		return amdgpu_dc != 0;
 	case CHIP_TONGA:
 	case CHIP_FIJI:
+	case CHIP_VEGA10:
 		return amdgpu_dc != 0;
 #endif
 	default:
@@ -1858,6 +1901,7 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	 * can recall function without having locking issues */
 	mutex_init(&adev->vm_manager.lock);
 	atomic_set(&adev->irq.ih.lock, 0);
+	mutex_init(&adev->firmware.mutex);
 	mutex_init(&adev->pm.mutex);
 	mutex_init(&adev->gfx.gpu_clock_mutex);
 	mutex_init(&adev->srbm_mutex);
@@ -1964,16 +2008,17 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 		DRM_INFO("GPU post is not needed\n");
 	}
 
-	/* Initialize clocks */
-	r = amdgpu_atombios_get_clock_info(adev);
-	if (r) {
-		dev_err(adev->dev, "amdgpu_atombios_get_clock_info failed\n");
-		goto failed;
+	if (!adev->is_atom_fw) {
+		/* Initialize clocks */
+		r = amdgpu_atombios_get_clock_info(adev);
+		if (r) {
+			dev_err(adev->dev, "amdgpu_atombios_get_clock_info failed\n");
+			return r;
+		}
+		/* init i2c buses */
+		if (!amdgpu_device_has_dc_support(adev))
+			amdgpu_atombios_i2c_init(adev);
 	}
-
-	/* init i2c buses */
-	if (!amdgpu_device_has_dc_support(adev))
-		amdgpu_atombios_i2c_init(adev);
 
 	/* Fence driver */
 	r = amdgpu_fence_driver_init(adev);
@@ -2183,7 +2228,10 @@ int amdgpu_device_suspend(struct drm_device *dev, bool suspend, bool fbcon)
 	 */
 	amdgpu_bo_evict_vram(adev);
 
-	amdgpu_atombios_scratch_regs_save(adev);
+	if (adev->is_atom_fw)
+		amdgpu_atomfirmware_scratch_regs_save(adev);
+	else
+		amdgpu_atombios_scratch_regs_save(adev);
 	pci_save_state(dev->pdev);
 	if (suspend) {
 		/* Shut down the device */
@@ -2235,7 +2283,10 @@ int amdgpu_device_resume(struct drm_device *dev, bool resume, bool fbcon)
 			return r;
 		}
 	}
-	amdgpu_atombios_scratch_regs_restore(adev);
+	if (adev->is_atom_fw)
+		amdgpu_atomfirmware_scratch_regs_restore(adev);
+	else
+		amdgpu_atombios_scratch_regs_restore(adev);
 
 	/* post card */
 	if (amdgpu_need_post(adev)) {
@@ -2245,12 +2296,10 @@ int amdgpu_device_resume(struct drm_device *dev, bool resume, bool fbcon)
 	}
 
 	r = amdgpu_resume(adev);
-	if (r)
+	if (r) {
 		DRM_ERROR("amdgpu_resume failed (%d).\n", r);
-
-	if (r)
-		DRM_ERROR("amdgpu_resume failed (%d).\n", r);
-
+		return r;
+	}
 	amdgpu_fence_driver_resume(adev);
 
 	if (resume) {
@@ -2642,9 +2691,15 @@ retry:
 			amdgpu_display_stop_mc_access(adev, &save);
 			amdgpu_wait_for_idle(adev, AMD_IP_BLOCK_TYPE_GMC);
 		}
-		amdgpu_atombios_scratch_regs_save(adev);
+		if (adev->is_atom_fw)
+			amdgpu_atomfirmware_scratch_regs_save(adev);
+		else
+			amdgpu_atombios_scratch_regs_save(adev);
 		r = amdgpu_asic_reset(adev);
-		amdgpu_atombios_scratch_regs_restore(adev);
+		if (adev->is_atom_fw)
+			amdgpu_atomfirmware_scratch_regs_restore(adev);
+		else
+			amdgpu_atombios_scratch_regs_restore(adev);
 		/* post card */
 		amdgpu_atom_asic_init(adev->mode_info.atom_context);
 
@@ -2909,7 +2964,7 @@ static ssize_t amdgpu_debugfs_regs_read(struct file *f, char __user *buf,
 		use_bank = 0;
 	}
 
-	*pos &= 0x3FFFF;
+	*pos &= (1UL << 22) - 1;
 
 	if (use_bank) {
 		if ((sh_bank != 0xFFFFFFFF && sh_bank >= adev->gfx.config.max_sh_per_se) ||
@@ -2985,7 +3040,7 @@ static ssize_t amdgpu_debugfs_regs_write(struct file *f, const char __user *buf,
 		use_bank = 0;
 	}
 
-	*pos &= 0x3FFFF;
+	*pos &= (1UL << 22) - 1;
 
 	if (use_bank) {
 		if ((sh_bank != 0xFFFFFFFF && sh_bank >= adev->gfx.config.max_sh_per_se) ||

@@ -274,24 +274,14 @@ static int vce_v2_0_start(struct amdgpu_device *adev)
 
 static int vce_v2_0_stop(struct amdgpu_device *adev)
 {
-	int i, j;
+	int i;
 	int status;
 
 	if (vce_v2_0_lmi_clean(adev)) {
 		DRM_INFO("vce is not idle \n");
 		return 0;
 	}
-/*
-	for (i = 0; i < 10; ++i) {
-		for (j = 0; j < 100; ++j) {
-			status = RREG32(mmVCE_FW_REG_STATUS);
-			if (!(status & 1))
-				break;
-			mdelay(1);
-		}
-		break;
-	}
-*/
+
 	if (vce_v2_0_wait_for_idle(adev)) {
 		DRM_INFO("VCE is busy, Can't set clock gateing");
 		return 0;
@@ -300,14 +290,11 @@ static int vce_v2_0_stop(struct amdgpu_device *adev)
 	/* Stall UMC and register bus before resetting VCPU */
 	WREG32_P(mmVCE_LMI_CTRL2, 1 << 8, ~(1 << 8));
 
-	for (i = 0; i < 10; ++i) {
-		for (j = 0; j < 100; ++j) {
-			status = RREG32(mmVCE_LMI_STATUS);
-			if (status & 0x240)
-				break;
-			mdelay(1);
-		}
-		break;
+	for (i = 0; i < 100; ++i) {
+		status = RREG32(mmVCE_LMI_STATUS);
+		if (status & 0x240)
+			break;
+		mdelay(1);
 	}
 
 	WREG32_P(mmVCE_VCPU_CNTL, 0, ~0x80001);
@@ -464,11 +451,7 @@ static int vce_v2_0_sw_fini(void *handle)
 	if (r)
 		return r;
 
-	r = amdgpu_vce_sw_fini(adev);
-	if (r)
-		return r;
-
-	return r;
+	return amdgpu_vce_sw_fini(adev);
 }
 
 static int vce_v2_0_hw_init(void *handle)
@@ -508,11 +491,7 @@ static int vce_v2_0_suspend(void *handle)
 	if (r)
 		return r;
 
-	r = amdgpu_vce_suspend(adev);
-	if (r)
-		return r;
-
-	return r;
+	return amdgpu_vce_suspend(adev);
 }
 
 static int vce_v2_0_resume(void *handle)
@@ -524,11 +503,7 @@ static int vce_v2_0_resume(void *handle)
 	if (r)
 		return r;
 
-	r = vce_v2_0_hw_init(adev);
-	if (r)
-		return r;
-
-	return r;
+	return vce_v2_0_hw_init(adev);
 }
 
 static int vce_v2_0_soft_reset(void *handle)

@@ -97,6 +97,8 @@ static void dm_set_cursor(
 	attributes.rotation_angle    = 0;
 	attributes.attribute_flags.value = 0;
 
+	attributes.pitch = attributes.width;
+
 	x = amdgpu_crtc->cursor_x;
 	y = amdgpu_crtc->cursor_y;
 
@@ -493,7 +495,7 @@ static void fill_plane_attributes_from_fb(
 
 	memset(&surface->tiling_info, 0, sizeof(surface->tiling_info));
 
-	/* Fill GFX8 params */
+	/* Fill GFX params */
 	if (AMDGPU_TILING_GET(tiling_flags, ARRAY_MODE) == DC_ARRAY_2D_TILED_THIN1)
 	{
 		unsigned bankw, bankh, mtaspect, tile_split, num_banks;
@@ -521,6 +523,26 @@ static void fill_plane_attributes_from_fb(
 
 	surface->tiling_info.gfx8.pipe_config =
 			AMDGPU_TILING_GET(tiling_flags, PIPE_CONFIG);
+
+	if (adev->asic_type == CHIP_VEGA10) {
+		/* Fill GFX9 params */
+		surface->tiling_info.gfx9.num_pipes =
+			adev->gfx.config.gb_addr_config_fields.num_pipes;
+		surface->tiling_info.gfx9.num_banks =
+			adev->gfx.config.gb_addr_config_fields.num_banks;
+		surface->tiling_info.gfx9.pipe_interleave =
+			adev->gfx.config.gb_addr_config_fields.pipe_interleave_size;
+		surface->tiling_info.gfx9.num_shader_engines =
+			adev->gfx.config.gb_addr_config_fields.num_se;
+		surface->tiling_info.gfx9.max_compressed_frags =
+			adev->gfx.config.gb_addr_config_fields.max_compress_frags;
+		surface->tiling_info.gfx9.num_rb_per_se =
+			adev->gfx.config.gb_addr_config_fields.num_rb_per_se;
+		surface->tiling_info.gfx9.swizzle =
+			AMDGPU_TILING_GET(tiling_flags, SWIZZLE_MODE);
+		surface->tiling_info.gfx9.shaderEnable = 1;
+	}
+
 
 	surface->plane_size.grph.surface_size.x = 0;
 	surface->plane_size.grph.surface_size.y = 0;
@@ -1587,10 +1609,57 @@ const struct drm_encoder_helper_funcs amdgpu_dm_encoder_helper_funcs = {
 	.atomic_check = dm_encoder_helper_atomic_check
 };
 
+static void dm_drm_plane_reset(struct drm_plane *plane)
+{
+	struct amdgpu_drm_plane_state *amdgpu_state;
+
+	if (plane->state) {
+		amdgpu_state = to_amdgpu_plane_state(plane->state);
+		if (amdgpu_state->base.fb)
+			drm_framebuffer_unreference(amdgpu_state->base.fb);
+		kfree(amdgpu_state);
+		plane->state = NULL;
+	}
+
+	amdgpu_state = kzalloc(sizeof(*amdgpu_state), GFP_KERNEL);
+	if (amdgpu_state) {
+		plane->state = &amdgpu_state->base;
+		plane->state->plane = plane;
+	}
+}
+
+static struct drm_plane_state *
+dm_drm_plane_duplicate_state(struct drm_plane *plane)
+{
+	struct amdgpu_drm_plane_state *amdgpu_state;
+	struct amdgpu_drm_plane_state *copy;
+
+	amdgpu_state = to_amdgpu_plane_state(plane->state);
+	copy = kzalloc(sizeof(*amdgpu_state), GFP_KERNEL);
+	if (!copy)
+		return NULL;
+
+	__drm_atomic_helper_plane_duplicate_state(plane, &copy->base);
+	return &copy->base;
+}
+
+static void dm_drm_plane_destroy_state(struct drm_plane *plane,
+					   struct drm_plane_state *old_state)
+{
+	struct amdgpu_drm_plane_state *old_amdgpu_state =
+					to_amdgpu_plane_state(old_state);
+	__drm_atomic_helper_plane_destroy_state(old_state);
+	kfree(old_amdgpu_state);
+}
+
 static const struct drm_plane_funcs dm_plane_funcs = {
-	.reset = drm_atomic_helper_plane_reset,
-	.atomic_duplicate_state = drm_atomic_helper_plane_duplicate_state,
-	.atomic_destroy_state = drm_atomic_helper_plane_destroy_state
+	.update_plane	= drm_atomic_helper_update_plane,
+	.disable_plane	= drm_atomic_helper_disable_plane,
+	.destroy	= drm_plane_cleanup,
+	.set_property	= drm_atomic_helper_plane_set_property,
+	.reset = dm_drm_plane_reset,
+	.atomic_duplicate_state = dm_drm_plane_duplicate_state,
+	.atomic_destroy_state = dm_drm_plane_destroy_state,
 };
 
 static int dm_plane_helper_prepare_fb(
@@ -1719,37 +1788,67 @@ static uint32_t rgb_formats[] = {
 	DRM_FORMAT_ABGR2101010,
 };
 
+static uint32_t yuv_formats[] = {
+	DRM_FORMAT_YUYV,
+	DRM_FORMAT_YVYU,
+	DRM_FORMAT_UYVY,
+	DRM_FORMAT_VYUY,
+};
+
+int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
+			struct amdgpu_plane *aplane,
+			unsigned long possible_crtcs)
+{
+	int res = -EPERM;
+
+	switch (aplane->plane_type) {
+	case DRM_PLANE_TYPE_PRIMARY:
+		aplane->base.format_default = true;
+
+		res = drm_universal_plane_init(
+				dm->adev->ddev,
+				&aplane->base,
+				possible_crtcs,
+				&dm_plane_funcs,
+				rgb_formats,
+				ARRAY_SIZE(rgb_formats),
+				aplane->plane_type, NULL);
+		break;
+	case DRM_PLANE_TYPE_OVERLAY:
+		res = drm_universal_plane_init(
+				dm->adev->ddev,
+				&aplane->base,
+				possible_crtcs,
+				&dm_plane_funcs,
+				yuv_formats,
+				ARRAY_SIZE(yuv_formats),
+				aplane->plane_type, NULL);
+		break;
+	case DRM_PLANE_TYPE_CURSOR:
+		DRM_ERROR("KMS: Cursor plane not implemented.");
+		break;
+	}
+
+	drm_plane_helper_add(&aplane->base, &dm_plane_helper_funcs);
+
+	return res;
+}
+
 int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
-			struct amdgpu_crtc *acrtc,
+			struct drm_plane *plane,
 			uint32_t crtc_index)
 {
+	struct amdgpu_crtc *acrtc;
 	int res = -ENOMEM;
 
-	struct drm_plane *primary_plane =
-		kzalloc(sizeof(*primary_plane), GFP_KERNEL);
-
-	if (!primary_plane)
-		goto fail_plane;
-
-	primary_plane->format_default = true;
-
-	res = drm_universal_plane_init(
-		dm->adev->ddev,
-		primary_plane,
-		0,
-		&dm_plane_funcs,
-		rgb_formats,
-		ARRAY_SIZE(rgb_formats),
-		DRM_PLANE_TYPE_PRIMARY, NULL);
-
-	primary_plane->crtc = &acrtc->base;
-
-	drm_plane_helper_add(primary_plane, &dm_plane_helper_funcs);
+	acrtc = kzalloc(sizeof(struct amdgpu_crtc), GFP_KERNEL);
+	if (!acrtc)
+		goto fail;
 
 	res = drm_crtc_init_with_planes(
 			dm->ddev,
 			&acrtc->base,
-			primary_plane,
+			plane,
 			NULL,
 			&amdgpu_dm_crtc_funcs, NULL);
 
@@ -1758,8 +1857,8 @@ int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 
 	drm_crtc_helper_add(&acrtc->base, &amdgpu_dm_crtc_helper_funcs);
 
-	acrtc->max_cursor_width = 128;
-	acrtc->max_cursor_height = 128;
+	acrtc->max_cursor_width = dm->adev->dm.dc->caps.max_cursor_size;
+	acrtc->max_cursor_height = dm->adev->dm.dc->caps.max_cursor_size;
 
 	acrtc->crtc_id = crtc_index;
 	acrtc->base.enabled = false;
@@ -1769,8 +1868,7 @@ int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 
 	return 0;
 fail:
-	kfree(primary_plane);
-fail_plane:
+	kfree(acrtc);
 	acrtc->crtc_id = -1;
 	return res;
 }
@@ -2023,7 +2121,7 @@ int amdgpu_dm_i2c_xfer(struct i2c_adapter *i2c_adap,
 	cmd.speed = 100;
 
 	for (i = 0; i < num; i++) {
-		cmd.payloads[i].write = (msgs[i].flags & I2C_M_RD);
+		cmd.payloads[i].write = !(msgs[i].flags & I2C_M_RD);
 		cmd.payloads[i].address = msgs[i].addr;
 		cmd.payloads[i].length = msgs[i].len;
 		cmd.payloads[i].data = msgs[i].buf;
@@ -2077,6 +2175,7 @@ int amdgpu_dm_connector_init(
 	struct dc *dc = dm->dc;
 	const struct dc_link *link = dc_get_link_at_index(dc, link_index);
 	struct amdgpu_i2c_adapter *i2c;
+	((struct dc_link *)link)->priv = aconnector;
 
 	DRM_DEBUG_KMS("%s()\n", __func__);
 
@@ -2121,7 +2220,7 @@ int amdgpu_dm_connector_init(
 
 	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort
 		|| connector_type == DRM_MODE_CONNECTOR_eDP)
-		amdgpu_dm_initialize_mst_connector(dm, aconnector);
+		amdgpu_dm_initialize_dp_connector(dm, aconnector);
 
 #if defined(CONFIG_BACKLIGHT_CLASS_DEVICE) ||\
 	defined(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
@@ -2545,7 +2644,7 @@ void amdgpu_dm_atomic_commit_tail(
 	}
 
 	/* DC is optimized not to do anything if 'streams' didn't change. */
-	dc_commit_streams(dm->dc, commit_streams, commit_streams_count);
+	WARN_ON(!dc_commit_streams(dm->dc, commit_streams, commit_streams_count));
 
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
 		struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
@@ -3011,6 +3110,8 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 		ret = drm_atomic_add_affected_planes(state, crtc);
 		if (ret)
 			return ret;
+
+		ret = -EINVAL;
 	}
 
 	for (i = 0; i < set_count; i++) {
@@ -3110,9 +3211,11 @@ static bool is_dp_capable_without_timing_msa(
 	uint8_t dpcd_data;
 	bool capable = false;
 	if (amdgpu_connector->dc_link &&
-	    dc_read_dpcd(dc, amdgpu_connector->dc_link->link_index,
-			 DP_DOWN_STREAM_PORT_COUNT,
-			 &dpcd_data, sizeof(dpcd_data)) )
+		dc_read_aux_dpcd(
+			dc,
+			amdgpu_connector->dc_link->link_index,
+			DP_DOWN_STREAM_PORT_COUNT,
+			&dpcd_data, sizeof(dpcd_data)))
 		capable = (dpcd_data & DP_MSA_TIMING_PAR_IGNORED) ? true:false;
 
 	return capable;

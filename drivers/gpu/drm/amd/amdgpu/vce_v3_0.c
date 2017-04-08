@@ -65,7 +65,8 @@ static void vce_v3_0_mc_resume(struct amdgpu_device *adev, int idx);
 static void vce_v3_0_set_ring_funcs(struct amdgpu_device *adev);
 static void vce_v3_0_set_irq_funcs(struct amdgpu_device *adev);
 static int vce_v3_0_wait_for_idle(void *handle);
-
+static int vce_v3_0_set_clockgating_state(void *handle,
+					  enum amd_clockgating_state state);
 /**
  * vce_v3_0_ring_get_rptr - get read pointer
  *
@@ -305,12 +306,8 @@ static int vce_v3_0_stop(struct amdgpu_device *adev)
 		/* hold on ECPU */
 		WREG32_FIELD(VCE_SOFT_RESET, ECPU_SOFT_RESET, 1);
 
-		/* clear BUSY flag */
-		WREG32_FIELD(VCE_STATUS, JOB_BUSY, 0);
-
-		/* Set Clock-Gating off */
-		if (adev->cg_flags & AMD_CG_SUPPORT_VCE_MGCG)
-			vce_v3_0_set_vce_sw_clock_gating(adev, false);
+		/* clear VCE STATUS */
+		WREG32(mmVCE_STATUS, 0);
 	}
 
 	WREG32(mmGRBM_GFX_INDEX, mmGRBM_GFX_INDEX_DEFAULT);
@@ -420,11 +417,7 @@ static int vce_v3_0_sw_fini(void *handle)
 	if (r)
 		return r;
 
-	r = amdgpu_vce_sw_fini(adev);
-	if (r)
-		return r;
-
-	return r;
+	return amdgpu_vce_sw_fini(adev);
 }
 
 static int vce_v3_0_hw_init(void *handle)
@@ -461,7 +454,8 @@ static int vce_v3_0_hw_fini(void *handle)
 	if (r)
 		return r;
 
-	return vce_v3_0_stop(adev);
+	vce_v3_0_stop(adev);
+	return vce_v3_0_set_clockgating_state(adev, AMD_CG_STATE_GATE);
 }
 
 static int vce_v3_0_suspend(void *handle)
@@ -473,11 +467,7 @@ static int vce_v3_0_suspend(void *handle)
 	if (r)
 		return r;
 
-	r = amdgpu_vce_suspend(adev);
-	if (r)
-		return r;
-
-	return r;
+	return amdgpu_vce_suspend(adev);
 }
 
 static int vce_v3_0_resume(void *handle)
@@ -489,11 +479,7 @@ static int vce_v3_0_resume(void *handle)
 	if (r)
 		return r;
 
-	r = vce_v3_0_hw_init(adev);
-	if (r)
-		return r;
-
-	return r;
+	return vce_v3_0_hw_init(adev);
 }
 
 static void vce_v3_0_mc_resume(struct amdgpu_device *adev, int idx)
@@ -728,7 +714,7 @@ static int vce_v3_0_set_clockgating_state(void *handle,
 
 		WREG32(mmGRBM_GFX_INDEX, GET_VCE_INSTANCE(i));
 
-		if (enable) {
+		if (!enable) {
 			/* initialize VCE_CLOCK_GATING_A: Clock ON/OFF delay */
 			uint32_t data = RREG32(mmVCE_CLOCK_GATING_A);
 			data &= ~(0xf | 0xff0);
@@ -785,8 +771,12 @@ static void vce_v3_0_get_clockgating_state(void *handle, u32 *flags)
 
 	mutex_lock(&adev->pm.mutex);
 
-	if (RREG32_SMC(ixCURRENT_PG_STATUS) &
-			CURRENT_PG_STATUS__VCE_PG_STATUS_MASK) {
+	if (adev->flags & AMD_IS_APU)
+		data = RREG32_SMC(ixCURRENT_PG_STATUS_APU);
+	else
+		data = RREG32_SMC(ixCURRENT_PG_STATUS);
+
+	if (data & CURRENT_PG_STATUS__VCE_PG_STATUS_MASK) {
 		DRM_INFO("Cannot get clockgating state when VCE is powergated.\n");
 		goto out;
 	}

@@ -465,15 +465,9 @@ static void vi_detect_hw_virtualization(struct amdgpu_device *adev)
 }
 
 static const struct amdgpu_allowed_register_entry tonga_allowed_read_registers[] = {
-	{mmGB_MACROTILE_MODE7, true},
 };
 
 static const struct amdgpu_allowed_register_entry cz_allowed_read_registers[] = {
-	{mmGB_TILE_MODE7, true},
-	{mmGB_TILE_MODE12, true},
-	{mmGB_TILE_MODE17, true},
-	{mmGB_TILE_MODE23, true},
-	{mmGB_MACROTILE_MODE7, true},
 };
 
 static const struct amdgpu_allowed_register_entry vi_allowed_read_registers[] = {
@@ -796,6 +790,8 @@ static int vi_set_uvd_clocks(struct amdgpu_device *adev, u32 vclk, u32 dclk)
 		return r;
 
 	r = vi_set_uvd_clock(adev, dclk, ixCG_DCLK_CNTL, ixCG_DCLK_STATUS);
+	if (r)
+		return r;
 
 	return 0;
 }
@@ -908,6 +904,9 @@ static const struct amdgpu_asic_funcs vi_asic_funcs =
 	.set_vce_clocks = &vi_set_vce_clocks,
 	.get_config_memsize = &vi_get_config_memsize,
 };
+
+#define CZ_REV_BRISTOL(rev)	 \
+	((rev >= 0xC8 && rev <= 0xCE) || (rev >= 0xE1 && rev <= 0xE6))
 
 static int vi_common_early_init(void *handle)
 {
@@ -1034,7 +1033,25 @@ static int vi_common_early_init(void *handle)
 		adev->external_rev_id = adev->rev_id + 0x50;
 		break;
 	case CHIP_POLARIS12:
-		adev->cg_flags = AMD_CG_SUPPORT_UVD_MGCG;
+		adev->cg_flags = AMD_CG_SUPPORT_GFX_MGCG |
+			AMD_CG_SUPPORT_GFX_RLC_LS |
+			AMD_CG_SUPPORT_GFX_CP_LS |
+			AMD_CG_SUPPORT_GFX_CGCG |
+			AMD_CG_SUPPORT_GFX_CGLS |
+			AMD_CG_SUPPORT_GFX_3D_CGCG |
+			AMD_CG_SUPPORT_GFX_3D_CGLS |
+			AMD_CG_SUPPORT_SDMA_MGCG |
+			AMD_CG_SUPPORT_SDMA_LS |
+			AMD_CG_SUPPORT_BIF_MGCG |
+			AMD_CG_SUPPORT_BIF_LS |
+			AMD_CG_SUPPORT_HDP_MGCG |
+			AMD_CG_SUPPORT_HDP_LS |
+			AMD_CG_SUPPORT_ROM_MGCG |
+			AMD_CG_SUPPORT_MC_MGCG |
+			AMD_CG_SUPPORT_MC_LS |
+			AMD_CG_SUPPORT_DRM_LS |
+			AMD_CG_SUPPORT_UVD_MGCG |
+			AMD_CG_SUPPORT_VCE_MGCG;
 		adev->pg_flags = 0;
 		adev->external_rev_id = adev->rev_id + 0x64;
 		break;
@@ -1045,7 +1062,6 @@ static int vi_common_early_init(void *handle)
 			AMD_CG_SUPPORT_GFX_RLC_LS |
 			AMD_CG_SUPPORT_GFX_CP_LS |
 			AMD_CG_SUPPORT_GFX_CGTS |
-			AMD_CG_SUPPORT_GFX_MGLS |
 			AMD_CG_SUPPORT_GFX_CGTS_LS |
 			AMD_CG_SUPPORT_GFX_CGCG |
 			AMD_CG_SUPPORT_GFX_CGLS |
@@ -1057,8 +1073,8 @@ static int vi_common_early_init(void *handle)
 			AMD_CG_SUPPORT_VCE_MGCG;
 		/* rev0 hardware requires workarounds to support PG */
 		adev->pg_flags = 0;
-		if (adev->rev_id != 0x00) {
-			adev->pg_flags |=
+		if (adev->rev_id != 0x00 || CZ_REV_BRISTOL(adev->pdev->revision)) {
+			adev->pg_flags |= AMD_PG_SUPPORT_GFX_PG |
 				AMD_PG_SUPPORT_GFX_SMG |
 				AMD_PG_SUPPORT_GFX_PIPELINE |
 				AMD_PG_SUPPORT_CP |
@@ -1074,7 +1090,6 @@ static int vi_common_early_init(void *handle)
 			AMD_CG_SUPPORT_GFX_RLC_LS |
 			AMD_CG_SUPPORT_GFX_CP_LS |
 			AMD_CG_SUPPORT_GFX_CGTS |
-			AMD_CG_SUPPORT_GFX_MGLS |
 			AMD_CG_SUPPORT_GFX_CGTS_LS |
 			AMD_CG_SUPPORT_GFX_CGCG |
 			AMD_CG_SUPPORT_GFX_CGLS |
@@ -1097,8 +1112,8 @@ static int vi_common_early_init(void *handle)
 		return -EINVAL;
 	}
 
-	if (amdgpu_smc_load_fw && smc_enabled)
-		adev->firmware.smu_load = true;
+	/* vi use smc load by default */
+	adev->firmware.load_type = amdgpu_ucode_get_load_type(adev, amdgpu_fw_load_type);
 
 	amdgpu_get_pcie_info(adev);
 
@@ -1404,24 +1419,24 @@ static int vi_common_set_clockgating_state(void *handle,
 	switch (adev->asic_type) {
 	case CHIP_FIJI:
 		vi_update_bif_medium_grain_light_sleep(adev,
-				state == AMD_CG_STATE_GATE ? true : false);
+				state == AMD_CG_STATE_GATE);
 		vi_update_hdp_medium_grain_clock_gating(adev,
-				state == AMD_CG_STATE_GATE ? true : false);
+				state == AMD_CG_STATE_GATE);
 		vi_update_hdp_light_sleep(adev,
-				state == AMD_CG_STATE_GATE ? true : false);
+				state == AMD_CG_STATE_GATE);
 		vi_update_rom_medium_grain_clock_gating(adev,
-				state == AMD_CG_STATE_GATE ? true : false);
+				state == AMD_CG_STATE_GATE);
 		break;
 	case CHIP_CARRIZO:
 	case CHIP_STONEY:
 		vi_update_bif_medium_grain_light_sleep(adev,
-				state == AMD_CG_STATE_GATE ? true : false);
+				state == AMD_CG_STATE_GATE);
 		vi_update_hdp_medium_grain_clock_gating(adev,
-				state == AMD_CG_STATE_GATE ? true : false);
+				state == AMD_CG_STATE_GATE);
 		vi_update_hdp_light_sleep(adev,
-				state == AMD_CG_STATE_GATE ? true : false);
+				state == AMD_CG_STATE_GATE);
 		vi_update_drm_light_sleep(adev,
-				state == AMD_CG_STATE_GATE ? true : false);
+				state == AMD_CG_STATE_GATE);
 		break;
 	case CHIP_TONGA:
 	case CHIP_POLARIS10:
