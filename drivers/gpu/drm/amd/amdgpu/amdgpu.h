@@ -308,6 +308,7 @@ struct amdgpu_gart_funcs {
 				     uint32_t flags);
 	/* adjust mc addr in fb for APU case */
 	u64 (*adjust_mc_addr)(struct amdgpu_device *adev, u64 addr);
+	uint32_t (*get_invalidate_req)(unsigned int vm_id);
 };
 
 /* provided by the ih block */
@@ -572,7 +573,6 @@ struct amdgpu_vmhub {
 	uint32_t	vm_context0_cntl;
 	uint32_t	vm_l2_pro_fault_status;
 	uint32_t	vm_l2_pro_fault_cntl;
-	uint32_t	(*get_invalidate_req)(unsigned int vm_id);
 };
 
 /*
@@ -1894,12 +1894,14 @@ void amdgpu_unregister_atpx_handler(void);
 bool amdgpu_has_atpx_dgpu_power_cntl(void);
 bool amdgpu_is_atpx_hybrid(void);
 bool amdgpu_atpx_dgpu_req_power_for_displays(void);
+bool amdgpu_has_atpx(void);
 #else
 static inline void amdgpu_register_atpx_handler(void) {}
 static inline void amdgpu_unregister_atpx_handler(void) {}
 static inline bool amdgpu_has_atpx_dgpu_power_cntl(void) { return false; }
 static inline bool amdgpu_is_atpx_hybrid(void) { return false; }
 static inline bool amdgpu_atpx_dgpu_req_power_for_displays(void) { return false; }
+static inline bool amdgpu_has_atpx(void) { return false; }
 #endif
 
 /*

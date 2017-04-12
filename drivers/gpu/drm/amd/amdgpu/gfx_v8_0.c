@@ -4855,6 +4855,20 @@ static int gfx_v8_0_mqd_init(struct amdgpu_ring *ring)
 	tmp = REG_SET_FIELD(tmp, CP_HQD_PERSISTENT_STATE, PRELOAD_SIZE, 0x53);
 	mqd->cp_hqd_persistent_state = tmp;
 
+	/* set MTYPE */
+	tmp = RREG32(mmCP_HQD_IB_CONTROL);
+	tmp = REG_SET_FIELD(tmp, CP_HQD_IB_CONTROL, MIN_IB_AVAIL_SIZE, 3);
+	tmp = REG_SET_FIELD(tmp, CP_HQD_IB_CONTROL, MTYPE, 3);
+	mqd->cp_hqd_ib_control = tmp;
+
+	tmp = RREG32(mmCP_HQD_IQ_TIMER);
+	tmp = REG_SET_FIELD(tmp, CP_HQD_IQ_TIMER, MTYPE, 3);
+	mqd->cp_hqd_iq_timer = tmp;
+
+	tmp = RREG32(mmCP_HQD_CTX_SAVE_CONTROL);
+	tmp = REG_SET_FIELD(tmp, CP_HQD_CTX_SAVE_CONTROL, MTYPE, 3);
+	mqd->cp_hqd_ctx_save_control = tmp;
+
 	/* activate the queue */
 	mqd->cp_hqd_active = 1;
 
@@ -4916,17 +4930,6 @@ static int gfx_v8_0_kiq_init_register(struct amdgpu_ring *ring)
 	WREG32(mmCP_HQD_PQ_WPTR_POLL_ADDR, mqd->cp_hqd_pq_wptr_poll_addr_lo);
 	WREG32(mmCP_HQD_PQ_WPTR_POLL_ADDR_HI, mqd->cp_hqd_pq_wptr_poll_addr_hi);
 
-	/* enable the doorbell if requested */
-	if (ring->use_doorbell) {
-		if ((adev->asic_type == CHIP_CARRIZO) ||
-				(adev->asic_type == CHIP_FIJI) ||
-				(adev->asic_type == CHIP_STONEY)) {
-			WREG32(mmCP_MEC_DOORBELL_RANGE_LOWER,
-						AMDGPU_DOORBELL_KIQ << 2);
-			WREG32(mmCP_MEC_DOORBELL_RANGE_UPPER,
-						AMDGPU_DOORBELL_MEC_RING7 << 2);
-		}
-	}
 	WREG32(mmCP_HQD_PQ_DOORBELL_CONTROL, mqd->cp_hqd_pq_doorbell_control);
 
 	/* reset read and write pointers, similar to CP_RB0_WPTR/_RPTR */
@@ -5051,6 +5054,18 @@ static int gfx_v8_0_kiq_resume(struct amdgpu_device *adev)
 		amdgpu_bo_unreserve(ring->mqd_obj);
 		if (r)
 			goto done;
+	}
+
+	if ((adev->asic_type == CHIP_CARRIZO) ||
+	    (adev->asic_type == CHIP_FIJI) ||
+	    (adev->asic_type == CHIP_STONEY) ||
+	    (adev->asic_type == CHIP_POLARIS10) ||
+	    (adev->asic_type == CHIP_POLARIS11) ||
+	    (adev->asic_type == CHIP_POLARIS12)) {
+		WREG32(mmCP_MEC_DOORBELL_RANGE_LOWER,
+		       AMDGPU_DOORBELL_KIQ << 2);
+		WREG32(mmCP_MEC_DOORBELL_RANGE_UPPER,
+		       AMDGPU_DOORBELL_MEC_RING7 << 2);
 	}
 
 	r = gfx_v8_0_kiq_kcq_enable(adev);
@@ -6962,8 +6977,6 @@ static const struct amdgpu_ring_funcs gfx_v8_0_ring_funcs_kiq = {
 	.emit_ib_size =	4, /* gfx_v8_0_ring_emit_ib_compute */
 	.emit_ib = gfx_v8_0_ring_emit_ib_compute,
 	.emit_fence = gfx_v8_0_ring_emit_fence_kiq,
-	.emit_hdp_flush = gfx_v8_0_ring_emit_hdp_flush,
-	.emit_hdp_invalidate = gfx_v8_0_ring_emit_hdp_invalidate,
 	.test_ring = gfx_v8_0_ring_test_ring,
 	.test_ib = gfx_v8_0_ring_test_ib,
 	.insert_nop = amdgpu_ring_insert_nop,

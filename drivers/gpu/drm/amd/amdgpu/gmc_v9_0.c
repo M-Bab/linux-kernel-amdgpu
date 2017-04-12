@@ -173,6 +173,25 @@ static void gmc_v9_0_set_irq_funcs(struct amdgpu_device *adev)
 	adev->mc.vm_fault.funcs = &gmc_v9_0_irq_funcs;
 }
 
+static uint32_t gmc_v9_0_get_invalidate_req(unsigned int vm_id)
+{
+	u32 req = 0;
+
+	/* invalidate using legacy mode on vm_id*/
+	req = REG_SET_FIELD(req, VM_INVALIDATE_ENG0_REQ,
+			    PER_VMID_INVALIDATE_REQ, 1 << vm_id);
+	req = REG_SET_FIELD(req, VM_INVALIDATE_ENG0_REQ, FLUSH_TYPE, 0);
+	req = REG_SET_FIELD(req, VM_INVALIDATE_ENG0_REQ, INVALIDATE_L2_PTES, 1);
+	req = REG_SET_FIELD(req, VM_INVALIDATE_ENG0_REQ, INVALIDATE_L2_PDE0, 1);
+	req = REG_SET_FIELD(req, VM_INVALIDATE_ENG0_REQ, INVALIDATE_L2_PDE1, 1);
+	req = REG_SET_FIELD(req, VM_INVALIDATE_ENG0_REQ, INVALIDATE_L2_PDE2, 1);
+	req = REG_SET_FIELD(req, VM_INVALIDATE_ENG0_REQ, INVALIDATE_L1_PTES, 1);
+	req = REG_SET_FIELD(req, VM_INVALIDATE_ENG0_REQ,
+			    CLEAR_PROTECTION_FAULT_STATUS_ADDR,	0);
+
+	return req;
+}
+
 /*
  * GART
  * VMID 0 is the physical GPU addresses as used by the kernel.
@@ -202,7 +221,7 @@ static void gmc_v9_0_gart_flush_gpu_tlb(struct amdgpu_device *adev,
 
 	for (i = 0; i < AMDGPU_MAX_VMHUBS; ++i) {
 		struct amdgpu_vmhub *hub = &adev->vmhub[i];
-		u32 tmp = hub->get_invalidate_req(vmid);
+		u32 tmp = gmc_v9_0_get_invalidate_req(vmid);
 
 		WREG32_NO_KIQ(hub->vm_inv_eng0_req + eng, tmp);
 
@@ -345,6 +364,7 @@ static const struct amdgpu_gart_funcs gmc_v9_0_gart_funcs = {
 	.set_pte_pde = gmc_v9_0_gart_set_pte_pde,
 	.get_vm_pte_flags = gmc_v9_0_get_vm_pte_flags,
 	.adjust_mc_addr = gmc_v9_0_adjust_mc_addr,
+	.get_invalidate_req = gmc_v9_0_get_invalidate_req,
 };
 
 static void gmc_v9_0_set_gart_funcs(struct amdgpu_device *adev)
@@ -500,7 +520,12 @@ static int gmc_v9_0_vm_init(struct amdgpu_device *adev)
 	 * amdkfd will use VMIDs 8-15
 	 */
 	adev->vm_manager.num_ids = AMDGPU_NUM_OF_VMIDS;
-	adev->vm_manager.num_level = 3;
+
+	/* TODO: fix num_level for APU when updating vm size and block size */
+	if (adev->flags & AMD_IS_APU)
+		adev->vm_manager.num_level = 1;
+	else
+		adev->vm_manager.num_level = 3;
 	amdgpu_vm_manager_init(adev);
 
 	/* base offset of vram pages */
@@ -532,9 +557,20 @@ static int gmc_v9_0_sw_init(void *handle)
 
 	if (adev->flags & AMD_IS_APU) {
 		adev->mc.vram_type = AMDGPU_VRAM_TYPE_UNKNOWN;
+		amdgpu_vm_adjust_size(adev, 64);
 	} else {
 		/* XXX Don't know how to get VRAM type yet. */
 		adev->mc.vram_type = AMDGPU_VRAM_TYPE_HBM;
+		/*
+		 * To fulfill 4-level page support,
+		 * vm size is 256TB (48bit), maximum size of Vega10,
+		 * block size 512 (9bit)
+		 */
+		adev->vm_manager.vm_size = 1U << 18;
+		adev->vm_manager.block_size = 9;
+		DRM_INFO("vm size is %llu GB, block size is %u-bit\n",
+				adev->vm_manager.vm_size,
+				adev->vm_manager.block_size);
 	}
 
 	/* This interrupt is VMC page fault.*/
@@ -546,14 +582,7 @@ static int gmc_v9_0_sw_init(void *handle)
 	if (r)
 		return r;
 
-	/* Because of four level VMPTs, vm size is at least 512GB.
-	 * The maximum size is 256TB (48bit).
-	 */
-	if (amdgpu_vm_size < 512) {
-		DRM_WARN("VM size is at least 512GB!\n");
-		amdgpu_vm_size = 512;
-	}
-	adev->vm_manager.max_pfn = (uint64_t)amdgpu_vm_size << 18;
+	adev->vm_manager.max_pfn = adev->vm_manager.vm_size << 18;
 
 	/* Set the internal MC address mask
 	 * This is the max address of the GPU's
