@@ -394,8 +394,9 @@ static int gmc_v9_0_late_init(void *handle)
 		unsigned vmhub = ring->funcs->vmhub;
 
 		ring->vm_inv_eng = vm_inv_eng[vmhub]++;
-		dev_info(adev->dev, "ring %u uses VM inv eng %u on hub %u\n",
-			 ring->idx, ring->vm_inv_eng, ring->funcs->vmhub);
+		dev_info(adev->dev, "ring %u(%s) uses VM inv eng %u on hub %u\n",
+			 ring->idx, ring->name, ring->vm_inv_eng,
+			 ring->funcs->vmhub);
 	}
 
 	/* Engine 17 is used for GART flushes */
@@ -485,7 +486,8 @@ static int gmc_v9_0_mc_init(struct amdgpu_device *adev)
 	 * size equal to the 1024 or vram, whichever is larger.
 	 */
 	if (amdgpu_gart_size == -1)
-		adev->mc.gtt_size = max((1024ULL << 20), adev->mc.mc_vram_size);
+		adev->mc.gtt_size = max((AMDGPU_DEFAULT_GTT_SIZE_MB << 20),
+					adev->mc.mc_vram_size);
 	else
 		adev->mc.gtt_size = (uint64_t)amdgpu_gart_size << 20;
 

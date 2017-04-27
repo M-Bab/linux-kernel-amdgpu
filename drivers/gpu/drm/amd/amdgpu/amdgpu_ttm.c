@@ -1040,11 +1040,17 @@ uint64_t amdgpu_ttm_tt_pte_flags(struct amdgpu_device *adev, struct ttm_tt *ttm,
 static bool amdgpu_ttm_bo_eviction_valuable(struct ttm_buffer_object *bo,
 					    const struct ttm_place *place)
 {
-	if (bo->mem.mem_type == TTM_PL_VRAM &&
-	    bo->mem.start == AMDGPU_BO_INVALID_OFFSET) {
-		unsigned long num_pages = bo->mem.num_pages;
-		struct drm_mm_node *node = bo->mem.mm_node;
+	unsigned long num_pages = bo->mem.num_pages;
+	struct drm_mm_node *node = bo->mem.mm_node;
 
+	if (bo->mem.start != AMDGPU_BO_INVALID_OFFSET)
+		return ttm_bo_eviction_valuable(bo, place);
+
+	switch (bo->mem.mem_type) {
+	case TTM_PL_TT:
+		return true;
+
+	case TTM_PL_VRAM:
 		/* Check each drm MM node individually */
 		while (num_pages) {
 			if (place->fpfn < (node->start + node->size) &&
@@ -1054,8 +1060,10 @@ static bool amdgpu_ttm_bo_eviction_valuable(struct ttm_buffer_object *bo,
 			num_pages -= node->size;
 			++node;
 		}
+		break;
 
-		return false;
+	default:
+		break;
 	}
 
 	return ttm_bo_eviction_valuable(bo, place);
@@ -1403,6 +1411,8 @@ error_free:
 
 #if defined(CONFIG_DEBUG_FS)
 
+extern void amdgpu_gtt_mgr_print(struct seq_file *m, struct ttm_mem_type_manager
+				 *man);
 static int amdgpu_mm_dump_table(struct seq_file *m, void *data)
 {
 	struct drm_info_node *node = (struct drm_info_node *)m->private;
@@ -1416,11 +1426,17 @@ static int amdgpu_mm_dump_table(struct seq_file *m, void *data)
 	spin_lock(&glob->lru_lock);
 	ret = drm_mm_dump_table(m, mm);
 	spin_unlock(&glob->lru_lock);
-	if (ttm_pl == TTM_PL_VRAM)
+	switch (ttm_pl) {
+	case TTM_PL_VRAM:
 		seq_printf(m, "man size:%llu pages, ram usage:%lluMB, vis usage:%lluMB\n",
 			   adev->mman.bdev.man[ttm_pl].size,
 			   (u64)atomic64_read(&adev->vram_usage) >> 20,
 			   (u64)atomic64_read(&adev->vram_vis_usage) >> 20);
+		break;
+	case TTM_PL_TT:
+		amdgpu_gtt_mgr_print(m, &adev->mman.bdev.man[TTM_PL_TT]);
+		break;
+	}
 	return ret;
 }
 
