@@ -941,12 +941,6 @@ static int gfx_v8_0_init_microcode(struct amdgpu_device *adev)
 	cp_hdr = (const struct gfx_firmware_header_v1_0 *)adev->gfx.me_fw->data;
 	adev->gfx.me_fw_version = le32_to_cpu(cp_hdr->header.ucode_version);
 
-	/* chain ib ucode isn't formal released, just disable it by far
-	 * TODO: when ucod ready we should use ucode version to judge if
-	 * chain-ib support or not.
-	 */
-	adev->virt.chained_ib_support = false;
-
 	adev->gfx.me_feature_version = le32_to_cpu(cp_hdr->ucode_feature_version);
 
 	snprintf(fw_name, sizeof(fw_name), "amdgpu/%s_ce.bin", chip_name);
@@ -959,6 +953,17 @@ static int gfx_v8_0_init_microcode(struct amdgpu_device *adev)
 	cp_hdr = (const struct gfx_firmware_header_v1_0 *)adev->gfx.ce_fw->data;
 	adev->gfx.ce_fw_version = le32_to_cpu(cp_hdr->header.ucode_version);
 	adev->gfx.ce_feature_version = le32_to_cpu(cp_hdr->ucode_feature_version);
+
+	/*
+	 * Support for MCBP/Virtualization in combination with chained IBs is
+	 * formal released on feature version #46
+	 */
+	if (adev->gfx.ce_feature_version >= 46 &&
+	    adev->gfx.pfp_feature_version >= 46) {
+		adev->virt.chained_ib_support = true;
+		DRM_INFO("Chained IB support enabled!\n");
+	} else
+		adev->virt.chained_ib_support = false;
 
 	snprintf(fw_name, sizeof(fw_name), "amdgpu/%s_rlc.bin", chip_name);
 	err = request_firmware(&adev->gfx.rlc_fw, fw_name, adev->dev);
@@ -1239,7 +1244,7 @@ static void gfx_v8_0_rlc_fini(struct amdgpu_device *adev)
 
 	/* clear state block */
 	if (adev->gfx.rlc.clear_state_obj) {
-		r = amdgpu_bo_reserve(adev->gfx.rlc.clear_state_obj, false);
+		r = amdgpu_bo_reserve(adev->gfx.rlc.clear_state_obj, true);
 		if (unlikely(r != 0))
 			dev_warn(adev->dev, "(%d) reserve RLC cbs bo failed\n", r);
 		amdgpu_bo_unpin(adev->gfx.rlc.clear_state_obj);
@@ -1250,7 +1255,7 @@ static void gfx_v8_0_rlc_fini(struct amdgpu_device *adev)
 
 	/* jump table block */
 	if (adev->gfx.rlc.cp_table_obj) {
-		r = amdgpu_bo_reserve(adev->gfx.rlc.cp_table_obj, false);
+		r = amdgpu_bo_reserve(adev->gfx.rlc.cp_table_obj, true);
 		if (unlikely(r != 0))
 			dev_warn(adev->dev, "(%d) reserve RLC cp table bo failed\n", r);
 		amdgpu_bo_unpin(adev->gfx.rlc.cp_table_obj);
@@ -1363,7 +1368,7 @@ static void gfx_v8_0_mec_fini(struct amdgpu_device *adev)
 	int r;
 
 	if (adev->gfx.mec.hpd_eop_obj) {
-		r = amdgpu_bo_reserve(adev->gfx.mec.hpd_eop_obj, false);
+		r = amdgpu_bo_reserve(adev->gfx.mec.hpd_eop_obj, true);
 		if (unlikely(r != 0))
 			dev_warn(adev->dev, "(%d) reserve HPD EOP bo failed\n", r);
 		amdgpu_bo_unpin(adev->gfx.mec.hpd_eop_obj);
@@ -1379,6 +1384,8 @@ static int gfx_v8_0_kiq_init_ring(struct amdgpu_device *adev,
 {
 	struct amdgpu_kiq *kiq = &adev->gfx.kiq;
 	int r = 0;
+
+	mutex_init(&kiq->ring_mutex);
 
 	r = amdgpu_wb_get(adev, &adev->virt.reg_val_offs);
 	if (r)
@@ -1491,7 +1498,7 @@ static int gfx_v8_0_kiq_init(struct amdgpu_device *adev)
 
 	memset(hpd, 0, MEC_HPD_SIZE);
 
-	r = amdgpu_bo_reserve(kiq->eop_obj, false);
+	r = amdgpu_bo_reserve(kiq->eop_obj, true);
 	if (unlikely(r != 0))
 		dev_warn(adev->dev, "(%d) reserve kiq eop bo failed\n", r);
 	amdgpu_bo_kunmap(kiq->eop_obj);
@@ -1933,6 +1940,7 @@ static int gfx_v8_0_gpu_early_init(struct amdgpu_device *adev)
 		case 0xca:
 		case 0xce:
 		case 0x88:
+		case 0xe6:
 			/* B6 */
 			adev->gfx.config.max_cu_per_sh = 6;
 			break;
@@ -1965,17 +1973,28 @@ static int gfx_v8_0_gpu_early_init(struct amdgpu_device *adev)
 		adev->gfx.config.max_backends_per_se = 1;
 
 		switch (adev->pdev->revision) {
+		case 0x80:
+		case 0x81:
 		case 0xc0:
 		case 0xc1:
 		case 0xc2:
 		case 0xc4:
 		case 0xc8:
 		case 0xc9:
+		case 0xd6:
+		case 0xda:
+		case 0xe9:
+		case 0xea:
 			adev->gfx.config.max_cu_per_sh = 3;
 			break;
+		case 0x83:
 		case 0xd0:
 		case 0xd1:
 		case 0xd2:
+		case 0xd4:
+		case 0xdb:
+		case 0xe1:
+		case 0xe2:
 		default:
 			adev->gfx.config.max_cu_per_sh = 2;
 			break;
@@ -7098,8 +7117,14 @@ static void gfx_v8_0_get_cu_info(struct amdgpu_device *adev)
 	u32 mask, bitmap, ao_bitmap, ao_cu_mask = 0;
 	struct amdgpu_cu_info *cu_info = &adev->gfx.cu_info;
 	unsigned disable_masks[4 * 2];
+	u32 ao_cu_num;
 
 	memset(cu_info, 0, sizeof(*cu_info));
+
+	if (adev->flags & AMD_IS_APU)
+		ao_cu_num = 2;
+	else
+		ao_cu_num = adev->gfx.config.max_cu_per_sh;
 
 	amdgpu_gfx_parse_disable_cu(disable_masks, 4, 2);
 
@@ -7116,9 +7141,9 @@ static void gfx_v8_0_get_cu_info(struct amdgpu_device *adev)
 			bitmap = gfx_v8_0_get_cu_active_bitmap(adev);
 			cu_info->bitmap[i][j] = bitmap;
 
-			for (k = 0; k < 16; k ++) {
+			for (k = 0; k < adev->gfx.config.max_cu_per_sh; k ++) {
 				if (bitmap & mask) {
-					if (counter < 2)
+					if (counter < ao_cu_num)
 						ao_bitmap |= mask;
 					counter ++;
 				}

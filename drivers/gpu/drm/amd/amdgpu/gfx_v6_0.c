@@ -2437,7 +2437,7 @@ static void gfx_v6_0_rlc_fini(struct amdgpu_device *adev)
 	int r;
 
 	if (adev->gfx.rlc.save_restore_obj) {
-		r = amdgpu_bo_reserve(adev->gfx.rlc.save_restore_obj, false);
+		r = amdgpu_bo_reserve(adev->gfx.rlc.save_restore_obj, true);
 		if (unlikely(r != 0))
 			dev_warn(adev->dev, "(%d) reserve RLC sr bo failed\n", r);
 		amdgpu_bo_unpin(adev->gfx.rlc.save_restore_obj);
@@ -2448,7 +2448,7 @@ static void gfx_v6_0_rlc_fini(struct amdgpu_device *adev)
 	}
 
 	if (adev->gfx.rlc.clear_state_obj) {
-		r = amdgpu_bo_reserve(adev->gfx.rlc.clear_state_obj, false);
+		r = amdgpu_bo_reserve(adev->gfx.rlc.clear_state_obj, true);
 		if (unlikely(r != 0))
 			dev_warn(adev->dev, "(%d) reserve RLC c bo failed\n", r);
 		amdgpu_bo_unpin(adev->gfx.rlc.clear_state_obj);
@@ -2459,7 +2459,7 @@ static void gfx_v6_0_rlc_fini(struct amdgpu_device *adev)
 	}
 
 	if (adev->gfx.rlc.cp_table_obj) {
-		r = amdgpu_bo_reserve(adev->gfx.rlc.cp_table_obj, false);
+		r = amdgpu_bo_reserve(adev->gfx.rlc.cp_table_obj, true);
 		if (unlikely(r != 0))
 			dev_warn(adev->dev, "(%d) reserve RLC cp table bo failed\n", r);
 		amdgpu_bo_unpin(adev->gfx.rlc.cp_table_obj);
@@ -3719,6 +3719,12 @@ static void gfx_v6_0_get_cu_info(struct amdgpu_device *adev)
 	u32 mask, bitmap, ao_bitmap, ao_cu_mask = 0;
 	struct amdgpu_cu_info *cu_info = &adev->gfx.cu_info;
 	unsigned disable_masks[4 * 2];
+	u32 ao_cu_num;
+
+	if (adev->flags & AMD_IS_APU)
+		ao_cu_num = 2;
+	else
+		ao_cu_num = adev->gfx.config.max_cu_per_sh;
 
 	memset(cu_info, 0, sizeof(*cu_info));
 
@@ -3737,9 +3743,9 @@ static void gfx_v6_0_get_cu_info(struct amdgpu_device *adev)
 			bitmap = gfx_v6_0_get_cu_enabled(adev);
 			cu_info->bitmap[i][j] = bitmap;
 
-			for (k = 0; k < 16; k++) {
+			for (k = 0; k < adev->gfx.config.max_cu_per_sh; k++) {
 				if (bitmap & mask) {
-					if (counter < 2)
+					if (counter < ao_cu_num)
 						ao_bitmap |= mask;
 					counter ++;
 				}
