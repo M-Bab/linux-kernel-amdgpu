@@ -156,6 +156,7 @@ struct core_link {
 	unsigned int dpcd_sink_count;
 
 	enum edp_revision edp_revision;
+	bool psr_enabled;
 
 	/* MST record stream using this link */
 	struct link_flags {
@@ -211,11 +212,8 @@ struct resource_funcs {
 
 	struct pipe_ctx *(*acquire_idle_pipe_for_layer)(
 			struct validate_context *context,
+			const struct resource_pool *pool,
 			struct core_stream *stream);
-
-	void (*build_bit_depth_reduction_params)(
-			const struct core_stream *stream,
-			struct bit_depth_reduction_params *fmt_bit_depth);
 };
 
 struct audio_support{
@@ -292,7 +290,6 @@ struct pipe_ctx {
 };
 
 struct resource_context {
-	const struct resource_pool *pool;
 	struct pipe_ctx pipe_ctx[MAX_PIPES];
 	bool is_stream_enc_acquired[MAX_PIPES * 2];
 	bool is_audio_acquired[MAX_PIPES];

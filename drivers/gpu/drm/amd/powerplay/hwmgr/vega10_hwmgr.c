@@ -1137,7 +1137,7 @@ static void vega10_setup_default_single_dpm_table(struct pp_hwmgr *hwmgr,
 	int i;
 
 	for (i = 0; i < dep_table->count; i++) {
-		if (i == 0 || dpm_table->dpm_levels[dpm_table->count - 1].value !=
+		if (i == 0 || dpm_table->dpm_levels[dpm_table->count - 1].value <=
 				dep_table->entries[i].clk) {
 			dpm_table->dpm_levels[dpm_table->count].value =
 					dep_table->entries[i].clk;
@@ -1274,7 +1274,7 @@ static int vega10_setup_default_dpm_tables(struct pp_hwmgr *hwmgr)
 	dpm_table = &(data->dpm_table.eclk_table);
 	for (i = 0; i < dep_mm_table->count; i++) {
 		if (i == 0 || dpm_table->dpm_levels
-				[dpm_table->count - 1].value !=
+				[dpm_table->count - 1].value <=
 						dep_mm_table->entries[i].eclk) {
 			dpm_table->dpm_levels[dpm_table->count].value =
 					dep_mm_table->entries[i].eclk;
@@ -1290,7 +1290,7 @@ static int vega10_setup_default_dpm_tables(struct pp_hwmgr *hwmgr)
 	dpm_table = &(data->dpm_table.vclk_table);
 	for (i = 0; i < dep_mm_table->count; i++) {
 		if (i == 0 || dpm_table->dpm_levels
-				[dpm_table->count - 1].value !=
+				[dpm_table->count - 1].value <=
 						dep_mm_table->entries[i].vclk) {
 			dpm_table->dpm_levels[dpm_table->count].value =
 					dep_mm_table->entries[i].vclk;
@@ -1304,7 +1304,7 @@ static int vega10_setup_default_dpm_tables(struct pp_hwmgr *hwmgr)
 	dpm_table = &(data->dpm_table.dclk_table);
 	for (i = 0; i < dep_mm_table->count; i++) {
 		if (i == 0 || dpm_table->dpm_levels
-				[dpm_table->count - 1].value !=
+				[dpm_table->count - 1].value <=
 						dep_mm_table->entries[i].dclk) {
 			dpm_table->dpm_levels[dpm_table->count].value =
 					dep_mm_table->entries[i].dclk;
@@ -1535,7 +1535,11 @@ static int vega10_populate_single_gfx_level(struct pp_hwmgr *hwmgr,
 	current_gfxclk_level->FbMult =
 			cpu_to_le32(dividers.ulPll_fb_mult);
 	/* Spread FB Multiplier bit: bit 0:8 int, bit 31:16 frac */
-	current_gfxclk_level->SsOn = dividers.ucPll_ss_enable;
+	if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
+				PHM_PlatformCaps_EngineSpreadSpectrumSupport))
+		current_gfxclk_level->SsOn = dividers.ucPll_ss_enable;
+	else
+		current_gfxclk_level->SsOn = 0;
 	current_gfxclk_level->SsFbMult =
 			cpu_to_le32(dividers.ulPll_ss_fbsmult);
 	current_gfxclk_level->SsSlewFrac =
@@ -2298,6 +2302,7 @@ static int vega10_init_smc_table(struct pp_hwmgr *hwmgr)
 			(struct phm_ppt_v2_information *)(hwmgr->pptable);
 	PPTable_t *pp_table = &(data->smc_state_table.pp_table);
 	struct pp_atomfwctrl_voltage_table voltage_table;
+	struct pp_atomfwctrl_bios_boot_up_values boot_up_values;
 
 	result = vega10_setup_default_dpm_tables(hwmgr);
 	PP_ASSERT_WITH_CODE(!result,
@@ -2367,6 +2372,24 @@ static int vega10_init_smc_table(struct pp_hwmgr *hwmgr)
 		PP_ASSERT_WITH_CODE(!result,
 				"Failed to populate Clock Stretcher Table!",
 				return result);
+	}
+
+	result = pp_atomfwctrl_get_vbios_bootup_values(hwmgr, &boot_up_values);
+	if (!result) {
+		data->vbios_boot_state.vddc     = boot_up_values.usVddc;
+		data->vbios_boot_state.vddci    = boot_up_values.usVddci;
+		data->vbios_boot_state.mvddc    = boot_up_values.usMvddc;
+		data->vbios_boot_state.gfx_clock = boot_up_values.ulGfxClk;
+		data->vbios_boot_state.mem_clock = boot_up_values.ulUClk;
+		data->vbios_boot_state.soc_clock = boot_up_values.ulSocClk;
+		if (0 != boot_up_values.usVddc) {
+			smum_send_msg_to_smc_with_parameter(hwmgr->smumgr,
+						PPSMC_MSG_SetFloorSocVoltage,
+						(boot_up_values.usVddc * 4));
+			data->vbios_boot_state.bsoc_vddc_lock = true;
+		} else {
+			data->vbios_boot_state.bsoc_vddc_lock = false;
+		}
 	}
 
 	result = vega10_populate_avfs_parameters(hwmgr);
@@ -2588,6 +2611,12 @@ static int vega10_start_dpm(struct pp_hwmgr *hwmgr, uint32_t bitmap)
 				true, data->smu_features[GNLD_LED_DISPLAY].smu_feature_bitmap),
 		"Attempt to Enable LED DPM feature Failed!", return -EINVAL);
 		data->smu_features[GNLD_LED_DISPLAY].enabled = true;
+	}
+
+	if (data->vbios_boot_state.bsoc_vddc_lock) {
+		smum_send_msg_to_smc_with_parameter(hwmgr->smumgr,
+						PPSMC_MSG_SetFloorSocVoltage, 0);
+		data->vbios_boot_state.bsoc_vddc_lock = false;
 	}
 
 	if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
@@ -4160,55 +4189,56 @@ static int vega10_force_clock_level(struct pp_hwmgr *hwmgr,
 
 	switch (type) {
 	case PP_SCLK:
-		if (data->registry_data.sclk_dpm_key_disabled)
-			break;
-
 		for (i = 0; i < 32; i++) {
 			if (mask & (1 << i))
 				break;
 		}
+		data->smc_state_table.gfx_boot_level = i;
 
-		PP_ASSERT_WITH_CODE(!smum_send_msg_to_smc_with_parameter(
-				hwmgr->smumgr,
-				PPSMC_MSG_SetSoftMinGfxclkByIndex,
-				i),
-				"Failed to set soft min sclk index!",
-				return -1);
+		for (i = 31; i >= 0; i--) {
+			if (mask & (1 << i))
+				break;
+		}
+		data->smc_state_table.gfx_max_level = i;
+
+		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_bootup_level(hwmgr),
+			"Failed to upload boot level to lowest!",
+			return -EINVAL);
+
+		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_max_level(hwmgr),
+			"Failed to upload dpm max level to highest!",
+			return -EINVAL);
 		break;
 
 	case PP_MCLK:
-		if (data->registry_data.mclk_dpm_key_disabled)
-			break;
-
 		for (i = 0; i < 32; i++) {
 			if (mask & (1 << i))
 				break;
 		}
 
-		PP_ASSERT_WITH_CODE(!smum_send_msg_to_smc_with_parameter(
-				hwmgr->smumgr,
-				PPSMC_MSG_SetSoftMinUclkByIndex,
-				i),
-				"Failed to set soft min mclk index!",
-				return -1);
+		for (i = 0; i < 32; i++) {
+			if (mask & (1 << i))
+				break;
+		}
+		data->smc_state_table.mem_boot_level = i;
+
+		for (i = 31; i >= 0; i--) {
+			if (mask & (1 << i))
+				break;
+		}
+		data->smc_state_table.mem_max_level = i;
+
+		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_bootup_level(hwmgr),
+			"Failed to upload boot level to lowest!",
+			return -EINVAL);
+
+		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_max_level(hwmgr),
+			"Failed to upload dpm max level to highest!",
+			return -EINVAL);
+
 		break;
 
 	case PP_PCIE:
-		if (data->registry_data.pcie_dpm_key_disabled)
-			break;
-
-		for (i = 0; i < 32; i++) {
-			if (mask & (1 << i))
-				break;
-		}
-
-		PP_ASSERT_WITH_CODE(!smum_send_msg_to_smc_with_parameter(
-				hwmgr->smumgr,
-				PPSMC_MSG_SetMinLinkDpmByIndex,
-				i),
-				"Failed to set min pcie index!",
-				return -1);
-		break;
 	default:
 		break;
 	}
