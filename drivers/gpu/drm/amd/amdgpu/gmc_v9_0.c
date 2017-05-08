@@ -386,7 +386,7 @@ static int gmc_v9_0_early_init(void *handle)
 static int gmc_v9_0_late_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-	unsigned vm_inv_eng[AMDGPU_MAX_VMHUBS] = { 0 };
+	unsigned vm_inv_eng[AMDGPU_MAX_VMHUBS] = { 3, 3 };
 	unsigned i;
 
 	for(i = 0; i < adev->num_rings; ++i) {
@@ -780,6 +780,12 @@ static void gmc_v9_0_gart_disable(struct amdgpu_device *adev)
 static int gmc_v9_0_hw_fini(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+
+	if (amdgpu_sriov_vf(adev)) {
+		/* full access mode, so don't touch any GMC register */
+		DRM_DEBUG("For SRIOV client, shouldn't do anything.\n");
+		return 0;
+	}
 
 	amdgpu_irq_put(adev, &adev->mc.vm_fault, 0);
 	gmc_v9_0_gart_disable(adev);

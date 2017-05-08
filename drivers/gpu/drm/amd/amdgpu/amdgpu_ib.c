@@ -186,8 +186,6 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned num_ibs,
 			status |= AMDGPU_HAVE_CTX_SWITCH;
 		status |= job->preamble_status;
 
-		if (vm)
-			status |= AMDGPU_VM_DOMAIN;
 		amdgpu_ring_emit_cntxcntl(ring, status);
 	}
 
@@ -205,6 +203,9 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned num_ibs,
 				    need_ctx_switch);
 		need_ctx_switch = false;
 	}
+
+	if (ring->funcs->emit_tmz)
+		amdgpu_ring_emit_tmz(ring, false);
 
 	if (ring->funcs->emit_hdp_invalidate
 #ifdef CONFIG_X86_64

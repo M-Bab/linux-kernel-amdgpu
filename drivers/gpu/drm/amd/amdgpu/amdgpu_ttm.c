@@ -765,7 +765,7 @@ int amdgpu_ttm_recover_gart(struct amdgpu_device *adev)
 {
 	struct amdgpu_ttm_tt *gtt, *tmp;
 	struct ttm_mem_reg bo_mem;
-	uint32_t flags;
+	uint64_t flags;
 	int r;
 
 	bo_mem.mem_type = TTM_PL_TT;
@@ -1198,7 +1198,7 @@ void amdgpu_ttm_fini(struct amdgpu_device *adev)
 		return;
 	amdgpu_ttm_debugfs_fini(adev);
 	if (adev->stollen_vga_memory) {
-		r = amdgpu_bo_reserve(adev->stollen_vga_memory, false);
+		r = amdgpu_bo_reserve(adev->stollen_vga_memory, true);
 		if (r == 0) {
 			amdgpu_bo_unpin(adev->stollen_vga_memory);
 			amdgpu_bo_unreserve(adev->stollen_vga_memory);

@@ -909,6 +909,7 @@ struct amdgpu_mec {
 struct amdgpu_kiq {
 	u64			eop_gpu_addr;
 	struct amdgpu_bo	*eop_obj;
+	struct mutex		ring_mutex;
 	struct amdgpu_ring	ring;
 	struct amdgpu_irq_src	irq;
 };
@@ -969,6 +970,8 @@ struct amdgpu_gfx_config {
 	unsigned mc_arb_ramcfg;
 	unsigned gb_addr_config;
 	unsigned num_rbs;
+	unsigned gs_vgt_table_depth;
+	unsigned gs_prim_buffer_depth;
 
 	uint32_t tile_mode_array[32];
 	uint32_t macrotile_mode_array[16];
@@ -983,6 +986,7 @@ struct amdgpu_gfx_config {
 struct amdgpu_cu_info {
 	uint32_t number; /* total active CU number */
 	uint32_t ao_cu_mask;
+	uint32_t wave_front_size;
 	uint32_t bitmap[4][4];
 };
 
@@ -1003,10 +1007,10 @@ struct amdgpu_ngg_buf {
 };
 
 enum {
-	PRIM = 0,
-	POS,
-	CNTL,
-	PARAM,
+	NGG_PRIM = 0,
+	NGG_POS,
+	NGG_CNTL,
+	NGG_PARAM,
 	NGG_BUF_MAX
 };
 
@@ -1115,7 +1119,6 @@ struct amdgpu_cs_parser {
 #define AMDGPU_PREAMBLE_IB_PRESENT          (1 << 0) /* bit set means command submit involves a preamble IB */
 #define AMDGPU_PREAMBLE_IB_PRESENT_FIRST    (1 << 1) /* bit set means preamble IB is first presented in belonging context */
 #define AMDGPU_HAVE_CTX_SWITCH              (1 << 2) /* bit set means context switch occured */
-#define AMDGPU_VM_DOMAIN                    (1 << 3) /* bit set means in virtual memory context */
 
 struct amdgpu_job {
 	struct amd_sched_job    base;
@@ -1743,30 +1746,31 @@ static inline void amdgpu_ring_write_multiple(struct amdgpu_ring *ring, void *sr
 	unsigned occupied, chunk1, chunk2;
 	void *dst;
 
-	if (ring->count_dw < count_dw) {
+	if (unlikely(ring->count_dw < count_dw)) {
 		DRM_ERROR("amdgpu: writing more dwords to the ring than expected!\n");
-	} else {
-		occupied = ring->wptr & ring->buf_mask;
-		dst = (void *)&ring->ring[occupied];
-		chunk1 = ring->buf_mask + 1 - occupied;
-		chunk1 = (chunk1 >= count_dw) ? count_dw: chunk1;
-		chunk2 = count_dw - chunk1;
-		chunk1 <<= 2;
-		chunk2 <<= 2;
-
-		if (chunk1)
-			memcpy(dst, src, chunk1);
-
-		if (chunk2) {
-			src += chunk1;
-			dst = (void *)ring->ring;
-			memcpy(dst, src, chunk2);
-		}
-
-		ring->wptr += count_dw;
-		ring->wptr &= ring->ptr_mask;
-		ring->count_dw -= count_dw;
+		return;
 	}
+
+	occupied = ring->wptr & ring->buf_mask;
+	dst = (void *)&ring->ring[occupied];
+	chunk1 = ring->buf_mask + 1 - occupied;
+	chunk1 = (chunk1 >= count_dw) ? count_dw: chunk1;
+	chunk2 = count_dw - chunk1;
+	chunk1 <<= 2;
+	chunk2 <<= 2;
+
+	if (chunk1)
+		memcpy(dst, src, chunk1);
+
+	if (chunk2) {
+		src += chunk1;
+		dst = (void *)ring->ring;
+		memcpy(dst, src, chunk2);
+	}
+
+	ring->wptr += count_dw;
+	ring->wptr &= ring->ptr_mask;
+	ring->count_dw -= count_dw;
 }
 
 static inline struct amdgpu_sdma_instance *
@@ -1823,6 +1827,7 @@ amdgpu_get_sdma_instance(struct amdgpu_ring *ring)
 #define amdgpu_ring_emit_cntxcntl(r, d) (r)->funcs->emit_cntxcntl((r), (d))
 #define amdgpu_ring_emit_rreg(r, d) (r)->funcs->emit_rreg((r), (d))
 #define amdgpu_ring_emit_wreg(r, d, v) (r)->funcs->emit_wreg((r), (d), (v))
+#define amdgpu_ring_emit_tmz(r, b) (r)->funcs->emit_tmz((r), (b))
 #define amdgpu_ring_pad_ib(r, ib) ((r)->funcs->pad_ib((r), (ib)))
 #define amdgpu_ring_init_cond_exec(r) (r)->funcs->init_cond_exec((r))
 #define amdgpu_ring_patch_cond_exec(r,o) (r)->funcs->patch_cond_exec((r),(o))

@@ -657,8 +657,8 @@ static void gfx_v8_0_set_gds_init(struct amdgpu_device *adev);
 static void gfx_v8_0_set_rlc_funcs(struct amdgpu_device *adev);
 static u32 gfx_v8_0_get_csb_size(struct amdgpu_device *adev);
 static void gfx_v8_0_get_cu_info(struct amdgpu_device *adev);
-static void gfx_v8_0_ring_emit_ce_meta_init(struct amdgpu_ring *ring, uint64_t addr);
-static void gfx_v8_0_ring_emit_de_meta_init(struct amdgpu_ring *ring, uint64_t addr);
+static void gfx_v8_0_ring_emit_ce_meta(struct amdgpu_ring *ring);
+static void gfx_v8_0_ring_emit_de_meta(struct amdgpu_ring *ring);
 static int gfx_v8_0_compute_mqd_sw_init(struct amdgpu_device *adev);
 static void gfx_v8_0_compute_mqd_sw_fini(struct amdgpu_device *adev);
 
@@ -941,12 +941,6 @@ static int gfx_v8_0_init_microcode(struct amdgpu_device *adev)
 	cp_hdr = (const struct gfx_firmware_header_v1_0 *)adev->gfx.me_fw->data;
 	adev->gfx.me_fw_version = le32_to_cpu(cp_hdr->header.ucode_version);
 
-	/* chain ib ucode isn't formal released, just disable it by far
-	 * TODO: when ucod ready we should use ucode version to judge if
-	 * chain-ib support or not.
-	 */
-	adev->virt.chained_ib_support = false;
-
 	adev->gfx.me_feature_version = le32_to_cpu(cp_hdr->ucode_feature_version);
 
 	snprintf(fw_name, sizeof(fw_name), "amdgpu/%s_ce.bin", chip_name);
@@ -959,6 +953,17 @@ static int gfx_v8_0_init_microcode(struct amdgpu_device *adev)
 	cp_hdr = (const struct gfx_firmware_header_v1_0 *)adev->gfx.ce_fw->data;
 	adev->gfx.ce_fw_version = le32_to_cpu(cp_hdr->header.ucode_version);
 	adev->gfx.ce_feature_version = le32_to_cpu(cp_hdr->ucode_feature_version);
+
+	/*
+	 * Support for MCBP/Virtualization in combination with chained IBs is
+	 * formal released on feature version #46
+	 */
+	if (adev->gfx.ce_feature_version >= 46 &&
+	    adev->gfx.pfp_feature_version >= 46) {
+		adev->virt.chained_ib_support = true;
+		DRM_INFO("Chained IB support enabled!\n");
+	} else
+		adev->virt.chained_ib_support = false;
 
 	snprintf(fw_name, sizeof(fw_name), "amdgpu/%s_rlc.bin", chip_name);
 	err = request_firmware(&adev->gfx.rlc_fw, fw_name, adev->dev);
@@ -1239,7 +1244,7 @@ static void gfx_v8_0_rlc_fini(struct amdgpu_device *adev)
 
 	/* clear state block */
 	if (adev->gfx.rlc.clear_state_obj) {
-		r = amdgpu_bo_reserve(adev->gfx.rlc.clear_state_obj, false);
+		r = amdgpu_bo_reserve(adev->gfx.rlc.clear_state_obj, true);
 		if (unlikely(r != 0))
 			dev_warn(adev->dev, "(%d) reserve RLC cbs bo failed\n", r);
 		amdgpu_bo_unpin(adev->gfx.rlc.clear_state_obj);
@@ -1250,7 +1255,7 @@ static void gfx_v8_0_rlc_fini(struct amdgpu_device *adev)
 
 	/* jump table block */
 	if (adev->gfx.rlc.cp_table_obj) {
-		r = amdgpu_bo_reserve(adev->gfx.rlc.cp_table_obj, false);
+		r = amdgpu_bo_reserve(adev->gfx.rlc.cp_table_obj, true);
 		if (unlikely(r != 0))
 			dev_warn(adev->dev, "(%d) reserve RLC cp table bo failed\n", r);
 		amdgpu_bo_unpin(adev->gfx.rlc.cp_table_obj);
@@ -1363,7 +1368,7 @@ static void gfx_v8_0_mec_fini(struct amdgpu_device *adev)
 	int r;
 
 	if (adev->gfx.mec.hpd_eop_obj) {
-		r = amdgpu_bo_reserve(adev->gfx.mec.hpd_eop_obj, false);
+		r = amdgpu_bo_reserve(adev->gfx.mec.hpd_eop_obj, true);
 		if (unlikely(r != 0))
 			dev_warn(adev->dev, "(%d) reserve HPD EOP bo failed\n", r);
 		amdgpu_bo_unpin(adev->gfx.mec.hpd_eop_obj);
@@ -1379,6 +1384,8 @@ static int gfx_v8_0_kiq_init_ring(struct amdgpu_device *adev,
 {
 	struct amdgpu_kiq *kiq = &adev->gfx.kiq;
 	int r = 0;
+
+	mutex_init(&kiq->ring_mutex);
 
 	r = amdgpu_wb_get(adev, &adev->virt.reg_val_offs);
 	if (r)
@@ -1491,7 +1498,7 @@ static int gfx_v8_0_kiq_init(struct amdgpu_device *adev)
 
 	memset(hpd, 0, MEC_HPD_SIZE);
 
-	r = amdgpu_bo_reserve(kiq->eop_obj, false);
+	r = amdgpu_bo_reserve(kiq->eop_obj, true);
 	if (unlikely(r != 0))
 		dev_warn(adev->dev, "(%d) reserve kiq eop bo failed\n", r);
 	amdgpu_bo_kunmap(kiq->eop_obj);
@@ -1933,6 +1940,7 @@ static int gfx_v8_0_gpu_early_init(struct amdgpu_device *adev)
 		case 0xca:
 		case 0xce:
 		case 0x88:
+		case 0xe6:
 			/* B6 */
 			adev->gfx.config.max_cu_per_sh = 6;
 			break;
@@ -1965,17 +1973,28 @@ static int gfx_v8_0_gpu_early_init(struct amdgpu_device *adev)
 		adev->gfx.config.max_backends_per_se = 1;
 
 		switch (adev->pdev->revision) {
+		case 0x80:
+		case 0x81:
 		case 0xc0:
 		case 0xc1:
 		case 0xc2:
 		case 0xc4:
 		case 0xc8:
 		case 0xc9:
+		case 0xd6:
+		case 0xda:
+		case 0xe9:
+		case 0xea:
 			adev->gfx.config.max_cu_per_sh = 3;
 			break;
+		case 0x83:
 		case 0xd0:
 		case 0xd1:
 		case 0xd2:
+		case 0xd4:
+		case 0xdb:
+		case 0xe1:
+		case 0xe2:
 		default:
 			adev->gfx.config.max_cu_per_sh = 2;
 			break;
@@ -6402,8 +6421,12 @@ static void gfx_v8_0_ring_emit_ib_gfx(struct amdgpu_ring *ring,
 
 	control |= ib->length_dw | (vm_id << 24);
 
-	if (amdgpu_sriov_vf(ring->adev) && ib->flags & AMDGPU_IB_FLAG_PREEMPT)
+	if (amdgpu_sriov_vf(ring->adev) && (ib->flags & AMDGPU_IB_FLAG_PREEMPT)) {
 		control |= INDIRECT_BUFFER_PRE_ENB(1);
+
+		if (!(ib->flags & AMDGPU_IB_FLAG_CE))
+			gfx_v8_0_ring_emit_de_meta(ring);
+	}
 
 	amdgpu_ring_write(ring, header);
 	amdgpu_ring_write(ring,
@@ -6587,8 +6610,7 @@ static void gfx_v8_ring_emit_cntxcntl(struct amdgpu_ring *ring, uint32_t flags)
 	uint32_t dw2 = 0;
 
 	if (amdgpu_sriov_vf(ring->adev))
-		gfx_v8_0_ring_emit_ce_meta_init(ring,
-			(flags & AMDGPU_VM_DOMAIN) ? AMDGPU_CSA_VADDR : ring->adev->virt.csa_vmid0_addr);
+		gfx_v8_0_ring_emit_ce_meta(ring);
 
 	dw2 |= 0x80000000; /* set load_enable otherwise this package is just NOPs */
 	if (flags & AMDGPU_HAVE_CTX_SWITCH) {
@@ -6614,10 +6636,6 @@ static void gfx_v8_ring_emit_cntxcntl(struct amdgpu_ring *ring, uint32_t flags)
 	amdgpu_ring_write(ring, PACKET3(PACKET3_CONTEXT_CONTROL, 1));
 	amdgpu_ring_write(ring, dw2);
 	amdgpu_ring_write(ring, 0);
-
-	if (amdgpu_sriov_vf(ring->adev))
-		gfx_v8_0_ring_emit_de_meta_init(ring,
-			(flags & AMDGPU_VM_DOMAIN) ? AMDGPU_CSA_VADDR : ring->adev->virt.csa_vmid0_addr);
 }
 
 static unsigned gfx_v8_0_ring_emit_init_cond_exec(struct amdgpu_ring *ring)
@@ -6646,7 +6664,6 @@ static void gfx_v8_0_ring_emit_patch_cond_exec(struct amdgpu_ring *ring, unsigne
 	else
 		ring->ring[offset] = (ring->ring_size >> 2) - offset + cur;
 }
-
 
 static void gfx_v8_0_ring_emit_rreg(struct amdgpu_ring *ring, uint32_t reg)
 {
@@ -7098,8 +7115,14 @@ static void gfx_v8_0_get_cu_info(struct amdgpu_device *adev)
 	u32 mask, bitmap, ao_bitmap, ao_cu_mask = 0;
 	struct amdgpu_cu_info *cu_info = &adev->gfx.cu_info;
 	unsigned disable_masks[4 * 2];
+	u32 ao_cu_num;
 
 	memset(cu_info, 0, sizeof(*cu_info));
+
+	if (adev->flags & AMD_IS_APU)
+		ao_cu_num = 2;
+	else
+		ao_cu_num = adev->gfx.config.max_cu_per_sh;
 
 	amdgpu_gfx_parse_disable_cu(disable_masks, 4, 2);
 
@@ -7116,9 +7139,9 @@ static void gfx_v8_0_get_cu_info(struct amdgpu_device *adev)
 			bitmap = gfx_v8_0_get_cu_active_bitmap(adev);
 			cu_info->bitmap[i][j] = bitmap;
 
-			for (k = 0; k < 16; k ++) {
+			for (k = 0; k < adev->gfx.config.max_cu_per_sh; k ++) {
 				if (bitmap & mask) {
-					if (counter < 2)
+					if (counter < ao_cu_num)
 						ao_bitmap |= mask;
 					counter ++;
 				}
@@ -7153,7 +7176,7 @@ const struct amdgpu_ip_block_version gfx_v8_1_ip_block =
 	.funcs = &gfx_v8_0_ip_funcs,
 };
 
-static void gfx_v8_0_ring_emit_ce_meta_init(struct amdgpu_ring *ring, uint64_t csa_addr)
+static void gfx_v8_0_ring_emit_ce_meta(struct amdgpu_ring *ring)
 {
 	uint64_t ce_payload_addr;
 	int cnt_ce;
@@ -7163,10 +7186,12 @@ static void gfx_v8_0_ring_emit_ce_meta_init(struct amdgpu_ring *ring, uint64_t c
 	} ce_payload = {};
 
 	if (ring->adev->virt.chained_ib_support) {
-		ce_payload_addr = csa_addr + offsetof(struct vi_gfx_meta_data_chained_ib, ce_payload);
+		ce_payload_addr = AMDGPU_VA_RESERVED_SIZE - 2 * 4096 +
+						  offsetof(struct vi_gfx_meta_data_chained_ib, ce_payload);
 		cnt_ce = (sizeof(ce_payload.chained) >> 2) + 4 - 2;
 	} else {
-		ce_payload_addr = csa_addr + offsetof(struct vi_gfx_meta_data, ce_payload);
+		ce_payload_addr = AMDGPU_VA_RESERVED_SIZE - 2 * 4096 +
+						  offsetof(struct vi_gfx_meta_data, ce_payload);
 		cnt_ce = (sizeof(ce_payload.regular) >> 2) + 4 - 2;
 	}
 
@@ -7180,15 +7205,16 @@ static void gfx_v8_0_ring_emit_ce_meta_init(struct amdgpu_ring *ring, uint64_t c
 	amdgpu_ring_write_multiple(ring, (void *)&ce_payload, cnt_ce - 2);
 }
 
-static void gfx_v8_0_ring_emit_de_meta_init(struct amdgpu_ring *ring, uint64_t csa_addr)
+static void gfx_v8_0_ring_emit_de_meta(struct amdgpu_ring *ring)
 {
-	uint64_t de_payload_addr, gds_addr;
+	uint64_t de_payload_addr, gds_addr, csa_addr;
 	int cnt_de;
 	static union {
 		struct vi_de_ib_state regular;
 		struct vi_de_ib_state_chained_ib chained;
 	} de_payload = {};
 
+	csa_addr = AMDGPU_VA_RESERVED_SIZE - 2 * 4096;
 	gds_addr = csa_addr + 4096;
 	if (ring->adev->virt.chained_ib_support) {
 		de_payload.chained.gds_backup_addrlo = lower_32_bits(gds_addr);

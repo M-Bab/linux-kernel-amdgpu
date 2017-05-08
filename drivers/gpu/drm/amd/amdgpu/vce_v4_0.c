@@ -190,6 +190,7 @@ static int vce_v4_0_mmsch_start(struct amdgpu_device *adev,
 		dev_err(adev->dev, "failed to init MMSCH, mmVCE_MMSCH_VF_MAILBOX_RESP = %x\n", data);
 		return -EBUSY;
 	}
+	WDOORBELL32(adev->vce.ring[0].doorbell_index, 0);
 
 	return 0;
 }
@@ -505,8 +506,14 @@ static int vce_v4_0_hw_fini(void *handle)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	int i;
 
-	/* vce_v4_0_wait_for_idle(handle); */
-	vce_v4_0_stop(adev);
+	if (!amdgpu_sriov_vf(adev)) {
+		/* vce_v4_0_wait_for_idle(handle); */
+		vce_v4_0_stop(adev);
+	} else {
+		/* full access mode, so don't touch any VCE register */
+		DRM_DEBUG("For SRIOV client, shouldn't do anything.\n");
+	}
+
 	for (i = 0; i < adev->vce.num_rings; i++)
 		adev->vce.ring[i].ready = false;
 

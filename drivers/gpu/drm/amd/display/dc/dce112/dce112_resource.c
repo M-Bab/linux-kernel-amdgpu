@@ -40,7 +40,7 @@
 #include "dce/dce_stream_encoder.h"
 #include "dce/dce_audio.h"
 #include "dce/dce_opp.h"
-#include "dce110/dce110_ipp.h"
+#include "dce/dce_ipp.h"
 #include "dce/dce_clocks.h"
 #include "dce/dce_clock_source.h"
 
@@ -177,28 +177,6 @@ static const struct dce110_mem_input_reg_offsets dce112_mi_reg_offsets[] = {
 	}
 };
 
-static const struct dce110_ipp_reg_offsets ipp_reg_offsets[] = {
-{
-	.dcp_offset = (mmDCP0_CUR_CONTROL - mmCUR_CONTROL),
-},
-{
-	.dcp_offset = (mmDCP1_CUR_CONTROL - mmCUR_CONTROL),
-},
-{
-	.dcp_offset = (mmDCP2_CUR_CONTROL - mmCUR_CONTROL),
-},
-{
-	.dcp_offset = (mmDCP3_CUR_CONTROL - mmCUR_CONTROL),
-},
-{
-	.dcp_offset = (mmDCP4_CUR_CONTROL - mmCUR_CONTROL),
-},
-{
-	.dcp_offset = (mmDCP5_CUR_CONTROL - mmCUR_CONTROL),
-}
-};
-
-
 /* set register offset */
 #define SR(reg_name)\
 	.reg_name = mm ## reg_name
@@ -242,6 +220,28 @@ static const struct dce_abm_shift abm_shift = {
 
 static const struct dce_abm_mask abm_mask = {
 		ABM_MASK_SH_LIST_DCE110(_MASK)
+};
+
+#define ipp_regs(id)\
+[id] = {\
+		IPP_DCE110_REG_LIST_DCE_BASE(id)\
+}
+
+static const struct dce_ipp_registers ipp_regs[] = {
+		ipp_regs(0),
+		ipp_regs(1),
+		ipp_regs(2),
+		ipp_regs(3),
+		ipp_regs(4),
+		ipp_regs(5)
+};
+
+static const struct dce_ipp_shift ipp_shift = {
+		IPP_DCE100_MASK_SH_LIST_DCE_COMMON_BASE(__SHIFT)
+};
+
+static const struct dce_ipp_mask ipp_mask = {
+		IPP_DCE100_MASK_SH_LIST_DCE_COMMON_BASE(_MASK)
 };
 
 #define transform_regs(id)\
@@ -627,29 +627,19 @@ struct link_encoder *dce112_link_encoder_create(
 	return NULL;
 }
 
-struct input_pixel_processor *dce112_ipp_create(
-	struct dc_context *ctx,
-	uint32_t inst,
-	const struct dce110_ipp_reg_offsets *offset)
+static struct input_pixel_processor *dce112_ipp_create(
+	struct dc_context *ctx, uint32_t inst)
 {
-	struct dce110_ipp *ipp =
-		dm_alloc(sizeof(struct dce110_ipp));
+	struct dce_ipp *ipp = dm_alloc(sizeof(struct dce_ipp));
 
-	if (!ipp)
+	if (!ipp) {
+		BREAK_TO_DEBUGGER();
 		return NULL;
+	}
 
-	if (dce110_ipp_construct(ipp, ctx, inst, offset))
-			return &ipp->base;
-
-	BREAK_TO_DEBUGGER();
-	dm_free(ipp);
-	return NULL;
-}
-
-void dce112_ipp_destroy(struct input_pixel_processor **ipp)
-{
-	dm_free(TO_DCE110_IPP(*ipp));
-	*ipp = NULL;
+	dce_ipp_construct(ipp, ctx, inst,
+			&ipp_regs[inst], &ipp_shift, &ipp_mask);
+	return &ipp->base;
 }
 
 struct output_pixel_processor *dce112_opp_create(
@@ -712,7 +702,7 @@ static void destruct(struct dce110_resource_pool *pool)
 			dce112_transform_destroy(&pool->base.transforms[i]);
 
 		if (pool->base.ipps[i] != NULL)
-			dce112_ipp_destroy(&pool->base.ipps[i]);
+			dce_ipp_destroy(&pool->base.ipps[i]);
 
 		if (pool->base.mis[i] != NULL) {
 			dm_free(TO_DCE110_MEM_INPUT(pool->base.mis[i]));
@@ -759,22 +749,24 @@ static void destruct(struct dce110_resource_pool *pool)
 	}
 }
 
-static struct clock_source *find_matching_pll(struct resource_context *res_ctx,
+static struct clock_source *find_matching_pll(
+		struct resource_context *res_ctx,
+		const struct resource_pool *pool,
 		const struct core_stream *const stream)
 {
 	switch (stream->sink->link->link_enc->transmitter) {
 	case TRANSMITTER_UNIPHY_A:
-		return res_ctx->pool->clock_sources[DCE112_CLK_SRC_PLL0];
+		return pool->clock_sources[DCE112_CLK_SRC_PLL0];
 	case TRANSMITTER_UNIPHY_B:
-		return res_ctx->pool->clock_sources[DCE112_CLK_SRC_PLL1];
+		return pool->clock_sources[DCE112_CLK_SRC_PLL1];
 	case TRANSMITTER_UNIPHY_C:
-		return res_ctx->pool->clock_sources[DCE112_CLK_SRC_PLL2];
+		return pool->clock_sources[DCE112_CLK_SRC_PLL2];
 	case TRANSMITTER_UNIPHY_D:
-		return res_ctx->pool->clock_sources[DCE112_CLK_SRC_PLL3];
+		return pool->clock_sources[DCE112_CLK_SRC_PLL3];
 	case TRANSMITTER_UNIPHY_E:
-		return res_ctx->pool->clock_sources[DCE112_CLK_SRC_PLL4];
+		return pool->clock_sources[DCE112_CLK_SRC_PLL4];
 	case TRANSMITTER_UNIPHY_F:
-		return res_ctx->pool->clock_sources[DCE112_CLK_SRC_PLL5];
+		return pool->clock_sources[DCE112_CLK_SRC_PLL5];
 	default:
 		return NULL;
 	};
@@ -852,7 +844,7 @@ bool dce112_validate_bandwidth(
 			&dc->bw_dceip,
 			&dc->bw_vbios,
 			context->res_ctx.pipe_ctx,
-			context->res_ctx.pool->pipe_count,
+			dc->res_pool->pipe_count,
 			&context->bw_results))
 		result = true;
 	context->dispclk_khz = context->bw_results.dispclk_khz;
@@ -938,17 +930,18 @@ enum dc_status resource_map_phy_clock_resources(
 			if (dc_is_dp_signal(pipe_ctx->stream->signal)
 				|| pipe_ctx->stream->signal == SIGNAL_TYPE_VIRTUAL)
 				pipe_ctx->clock_source =
-					context->res_ctx.pool->dp_clock_source;
+						dc->res_pool->dp_clock_source;
 			else
-				pipe_ctx->clock_source =
-					find_matching_pll(&context->res_ctx,
-							  stream);
+				pipe_ctx->clock_source = find_matching_pll(
+					&context->res_ctx, dc->res_pool,
+					stream);
 
 			if (pipe_ctx->clock_source == NULL)
 				return DC_NO_CLOCK_SOURCE_RESOURCE;
 
 			resource_reference_clock_source(
 				&context->res_ctx,
+				dc->res_pool,
 				pipe_ctx->clock_source);
 
 			/* only one cs per stream regardless of mpo */
@@ -993,8 +986,6 @@ enum dc_status dce112_validate_with_context(
 	if (!dce112_validate_surface_sets(set, set_count))
 		return DC_FAIL_SURFACE_VALIDATE;
 
-	context->res_ctx.pool = dc->res_pool;
-
 	for (i = 0; i < set_count; i++) {
 		context->streams[i] = DC_STREAM_TO_CORE(set[i].stream);
 		dc_stream_retain(&context->streams[i]->public);
@@ -1006,8 +997,8 @@ enum dc_status dce112_validate_with_context(
 	if (result == DC_OK)
 		result = resource_map_phy_clock_resources(dc, context);
 
-	if (!resource_validate_attach_surfaces(
-			set, set_count, dc->current_context, context)) {
+	if (!resource_validate_attach_surfaces(set, set_count,
+			dc->current_context, context, dc->res_pool)) {
 		DC_ERROR("Failed to attach surface to stream!\n");
 		return DC_FAIL_ATTACH_SURFACES;
 	}
@@ -1031,8 +1022,6 @@ enum dc_status dce112_validate_guaranteed(
 		struct validate_context *context)
 {
 	enum dc_status result = DC_ERROR_UNEXPECTED;
-
-	context->res_ctx.pool = dc->res_pool;
 
 	context->streams[0] = DC_STREAM_TO_CORE(dc_stream);
 	dc_stream_retain(&context->streams[0]->public);
@@ -1073,7 +1062,7 @@ static const struct resource_funcs dce112_res_pool_funcs = {
 	.link_enc_create = dce112_link_encoder_create,
 	.validate_with_context = dce112_validate_with_context,
 	.validate_guaranteed = dce112_validate_guaranteed,
-	.validate_bandwidth = dce112_validate_bandwidth
+	.validate_bandwidth = dce112_validate_bandwidth,
 };
 
 static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
@@ -1370,10 +1359,7 @@ static bool construct(
 			goto res_create_fail;
 		}
 
-		pool->base.ipps[i] = dce112_ipp_create(
-			ctx,
-			i,
-			&ipp_reg_offsets[i]);
+		pool->base.ipps[i] = dce112_ipp_create(ctx, i);
 		if (pool->base.ipps[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error(
