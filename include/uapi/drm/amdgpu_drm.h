@@ -433,7 +433,9 @@ struct drm_amdgpu_gem_va {
 #define AMDGPU_HW_IP_UVD          3
 #define AMDGPU_HW_IP_VCE          4
 #define AMDGPU_HW_IP_UVD_ENC      5
-#define AMDGPU_HW_IP_NUM          6
+#define AMDGPU_HW_IP_VCN_DEC      6
+#define AMDGPU_HW_IP_VCN_ENC      7
+#define AMDGPU_HW_IP_NUM          8
 
 #define AMDGPU_HW_IP_INSTANCE_MAX_COUNT 1
 
@@ -862,6 +864,7 @@ struct drm_amdgpu_info_vce_clock_table {
 #define AMDGPU_FAMILY_VI			130 /* Iceland, Tonga */
 #define AMDGPU_FAMILY_CZ			135 /* Carrizo, Stoney */
 #define AMDGPU_FAMILY_AI			141 /* Vega10 */
+#define AMDGPU_FAMILY_RV			142 /* Raven */
 
 /*
  * Definition of free sync enter and exit signals

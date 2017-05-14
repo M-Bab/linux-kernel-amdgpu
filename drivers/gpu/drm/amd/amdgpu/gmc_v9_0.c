@@ -33,6 +33,7 @@
 #include "soc15_common.h"
 
 #include "nbio_v6_1.h"
+#include "nbio_v7_0.h"
 #include "gfxhub_v1_0.h"
 #include "mmhub_v1_0.h"
 
@@ -215,7 +216,10 @@ static void gmc_v9_0_gart_flush_gpu_tlb(struct amdgpu_device *adev,
 	unsigned i, j;
 
 	/* flush hdp cache */
-	nbio_v6_1_hdp_flush(adev);
+	if (adev->flags & AMD_IS_APU)
+		nbio_v7_0_hdp_flush(adev);
+	else
+		nbio_v6_1_hdp_flush(adev);
 
 	spin_lock(&adev->mc.invalidate_lock);
 
@@ -415,6 +419,11 @@ static void gmc_v9_0_vram_gtt_location(struct amdgpu_device *adev,
 	amdgpu_vram_location(adev, &adev->mc, base);
 	adev->mc.gtt_base_align = 0;
 	amdgpu_gtt_location(adev, mc);
+	/* base offset of vram pages */
+	if (adev->flags & AMD_IS_APU)
+		adev->vm_manager.vram_base_offset = gfxhub_v1_0_get_mc_fb_offset(adev);
+	else
+		adev->vm_manager.vram_base_offset = 0;
 }
 
 /**
@@ -474,7 +483,8 @@ static int gmc_v9_0_mc_init(struct amdgpu_device *adev)
 	adev->mc.aper_size = pci_resource_len(adev->pdev, 0);
 	/* size in MB on si */
 	adev->mc.mc_vram_size =
-		nbio_v6_1_get_memsize(adev) * 1024ULL * 1024ULL;
+		((adev->flags & AMD_IS_APU) ? nbio_v7_0_get_memsize(adev) :
+		 nbio_v6_1_get_memsize(adev)) * 1024ULL * 1024ULL;
 	adev->mc.real_vram_size = adev->mc.mc_vram_size;
 	adev->mc.visible_vram_size = adev->mc.aper_size;
 
@@ -546,10 +556,6 @@ static int gmc_v9_0_vm_init(struct amdgpu_device *adev)
 	else
 		adev->vm_manager.num_level = 3;
 	amdgpu_vm_manager_init(adev);
-
-	/* base offset of vram pages */
-	/*XXX This value is not zero for APU*/
-	adev->vm_manager.vram_base_offset = 0;
 
 	return 0;
 }
@@ -686,6 +692,8 @@ static void gmc_v9_0_init_golden_registers(struct amdgpu_device *adev)
 	switch (adev->asic_type) {
 	case CHIP_VEGA10:
 		break;
+	case CHIP_RAVEN:
+		break;
 	default:
 		break;
 	}
@@ -715,7 +723,10 @@ static int gmc_v9_0_gart_enable(struct amdgpu_device *adev)
 		return r;
 
 	/* After HDP is initialized, flush HDP.*/
-	nbio_v6_1_hdp_flush(adev);
+	if (adev->flags & AMD_IS_APU)
+		nbio_v7_0_hdp_flush(adev);
+	else
+		nbio_v6_1_hdp_flush(adev);
 
 	r = gfxhub_v1_0_gart_enable(adev);
 	if (r)
@@ -797,10 +808,6 @@ static int gmc_v9_0_suspend(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-	if (adev->vm_manager.enabled) {
-		gmc_v9_0_vm_fini(adev);
-		adev->vm_manager.enabled = false;
-	}
 	gmc_v9_0_hw_fini(adev);
 
 	return 0;
@@ -815,17 +822,9 @@ static int gmc_v9_0_resume(void *handle)
 	if (r)
 		return r;
 
-	if (!adev->vm_manager.enabled) {
-		r = gmc_v9_0_vm_init(adev);
-		if (r) {
-			dev_err(adev->dev,
-				"vm manager initialization failed (%d).\n", r);
-			return r;
-		}
-		adev->vm_manager.enabled = true;
-	}
+	amdgpu_vm_reset_all_ids(adev);
 
-	return r;
+	return 0;
 }
 
 static bool gmc_v9_0_is_idle(void *handle)

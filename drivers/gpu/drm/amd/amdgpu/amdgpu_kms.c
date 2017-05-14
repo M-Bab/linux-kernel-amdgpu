@@ -319,6 +319,19 @@ static int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file
 			ib_start_alignment = AMDGPU_GPU_PAGE_SIZE;
 			ib_size_alignment = 1;
 			break;
+		case AMDGPU_HW_IP_VCN_DEC:
+			type = AMD_IP_BLOCK_TYPE_VCN;
+			ring_mask = adev->vcn.ring_dec.ready ? 1 : 0;
+			ib_start_alignment = AMDGPU_GPU_PAGE_SIZE;
+			ib_size_alignment = 16;
+			break;
+		case AMDGPU_HW_IP_VCN_ENC:
+			type = AMD_IP_BLOCK_TYPE_VCN;
+			for (i = 0; i < adev->vcn.num_enc_rings; i++)
+				ring_mask |= ((adev->vcn.ring_enc[i].ready ? 1 : 0) << i);
+			ib_start_alignment = AMDGPU_GPU_PAGE_SIZE;
+			ib_size_alignment = 1;
+			break;
 		default:
 			return -EINVAL;
 		}
@@ -360,6 +373,10 @@ static int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file
 			break;
 		case AMDGPU_HW_IP_UVD_ENC:
 			type = AMD_IP_BLOCK_TYPE_UVD;
+			break;
+		case AMDGPU_HW_IP_VCN_DEC:
+		case AMDGPU_HW_IP_VCN_ENC:
+			type = AMD_IP_BLOCK_TYPE_VCN;
 			break;
 		default:
 			return -EINVAL;
@@ -812,8 +829,10 @@ void amdgpu_driver_postclose_kms(struct drm_device *dev,
 
 	amdgpu_ctx_mgr_fini(&fpriv->ctx_mgr);
 
-	amdgpu_uvd_free_handles(adev, file_priv);
-	amdgpu_vce_free_handles(adev, file_priv);
+	if (adev->asic_type != CHIP_RAVEN) {
+		amdgpu_uvd_free_handles(adev, file_priv);
+		amdgpu_vce_free_handles(adev, file_priv);
+	}
 
 	amdgpu_vm_bo_rmv(adev, fpriv->prt_va);
 

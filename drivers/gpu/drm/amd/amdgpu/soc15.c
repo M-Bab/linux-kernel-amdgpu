@@ -25,7 +25,7 @@
 #include <linux/module.h>
 #include "drmP.h"
 #include "amdgpu.h"
-#include "amdgpu_atombios.h"
+#include "amdgpu_atomfirmware.h"
 #include "amdgpu_ih.h"
 #include "amdgpu_uvd.h"
 #include "amdgpu_vce.h"
@@ -57,6 +57,7 @@
 #include "sdma_v4_0.h"
 #include "uvd_v7_0.h"
 #include "vce_v4_0.h"
+#include "vcn_v1_0.h"
 #include "amdgpu_powerplay.h"
 #include "dce_virtual.h"
 #include "mxgpu_ai.h"
@@ -104,10 +105,10 @@ static u32 soc15_pcie_rreg(struct amdgpu_device *adev, u32 reg)
 	u32 r;
 	struct nbio_pcie_index_data *nbio_pcie_id;
 
-	if (adev->asic_type == CHIP_VEGA10)
-		nbio_pcie_id = &nbio_v6_1_pcie_index_data;
+	if (adev->flags & AMD_IS_APU)
+		nbio_pcie_id = &nbio_v7_0_pcie_index_data;
 	else
-		BUG();
+		nbio_pcie_id = &nbio_v6_1_pcie_index_data;
 
 	address = nbio_pcie_id->index_offset;
 	data = nbio_pcie_id->data_offset;
@@ -125,10 +126,10 @@ static void soc15_pcie_wreg(struct amdgpu_device *adev, u32 reg, u32 v)
 	unsigned long flags, address, data;
 	struct nbio_pcie_index_data *nbio_pcie_id;
 
-	if (adev->asic_type == CHIP_VEGA10)
-		nbio_pcie_id = &nbio_v6_1_pcie_index_data;
+	if (adev->flags & AMD_IS_APU)
+		nbio_pcie_id = &nbio_v7_0_pcie_index_data;
 	else
-		BUG();
+		nbio_pcie_id = &nbio_v6_1_pcie_index_data;
 
 	address = nbio_pcie_id->index_offset;
 	data = nbio_pcie_id->data_offset;
@@ -199,10 +200,17 @@ static void soc15_didt_wreg(struct amdgpu_device *adev, u32 reg, u32 v)
 
 static u32 soc15_get_config_memsize(struct amdgpu_device *adev)
 {
-	return nbio_v6_1_get_memsize(adev);
+	if (adev->flags & AMD_IS_APU)
+		return nbio_v7_0_get_memsize(adev);
+	else
+		return nbio_v6_1_get_memsize(adev);
 }
 
 static const u32 vega10_golden_init[] =
+{
+};
+
+static const u32 raven_golden_init[] =
 {
 };
 
@@ -216,6 +224,11 @@ static void soc15_init_golden_registers(struct amdgpu_device *adev)
 		amdgpu_program_register_sequence(adev,
 						 vega10_golden_init,
 						 (const u32)ARRAY_SIZE(vega10_golden_init));
+		break;
+	case CHIP_RAVEN:
+		amdgpu_program_register_sequence(adev,
+						 raven_golden_init,
+						 (const u32)ARRAY_SIZE(raven_golden_init));
 		break;
 	default:
 		break;
@@ -367,7 +380,10 @@ static void soc15_gpu_pci_config_reset(struct amdgpu_device *adev)
 
 	/* wait for asic to come out of reset */
 	for (i = 0; i < adev->usec_timeout; i++) {
-		if (nbio_v6_1_get_memsize(adev) != 0xffffffff)
+		u32 memsize = (adev->flags & AMD_IS_APU) ?
+			nbio_v7_0_get_memsize(adev) :
+			nbio_v6_1_get_memsize(adev);
+		if (memsize != 0xffffffff)
 			break;
 		udelay(1);
 	}
@@ -376,11 +392,11 @@ static void soc15_gpu_pci_config_reset(struct amdgpu_device *adev)
 
 static int soc15_asic_reset(struct amdgpu_device *adev)
 {
-	amdgpu_atombios_scratch_regs_engine_hung(adev, true);
+	amdgpu_atomfirmware_scratch_regs_engine_hung(adev, true);
 
 	soc15_gpu_pci_config_reset(adev);
 
-	amdgpu_atombios_scratch_regs_engine_hung(adev, false);
+	amdgpu_atomfirmware_scratch_regs_engine_hung(adev, false);
 
 	return 0;
 }
@@ -441,8 +457,12 @@ static void soc15_program_aspm(struct amdgpu_device *adev)
 static void soc15_enable_doorbell_aperture(struct amdgpu_device *adev,
 					bool enable)
 {
-	nbio_v6_1_enable_doorbell_aperture(adev, enable);
-	nbio_v6_1_enable_doorbell_selfring_aperture(adev, enable);
+	if (adev->flags & AMD_IS_APU) {
+		nbio_v7_0_enable_doorbell_aperture(adev, enable);
+	} else {
+		nbio_v6_1_enable_doorbell_aperture(adev, enable);
+		nbio_v6_1_enable_doorbell_selfring_aperture(adev, enable);
+	}
 }
 
 static const struct amdgpu_ip_block_version vega10_common_ip_block =
@@ -485,6 +505,24 @@ int soc15_set_ip_blocks(struct amdgpu_device *adev)
 		amdgpu_ip_block_add(adev, &uvd_v7_0_ip_block);
 		amdgpu_ip_block_add(adev, &vce_v4_0_ip_block);
 		break;
+	case CHIP_RAVEN:
+		amdgpu_ip_block_add(adev, &vega10_common_ip_block);
+		amdgpu_ip_block_add(adev, &gfxhub_v1_0_ip_block);
+		amdgpu_ip_block_add(adev, &mmhub_v1_0_ip_block);
+		amdgpu_ip_block_add(adev, &gmc_v9_0_ip_block);
+		amdgpu_ip_block_add(adev, &vega10_ih_ip_block);
+		amdgpu_ip_block_add(adev, &psp_v10_0_ip_block);
+		amdgpu_ip_block_add(adev, &amdgpu_pp_ip_block);
+#if defined(CONFIG_DRM_AMD_DC)
+		if (amdgpu_device_has_dc_support(adev))
+			amdgpu_ip_block_add(adev, &dm_ip_block);
+#else
+#	warning "Enable CONFIG_DRM_AMD_DC for display support on Raven."
+#endif
+		amdgpu_ip_block_add(adev, &gfx_v9_0_ip_block);
+		amdgpu_ip_block_add(adev, &sdma_v4_0_ip_block);
+		amdgpu_ip_block_add(adev, &vcn_v1_0_ip_block);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -494,7 +532,10 @@ int soc15_set_ip_blocks(struct amdgpu_device *adev)
 
 static uint32_t soc15_get_rev_id(struct amdgpu_device *adev)
 {
-	return nbio_v6_1_get_rev_id(adev);
+	if (adev->flags & AMD_IS_APU)
+		return nbio_v7_0_get_rev_id(adev);
+	else
+		return nbio_v6_1_get_rev_id(adev);
 }
 
 
@@ -545,6 +586,9 @@ static int soc15_common_early_init(void *handle)
 	case CHIP_VEGA10:
 		nbio_v6_1_init(adev);
 		break;
+	case CHIP_RAVEN:
+		nbio_v7_0_init(adev);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -573,6 +617,29 @@ static int soc15_common_early_init(void *handle)
 			AMD_CG_SUPPORT_MC_MGCG |
 			AMD_CG_SUPPORT_MC_LS;
 		adev->pg_flags = 0;
+		adev->external_rev_id = 0x1;
+		break;
+	case CHIP_RAVEN:
+		adev->cg_flags = AMD_CG_SUPPORT_GFX_MGCG |
+			AMD_CG_SUPPORT_GFX_MGLS |
+			AMD_CG_SUPPORT_GFX_RLC_LS |
+			AMD_CG_SUPPORT_GFX_CP_LS |
+			AMD_CG_SUPPORT_GFX_3D_CGCG |
+			AMD_CG_SUPPORT_GFX_3D_CGLS |
+			AMD_CG_SUPPORT_GFX_CGCG |
+			AMD_CG_SUPPORT_GFX_CGLS |
+			AMD_CG_SUPPORT_BIF_MGCG |
+			AMD_CG_SUPPORT_BIF_LS |
+			AMD_CG_SUPPORT_HDP_MGCG |
+			AMD_CG_SUPPORT_HDP_LS |
+			AMD_CG_SUPPORT_DRM_MGCG |
+			AMD_CG_SUPPORT_DRM_LS |
+			AMD_CG_SUPPORT_ROM_MGCG |
+			AMD_CG_SUPPORT_MC_MGCG |
+			AMD_CG_SUPPORT_MC_LS |
+			AMD_CG_SUPPORT_SDMA_MGCG |
+			AMD_CG_SUPPORT_SDMA_LS;
+		adev->pg_flags = AMD_PG_SUPPORT_SDMA;
 		adev->external_rev_id = 0x1;
 		break;
 	default:
@@ -800,6 +867,20 @@ static int soc15_common_set_clockgating_state(void *handle,
 		soc15_update_rom_medium_grain_clock_gating(adev,
 				state == AMD_CG_STATE_GATE ? true : false);
 		soc15_update_df_medium_grain_clock_gating(adev,
+				state == AMD_CG_STATE_GATE ? true : false);
+		break;
+	case CHIP_RAVEN:
+		nbio_v7_0_update_medium_grain_clock_gating(adev,
+				state == AMD_CG_STATE_GATE ? true : false);
+		nbio_v6_1_update_medium_grain_light_sleep(adev,
+				state == AMD_CG_STATE_GATE ? true : false);
+		soc15_update_hdp_light_sleep(adev,
+				state == AMD_CG_STATE_GATE ? true : false);
+		soc15_update_drm_clock_gating(adev,
+				state == AMD_CG_STATE_GATE ? true : false);
+		soc15_update_drm_light_sleep(adev,
+				state == AMD_CG_STATE_GATE ? true : false);
+		soc15_update_rom_medium_grain_clock_gating(adev,
 				state == AMD_CG_STATE_GATE ? true : false);
 		break;
 	default:

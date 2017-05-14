@@ -30,6 +30,7 @@
 #include "amdgpu_ucode.h"
 #include "soc15_common.h"
 #include "psp_v3_1.h"
+#include "psp_v10_0.h"
 
 static void psp_set_funcs(struct amdgpu_device *adev);
 
@@ -60,6 +61,12 @@ static int psp_sw_init(void *handle)
 		psp->cmd_submit = psp_v3_1_cmd_submit;
 		psp->compare_sram_data = psp_v3_1_compare_sram_data;
 		psp->smu_reload_quirk = psp_v3_1_smu_reload_quirk;
+		break;
+	case CHIP_RAVEN:
+		psp->prep_cmd_buf = psp_v10_0_prep_cmd_buf;
+		psp->ring_init = psp_v10_0_ring_init;
+		psp->cmd_submit = psp_v10_0_cmd_submit;
+		psp->compare_sram_data = psp_v10_0_compare_sram_data;
 		break;
 	default:
 		return -EINVAL;
@@ -546,6 +553,15 @@ const struct amdgpu_ip_block_version psp_v3_1_ip_block =
 	.type = AMD_IP_BLOCK_TYPE_PSP,
 	.major = 3,
 	.minor = 1,
+	.rev = 0,
+	.funcs = &psp_ip_funcs,
+};
+
+const struct amdgpu_ip_block_version psp_v10_0_ip_block =
+{
+	.type = AMD_IP_BLOCK_TYPE_PSP,
+	.major = 10,
+	.minor = 0,
 	.rev = 0,
 	.funcs = &psp_ip_funcs,
 };

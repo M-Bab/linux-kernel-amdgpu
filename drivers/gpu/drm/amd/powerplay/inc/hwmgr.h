@@ -488,6 +488,9 @@ struct phm_tdp_table {
 	uint8_t  ucVr_I2C_LineSDA;
 	uint8_t  ucPlx_I2C_LineSDA;
 	uint32_t usBoostPowerLimit;
+	uint16_t usBoostStartTemperature;
+	uint16_t usBoostStopTemperature;
+	uint32_t  ulBoostClock;
 };
 
 struct phm_ppm_table {
@@ -624,7 +627,7 @@ struct phm_dynamic_state_info {
 	uint32_t                                  vddc_vddci_delta;
 	uint32_t                                  min_vddc_for_pcie_gen2;
 	struct phm_cac_leakage_table              *cac_leakage_table;
-	struct phm_phase_shedding_limits_table	  *vddc_phase_shed_limits_table;
+	struct phm_phase_shedding_limits_table  *vddc_phase_shed_limits_table;
 
 	struct phm_vce_clock_voltage_dependency_table
 					    *vce_clock_voltage_dependency_table;
@@ -637,8 +640,8 @@ struct phm_dynamic_state_info {
 
 	struct phm_ppm_table                          *ppm_parameter_table;
 	struct phm_cac_tdp_table                      *cac_dtp_table;
-	struct phm_clock_voltage_dependency_table	  *vdd_gfx_dependency_on_sclk;
-	struct phm_vq_budgeting_table				  *vq_budgeting_table;
+	struct phm_clock_voltage_dependency_table	*vdd_gfx_dependency_on_sclk;
+	struct phm_vq_budgeting_table				*vq_budgeting_table;
 };
 
 struct pp_fan_info {
@@ -764,6 +767,7 @@ struct pp_hwmgr {
 	struct pp_thermal_controller_info thermal_controller;
 	bool fan_ctrl_is_in_default_mode;
 	uint32_t fan_ctrl_default_mode;
+	bool fan_ctrl_enabled;
 	uint32_t tmin;
 	struct phm_microcode_version_info microcode_version_info;
 	uint32_t ps_size;
@@ -821,6 +825,7 @@ extern void phm_apply_dal_min_voltage_request(struct pp_hwmgr *hwmgr);
 
 extern int smu7_init_function_pointers(struct pp_hwmgr *hwmgr);
 extern int vega10_hwmgr_init(struct pp_hwmgr *hwmgr);
+extern int rv_init_function_pointers(struct pp_hwmgr *hwmgr);
 
 extern int phm_get_voltage_evv_on_sclk(struct pp_hwmgr *hwmgr, uint8_t voltage_type,
 				uint32_t sclk, uint16_t id, uint16_t *voltage);

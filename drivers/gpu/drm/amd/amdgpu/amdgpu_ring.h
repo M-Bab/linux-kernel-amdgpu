@@ -47,7 +47,9 @@ enum amdgpu_ring_type {
 	AMDGPU_RING_TYPE_UVD,
 	AMDGPU_RING_TYPE_VCE,
 	AMDGPU_RING_TYPE_KIQ,
-	AMDGPU_RING_TYPE_UVD_ENC
+	AMDGPU_RING_TYPE_UVD_ENC,
+	AMDGPU_RING_TYPE_VCN_DEC,
+	AMDGPU_RING_TYPE_VCN_ENC
 };
 
 struct amdgpu_device;
@@ -76,6 +78,7 @@ struct amdgpu_fence_driver {
 int amdgpu_fence_driver_init(struct amdgpu_device *adev);
 void amdgpu_fence_driver_fini(struct amdgpu_device *adev);
 void amdgpu_fence_driver_force_completion(struct amdgpu_device *adev);
+void amdgpu_fence_driver_force_completion_ring(struct amdgpu_ring *ring);
 
 int amdgpu_fence_driver_init_ring(struct amdgpu_ring *ring,
 				  unsigned num_hw_submission);
@@ -130,6 +133,7 @@ struct amdgpu_ring_funcs {
 	int (*test_ib)(struct amdgpu_ring *ring, long timeout);
 	/* insert NOP packets */
 	void (*insert_nop)(struct amdgpu_ring *ring, uint32_t count);
+	void (*insert_start)(struct amdgpu_ring *ring);
 	void (*insert_end)(struct amdgpu_ring *ring);
 	/* pad the indirect buffer to the necessary number of dw */
 	void (*pad_ib)(struct amdgpu_ring *ring, struct amdgpu_ib *ib);

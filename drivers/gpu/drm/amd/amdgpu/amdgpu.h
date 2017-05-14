@@ -63,6 +63,7 @@
 #include "amdgpu_dm.h"
 #include "amdgpu_uvd.h"
 #include "amdgpu_vce.h"
+#include "amdgpu_vcn.h"
 
 #include "gpu_scheduler.h"
 #include "amdgpu_virt.h"
@@ -111,6 +112,7 @@ extern int amdgpu_prim_buf_per_se;
 extern int amdgpu_pos_buf_per_se;
 extern int amdgpu_cntl_sb_buf_per_se;
 extern int amdgpu_param_buf_per_se;
+extern int amdgpu_job_hang_limit;
 
 #define AMDGPU_DEFAULT_GTT_SIZE_MB		3072ULL /* 3GB by default */
 #define AMDGPU_WAIT_IDLE_TIMEOUT_IN_MS	        3000
@@ -556,7 +558,7 @@ int amdgpu_gart_table_vram_pin(struct amdgpu_device *adev);
 void amdgpu_gart_table_vram_unpin(struct amdgpu_device *adev);
 int amdgpu_gart_init(struct amdgpu_device *adev);
 void amdgpu_gart_fini(struct amdgpu_device *adev);
-void amdgpu_gart_unbind(struct amdgpu_device *adev, uint64_t offset,
+int amdgpu_gart_unbind(struct amdgpu_device *adev, uint64_t offset,
 			int pages);
 int amdgpu_gart_bind(struct amdgpu_device *adev, uint64_t offset,
 		     int pages, struct page **pagelist,
@@ -1126,6 +1128,7 @@ struct amdgpu_job {
 	struct amdgpu_vm	*vm;
 	struct amdgpu_ring	*ring;
 	struct amdgpu_sync	sync;
+	struct amdgpu_sync	sched_sync;
 	struct amdgpu_ib	*ibs;
 	struct fence		*fence; /* the hw fence */
 	uint32_t		preamble_status;
@@ -1577,11 +1580,18 @@ struct amdgpu_device {
 	/* sdma */
 	struct amdgpu_sdma		sdma;
 
-	/* uvd */
-	struct amdgpu_uvd		uvd;
+	union {
+		struct {
+			/* uvd */
+			struct amdgpu_uvd		uvd;
 
-	/* vce */
-	struct amdgpu_vce		vce;
+			/* vce */
+			struct amdgpu_vce		vce;
+		};
+
+		/* vcn */
+		struct amdgpu_vcn		vcn;
+	};
 
 	/* firmwares */
 	struct amdgpu_firmware		firmware;

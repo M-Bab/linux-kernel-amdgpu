@@ -48,6 +48,7 @@ enum amd_asic_type {
 	CHIP_POLARIS11,
 	CHIP_POLARIS12,
 	CHIP_VEGA10,
+	CHIP_RAVEN,
 	CHIP_LAST,
 };
 
@@ -76,7 +77,8 @@ enum amd_ip_block_type {
 	AMD_IP_BLOCK_TYPE_VCE,
 	AMD_IP_BLOCK_TYPE_ACP,
 	AMD_IP_BLOCK_TYPE_GFXHUB,
-	AMD_IP_BLOCK_TYPE_MMHUB
+	AMD_IP_BLOCK_TYPE_MMHUB,
+	AMD_IP_BLOCK_TYPE_VCN
 };
 
 enum amd_clockgating_state {
@@ -136,6 +138,12 @@ struct amd_pp_profile {
 	uint16_t activity_threshold;
 	uint8_t up_hyst;
 	uint8_t down_hyst;
+};
+
+enum amd_fan_ctrl_mode {
+	AMD_FAN_CTRL_NONE = 0,
+	AMD_FAN_CTRL_MANUAL = 1,
+	AMD_FAN_CTRL_AUTO = 2,
 };
 
 /* CG flags */
