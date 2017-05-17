@@ -67,7 +67,10 @@
 #endif
 
 #define BREAK_TO_DEBUGGER() ASSERT(0)
-
+#else
+#define ASSERT(expr)
+#define ASSERT_CRITICAL(expr)
+#define BREAK_TO_DEBUGGER()
 #endif /* CONFIG_DEBUG_KERNEL || CONFIG_DEBUG_DRIVER */
 
 #define DC_ERR(...)  do { \
