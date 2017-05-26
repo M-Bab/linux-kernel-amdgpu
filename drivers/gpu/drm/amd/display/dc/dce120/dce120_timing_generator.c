@@ -386,34 +386,27 @@ bool dce120_timing_generator_did_triggered_reset_occur(
 /* Move to enable accelerated mode */
 void dce120_timing_generator_disable_vga(struct timing_generator *tg)
 {
-	uint32_t addr = 0;
 	uint32_t offset = 0;
 	uint32_t value = 0;
 	struct dce110_timing_generator *tg110 = DCE110TG_FROM_TG(tg);
 
 	switch (tg110->controller_id) {
 	case CONTROLLER_ID_D0:
-		addr = mmD1VGA_CONTROL;
 		offset = 0;
 		break;
 	case CONTROLLER_ID_D1:
-		addr = mmD2VGA_CONTROL;
 		offset = mmD2VGA_CONTROL - mmD1VGA_CONTROL;
 		break;
 	case CONTROLLER_ID_D2:
-		addr = mmD3VGA_CONTROL;
 		offset = mmD3VGA_CONTROL - mmD1VGA_CONTROL;
 		break;
 	case CONTROLLER_ID_D3:
-		addr = mmD4VGA_CONTROL;
 		offset = mmD4VGA_CONTROL - mmD1VGA_CONTROL;
 		break;
 	case CONTROLLER_ID_D4:
-		addr = mmD1VGA_CONTROL;
-		offset = mmD1VGA_CONTROL - mmD1VGA_CONTROL;
+		offset = mmD5VGA_CONTROL - mmD1VGA_CONTROL;
 		break;
 	case CONTROLLER_ID_D5:
-		addr = mmD6VGA_CONTROL;
 		offset = mmD6VGA_CONTROL - mmD1VGA_CONTROL;
 		break;
 	default:
@@ -669,36 +662,23 @@ void dce120_timing_generator_enable_advanced_request(
 				mmCRTC0_CRTC_START_LINE_CONTROL,
 				tg110->offsets.crtc);
 
-
-	if (enable) {
-		set_reg_field_value(
-			value,
-			0,
-			CRTC0_CRTC_START_LINE_CONTROL,
-			CRTC_LEGACY_REQUESTOR_EN);
-	} else {
-		set_reg_field_value(
-			value,
-			1,
-			CRTC0_CRTC_START_LINE_CONTROL,
-			CRTC_LEGACY_REQUESTOR_EN);
-	}
+	set_reg_field_value(
+		value,
+		enable ? 0 : 1,
+		CRTC0_CRTC_START_LINE_CONTROL,
+		CRTC_LEGACY_REQUESTOR_EN);
 
 	/* Program advanced line position acc.to the best case from fetching data perspective to hide MC latency
 	 * and prefilling Line Buffer in V Blank (to 10 lines as LB can store max 10 lines)
 	 */
 	if (v_sync_width_and_b_porch > 10)
-		set_reg_field_value(
-			value,
-			10,
-			CRTC0_CRTC_START_LINE_CONTROL,
-			CRTC_ADVANCED_START_LINE_POSITION);
-	else
-		set_reg_field_value(
-			value,
-			v_sync_width_and_b_porch,
-			CRTC0_CRTC_START_LINE_CONTROL,
-			CRTC_ADVANCED_START_LINE_POSITION);
+		v_sync_width_and_b_porch = 10;
+
+	set_reg_field_value(
+		value,
+		v_sync_width_and_b_porch,
+		CRTC0_CRTC_START_LINE_CONTROL,
+		CRTC_ADVANCED_START_LINE_POSITION);
 
 	dm_write_reg_soc15(tg->ctx,
 			mmCRTC0_CRTC_START_LINE_CONTROL,
@@ -746,9 +726,9 @@ void dce120_tg_program_timing(struct timing_generator *tg,
 	bool use_vbios)
 {
 	if (use_vbios)
-			dce110_timing_generator_program_timing_generator(tg, timing);
-		else
-			dce120_timing_generator_program_blanking(tg, timing);
+		dce110_timing_generator_program_timing_generator(tg, timing);
+	else
+		dce120_timing_generator_program_blanking(tg, timing);
 }
 
 bool dce120_tg_is_blanked(struct timing_generator *tg)
@@ -759,15 +739,14 @@ bool dce120_tg_is_blanked(struct timing_generator *tg)
 			mmCRTC0_CRTC_BLANK_CONTROL,
 			tg110->offsets.crtc);
 
-	if (
-		get_reg_field_value(
-			value,
-			CRTC0_CRTC_BLANK_CONTROL,
-			CRTC_BLANK_DATA_EN) == 1	&&
-		get_reg_field_value(
-			value,
-			CRTC0_CRTC_BLANK_CONTROL,
-			CRTC_CURRENT_BLANK_STATE) == 1)
+	if (get_reg_field_value(
+		value,
+		CRTC0_CRTC_BLANK_CONTROL,
+		CRTC_BLANK_DATA_EN) == 1 &&
+	    get_reg_field_value(
+		value,
+		CRTC0_CRTC_BLANK_CONTROL,
+		CRTC_CURRENT_BLANK_STATE) == 1)
 			return true;
 
 	return false;
@@ -782,17 +761,11 @@ void dce120_tg_set_blank(struct timing_generator *tg,
 		CRTC0_CRTC_DOUBLE_BUFFER_CONTROL,
 		CRTC_BLANK_DATA_DOUBLE_BUFFER_EN, 0);
 
-	if (enable_blanking) {
-		CRTC_REG_SET(
-			CRTC0_CRTC_BLANK_CONTROL,
-			CRTC_BLANK_DATA_EN, 1);
-
-	} else
-		dm_write_reg_soc15(
-			tg->ctx,
-			mmCRTC0_CRTC_BLANK_CONTROL,
-			tg110->offsets.crtc,
-			0);
+	if (enable_blanking)
+		CRTC_REG_SET(CRTC0_CRTC_BLANK_CONTROL, CRTC_BLANK_DATA_EN, 1);
+	else
+		dm_write_reg_soc15(tg->ctx, mmCRTC0_CRTC_BLANK_CONTROL,
+			tg110->offsets.crtc, 0);
 }
 
 bool dce120_tg_validate_timing(struct timing_generator *tg,

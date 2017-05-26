@@ -122,7 +122,7 @@ struct dc_stream_funcs {
 			const struct rect *dst);
 
 	bool (*set_gamut_remap)(struct dc *dc,
-			const struct dc_stream **stream, int num_streams);
+			const struct dc_stream *stream);
 
 	void (*set_static_screen_events)(struct dc *dc,
 			const struct dc_stream **stream,
@@ -265,7 +265,8 @@ struct dc_hdr_static_metadata {
 enum dc_transfer_func_type {
 	TF_TYPE_PREDEFINED,
 	TF_TYPE_DISTRIBUTED_POINTS,
-	TF_TYPE_BYPASS
+	TF_TYPE_BYPASS,
+	TF_TYPE_UNKNOWN
 };
 
 struct dc_transfer_func_distributed_points {
@@ -349,11 +350,8 @@ struct dc_surface_update {
 	 */
 	/* gamma TO BE REMOVED */
 	struct dc_gamma *gamma;
-	struct dc_hdr_static_metadata *hdr_static_metadata;
 	struct dc_transfer_func *in_transfer_func;
-	struct dc_transfer_func *out_transfer_func;
-
-
+	struct dc_hdr_static_metadata *hdr_static_metadata;
 };
 /*
  * This structure is filled in by dc_surface_get_status and contains
@@ -396,18 +394,6 @@ struct dc_flip_addrs {
 };
 
 /*
- * Optimized flip address update function.
- *
- * After this call:
- *   Surface addresses and flip attributes are programmed.
- *   Surface flip occur at next configured time (h_sync or v_sync flip)
- */
-void dc_flip_surface_addrs(struct dc *dc,
-		const struct dc_surface *const surfaces[],
-		struct dc_flip_addrs flip_addrs[],
-		uint32_t count);
-
-/*
  * Set up surface attributes and associate to a stream
  * The surfaces parameter is an absolute set of all surface active for the stream.
  * If no surfaces are provided, the stream will be blanked; no memory read.
@@ -436,9 +422,35 @@ bool dc_post_update_surfaces_to_stream(
 void dc_update_surfaces_for_stream(struct dc *dc, struct dc_surface_update *updates,
 		int surface_count, const struct dc_stream *stream);
 
+/* Surface update type is used by dc_update_surfaces_and_stream
+ * The update type is determined at the very beginning of the function based
+ * on parameters passed in and decides how much programming (or updating) is
+ * going to be done during the call.
+ *
+ * UPDATE_TYPE_FAST is used for really fast updates that do not require much
+ * logical calculations or hardware register programming. This update MUST be
+ * ISR safe on windows. Currently fast update will only be used to flip surface
+ * address.
+ *
+ * UPDATE_TYPE_MED is used for slower updates which require significant hw
+ * re-programming however do not affect bandwidth consumption or clock
+ * requirements. At present, this is the level at which front end updates
+ * that do not require us to run bw_calcs happen. These are in/out transfer func
+ * updates, viewport offset changes, recout size changes and pixel depth changes.
+ * This update can be done at ISR, but we want to minimize how often this happens.
+ *
+ * UPDATE_TYPE_FULL is slow. Really slow. This requires us to recalculate our
+ * bandwidth and clocks, possibly rearrange some pipes and reprogram anything front
+ * end related. Any time viewport dimensions, recout dimensions, scaling ratios or
+ * gamma need to be adjusted or pipe needs to be turned on (or disconnected) we do
+ * a full update. This cannot be done at ISR level and should be a rare event.
+ * Unless someone is stress testing mpo enter/exit, playing with colour or adjusting
+ * underscan we don't expect to see this call at all.
+ */
+
 enum surface_update_type {
 	UPDATE_TYPE_FAST, /* super fast, safe to execute in isr */
-	UPDATE_TYPE_MED,  /* a lot of programming needed.  may need to alloc */
+	UPDATE_TYPE_MED,  /* ISR safe, most of programming needed, no bw/clk change*/
 	UPDATE_TYPE_FULL, /* may need to shuffle resources */
 };
 
@@ -473,11 +485,9 @@ struct dc_stream {
 };
 
 struct dc_stream_update {
-
 	struct rect src;
-
 	struct rect dst;
-
+	struct dc_transfer_func *out_transfer_func;
 };
 
 
@@ -646,6 +656,8 @@ struct dc_link {
 
 	void *priv;
 	bool aux_mode;
+
+	struct ddc_service *ddc;
 };
 
 struct dpcd_caps {
@@ -689,6 +701,8 @@ const struct graphics_object_id dc_get_link_id_at_index(
 /* Set backlight level of an embedded panel (eDP, LVDS). */
 bool dc_link_set_backlight_level(const struct dc_link *dc_link, uint32_t level,
 		uint32_t frame_ramp, const struct dc_stream *stream);
+
+bool dc_link_set_abm_disable(const struct dc_link *dc_link);
 
 bool dc_link_set_psr_enable(const struct dc_link *dc_link, bool enable);
 
@@ -828,13 +842,6 @@ void dc_set_power_state(
 		struct dc *dc,
 		enum dc_acpi_cm_power_state power_state);
 void dc_resume(const struct dc *dc);
-
-/*******************************************************************************
- * DDC Interfaces
- ******************************************************************************/
-
-const struct ddc_service *dc_get_ddc_at_index(
-		struct dc *dc, uint32_t link_index);
 
 /*
  * DPCD access interfaces

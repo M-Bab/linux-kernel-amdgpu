@@ -35,11 +35,14 @@ struct abm {
 struct abm_funcs {
 	void (*abm_init)(struct abm *abm);
 	bool (*set_abm_level)(struct abm *abm, unsigned int abm_level);
+	bool (*set_abm_immediate_disable)(struct abm *abm);
 	bool (*init_backlight)(struct abm *abm);
 	bool (*set_backlight_level)(struct abm *abm,
 			unsigned int backlight_level,
 			unsigned int frame_ramp,
 			unsigned int controller_id);
+	unsigned int (*get_current_backlight_8_bit)(struct abm *abm);
+	bool (*is_dmcu_initialized)(struct abm *abm);
 };
 
 #endif

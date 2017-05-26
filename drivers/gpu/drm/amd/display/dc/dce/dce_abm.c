@@ -49,6 +49,8 @@
 #define MCP_ABM_PIPE_SET 0x66
 #define MCP_BL_SET 0x67
 
+#define MCP_DISABLE_ABM_IMMEDIATELY 255
+
 struct abm_backlight_registers {
 	unsigned int BL_PWM_CNTL;
 	unsigned int BL_PWM_CNTL2;
@@ -60,7 +62,7 @@ struct abm_backlight_registers {
 static struct abm_backlight_registers stored_backlight_registers = {0};
 
 
-static unsigned int get_current_backlight(struct dce_abm *abm_dce)
+static unsigned int get_current_backlight_16_bit(struct dce_abm *abm_dce)
 {
 	uint64_t current_backlight;
 	uint32_t round_result;
@@ -252,7 +254,7 @@ static void dmcu_set_backlight_level(
 static void dce_abm_init(struct abm *abm)
 {
 	struct dce_abm *abm_dce = TO_DCE_ABM(abm);
-	unsigned int backlight = get_current_backlight(abm_dce);
+	unsigned int backlight = get_current_backlight_16_bit(abm_dce);
 
 	REG_WRITE(DC_ABM1_HG_SAMPLE_RATE, 0x103);
 	REG_WRITE(DC_ABM1_HG_SAMPLE_RATE, 0x101);
@@ -289,6 +291,14 @@ static void dce_abm_init(struct abm *abm)
 			ABM1_BL_REG_READ_MISSED_FRAME_CLEAR, 1);
 }
 
+static unsigned int dce_abm_get_current_backlight_8_bit(struct abm *abm)
+{
+	struct dce_abm *abm_dce = TO_DCE_ABM(abm);
+	unsigned int backlight = REG_READ(BL1_PWM_CURRENT_ABM_LEVEL);
+
+	return (backlight >> 8);
+}
+
 static bool dce_abm_set_level(struct abm *abm, uint32_t level)
 {
 	struct dce_abm *abm_dce = TO_DCE_ABM(abm);
@@ -300,6 +310,24 @@ static bool dce_abm_set_level(struct abm *abm, uint32_t level)
 	REG_UPDATE_2(MASTER_COMM_CMD_REG,
 			MASTER_COMM_CMD_REG_BYTE0, MCP_ABM_LEVEL_SET,
 			MASTER_COMM_CMD_REG_BYTE2, level);
+
+	/* notifyDMCUMsg */
+	REG_UPDATE(MASTER_COMM_CNTL_REG, MASTER_COMM_INTERRUPT, 1);
+
+	return true;
+}
+
+static bool dce_abm_immediate_disable(struct abm *abm)
+{
+	struct dce_abm *abm_dce = TO_DCE_ABM(abm);
+
+	REG_WAIT(MASTER_COMM_CNTL_REG, MASTER_COMM_INTERRUPT, 0,
+			100, 800);
+
+	/* setDMCUParam_ABMLevel */
+	REG_UPDATE_2(MASTER_COMM_CMD_REG,
+			MASTER_COMM_CMD_REG_BYTE0, MCP_ABM_LEVEL_SET,
+			MASTER_COMM_CMD_REG_BYTE2, MCP_DISABLE_ABM_IMMEDIATELY);
 
 	/* notifyDMCUMsg */
 	REG_UPDATE(MASTER_COMM_CNTL_REG, MASTER_COMM_INTERRUPT, 1);
@@ -366,6 +394,16 @@ static bool dce_abm_init_backlight(struct abm *abm)
 	return true;
 }
 
+static bool is_dmcu_initialized(struct abm *abm)
+{
+	struct dce_abm *abm_dce = TO_DCE_ABM(abm);
+	unsigned int dmcu_uc_reset;
+
+	REG_GET(DMCU_STATUS, UC_IN_RESET, &dmcu_uc_reset);
+
+	return !dmcu_uc_reset;
+}
+
 static bool dce_abm_set_backlight_level(
 		struct abm *abm,
 		unsigned int backlight_level,
@@ -373,23 +411,19 @@ static bool dce_abm_set_backlight_level(
 		unsigned int controller_id)
 {
 	struct dce_abm *abm_dce = TO_DCE_ABM(abm);
-	unsigned int dmcu_uc_reset;
 
 	dm_logger_write(abm->ctx->logger, LOG_BACKLIGHT,
 			"New Backlight level: %d (0x%X)\n",
 			backlight_level, backlight_level);
 
-	REG_GET(DMCU_STATUS, UC_IN_RESET, &dmcu_uc_reset);
-
 	/* If DMCU is in reset state, DMCU is uninitialized */
-	if (dmcu_uc_reset) {
-		driver_set_backlight_level(abm_dce, backlight_level);
-	} else {
+	if (is_dmcu_initialized(abm))
 		dmcu_set_backlight_level(abm_dce,
 				backlight_level,
 				frame_ramp,
 				controller_id);
-	}
+	else
+		driver_set_backlight_level(abm_dce, backlight_level);
 
 	return true;
 }
@@ -398,7 +432,10 @@ static const struct abm_funcs dce_funcs = {
 	.abm_init = dce_abm_init,
 	.set_abm_level = dce_abm_set_level,
 	.init_backlight = dce_abm_init_backlight,
-	.set_backlight_level = dce_abm_set_backlight_level
+	.set_backlight_level = dce_abm_set_backlight_level,
+	.get_current_backlight_8_bit = dce_abm_get_current_backlight_8_bit,
+	.set_abm_immediate_disable = dce_abm_immediate_disable,
+	.is_dmcu_initialized = is_dmcu_initialized
 };
 
 static void dce_abm_construct(

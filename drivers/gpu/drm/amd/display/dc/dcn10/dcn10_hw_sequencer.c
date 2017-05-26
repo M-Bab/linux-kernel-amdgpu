@@ -29,9 +29,9 @@
 #include "core_types.h"
 #include "core_status.h"
 #include "resource.h"
-#include "hw_sequencer.h"
 #include "dcn10_hw_sequencer.h"
 #include "dce110/dce110_hw_sequencer.h"
+#include "dce/dce_hwseq.h"
 #include "abm.h"
 
 #include "dcn10/dcn10_transform.h"
@@ -828,7 +828,7 @@ static void reset_front_end_for_pipe(
 	/* TODO: build stream pipes group id. For now, use stream otg
 	 * id as pipe group id
 	 */
-	tree_cfg = &context->res_ctx.mpc_tree[pipe_ctx->mpc_idx];
+	tree_cfg = &dc->current_context->res_ctx.mpc_tree[pipe_ctx->mpc_idx];
 
 	if (pipe_ctx->top_pipe == NULL)
 		dcn10_delete_mpc_tree(mpc, tree_cfg);
@@ -848,7 +848,7 @@ static void reset_front_end_for_pipe(
 
 	unlock_master_tg_and_wait(dc->ctx, pipe_ctx->tg->inst);
 
-	pipe_ctx->mi->funcs->disable_request(pipe_ctx->mi);
+	pipe_ctx->mi->funcs->set_blank(pipe_ctx->mi, true);
 
 	wait_no_outstanding_request(dc->ctx, pipe_ctx->pipe_idx);
 
@@ -951,6 +951,10 @@ static bool dcn10_set_input_transfer_func(
 
 	if (surface->public.in_transfer_func)
 		tf = DC_TRANSFER_FUNC_TO_CORE(surface->public.in_transfer_func);
+
+	if (surface->public.gamma_correction && dce_use_lut(surface))
+	    ipp->funcs->ipp_program_input_lut(ipp,
+			    surface->public.gamma_correction);
 
 	if (tf == NULL)
 		ipp->funcs->ipp_set_degamma(ipp, IPP_DEGAMMA_MODE_BYPASS);
@@ -1301,10 +1305,12 @@ static bool dcn10_translate_regamma_to_hw_format(const struct dc_transfer_func
 
 static bool dcn10_set_output_transfer_func(
 	struct pipe_ctx *pipe_ctx,
-	const struct core_surface *surface,
 	const struct core_stream *stream)
 {
 	struct output_pixel_processor *opp = pipe_ctx->opp;
+
+	if (opp == NULL)
+		return false;
 
 	opp->regamma_params.hw_points_num = GAMMA_HW_POINTS_NUM;
 
@@ -1428,7 +1434,10 @@ static void dcn10_power_on_fe(
 		enable_dcfclk(dc->ctx,
 				pipe_ctx->pipe_idx,
 				pipe_ctx->pix_clk_params.requested_pix_clk,
-				context->dppclk_div);
+				context->bw.dcn.calc_clk.dppclk_div);
+		dc->current_context->bw.dcn.cur_clk.dppclk_div =
+				context->bw.dcn.calc_clk.dppclk_div;
+		context->bw.dcn.cur_clk.dppclk_div = context->bw.dcn.calc_clk.dppclk_div;
 
 		if (dc_surface) {
 			dm_logger_write(dc->ctx->logger, LOG_DC,
@@ -1508,6 +1517,35 @@ static void program_gamut_remap(struct pipe_ctx *pipe_ctx)
 	pipe_ctx->xfm->funcs->transform_set_gamut_remap(pipe_ctx->xfm, &adjust);
 }
 
+static bool is_lower_pipe_tree_visible(struct pipe_ctx *pipe_ctx)
+{
+	if (pipe_ctx->surface->public.visible)
+		return true;
+	if (pipe_ctx->bottom_pipe && is_lower_pipe_tree_visible(pipe_ctx->bottom_pipe))
+		return true;
+	return false;
+}
+
+static bool is_upper_pipe_tree_visible(struct pipe_ctx *pipe_ctx)
+{
+	if (pipe_ctx->surface->public.visible)
+		return true;
+	if (pipe_ctx->top_pipe && is_upper_pipe_tree_visible(pipe_ctx->top_pipe))
+		return true;
+	return false;
+}
+
+static bool is_pipe_tree_visible(struct pipe_ctx *pipe_ctx)
+{
+	if (pipe_ctx->surface->public.visible)
+		return true;
+	if (pipe_ctx->top_pipe && is_upper_pipe_tree_visible(pipe_ctx->top_pipe))
+		return true;
+	if (pipe_ctx->bottom_pipe && is_lower_pipe_tree_visible(pipe_ctx->bottom_pipe))
+		return true;
+	return false;
+}
+
 static void update_dchubp_dpp(
 	struct core_dc *dc,
 	struct pipe_ctx *pipe_ctx,
@@ -1523,12 +1561,17 @@ static void update_dchubp_dpp(
 	struct tg_color black_color = {0};
 	struct dcn10_mpc *mpc = TO_DCN10_MPC(dc->res_pool->mpc);
 
+	struct pipe_ctx *cur_pipe_ctx = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
+
 	/* depends on DML calculation, DPP clock value may change dynamically */
 	enable_dppclk(
 		dc->ctx,
 		pipe_ctx->pipe_idx,
 		pipe_ctx->pix_clk_params.requested_pix_clk,
-		context->dppclk_div);
+		context->bw.dcn.calc_clk.dppclk_div);
+	dc->current_context->bw.dcn.cur_clk.dppclk_div =
+			context->bw.dcn.calc_clk.dppclk_div;
+	context->bw.dcn.cur_clk.dppclk_div = context->bw.dcn.calc_clk.dppclk_div;
 
 	select_vtg(dc->ctx, pipe_ctx->pipe_idx, pipe_ctx->tg->inst);
 
@@ -1566,6 +1609,7 @@ static void update_dchubp_dpp(
 	 */
 	pipe_ctx->mpc_idx = pipe_ctx->tg->inst;
 	tree_cfg = &context->res_ctx.mpc_tree[pipe_ctx->mpc_idx];
+
 	/* enable when bottom pipe is present and
 	 * it does not share a surface with current pipe
 	 */
@@ -1576,20 +1620,28 @@ static void update_dchubp_dpp(
 		pipe_ctx->scl_data.lb_params.alpha_en = 0;
 		tree_cfg->mode = TOP_PASSTHRU;
 	}
-	if (!pipe_ctx->top_pipe) {
+	if (!pipe_ctx->top_pipe && !cur_pipe_ctx->bottom_pipe) {
 		/* primary pipe, set mpc tree index 0 only */
 		tree_cfg->num_pipes = 1;
 		tree_cfg->opp_id = pipe_ctx->tg->inst;
 		tree_cfg->dpp[0] = pipe_ctx->pipe_idx;
 		tree_cfg->mpcc[0] = pipe_ctx->pipe_idx;
-		dcn10_set_mpc_tree(mpc, tree_cfg);
-	} else {
-		/* TODO: add position is hard code to 1 for now
-		 * If more than 2 pipes are supported, calculate position
-		 */
+	}
+
+	if (!cur_pipe_ctx->top_pipe && !pipe_ctx->top_pipe) {
+
+		if (!cur_pipe_ctx->bottom_pipe)
+			dcn10_set_mpc_tree(mpc, tree_cfg);
+
+	} else if (!cur_pipe_ctx->top_pipe && pipe_ctx->top_pipe) {
+
 		dcn10_add_dpp(mpc, tree_cfg,
 			pipe_ctx->pipe_idx, pipe_ctx->pipe_idx, 1);
+	} else {
+		/* nothing to be done here */
+		ASSERT(cur_pipe_ctx->top_pipe && pipe_ctx->top_pipe);
 	}
+
 
 	color_space = pipe_ctx->stream->public.output_color_space;
 	color_space_to_black_color(dc, color_space, &black_color);
@@ -1614,12 +1666,9 @@ static void update_dchubp_dpp(
 		&size,
 		surface->public.rotation,
 		&surface->public.dcc,
-		surface->public.horizontal_mirror,
-		surface->public.visible);
+		surface->public.horizontal_mirror);
 
-	/* Only support one plane for now. */
-	pipe_ctx->tg->funcs->set_blank(pipe_ctx->tg, !surface->public.visible);
-
+	mi->funcs->set_blank(mi, !is_pipe_tree_visible(pipe_ctx));
 }
 
 static void program_all_pipe_in_tree(
@@ -1638,17 +1687,25 @@ static void program_all_pipe_in_tree(
 		if (pipe_ctx->top_pipe == NULL) {
 			/* watermark is for all pipes */
 			pipe_ctx->mi->funcs->program_watermarks(
-					pipe_ctx->mi, &context->watermarks, ref_clk_mhz);
+					pipe_ctx->mi, &context->bw.dcn.watermarks, ref_clk_mhz);
 			lock_otg_master_update(dc->ctx, pipe_ctx->tg->inst);
 		}
+
 		pipe_ctx->tg->dlg_otg_param.vready_offset = pipe_ctx->pipe_dlg_param.vready_offset;
 		pipe_ctx->tg->dlg_otg_param.vstartup_start = pipe_ctx->pipe_dlg_param.vstartup_start;
 		pipe_ctx->tg->dlg_otg_param.vupdate_offset = pipe_ctx->pipe_dlg_param.vupdate_offset;
 		pipe_ctx->tg->dlg_otg_param.vupdate_width = pipe_ctx->pipe_dlg_param.vupdate_width;
 		pipe_ctx->tg->dlg_otg_param.signal =  pipe_ctx->stream->signal;
+
 		pipe_ctx->tg->funcs->program_global_sync(
 				pipe_ctx->tg);
+		pipe_ctx->tg->funcs->set_blank(pipe_ctx->tg, !is_pipe_tree_visible(pipe_ctx));
+
+
+
 		update_dchubp_dpp(dc, pipe_ctx, context);
+
+		/* Only support one plane for now. */
 	}
 
 	if (pipe_ctx->bottom_pipe != NULL)
@@ -1663,16 +1720,16 @@ static void dcn10_pplib_apply_display_requirements(
 
 	pp_display_cfg->all_displays_in_sync = false;/*todo*/
 	pp_display_cfg->nb_pstate_switch_disable = false;
-	pp_display_cfg->min_engine_clock_khz = context->dcfclk_khz;
-	pp_display_cfg->min_memory_clock_khz = context->fclk_khz;
-	pp_display_cfg->min_engine_clock_deep_sleep_khz = context->dcfclk_deep_sleep_khz;
-	pp_display_cfg->min_dcfc_deep_sleep_clock_khz = context->dcfclk_deep_sleep_khz;
+	pp_display_cfg->min_engine_clock_khz = context->bw.dcn.cur_clk.dcfclk_khz;
+	pp_display_cfg->min_memory_clock_khz = context->bw.dcn.cur_clk.fclk_khz;
+	pp_display_cfg->min_engine_clock_deep_sleep_khz = context->bw.dcn.cur_clk.dcfclk_deep_sleep_khz;
+	pp_display_cfg->min_dcfc_deep_sleep_clock_khz = context->bw.dcn.cur_clk.dcfclk_deep_sleep_khz;
 	pp_display_cfg->avail_mclk_switch_time_us =
-			context->dram_ccm_us > 0 ? context->dram_ccm_us : 0;
+			context->bw.dcn.cur_clk.dram_ccm_us > 0 ? context->bw.dcn.cur_clk.dram_ccm_us : 0;
 	pp_display_cfg->avail_mclk_switch_time_in_disp_active_us =
-			context->min_active_dram_ccm_us > 0 ? context->min_active_dram_ccm_us : 0;
-	pp_display_cfg->min_dcfclock_khz = context->dcfclk_khz;
-	pp_display_cfg->disp_clk_khz = context->dispclk_khz;
+			context->bw.dcn.cur_clk.min_active_dram_ccm_us > 0 ? context->bw.dcn.cur_clk.min_active_dram_ccm_us : 0;
+	pp_display_cfg->min_dcfclock_khz = context->bw.dcn.cur_clk.dcfclk_khz;
+	pp_display_cfg->disp_clk_khz = context->bw.dcn.cur_clk.dispclk_khz;
 	dce110_fill_display_configs(context, pp_display_cfg);
 
 	if (memcmp(&dc->prev_display_config, pp_display_cfg, sizeof(
@@ -1689,19 +1746,21 @@ static void dcn10_apply_ctx_for_surface(
 {
 	int i;
 
-	memcpy(context->res_ctx.mpc_tree,
-			dc->current_context->res_ctx.mpc_tree,
-			sizeof(struct mpc_tree_cfg) * dc->res_pool->pipe_count);
-
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
-		if (!pipe_ctx->surface)
+		if (!pipe_ctx->surface || pipe_ctx->surface != surface)
 			continue;
 
+
 		/* looking for top pipe to program */
-		if (!pipe_ctx->top_pipe)
+		if (!pipe_ctx->top_pipe) {
+			memcpy(context->res_ctx.mpc_tree,
+					dc->current_context->res_ctx.mpc_tree,
+					sizeof(struct mpc_tree_cfg) * dc->res_pool->pipe_count);
+
 			program_all_pipe_in_tree(dc, pipe_ctx, context);
+		}
 	}
 
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
@@ -1737,22 +1796,51 @@ static void dcn10_set_bandwidth(
 	if (IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment))
 		return;
 
-	if (decrease_allowed || context->dispclk_khz > dc->current_context->dispclk_khz) {
+	if (decrease_allowed || context->bw.dcn.calc_clk.dispclk_khz
+			> dc->current_context->bw.dcn.cur_clk.dispclk_khz) {
 		dc->res_pool->display_clock->funcs->set_clock(
 				dc->res_pool->display_clock,
-				context->dispclk_khz);
-		dc->current_context->dispclk_khz = context->dispclk_khz;
+				context->bw.dcn.calc_clk.dispclk_khz);
+		dc->current_context->bw.dcn.cur_clk.dispclk_khz =
+				context->bw.dcn.calc_clk.dispclk_khz;
 	}
-	if (decrease_allowed || context->dcfclk_khz > dc->current_context->dcfclk_khz) {
+	if (decrease_allowed || context->bw.dcn.calc_clk.dcfclk_khz
+			> dc->current_context->bw.dcn.cur_clk.dcfclk_khz) {
 		clock.clk_type = DM_PP_CLOCK_TYPE_DCFCLK;
-		clock.clocks_in_khz = context->dcfclk_khz;
+		clock.clocks_in_khz = context->bw.dcn.calc_clk.dcfclk_khz;
 		dm_pp_apply_clock_for_voltage_request(dc->ctx, &clock);
+		dc->current_context->bw.dcn.cur_clk.dcfclk_khz = clock.clocks_in_khz;
+		context->bw.dcn.cur_clk.dcfclk_khz = clock.clocks_in_khz;
 	}
-	if (decrease_allowed || context->fclk_khz > dc->current_context->fclk_khz) {
+	if (decrease_allowed || context->bw.dcn.calc_clk.fclk_khz
+			> dc->current_context->bw.dcn.cur_clk.fclk_khz) {
 		clock.clk_type = DM_PP_CLOCK_TYPE_FCLK;
-		clock.clocks_in_khz = context->fclk_khz;
+		clock.clocks_in_khz = context->bw.dcn.calc_clk.fclk_khz;
 		dm_pp_apply_clock_for_voltage_request(dc->ctx, &clock);
-		dc->current_context->fclk_khz = clock.clocks_in_khz ;
+		dc->current_context->bw.dcn.calc_clk.fclk_khz = clock.clocks_in_khz;
+		context->bw.dcn.cur_clk.fclk_khz = clock.clocks_in_khz;
+	}
+	if (decrease_allowed || context->bw.dcn.calc_clk.dcfclk_deep_sleep_khz
+			> dc->current_context->bw.dcn.cur_clk.dcfclk_deep_sleep_khz) {
+		dc->current_context->bw.dcn.calc_clk.dcfclk_deep_sleep_khz =
+				context->bw.dcn.calc_clk.dcfclk_deep_sleep_khz;
+		context->bw.dcn.cur_clk.dcfclk_deep_sleep_khz =
+				context->bw.dcn.calc_clk.dcfclk_deep_sleep_khz;
+	}
+	/* Decrease in freq is increase in period so opposite comparison for dram_ccm */
+	if (decrease_allowed || context->bw.dcn.calc_clk.dram_ccm_us
+			< dc->current_context->bw.dcn.cur_clk.dram_ccm_us) {
+		dc->current_context->bw.dcn.calc_clk.dram_ccm_us =
+				context->bw.dcn.calc_clk.dram_ccm_us;
+		context->bw.dcn.cur_clk.dram_ccm_us =
+				context->bw.dcn.calc_clk.dram_ccm_us;
+	}
+	if (decrease_allowed || context->bw.dcn.calc_clk.min_active_dram_ccm_us
+			< dc->current_context->bw.dcn.cur_clk.min_active_dram_ccm_us) {
+		dc->current_context->bw.dcn.calc_clk.min_active_dram_ccm_us =
+				context->bw.dcn.calc_clk.min_active_dram_ccm_us;
+		context->bw.dcn.cur_clk.min_active_dram_ccm_us =
+				context->bw.dcn.calc_clk.min_active_dram_ccm_us;
 	}
 	dcn10_pplib_apply_display_requirements(dc, context);
 }

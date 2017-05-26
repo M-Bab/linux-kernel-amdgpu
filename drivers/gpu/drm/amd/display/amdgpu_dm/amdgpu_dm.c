@@ -141,8 +141,8 @@ static int dm_crtc_get_scanoutpos(struct amdgpu_device *adev, int crtc,
 					 &h_position,
 					 &v_position);
 
-		*position = (v_position) || (h_position << 16);
-		*vbl = (v_blank_start) || (v_blank_end << 16);
+		*position = v_position | (h_position << 16);
+		*vbl = v_blank_start | (v_blank_end << 16);
 	}
 
 	return 0;
@@ -401,9 +401,8 @@ void amdgpu_dm_fini(struct amdgpu_device *adev)
 		adev->dm.freesync_module = NULL;
 	}
 	/* DC Destroy TODO: Replace destroy DAL */
-	{
+	if (adev->dm.dc)
 		dc_destroy(&adev->dm.dc);
-	}
 	return;
 }
 
@@ -496,7 +495,7 @@ static int dm_hw_fini(void *handle)
 	amdgpu_dm_hpd_fini(adev);
 
 	amdgpu_dm_irq_fini(adev);
-
+	amdgpu_dm_fini(adev);
 	return 0;
 }
 
@@ -1355,6 +1354,7 @@ static void dm_page_flip(struct amdgpu_device *adev,
 	struct amdgpu_crtc *acrtc;
 	const struct dc_stream *stream;
 	struct dc_flip_addrs addr = { {0} };
+	struct dc_surface_update surface_updates[1] = { {0} };
 
 	/*
 	 * TODO risk of concurrency issues
@@ -1417,9 +1417,11 @@ static void dm_page_flip(struct amdgpu_device *adev,
 		acrtc->base.state->event = NULL;
 	}
 
-	dc_flip_surface_addrs(adev->dm.dc,
-			      dc_stream_get_status(stream)->surfaces,
-			      &addr, 1);
+	surface_updates->surface = dc_stream_get_status(stream)->surfaces[0];
+	surface_updates->flip_addr = &addr;
+
+
+	dc_update_surfaces_for_stream(adev->dm.dc, surface_updates, 1, stream);
 
 	DRM_DEBUG_DRIVER("%s Flipping to hi: 0x%x, low: 0x%x \n",
 			 __func__,

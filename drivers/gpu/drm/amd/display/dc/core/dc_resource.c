@@ -431,6 +431,7 @@ static void calculate_viewport(struct pipe_ctx *pipe_ctx)
 	const struct dc_surface *surface = &pipe_ctx->surface->public;
 	const struct dc_stream *stream = &pipe_ctx->stream->public;
 	struct scaler_data *data = &pipe_ctx->scl_data;
+	struct rect surf_src = surface->src_rect;
 	struct rect clip = { 0 };
 	int vpc_div = (data->format == PIXEL_FORMAT_420BPP12
 			|| data->format == PIXEL_FORMAT_420BPP15) ? 2 : 1;
@@ -444,6 +445,11 @@ static void calculate_viewport(struct pipe_ctx *pipe_ctx)
 		pri_split = false;
 		sec_split = false;
 	}
+
+	if (pipe_ctx->surface->public.rotation == ROTATION_ANGLE_90 ||
+			pipe_ctx->surface->public.rotation == ROTATION_ANGLE_270)
+		rect_swap_helper(&surf_src);
+
 	/* The actual clip is an intersection between stream
 	 * source and surface clip
 	 */
@@ -463,18 +469,18 @@ static void calculate_viewport(struct pipe_ctx *pipe_ctx)
 			stream->src.y + stream->src.height - clip.y :
 			surface->clip_rect.y + surface->clip_rect.height - clip.y ;
 
-	/* offset = src.ofs + (clip.ofs - surface->dst_rect.ofs) * scl_ratio
+	/* offset = surf_src.ofs + (clip.ofs - surface->dst_rect.ofs) * scl_ratio
 	 * num_pixels = clip.num_pix * scl_ratio
 	 */
-	data->viewport.x = surface->src_rect.x + (clip.x - surface->dst_rect.x) *
-			surface->src_rect.width / surface->dst_rect.width;
+	data->viewport.x = surf_src.x + (clip.x - surface->dst_rect.x) *
+			surf_src.width / surface->dst_rect.width;
 	data->viewport.width = clip.width *
-			surface->src_rect.width / surface->dst_rect.width;
+			surf_src.width / surface->dst_rect.width;
 
-	data->viewport.y = surface->src_rect.y + (clip.y - surface->dst_rect.y) *
-			surface->src_rect.height / surface->dst_rect.height;
+	data->viewport.y = surf_src.y + (clip.y - surface->dst_rect.y) *
+			surf_src.height / surface->dst_rect.height;
 	data->viewport.height = clip.height *
-			surface->src_rect.height / surface->dst_rect.height;
+			surf_src.height / surface->dst_rect.height;
 
 	/* Round down, compensate in init */
 	data->viewport_c.x = data->viewport.x / vpc_div;
@@ -523,16 +529,21 @@ static void calculate_recout(struct pipe_ctx *pipe_ctx, struct view *recout_skip
 {
 	const struct dc_surface *surface = &pipe_ctx->surface->public;
 	struct core_stream *stream = pipe_ctx->stream;
-	struct rect clip = surface->clip_rect;
+	struct rect surf_src = surface->src_rect;
+	struct rect surf_clip = surface->clip_rect;
 	int recout_full_x, recout_full_y;
 
+	if (pipe_ctx->surface->public.rotation == ROTATION_ANGLE_90 ||
+			pipe_ctx->surface->public.rotation == ROTATION_ANGLE_270)
+		rect_swap_helper(&surf_src);
+
 	pipe_ctx->scl_data.recout.x = stream->public.dst.x;
-	if (stream->public.src.x < clip.x)
-		pipe_ctx->scl_data.recout.x += (clip.x
+	if (stream->public.src.x < surf_clip.x)
+		pipe_ctx->scl_data.recout.x += (surf_clip.x
 			- stream->public.src.x) * stream->public.dst.width
 						/ stream->public.src.width;
 
-	pipe_ctx->scl_data.recout.width = clip.width *
+	pipe_ctx->scl_data.recout.width = surf_clip.width *
 			stream->public.dst.width / stream->public.src.width;
 	if (pipe_ctx->scl_data.recout.width + pipe_ctx->scl_data.recout.x >
 			stream->public.dst.x + stream->public.dst.width)
@@ -541,12 +552,12 @@ static void calculate_recout(struct pipe_ctx *pipe_ctx, struct view *recout_skip
 						- pipe_ctx->scl_data.recout.x;
 
 	pipe_ctx->scl_data.recout.y = stream->public.dst.y;
-	if (stream->public.src.y < clip.y)
-		pipe_ctx->scl_data.recout.y += (clip.y
+	if (stream->public.src.y < surf_clip.y)
+		pipe_ctx->scl_data.recout.y += (surf_clip.y
 			- stream->public.src.y) * stream->public.dst.height
 						/ stream->public.src.height;
 
-	pipe_ctx->scl_data.recout.height = clip.height *
+	pipe_ctx->scl_data.recout.height = surf_clip.height *
 			stream->public.dst.height / stream->public.src.height;
 	if (pipe_ctx->scl_data.recout.height + pipe_ctx->scl_data.recout.y >
 			stream->public.dst.y + stream->public.dst.height)
@@ -569,7 +580,7 @@ static void calculate_recout(struct pipe_ctx *pipe_ctx, struct view *recout_skip
 			pipe_ctx->scl_data.recout.width += pipe_ctx->scl_data.recout.width % 2;
 		}
 	} else if (pipe_ctx->bottom_pipe &&
-			   pipe_ctx->bottom_pipe->surface == pipe_ctx->surface) {
+			pipe_ctx->bottom_pipe->surface == pipe_ctx->surface) {
 		if (stream->public.timing.timing_3d_format ==
 			TIMING_3D_FORMAT_TOP_AND_BOTTOM)
 			pipe_ctx->scl_data.recout.height /= 2;
@@ -577,17 +588,17 @@ static void calculate_recout(struct pipe_ctx *pipe_ctx, struct view *recout_skip
 			pipe_ctx->scl_data.recout.width /= 2;
 	}
 
-	/* Unclipped recout offset = stream dst offset + ((surf dst offset - stream src offset)
-	 * 				* 1/ stream scaling ratio) - (surf src offset * 1/ full scl
+	/* Unclipped recout offset = stream dst offset + ((surf dst offset - stream surf_src offset)
+	 * 				* 1/ stream scaling ratio) - (surf surf_src offset * 1/ full scl
 	 * 				ratio)
 	 */
 	recout_full_x = stream->public.dst.x + (surface->dst_rect.x -  stream->public.src.x)
 					* stream->public.dst.width / stream->public.src.width -
-			surface->src_rect.x * surface->dst_rect.width / surface->src_rect.width
+			surf_src.x * surface->dst_rect.width / surf_src.width
 					* stream->public.dst.width / stream->public.src.width;
 	recout_full_y = stream->public.dst.y + (surface->dst_rect.y -  stream->public.src.y)
 					* stream->public.dst.height / stream->public.src.height -
-			surface->src_rect.y * surface->dst_rect.height / surface->src_rect.height
+			surf_src.y * surface->dst_rect.height / surf_src.height
 					* stream->public.dst.height / stream->public.src.height;
 
 	recout_skip->width = pipe_ctx->scl_data.recout.x - recout_full_x;
@@ -598,16 +609,21 @@ static void calculate_scaling_ratios(struct pipe_ctx *pipe_ctx)
 {
 	const struct dc_surface *surface = &pipe_ctx->surface->public;
 	struct core_stream *stream = pipe_ctx->stream;
+	struct rect surf_src = surface->src_rect;
 	const int in_w = stream->public.src.width;
 	const int in_h = stream->public.src.height;
 	const int out_w = stream->public.dst.width;
 	const int out_h = stream->public.dst.height;
 
+	if (pipe_ctx->surface->public.rotation == ROTATION_ANGLE_90 ||
+			pipe_ctx->surface->public.rotation == ROTATION_ANGLE_270)
+		rect_swap_helper(&surf_src);
+
 	pipe_ctx->scl_data.ratios.horz = dal_fixed31_32_from_fraction(
-					surface->src_rect.width,
+					surf_src.width,
 					surface->dst_rect.width);
 	pipe_ctx->scl_data.ratios.vert = dal_fixed31_32_from_fraction(
-					surface->src_rect.height,
+					surf_src.height,
 					surface->dst_rect.height);
 
 	if (surface->stereo_format == PLANE_STEREO_FORMAT_SIDE_BY_SIDE)
@@ -637,8 +653,10 @@ static void calculate_inits_and_adj_vp(struct pipe_ctx *pipe_ctx, struct view *r
 	int vpc_div = (data->format == PIXEL_FORMAT_420BPP12
 			|| data->format == PIXEL_FORMAT_420BPP15) ? 2 : 1;
 
+
 	if (pipe_ctx->surface->public.rotation == ROTATION_ANGLE_90 ||
 			pipe_ctx->surface->public.rotation == ROTATION_ANGLE_270) {
+		rect_swap_helper(&src);
 		rect_swap_helper(&data->viewport_c);
 		rect_swap_helper(&data->viewport);
 	}
@@ -1130,7 +1148,7 @@ bool resource_validate_attach_surfaces(
 	int i, j;
 
 	for (i = 0; i < set_count; i++) {
-		for (j = 0; j < old_context->stream_count; j++)
+		for (j = 0; old_context && j < old_context->stream_count; j++)
 			if (is_stream_unchanged(
 					old_context->streams[j],
 					context->streams[i])) {
@@ -1283,9 +1301,12 @@ static void update_stream_signal(struct core_stream *stream)
 		stream->signal = stream->public.output_signal;
 	}
 
-	if (stream->signal == SIGNAL_TYPE_DVI_SINGLE_LINK &&
-		stream->public.timing.pix_clk_khz > TMDS_MAX_PIXEL_CLOCK_IN_KHZ)
-		stream->signal = SIGNAL_TYPE_DVI_DUAL_LINK;
+	if (dc_is_dvi_signal(stream->signal)) {
+		if (stream->public.timing.pix_clk_khz > TMDS_MAX_PIXEL_CLOCK_IN_KHZ)
+			stream->signal = SIGNAL_TYPE_DVI_DUAL_LINK;
+		else
+			stream->signal = SIGNAL_TYPE_DVI_SINGLE_LINK;
+	}
 }
 
 bool resource_is_stream_unchanged(
@@ -1366,9 +1387,7 @@ static int get_norm_pix_clk(const struct dc_crtc_timing *timing)
 	return normalized_pix_clk;
 }
 
-static void calculate_phy_pix_clks(
-		const struct core_dc *dc,
-		struct validate_context *context)
+static void calculate_phy_pix_clks(struct validate_context *context)
 {
 	int i;
 
@@ -1389,21 +1408,22 @@ static void calculate_phy_pix_clks(
 
 enum dc_status resource_map_pool_resources(
 		const struct core_dc *dc,
-		struct validate_context *context)
+		struct validate_context *context,
+		struct validate_context *old_context)
 {
 	const struct resource_pool *pool = dc->res_pool;
 	int i, j;
 
-	calculate_phy_pix_clks(dc, context);
+	calculate_phy_pix_clks(context);
 
-	for (i = 0; i < context->stream_count; i++) {
+	for (i = 0; old_context && i < context->stream_count; i++) {
 		struct core_stream *stream = context->streams[i];
 
-		if (!resource_is_stream_unchanged(dc->current_context, stream)) {
-			if (stream != NULL && dc->current_context->streams[i] != NULL) {
+		if (!resource_is_stream_unchanged(old_context, stream)) {
+			if (stream != NULL && old_context->streams[i] != NULL) {
 				stream->bit_depth_params =
-						dc->current_context->streams[i]->bit_depth_params;
-				stream->clamping = dc->current_context->streams[i]->clamping;
+						old_context->streams[i]->bit_depth_params;
+				stream->clamping = old_context->streams[i]->clamping;
 				continue;
 			}
 		}
@@ -1413,7 +1433,7 @@ enum dc_status resource_map_pool_resources(
 			struct pipe_ctx *pipe_ctx =
 				&context->res_ctx.pipe_ctx[j];
 			const struct pipe_ctx *old_pipe_ctx =
-				&dc->current_context->res_ctx.pipe_ctx[j];
+					&old_context->res_ctx.pipe_ctx[j];
 
 			if (!are_stream_backends_same(old_pipe_ctx->stream, stream))
 				continue;
@@ -1454,7 +1474,7 @@ enum dc_status resource_map_pool_resources(
 		struct pipe_ctx *pipe_ctx = NULL;
 		int pipe_idx = -1;
 
-		if (resource_is_stream_unchanged(dc->current_context, stream))
+		if (old_context && resource_is_stream_unchanged(old_context, stream))
 			continue;
 		/* acquire new resources */
 		pipe_idx = acquire_first_free_pipe(
@@ -2182,7 +2202,8 @@ void resource_build_info_frame(struct pipe_ctx *pipe_ctx)
 
 enum dc_status resource_map_clock_resources(
 		const struct core_dc *dc,
-		struct validate_context *context)
+		struct validate_context *context,
+		struct validate_context *old_context)
 {
 	int i, j;
 	const struct resource_pool *pool = dc->res_pool;
@@ -2191,7 +2212,7 @@ enum dc_status resource_map_clock_resources(
 	for (i = 0; i < context->stream_count; i++) {
 		const struct core_stream *stream = context->streams[i];
 
-		if (resource_is_stream_unchanged(dc->current_context, stream))
+		if (old_context && resource_is_stream_unchanged(old_context, stream))
 			continue;
 
 		for (j = 0; j < MAX_PIPES; j++) {

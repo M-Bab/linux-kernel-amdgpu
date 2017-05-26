@@ -826,6 +826,7 @@ struct amdgpu_fpriv {
 	struct mutex		bo_list_lock;
 	struct idr		bo_list_handles;
 	struct amdgpu_ctx_mgr	ctx_mgr;
+	u32			vram_lost_counter;
 };
 
 /*
@@ -1128,6 +1129,7 @@ struct amdgpu_job {
 	struct amdgpu_vm	*vm;
 	struct amdgpu_ring	*ring;
 	struct amdgpu_sync	sync;
+	struct amdgpu_sync	dep_sync;
 	struct amdgpu_sync	sched_sync;
 	struct amdgpu_ib	*ibs;
 	struct dma_fence	*fence; /* the hw fence */
@@ -1432,6 +1434,7 @@ typedef void (*amdgpu_wreg_t)(struct amdgpu_device*, uint32_t, uint32_t);
 typedef uint32_t (*amdgpu_block_rreg_t)(struct amdgpu_device*, uint32_t, uint32_t);
 typedef void (*amdgpu_block_wreg_t)(struct amdgpu_device*, uint32_t, uint32_t, uint32_t);
 
+#define AMDGPU_RESET_MAGIC_NUM 64
 struct amdgpu_device {
 	struct device			*dev;
 	struct drm_device		*ddev;
@@ -1531,7 +1534,9 @@ struct amdgpu_device {
 	atomic64_t			gtt_usage;
 	atomic64_t			num_bytes_moved;
 	atomic64_t			num_evictions;
+	atomic64_t			num_vram_cpu_page_faults;
 	atomic_t			gpu_reset_counter;
+	atomic_t			vram_lost_counter;
 
 	/* data for buffer migration throttling */
 	struct {
@@ -1628,6 +1633,7 @@ struct amdgpu_device {
 
 	/* record hw reset is performed */
 	bool has_hw_reset;
+	u8				reset_magic[AMDGPU_RESET_MAGIC_NUM];
 
 };
 
@@ -1924,6 +1930,8 @@ static inline bool amdgpu_has_atpx(void) { return false; }
 extern const struct drm_ioctl_desc amdgpu_ioctls_kms[];
 extern const int amdgpu_max_kms_ioctl;
 
+bool amdgpu_kms_vram_lost(struct amdgpu_device *adev,
+			  struct amdgpu_fpriv *fpriv);
 int amdgpu_driver_load_kms(struct drm_device *dev, unsigned long flags);
 void amdgpu_driver_unload_kms(struct drm_device *dev);
 void amdgpu_driver_lastclose_kms(struct drm_device *dev);

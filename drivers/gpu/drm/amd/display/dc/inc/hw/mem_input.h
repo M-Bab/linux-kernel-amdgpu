@@ -27,9 +27,6 @@
 
 #include "dc.h"
 #include "include/grph_object_id.h"
-#include "inc/dce_calcs.h"
-
-#include "dce/dce_mem_input.h" /* temporary */
 
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 #include "dml/display_mode_structs.h"
@@ -52,8 +49,14 @@ struct dcn_watermark_set {
 	struct dcn_watermarks c;
 	struct dcn_watermarks d;
 };
-
 #endif
+
+struct dce_watermarks {
+	int a_mark;
+	int b_mark;
+	int c_mark;
+	int d_mark;
+};
 
 struct stutter_modes {
 	bool enhanced;
@@ -68,11 +71,6 @@ struct mem_input {
 	struct dc_plane_address current_address;
 	uint32_t inst;
 	struct stutter_modes stutter_mode;
-
-	const struct dce_mem_input_registers *regs;
-	const struct dce_mem_input_shift *shifts;
-	const struct dce_mem_input_mask *masks;
-	struct dce_mem_input_wa wa;
 };
 
 struct mem_input_funcs {
@@ -88,23 +86,20 @@ struct mem_input_funcs {
 			struct _vcs_dpi_display_ttu_regs_st *ttu_regs,
 			struct _vcs_dpi_display_rq_regs_st *rq_regs,
 			struct _vcs_dpi_display_pipe_dest_params_st *pipe_dest);
-
-	void (*disable_request)(struct mem_input *mem_input);
-
 #endif
 
 	void (*mem_input_program_display_marks)(
 		struct mem_input *mem_input,
-		struct bw_watermarks nbp,
-		struct bw_watermarks stutter,
-		struct bw_watermarks urgent,
+		struct dce_watermarks nbp,
+		struct dce_watermarks stutter,
+		struct dce_watermarks urgent,
 		uint32_t total_dest_line_time_ns);
 
 	void (*mem_input_program_chroma_display_marks)(
 			struct mem_input *mem_input,
-			struct bw_watermarks nbp,
-			struct bw_watermarks stutter,
-			struct bw_watermarks urgent,
+			struct dce_watermarks nbp,
+			struct dce_watermarks stutter,
+			struct dce_watermarks urgent,
 			uint32_t total_dest_line_time_ns);
 
 	void (*allocate_mem_input)(
@@ -136,13 +131,14 @@ struct mem_input_funcs {
 		union plane_size *plane_size,
 		enum dc_rotation_angle rotation,
 		struct dc_plane_dcc_param *dcc,
-		bool horizontal_mirror,
-		bool visible);
+		bool horizontal_mirror);
 
 	bool (*mem_input_is_flip_pending)(struct mem_input *mem_input);
 
 	void (*mem_input_update_dchub)(struct mem_input *mem_input,
 			struct dchub_init_data *dh_data);
+
+	void (*set_blank)(struct mem_input *mi, bool blank);
 };
 
 #endif

@@ -35,12 +35,12 @@
 #include "include/irq_service_interface.h"
 #include "irq/dce80/irq_service_dce80.h"
 #include "dce110/dce110_timing_generator.h"
-#include "dce110/dce110_mem_input.h"
 #include "dce110/dce110_resource.h"
 #include "dce80/dce80_timing_generator.h"
+#include "dce/dce_mem_input.h"
 #include "dce/dce_link_encoder.h"
 #include "dce/dce_stream_encoder.h"
-#include "dce80/dce80_mem_input.h"
+#include "dce/dce_mem_input.h"
 #include "dce/dce_ipp.h"
 #include "dce/dce_transform.h"
 #include "dce/dce_opp.h"
@@ -139,51 +139,6 @@ static const struct dce110_timing_generator_offsets dce80_tg_offsets[] = {
 			.dmif = (mmDMIF_PG5_DPG_WATERMARK_MASK_CONTROL
 					- mmDPG_WATERMARK_MASK_CONTROL),
 		}
-};
-
-static const struct dce110_mem_input_reg_offsets dce80_mi_reg_offsets[] = {
-	{
-		.dcp = (mmGRPH_CONTROL - mmGRPH_CONTROL),
-		.dmif = (mmDMIF_PG0_DPG_WATERMARK_MASK_CONTROL
-				- mmDPG_WATERMARK_MASK_CONTROL),
-		.pipe = (mmPIPE0_DMIF_BUFFER_CONTROL
-				- mmPIPE0_DMIF_BUFFER_CONTROL),
-	},
-	{
-		.dcp = (mmDCP1_GRPH_CONTROL - mmGRPH_CONTROL),
-		.dmif = (mmDMIF_PG1_DPG_WATERMARK_MASK_CONTROL
-				- mmDPG_WATERMARK_MASK_CONTROL),
-		.pipe = (mmPIPE1_DMIF_BUFFER_CONTROL
-				- mmPIPE0_DMIF_BUFFER_CONTROL),
-	},
-	{
-		.dcp = (mmDCP2_GRPH_CONTROL - mmGRPH_CONTROL),
-		.dmif = (mmDMIF_PG2_DPG_WATERMARK_MASK_CONTROL
-				- mmDPG_WATERMARK_MASK_CONTROL),
-		.pipe = (mmPIPE2_DMIF_BUFFER_CONTROL
-				- mmPIPE0_DMIF_BUFFER_CONTROL),
-	},
-	{
-		.dcp = (mmDCP3_GRPH_CONTROL - mmGRPH_CONTROL),
-		.dmif = (mmDMIF_PG3_DPG_WATERMARK_MASK_CONTROL
-				- mmDPG_WATERMARK_MASK_CONTROL),
-		.pipe = (mmPIPE3_DMIF_BUFFER_CONTROL
-				- mmPIPE0_DMIF_BUFFER_CONTROL),
-	},
-	{
-		.dcp = (mmDCP4_GRPH_CONTROL - mmGRPH_CONTROL),
-		.dmif = (mmDMIF_PG4_DPG_WATERMARK_MASK_CONTROL
-				- mmDPG_WATERMARK_MASK_CONTROL),
-		.pipe = (mmPIPE4_DMIF_BUFFER_CONTROL
-				- mmPIPE0_DMIF_BUFFER_CONTROL),
-	},
-	{
-		.dcp = (mmDCP5_GRPH_CONTROL - mmGRPH_CONTROL),
-		.dmif = (mmDMIF_PG5_DPG_WATERMARK_MASK_CONTROL
-				- mmDPG_WATERMARK_MASK_CONTROL),
-		.pipe = (mmPIPE5_DMIF_BUFFER_CONTROL
-				- mmPIPE0_DMIF_BUFFER_CONTROL),
-	}
 };
 
 /* set register offset */
@@ -541,28 +496,18 @@ static const struct dce_mem_input_mask mi_masks = {
 
 static struct mem_input *dce80_mem_input_create(
 	struct dc_context *ctx,
-	uint32_t inst,
-	const struct dce110_mem_input_reg_offsets *offsets)
+	uint32_t inst)
 {
-	struct dce110_mem_input *mem_input80 =
-		dm_alloc(sizeof(struct dce110_mem_input));
+	struct dce_mem_input *dce_mi = dm_alloc(sizeof(struct dce_mem_input));
 
-	if (!mem_input80)
+	if (!dce_mi) {
+		BREAK_TO_DEBUGGER();
 		return NULL;
-
-	if (dce80_mem_input_construct(mem_input80, ctx, inst, offsets)) {
-		struct mem_input *mi = &mem_input80->base;
-
-		mi->regs = &mi_regs[inst];
-		mi->shifts = &mi_shifts;
-		mi->masks = &mi_masks;
-		mi->wa.single_head_rdreq_dmif_limit = 2;
-		return mi;
 	}
 
-	BREAK_TO_DEBUGGER();
-	dm_free(mem_input80);
-	return NULL;
+	dce_mem_input_construct(dce_mi, ctx, inst, &mi_regs[inst], &mi_shifts, &mi_masks);
+	dce_mi->wa.single_head_rdreq_dmif_limit = 2;
+	return &dce_mi->base;
 }
 
 static void dce80_transform_destroy(struct transform **xfm)
@@ -684,7 +629,7 @@ static void destruct(struct dce110_resource_pool *pool)
 			dce_ipp_destroy(&pool->base.ipps[i]);
 
 		if (pool->base.mis[i] != NULL) {
-			dm_free(TO_DCE110_MEM_INPUT(pool->base.mis[i]));
+			dm_free(TO_DCE_MEM_INPUT(pool->base.mis[i]));
 			pool->base.mis[i] = NULL;
 		}
 
@@ -724,7 +669,8 @@ static void destruct(struct dce110_resource_pool *pool)
 
 static enum dc_status validate_mapped_resource(
 		const struct core_dc *dc,
-		struct validate_context *context)
+		struct validate_context *context,
+		struct validate_context *old_context)
 {
 	enum dc_status status = DC_OK;
 	uint8_t i, j;
@@ -733,7 +679,7 @@ static enum dc_status validate_mapped_resource(
 		struct core_stream *stream = context->streams[i];
 		struct core_link *link = stream->sink->link;
 
-		if (resource_is_stream_unchanged(dc->current_context, stream))
+		if (old_context && resource_is_stream_unchanged(old_context, stream))
 			continue;
 
 		for (j = 0; j < MAX_PIPES; j++) {
@@ -781,8 +727,8 @@ bool dce80_validate_bandwidth(
 	struct validate_context *context)
 {
 	/* TODO implement when needed but for now hardcode max value*/
-	context->dispclk_khz = 681000;
-	context->bw_results.required_yclk = 250000 * MEMORY_TYPE_MULTIPLIER;
+	context->bw.dce.dispclk_khz = 681000;
+	context->bw.dce.yclk_khz = 250000 * MEMORY_TYPE_MULTIPLIER;
 
 	return true;
 }
@@ -812,7 +758,8 @@ enum dc_status dce80_validate_with_context(
 		const struct core_dc *dc,
 		const struct dc_validation_set set[],
 		int set_count,
-		struct validate_context *context)
+		struct validate_context *context,
+		struct validate_context *old_context)
 {
 	struct dc_context *dc_ctx = dc->ctx;
 	enum dc_status result = DC_ERROR_UNEXPECTED;
@@ -827,19 +774,19 @@ enum dc_status dce80_validate_with_context(
 		context->stream_count++;
 	}
 
-	result = resource_map_pool_resources(dc, context);
+	result = resource_map_pool_resources(dc, context, old_context);
 
 	if (result == DC_OK)
-		result = resource_map_clock_resources(dc, context);
+		result = resource_map_clock_resources(dc, context, old_context);
 
 	if (!resource_validate_attach_surfaces(set, set_count,
-			dc->current_context, context, dc->res_pool)) {
+			old_context, context, dc->res_pool)) {
 		DC_ERROR("Failed to attach surface to stream!\n");
 		return DC_FAIL_ATTACH_SURFACES;
 	}
 
 	if (result == DC_OK)
-		result = validate_mapped_resource(dc, context);
+		result = validate_mapped_resource(dc, context, old_context);
 
 	if (result == DC_OK)
 		result = resource_build_scaling_params_for_context(dc, context);
@@ -861,13 +808,13 @@ enum dc_status dce80_validate_guaranteed(
 	dc_stream_retain(&context->streams[0]->public);
 	context->stream_count++;
 
-	result = resource_map_pool_resources(dc, context);
+	result = resource_map_pool_resources(dc, context, NULL);
 
 	if (result == DC_OK)
-		result = resource_map_clock_resources(dc, context);
+		result = resource_map_clock_resources(dc, context, NULL);
 
 	if (result == DC_OK)
-		result = validate_mapped_resource(dc, context);
+		result = validate_mapped_resource(dc, context, NULL);
 
 	if (result == DC_OK) {
 		validate_guaranteed_copy_streams(
@@ -1000,8 +947,7 @@ static bool construct(
 			goto res_create_fail;
 		}
 
-		pool->base.mis[i] = dce80_mem_input_create(ctx, i,
-				&dce80_mi_reg_offsets[i]);
+		pool->base.mis[i] = dce80_mem_input_create(ctx, i);
 		if (pool->base.mis[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create memory input!\n");

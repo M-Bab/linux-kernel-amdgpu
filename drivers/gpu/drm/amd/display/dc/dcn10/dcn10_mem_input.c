@@ -38,22 +38,14 @@
 #define FN(reg_name, field_name) \
 	mi->mi_shift->field_name, mi->mi_mask->field_name
 
-static void set_blank(struct dcn10_mem_input *mi, bool blank)
+static void dcn_mi_set_blank(struct mem_input *mem_input, bool blank)
 {
+	struct dcn10_mem_input *mi = TO_DCN10_MEM_INPUT(mem_input);
 	uint32_t blank_en = blank ? 1 : 0;
 
 	REG_UPDATE_2(DCHUBP_CNTL,
 			HUBP_BLANK_EN, blank_en,
 			HUBP_TTU_DISABLE, blank_en);
-}
-
-
-static void disable_request(struct mem_input *mem_input)
-{
-	struct dcn10_mem_input *mi = TO_DCN10_MEM_INPUT(mem_input);
-
-	/* To disable the requestors, set blank_en to 1 */
-	set_blank(mi, true);
 }
 
 static void vready_workaround(struct mem_input *mem_input,
@@ -245,45 +237,43 @@ static bool mem_input_program_surface_flip_and_addr(
 	struct dcn10_mem_input *mi = TO_DCN10_MEM_INPUT(mem_input);
 
 	/* program flip type */
-
-	REG_UPDATE(DCSURF_FLIP_CONTROL,
+	REG_SET(DCSURF_FLIP_CONTROL, 0,
 			SURFACE_FLIP_TYPE, flip_immediate);
 
-	/* REG_UPDATE(FLIP_CONTROL, SURFACE_UPDATE_LOCK, 1); */
-
-
-	/* program high first and then the low addr, order matters! */
+	/* HW automatically latch rest of address register on write to
+	 * DCSURF_PRIMARY_SURFACE_ADDRESS if SURFACE_UPDATE_LOCK is not used
+	 *
+	 * program high first and then the low addr, order matters!
+	 */
 	switch (address->type) {
 	case PLN_ADDR_TYPE_GRAPHICS:
-		if (address->grph.addr.quad_part == 0)
-			break;
-
-		if (address->grph.meta_addr.quad_part != 0) {
-
-			REG_UPDATE(DCSURF_PRIMARY_META_SURFACE_ADDRESS_HIGH,
-					PRIMARY_META_SURFACE_ADDRESS_HIGH,
-					address->grph.meta_addr.high_part);
-
-			REG_UPDATE(DCSURF_PRIMARY_META_SURFACE_ADDRESS,
-					PRIMARY_META_SURFACE_ADDRESS,
-					address->grph.meta_addr.low_part);
-		}
-
-		REG_UPDATE(DCSURF_PRIMARY_SURFACE_ADDRESS_HIGH,
-				PRIMARY_SURFACE_ADDRESS_HIGH,
-				address->grph.addr.high_part);
-
-		REG_UPDATE(DCSURF_PRIMARY_SURFACE_ADDRESS,
-				PRIMARY_SURFACE_ADDRESS,
-				address->grph.addr.low_part);
-
-
 		/* DCN1.0 does not support const color
 		 * TODO: program DCHUBBUB_RET_PATH_DCC_CFGx_0/1
 		 * base on address->grph.dcc_const_color
 		 * x = 0, 2, 4, 6 for pipe 0, 1, 2, 3 for rgb and luma
 		 * x = 1, 3, 5, 7 for pipe 0, 1, 2, 3 for chroma
 		 */
+
+		if (address->grph.addr.quad_part == 0)
+			break;
+
+		if (address->grph.meta_addr.quad_part != 0) {
+			REG_SET(DCSURF_PRIMARY_META_SURFACE_ADDRESS_HIGH, 0,
+					PRIMARY_META_SURFACE_ADDRESS_HIGH,
+					address->grph.meta_addr.high_part);
+
+			REG_SET(DCSURF_PRIMARY_META_SURFACE_ADDRESS, 0,
+					PRIMARY_META_SURFACE_ADDRESS,
+					address->grph.meta_addr.low_part);
+		}
+
+		REG_SET(DCSURF_PRIMARY_SURFACE_ADDRESS_HIGH, 0,
+				PRIMARY_SURFACE_ADDRESS_HIGH,
+				address->grph.addr.high_part);
+
+		REG_SET(DCSURF_PRIMARY_SURFACE_ADDRESS, 0,
+				PRIMARY_SURFACE_ADDRESS,
+				address->grph.addr.low_part);
 		break;
 	case PLN_ADDR_TYPE_VIDEO_PROGRESSIVE:
 		if (address->video_progressive.luma_addr.quad_part == 0
@@ -291,40 +281,38 @@ static bool mem_input_program_surface_flip_and_addr(
 			break;
 
 		if (address->video_progressive.luma_meta_addr.quad_part != 0) {
-
-			REG_UPDATE(DCSURF_PRIMARY_META_SURFACE_ADDRESS_HIGH,
-				PRIMARY_META_SURFACE_ADDRESS_HIGH,
-				address->video_progressive.luma_meta_addr.high_part);
-
-			REG_UPDATE(DCSURF_PRIMARY_META_SURFACE_ADDRESS,
-				PRIMARY_META_SURFACE_ADDRESS,
-				address->video_progressive.luma_meta_addr.low_part);
-
-			REG_UPDATE(DCSURF_PRIMARY_META_SURFACE_ADDRESS_HIGH_C,
+			REG_SET(DCSURF_PRIMARY_META_SURFACE_ADDRESS_HIGH_C, 0,
 				PRIMARY_META_SURFACE_ADDRESS_HIGH_C,
 				address->video_progressive.chroma_meta_addr.high_part);
 
-			REG_UPDATE(DCSURF_PRIMARY_META_SURFACE_ADDRESS_C,
+			REG_SET(DCSURF_PRIMARY_META_SURFACE_ADDRESS_C, 0,
 				PRIMARY_META_SURFACE_ADDRESS_C,
 				address->video_progressive.chroma_meta_addr.low_part);
+
+			REG_SET(DCSURF_PRIMARY_META_SURFACE_ADDRESS_HIGH, 0,
+				PRIMARY_META_SURFACE_ADDRESS_HIGH,
+				address->video_progressive.luma_meta_addr.high_part);
+
+			REG_SET(DCSURF_PRIMARY_META_SURFACE_ADDRESS, 0,
+				PRIMARY_META_SURFACE_ADDRESS,
+				address->video_progressive.luma_meta_addr.low_part);
 		}
 
-		REG_UPDATE(DCSURF_PRIMARY_SURFACE_ADDRESS_HIGH,
-			PRIMARY_SURFACE_ADDRESS_HIGH,
-			address->video_progressive.luma_addr.high_part);
-
-		REG_UPDATE(DCSURF_PRIMARY_SURFACE_ADDRESS,
-			PRIMARY_SURFACE_ADDRESS,
-			address->video_progressive.luma_addr.low_part);
-
-		REG_UPDATE(DCSURF_PRIMARY_SURFACE_ADDRESS_HIGH_C,
+		REG_SET(DCSURF_PRIMARY_SURFACE_ADDRESS_HIGH_C, 0,
 			PRIMARY_SURFACE_ADDRESS_HIGH_C,
 			address->video_progressive.chroma_addr.high_part);
 
-		REG_UPDATE(DCSURF_PRIMARY_SURFACE_ADDRESS_C,
+		REG_SET(DCSURF_PRIMARY_SURFACE_ADDRESS_C, 0,
 			PRIMARY_SURFACE_ADDRESS_C,
 			address->video_progressive.chroma_addr.low_part);
 
+		REG_SET(DCSURF_PRIMARY_SURFACE_ADDRESS_HIGH, 0,
+			PRIMARY_SURFACE_ADDRESS_HIGH,
+			address->video_progressive.luma_addr.high_part);
+
+		REG_SET(DCSURF_PRIMARY_SURFACE_ADDRESS, 0,
+			PRIMARY_SURFACE_ADDRESS,
+			address->video_progressive.luma_addr.low_part);
 		break;
 	case PLN_ADDR_TYPE_GRPH_STEREO:
 		if (address->grph_stereo.left_addr.quad_part == 0)
@@ -333,39 +321,38 @@ static bool mem_input_program_surface_flip_and_addr(
 			break;
 		if (address->grph_stereo.right_meta_addr.quad_part != 0) {
 
-			REG_UPDATE(DCSURF_SECONDARY_META_SURFACE_ADDRESS_HIGH,
+			REG_SET(DCSURF_SECONDARY_META_SURFACE_ADDRESS_HIGH, 0,
 					SECONDARY_META_SURFACE_ADDRESS_HIGH,
 					address->grph_stereo.right_meta_addr.high_part);
 
-			REG_UPDATE(DCSURF_SECONDARY_META_SURFACE_ADDRESS,
+			REG_SET(DCSURF_SECONDARY_META_SURFACE_ADDRESS, 0,
 					SECONDARY_META_SURFACE_ADDRESS,
 					address->grph_stereo.right_meta_addr.low_part);
 		}
 		if (address->grph_stereo.left_meta_addr.quad_part != 0) {
 
-			REG_UPDATE(DCSURF_PRIMARY_META_SURFACE_ADDRESS_HIGH,
+			REG_SET(DCSURF_PRIMARY_META_SURFACE_ADDRESS_HIGH, 0,
 					PRIMARY_META_SURFACE_ADDRESS_HIGH,
 					address->grph_stereo.left_meta_addr.high_part);
 
-			REG_UPDATE(DCSURF_PRIMARY_META_SURFACE_ADDRESS,
+			REG_SET(DCSURF_PRIMARY_META_SURFACE_ADDRESS, 0,
 					PRIMARY_META_SURFACE_ADDRESS,
 					address->grph_stereo.left_meta_addr.low_part);
 		}
 
-		REG_UPDATE(DCSURF_SECONDARY_SURFACE_ADDRESS_HIGH,
+		REG_SET(DCSURF_SECONDARY_SURFACE_ADDRESS_HIGH, 0,
 				SECONDARY_SURFACE_ADDRESS_HIGH,
 				address->grph_stereo.right_addr.high_part);
 
-		REG_UPDATE(DCSURF_SECONDARY_SURFACE_ADDRESS,
+		REG_SET(DCSURF_SECONDARY_SURFACE_ADDRESS, 0,
 				SECONDARY_SURFACE_ADDRESS,
 				address->grph_stereo.right_addr.low_part);
 
-
-		REG_UPDATE(DCSURF_PRIMARY_SURFACE_ADDRESS_HIGH,
+		REG_SET(DCSURF_PRIMARY_SURFACE_ADDRESS_HIGH, 0,
 				PRIMARY_SURFACE_ADDRESS_HIGH,
 				address->grph_stereo.left_addr.high_part);
 
-		REG_UPDATE(DCSURF_PRIMARY_SURFACE_ADDRESS,
+		REG_SET(DCSURF_PRIMARY_SURFACE_ADDRESS, 0,
 				PRIMARY_SURFACE_ADDRESS,
 				address->grph_stereo.left_addr.low_part);
 		break;
@@ -373,7 +360,6 @@ static bool mem_input_program_surface_flip_and_addr(
 		BREAK_TO_DEBUGGER();
 		break;
 	}
-	/* REG_UPDATE(FLIP_CONTROL, SURFACE_UPDATE_LOCK, 0); */
 
 	mem_input->request_address = *address;
 
@@ -402,8 +388,7 @@ static void mem_input_program_surface_config(
 	union plane_size *plane_size,
 	enum dc_rotation_angle rotation,
 	struct dc_plane_dcc_param *dcc,
-	bool horizontal_mirror,
-	bool visible)
+	bool horizontal_mirror)
 {
 	struct dcn10_mem_input *mi = TO_DCN10_MEM_INPUT(mem_input);
 
@@ -412,8 +397,6 @@ static void mem_input_program_surface_config(
 	program_size_and_rotation(
 		mi, rotation, format, plane_size, dcc, horizontal_mirror);
 	program_pixel_format(mi, format);
-
-	set_blank(mi, !visible);
 }
 
 static void program_requestor(
@@ -573,7 +556,6 @@ static void mem_input_setup(
 	/* otg is locked when this func is called. Register are double buffered.
 	 * disable the requestors is not needed
 	 */
-	/* disable_request(mem_input); */
 	program_requestor(mem_input, rq_regs);
 	program_deadline(mem_input, dlg_attr, ttu_attr);
 	vready_workaround(mem_input, pipe_dest);
@@ -820,9 +802,9 @@ static void program_watermarks(
 
 static void mem_input_program_display_marks(
 	struct mem_input *mem_input,
-	struct bw_watermarks nbp,
-	struct bw_watermarks stutter,
-	struct bw_watermarks urgent,
+	struct dce_watermarks nbp,
+	struct dce_watermarks stutter,
+	struct dce_watermarks urgent,
 	uint32_t total_dest_line_time_ns)
 {
 	/* only for dce
@@ -1065,7 +1047,6 @@ static struct mem_input_funcs dcn10_mem_input_funcs = {
 	.mem_input_program_display_marks = mem_input_program_display_marks,
 	.allocate_mem_input = NULL,
 	.free_mem_input = NULL,
-	.disable_request = disable_request,
 	.mem_input_program_surface_flip_and_addr =
 			mem_input_program_surface_flip_and_addr,
 	.mem_input_program_surface_config =
@@ -1075,6 +1056,7 @@ static struct mem_input_funcs dcn10_mem_input_funcs = {
 	.program_watermarks = program_watermarks,
 	.mem_input_update_dchub = mem_input_update_dchub,
 	.mem_input_program_pte_vm = dcn_mem_input_program_pte_vm,
+	.set_blank = dcn_mi_set_blank,
 };
 
 

@@ -743,8 +743,7 @@ int amdgpu_vm_flush(struct amdgpu_ring *ring, struct amdgpu_job *job)
 		id->gws_size != job->gws_size ||
 		id->oa_base != job->oa_base ||
 		id->oa_size != job->oa_size);
-	bool vm_flush_needed = job->vm_needs_flush ||
-		amdgpu_vm_ring_has_compute_vm_bug(ring);
+	bool vm_flush_needed = job->vm_needs_flush;
 	unsigned patch_offset = 0;
 	int r;
 
@@ -760,11 +759,10 @@ int amdgpu_vm_flush(struct amdgpu_ring *ring, struct amdgpu_job *job)
 		patch_offset = amdgpu_ring_init_cond_exec(ring);
 
 	if (ring->funcs->emit_vm_flush && vm_flush_needed) {
-		u64 pd_addr = amdgpu_vm_adjust_mc_addr(adev, job->vm_pd_addr);
 		struct dma_fence *fence;
 
-		trace_amdgpu_vm_flush(ring, job->vm_id, pd_addr);
-		amdgpu_ring_emit_vm_flush(ring, job->vm_id, pd_addr);
+		trace_amdgpu_vm_flush(ring, job->vm_id, job->vm_pd_addr);
+		amdgpu_ring_emit_vm_flush(ring, job->vm_id, job->vm_pd_addr);
 
 		r = amdgpu_fence_emit(ring, &fence);
 		if (r)
@@ -777,7 +775,7 @@ int amdgpu_vm_flush(struct amdgpu_ring *ring, struct amdgpu_job *job)
 		mutex_unlock(&id_mgr->lock);
 	}
 
-	if (gds_switch_needed) {
+	if (ring->funcs->emit_gds_switch && gds_switch_needed) {
 		id->gds_base = job->gds_base;
 		id->gds_size = job->gds_size;
 		id->gws_base = job->gws_base;

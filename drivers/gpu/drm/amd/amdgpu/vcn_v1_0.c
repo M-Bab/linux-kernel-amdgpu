@@ -373,7 +373,6 @@ static void vcn_v1_0_disable_clock_gating(struct amdgpu_device *adev, bool sw)
 		| UVD_SUVD_CGC_GATE__SCM_MASK
 		| UVD_SUVD_CGC_GATE__SDB_MASK
 		| UVD_SUVD_CGC_GATE__SRE_H264_MASK
-		| UVD_SUVD_CGC_GATE__SRE_H264_MASK
 		| UVD_SUVD_CGC_GATE__SRE_HEVC_MASK
 		| UVD_SUVD_CGC_GATE__SIT_H264_MASK
 		| UVD_SUVD_CGC_GATE__SIT_HEVC_MASK
@@ -883,6 +882,7 @@ static void vcn_v1_0_dec_ring_emit_vm_flush(struct amdgpu_ring *ring,
 	uint32_t data0, data1, mask;
 	unsigned eng = ring->vm_inv_eng;
 
+	pd_addr = ring->adev->gart.gart_funcs->adjust_mc_addr(ring->adev, pd_addr);
 	pd_addr = pd_addr | 0x1; /* valid bit */
 	/* now only use physical base address of PDE and valid */
 	BUG_ON(pd_addr & 0xFFFF00000000003EULL);
@@ -1015,6 +1015,7 @@ static void vcn_v1_0_enc_ring_emit_vm_flush(struct amdgpu_ring *ring,
 	uint32_t req = ring->adev->gart.gart_funcs->get_invalidate_req(vm_id);
 	unsigned eng = ring->vm_inv_eng;
 
+	pd_addr = ring->adev->gart.gart_funcs->adjust_mc_addr(ring->adev, pd_addr);
 	pd_addr = pd_addr | 0x1; /* valid bit */
 	/* now only use physical base address of PDE and valid */
 	BUG_ON(pd_addr & 0xFFFF00000000003EULL);
@@ -1105,12 +1106,13 @@ static const struct amdgpu_ring_funcs vcn_v1_0_dec_ring_vm_funcs = {
 	.align_mask = 0xf,
 	.nop = PACKET0(SOC15_REG_OFFSET(UVD, 0, mmUVD_NO_OP), 0),
 	.support_64bit_ptrs = false,
+	.vmhub = AMDGPU_MMHUB,
 	.get_rptr = vcn_v1_0_dec_ring_get_rptr,
 	.get_wptr = vcn_v1_0_dec_ring_get_wptr,
 	.set_wptr = vcn_v1_0_dec_ring_set_wptr,
 	.emit_frame_size =
 		2 + /* vcn_v1_0_dec_ring_emit_hdp_invalidate */
-		34 * AMDGPU_MAX_VMHUBS + /* vcn_v1_0_dec_ring_emit_vm_flush */
+		34 + /* vcn_v1_0_dec_ring_emit_vm_flush */
 		14 + 14 + /* vcn_v1_0_dec_ring_emit_fence x2 vm fence */
 		6,
 	.emit_ib_size = 8, /* vcn_v1_0_dec_ring_emit_ib */
@@ -1133,11 +1135,12 @@ static const struct amdgpu_ring_funcs vcn_v1_0_enc_ring_vm_funcs = {
 	.align_mask = 0x3f,
 	.nop = VCN_ENC_CMD_NO_OP,
 	.support_64bit_ptrs = false,
+	.vmhub = AMDGPU_MMHUB,
 	.get_rptr = vcn_v1_0_enc_ring_get_rptr,
 	.get_wptr = vcn_v1_0_enc_ring_get_wptr,
 	.set_wptr = vcn_v1_0_enc_ring_set_wptr,
 	.emit_frame_size =
-		17 * AMDGPU_MAX_VMHUBS + /* vcn_v1_0_enc_ring_emit_vm_flush */
+		17 + /* vcn_v1_0_enc_ring_emit_vm_flush */
 		5 + 5 + /* vcn_v1_0_enc_ring_emit_fence x2 vm fence */
 		1, /* vcn_v1_0_enc_ring_insert_end */
 	.emit_ib_size = 5, /* vcn_v1_0_enc_ring_emit_ib */

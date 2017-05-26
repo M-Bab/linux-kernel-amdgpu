@@ -51,6 +51,8 @@
 
 #include "modules/inc/mod_freesync.h"
 
+#include "i2caux_interface.h"
+
 struct dm_connector_state {
 	struct drm_connector_state base;
 
@@ -1214,7 +1216,6 @@ static int amdgpu_freesync_update_property_atomic(
 	dev  = connector->dev;
 	adev = dev->dev_private;
 
-	drm_modeset_lock(&dev->mode_config.connection_mutex, NULL);
 	ret = drm_object_property_get_value(
 			&connector->base,
 			adev->mode_info.freesync_property,
@@ -1224,8 +1225,6 @@ static int amdgpu_freesync_update_property_atomic(
 				&connector->base,
 				adev->mode_info.freesync_property,
 				val_capable);
-	drm_modeset_unlock(&dev->mode_config.connection_mutex);
-
 	return ret;
 
 }
@@ -1796,9 +1795,7 @@ static void dm_plane_helper_cleanup_fb(
 		amdgpu_bo_unpin(rbo);
 		amdgpu_bo_unreserve(rbo);
 		amdgpu_bo_unref(&rbo);
-	}
-
-	afb->address = 0;
+	};
 }
 
 int dm_create_validation_set_for_connector(struct drm_connector *connector,
@@ -2183,6 +2180,7 @@ int amdgpu_dm_i2c_xfer(struct i2c_adapter *i2c_adap,
 		      struct i2c_msg *msgs, int num)
 {
 	struct amdgpu_i2c_adapter *i2c = i2c_get_adapdata(i2c_adap);
+	struct ddc_service *ddc_service = i2c->ddc_service;
 	struct i2c_command cmd;
 	int i;
 	int result = -EIO;
@@ -2203,11 +2201,13 @@ int amdgpu_dm_i2c_xfer(struct i2c_adapter *i2c_adap,
 		cmd.payloads[i].data = msgs[i].buf;
 	}
 
-	if (dc_submit_i2c(i2c->dm->dc, i2c->link_index, &cmd))
+	if (dal_i2caux_submit_i2c_command(
+			ddc_service->ctx->i2caux,
+			ddc_service->ddc_pin,
+			&cmd))
 		result = num;
 
 	kfree(cmd.payloads);
-
 	return result;
 }
 
@@ -2221,19 +2221,22 @@ static const struct i2c_algorithm amdgpu_dm_i2c_algo = {
 	.functionality = amdgpu_dm_i2c_func,
 };
 
-struct amdgpu_i2c_adapter *create_i2c(unsigned int link_index, struct amdgpu_display_manager *dm, int *res)
+static struct amdgpu_i2c_adapter *create_i2c(
+		struct ddc_service *ddc_service,
+		int link_index,
+		int *res)
 {
+	struct amdgpu_device *adev = ddc_service->ctx->driver_context;
 	struct amdgpu_i2c_adapter *i2c;
 
 	i2c = kzalloc(sizeof (struct amdgpu_i2c_adapter), GFP_KERNEL);
-	i2c->dm = dm;
 	i2c->base.owner = THIS_MODULE;
 	i2c->base.class = I2C_CLASS_DDC;
-	i2c->base.dev.parent = &dm->adev->pdev->dev;
+	i2c->base.dev.parent = &adev->pdev->dev;
 	i2c->base.algo = &amdgpu_dm_i2c_algo;
 	snprintf(i2c->base.name, sizeof (i2c->base.name), "AMDGPU DM i2c hw bus %d", link_index);
-	i2c->link_index = link_index;
 	i2c_set_adapdata(&i2c->base, i2c);
+	i2c->ddc_service = ddc_service;
 
 	return i2c;
 }
@@ -2255,7 +2258,7 @@ int amdgpu_dm_connector_init(
 
 	DRM_DEBUG_KMS("%s()\n", __func__);
 
-	i2c = create_i2c(link->link_index, dm, &res);
+	i2c = create_i2c(link->ddc, link->link_index, &res);
 	aconnector->i2c = i2c;
 	res = i2c_add_adapter(&i2c->base);
 
@@ -2559,10 +2562,11 @@ static void amdgpu_dm_do_flip(
 						 acrtc->crtc_id);
 }
 
-void dc_commit_surfaces(struct drm_atomic_state *state,
+static void amdgpu_dm_commit_surfaces(struct drm_atomic_state *state,
 			struct drm_device *dev,
 			struct amdgpu_display_manager *dm,
-			struct drm_crtc *pcrtc)
+			struct drm_crtc *pcrtc,
+			bool *wait_for_vblank)
 {
 	uint32_t i;
 	struct drm_plane *plane;
@@ -2575,10 +2579,11 @@ void dc_commit_surfaces(struct drm_atomic_state *state,
 	for_each_plane_in_state(state, plane, old_plane_state, i) {
 		struct drm_plane_state *plane_state = plane->state;
 		struct drm_crtc *crtc = plane_state->crtc;
+		struct amdgpu_crtc *acrtc_attach = to_amdgpu_crtc(crtc);
 		struct drm_framebuffer *fb = plane_state->fb;
 		struct drm_connector *connector;
 		struct dm_connector_state *dm_state = NULL;
-		struct amdgpu_crtc *acrtc_attach;
+
 		enum dm_commit_action action;
 		bool pflip_needed;
 
@@ -2587,13 +2592,13 @@ void dc_commit_surfaces(struct drm_atomic_state *state,
 
 		action = get_dm_commit_action(crtc->state);
 
-		/* Surfaces are created under two scenarios:
-		 * 1. This commit is not a page flip.
-		 * 2. This commit is a page flip, and streams are created.
+		/*
+		 * TODO - TO decide if it's a flip or surface update
+		 * stop relying on allow_modeset flag and query DC
+		 * using dc_check_update_surfaces_for_stream.
 		 */
 		pflip_needed = !state->allow_modeset;
-		if (!pflip_needed || action == DM_COMMIT_ACTION_DPMS_ON
-				|| action == DM_COMMIT_ACTION_SET) {
+		if (!pflip_needed) {
 			list_for_each_entry(connector,
 					    &dev->mode_config.connector_list,
 					    head) {
@@ -2623,11 +2628,23 @@ void dc_commit_surfaces(struct drm_atomic_state *state,
 			if (crtc == pcrtc) {
 				add_surface(dm->dc, crtc, plane,
 					    &dc_surfaces_constructed[planes_count]);
-				acrtc_attach = to_amdgpu_crtc(crtc);
 				dc_stream_attach = acrtc_attach->stream;
 				planes_count++;
 			}
+		} else if (crtc->state->planes_changed) {
+			*wait_for_vblank =
+				acrtc_attach->flip_flags & DRM_MODE_PAGE_FLIP_ASYNC ?
+				false : true;
+
+			amdgpu_dm_do_flip(
+				crtc,
+				fb,
+				drm_crtc_vblank_count(crtc) + *wait_for_vblank);
+
+			/*clean up the flags for next usage*/
+			acrtc_attach->flip_flags = 0;
 		}
+
 	}
 
 	if (planes_count) {
@@ -2649,8 +2666,6 @@ void amdgpu_dm_atomic_commit_tail(
 	struct drm_device *dev = state->dev;
 	struct amdgpu_device *adev = dev->dev_private;
 	struct amdgpu_display_manager *dm = &adev->dm;
-	struct drm_plane *plane;
-	struct drm_plane_state *old_plane_state;
 	uint32_t i, j;
 	uint32_t commit_streams_count = 0;
 	uint32_t new_crtcs_count = 0;
@@ -2815,7 +2830,7 @@ void amdgpu_dm_atomic_commit_tail(
 
 	/* update planes when needed per crtc*/
 	for_each_crtc_in_state(state, pcrtc, old_crtc_state, j)
-		dc_commit_surfaces(state, dev, dm, pcrtc);
+		amdgpu_dm_commit_surfaces(state, dev, dm, pcrtc, &wait_for_vblank);
 
 	for (i = 0; i < new_crtcs_count; i++) {
 		/*
@@ -2829,34 +2844,6 @@ void amdgpu_dm_atomic_commit_tail(
 
 		manage_dm_interrupts(adev, acrtc, true);
 		dm_crtc_cursor_reset(&acrtc->base);
-
-	}
-
-	for_each_plane_in_state(state, plane, old_plane_state, i) {
-		struct drm_plane_state *plane_state = plane->state;
-		struct drm_crtc *crtc = plane_state->crtc;
-		struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
-		struct drm_framebuffer *fb = plane_state->fb;
-		bool pflip_needed;
-
-		if (!fb || !crtc || !crtc->state->planes_changed ||
-			!crtc->state->active)
-			continue;
-		pflip_needed = !state->allow_modeset;
-
-		if (pflip_needed) {
-			wait_for_vblank =
-				acrtc->flip_flags & DRM_MODE_PAGE_FLIP_ASYNC ?
-				false : true;
-
-			amdgpu_dm_do_flip(
-				crtc,
-				fb,
-				drm_crtc_vblank_count(crtc) + wait_for_vblank);
-
-			/*clean up the flags for next usage*/
-			acrtc->flip_flags = 0;
-		}
 	}
 
 
@@ -3061,6 +3048,58 @@ static uint32_t remove_from_val_sets(
 	return set_count;
 }
 
+
+static enum surface_update_type  amdgpu_dm_check_surfaces_update_type(
+		struct dc *dc,
+		const struct dc_surface **new_surfaces,
+		uint8_t new_surface_count,
+		const struct dc_stream *dc_stream)
+{
+	struct dc_surface_update srf_updates[MAX_SURFACES];
+	struct dc_flip_addrs flip_addr[MAX_SURFACES];
+	struct dc_plane_info plane_info[MAX_SURFACES];
+	struct dc_scaling_info scaling_info[MAX_SURFACES];
+	int i;
+	const struct dc_stream_status *stream_status =
+			dc_stream_get_status(dc_stream);
+	enum surface_update_type update_type;
+
+	memset(srf_updates, 0, sizeof(srf_updates));
+	memset(flip_addr, 0, sizeof(flip_addr));
+	memset(plane_info, 0, sizeof(plane_info));
+	memset(scaling_info, 0, sizeof(scaling_info));
+
+	for (i = 0; i < new_surface_count; i++) {
+		srf_updates[i].surface = new_surfaces[i];
+		srf_updates[i].gamma =
+			(struct dc_gamma *)new_surfaces[i]->gamma_correction;
+		flip_addr[i].address = new_surfaces[i]->address;
+		flip_addr[i].flip_immediate = new_surfaces[i]->flip_immediate;
+		plane_info[i].color_space = new_surfaces[i]->color_space;
+		plane_info[i].format = new_surfaces[i]->format;
+		plane_info[i].plane_size = new_surfaces[i]->plane_size;
+		plane_info[i].rotation = new_surfaces[i]->rotation;
+		plane_info[i].horizontal_mirror = new_surfaces[i]->horizontal_mirror;
+		plane_info[i].stereo_format = new_surfaces[i]->stereo_format;
+		plane_info[i].tiling_info = new_surfaces[i]->tiling_info;
+		plane_info[i].visible = new_surfaces[i]->visible;
+		plane_info[i].dcc = new_surfaces[i]->dcc;
+		scaling_info[i].scaling_quality = new_surfaces[i]->scaling_quality;
+		scaling_info[i].src_rect = new_surfaces[i]->src_rect;
+		scaling_info[i].dst_rect = new_surfaces[i]->dst_rect;
+		scaling_info[i].clip_rect = new_surfaces[i]->clip_rect;
+
+		srf_updates[i].flip_addr = &flip_addr[i];
+		srf_updates[i].plane_info = &plane_info[i];
+		srf_updates[i].scaling_info = &scaling_info[i];
+	}
+
+	update_type = dc_check_update_surfaces_for_stream(
+			dc, srf_updates, new_surface_count, NULL, stream_status);
+
+	return update_type;
+}
+
 int amdgpu_dm_atomic_check(struct drm_device *dev,
 			struct drm_atomic_state *state)
 {
@@ -3079,6 +3118,11 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 	struct dc *dc = adev->dm.dc;
 	bool need_to_validate = false;
 	struct validate_context *context;
+	/*
+	 * This bool will be set for true for any modeset/reset
+	 * or surface update which implies non fast surfae update.
+	 */
+	bool wait_for_prev_commits = false;
 
 	ret = drm_atomic_helper_check(dev, state);
 
@@ -3155,6 +3199,7 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 
 			new_stream_count++;
 			need_to_validate = true;
+			wait_for_prev_commits = true;
 			break;
 		}
 
@@ -3200,6 +3245,7 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 
 			new_stream_count++;
 			need_to_validate = true;
+			wait_for_prev_commits = true;
 
 			break;
 		}
@@ -3211,6 +3257,7 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 						set,
 						set_count,
 						acrtc->stream);
+				wait_for_prev_commits = true;
 			}
 			break;
 		}
@@ -3246,15 +3293,9 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 
 			action = get_dm_commit_action(crtc->state);
 
-			/* Surfaces are created under two scenarios:
-			 * 1. This commit is not a page flip.
-			 * 2. This commit is a page flip, and streams are created.
-			 */
 			crtc_state = drm_atomic_get_crtc_state(state, crtc);
 			pflip_needed = !state->allow_modeset;
-			if (!pflip_needed ||
-				action == DM_COMMIT_ACTION_DPMS_ON ||
-				action == DM_COMMIT_ACTION_SET) {
+			if (!pflip_needed) {
 				struct dc_surface *surface;
 
 				list_for_each_entry(connector,
@@ -3303,8 +3344,46 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 
 	context = dc_get_validate_context(dc, set, set_count);
 
-	if (need_to_validate == false || set_count == 0 || context)
+	for (i = 0; i < set_count; i++) {
+		for (j = 0; j < set[i].surface_count; j++) {
+			if (amdgpu_dm_check_surfaces_update_type(
+					dc,
+					set[i].surfaces,
+					set[i].surface_count,
+					set[i].stream) > UPDATE_TYPE_MED) {
+				wait_for_prev_commits = true;
+				break;
+			}
+		}
+	}
+
+	if (need_to_validate == false || set_count == 0 || context) {
+
 		ret = 0;
+		/*
+		 * For full updates case when
+		 * removing/adding/updateding  streams on once CRTC while flipping
+		 * on another CRTC,
+		 * Adding all current active CRTC's states to the atomic commit in
+		 * amdgpu_dm_atomic_check will guarantee that any such full update commit
+		 * will wait for completion of any outstanding flip using DRMs
+		 * synchronization events.
+		 */
+		if (wait_for_prev_commits) {
+			list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
+				struct amdgpu_crtc *acrtc = to_amdgpu_crtc(crtc);
+				struct drm_crtc_state *crtc_state;
+
+				if (acrtc->stream) {
+					crtc_state = drm_atomic_get_crtc_state(state, crtc);
+					if (IS_ERR(crtc_state)) {
+						ret = PTR_ERR(crtc_state);
+						break;
+					}
+				}
+			}
+		}
+	}
 
 	if (context) {
 		dc_resource_validate_ctx_destruct(context);

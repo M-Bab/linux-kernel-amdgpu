@@ -201,11 +201,10 @@ static bool stream_get_crtc_position(struct dc *dc,
 	return ret;
 }
 
-static bool set_gamut_remap(struct dc *dc,
-			const struct dc_stream **stream, int num_streams)
+static bool set_gamut_remap(struct dc *dc, const struct dc_stream *stream)
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
-	struct core_stream *core_stream = DC_STREAM_TO_CORE(stream[0]);
+	struct core_stream *core_stream = DC_STREAM_TO_CORE(stream);
 	int i = 0;
 	bool ret = false;
 	struct pipe_ctx *pipes;
@@ -698,7 +697,7 @@ struct validate_context *dc_get_validate_context(
 	struct validate_context *context;
 
 	context = dm_alloc(sizeof(struct validate_context));
-	if(context == NULL)
+	if (context == NULL)
 		goto context_alloc_fail;
 
 	if (!is_validation_required(core_dc, set, set_count)) {
@@ -707,7 +706,7 @@ struct validate_context *dc_get_validate_context(
 	}
 
 	result = core_dc->res_pool->funcs->validate_with_context(
-						core_dc, set, set_count, context);
+			core_dc, set, set_count, context, core_dc->current_context);
 
 context_alloc_fail:
 	if (result != DC_OK) {
@@ -730,16 +729,30 @@ bool dc_validate_resources(
 		const struct dc_validation_set set[],
 		uint8_t set_count)
 {
-	struct validate_context *ctx;
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	enum dc_status result = DC_ERROR_UNEXPECTED;
+	struct validate_context *context;
 
-	ctx = dc_get_validate_context(dc, set, set_count);
-	if (ctx) {
-		dc_resource_validate_ctx_destruct(ctx);
-		dm_free(ctx);
-		return true;
+	context = dm_alloc(sizeof(struct validate_context));
+	if (context == NULL)
+		goto context_alloc_fail;
+
+	result = core_dc->res_pool->funcs->validate_with_context(
+				core_dc, set, set_count, context, NULL);
+
+context_alloc_fail:
+	if (result != DC_OK) {
+		dm_logger_write(core_dc->ctx->logger, LOG_WARNING,
+				"%s:resource validation failed, dc_status:%d\n",
+				__func__,
+				result);
 	}
 
-	return false;
+	dc_resource_validate_ctx_destruct(context);
+	dm_free(context);
+	context = NULL;
+
+	return result == DC_OK;
 }
 
 bool dc_validate_guaranteed(
@@ -904,7 +917,8 @@ bool dc_commit_streams(
 	if (context == NULL)
 		goto context_alloc_fail;
 
-	result = core_dc->res_pool->funcs->validate_with_context(core_dc, set, stream_count, context);
+	result = core_dc->res_pool->funcs->validate_with_context(
+			core_dc, set, stream_count, context, core_dc->current_context);
 	if (result != DC_OK){
 		dm_logger_write(core_dc->ctx->logger, LOG_ERROR,
 					"%s: Context validation failed! dc_status:%d\n",
@@ -970,13 +984,7 @@ bool dc_post_update_surfaces_to_stream(struct dc *dc)
 {
 	int i;
 	struct core_dc *core_dc = DC_TO_CORE(dc);
-	struct validate_context *context = dm_alloc(sizeof(struct validate_context));
-
-	if (!context) {
-		dm_error("%s: failed to create validate ctx\n", __func__);
-		return false;
-	}
-	dc_resource_validate_ctx_copy_construct(core_dc->current_context, context);
+	struct validate_context *context = core_dc->current_context;
 
 	post_surface_trace(dc);
 
@@ -986,20 +994,8 @@ bool dc_post_update_surfaces_to_stream(struct dc *dc)
 			core_dc->hwss.power_down_front_end(
 					core_dc, &context->res_ctx.pipe_ctx[i]);
 		}
-	if (!core_dc->res_pool->funcs->validate_bandwidth(core_dc, context)) {
-		BREAK_TO_DEBUGGER();
-		dc_resource_validate_ctx_destruct(context);
-		dm_free(context);
-		return false;
-	}
 
 	core_dc->hwss.set_bandwidth(core_dc, context, true);
-
-	if (core_dc->current_context) {
-		dc_resource_validate_ctx_destruct(core_dc->current_context);
-		dm_free(core_dc->current_context);
-	}
-	core_dc->current_context = context;
 
 	return true;
 }
@@ -1070,8 +1066,13 @@ static bool is_surface_in_context(
 static unsigned int pixel_format_to_bpp(enum surface_pixel_format format)
 {
 	switch (format) {
+	case SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr:
+	case SURFACE_PIXEL_FORMAT_VIDEO_420_YCrCb:
+		return 12;
 	case SURFACE_PIXEL_FORMAT_GRPH_ARGB1555:
 	case SURFACE_PIXEL_FORMAT_GRPH_RGB565:
+	case SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCbCr:
+	case SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb:
 		return 16;
 	case SURFACE_PIXEL_FORMAT_GRPH_ARGB8888:
 	case SURFACE_PIXEL_FORMAT_GRPH_ABGR8888:
@@ -1136,45 +1137,24 @@ static enum surface_update_type get_plane_info_update_type(
 static enum surface_update_type  get_scaling_info_update_type(
 		const struct dc_surface_update *u)
 {
-	struct dc_scaling_info temp_scaling_info = { { 0 } };
-
 	if (!u->scaling_info)
 		return UPDATE_TYPE_FAST;
 
-	/* Copy all parameters that will cause a full update
-	 * from current surface, the rest of the parameters
-	 * from provided plane configuration.
-	 * Perform memory compare and special validation
-	 * for those that can cause fast/medium updates
-	 */
-
-	/* Full Update Parameters */
-	temp_scaling_info.dst_rect = u->surface->dst_rect;
-	temp_scaling_info.src_rect = u->surface->src_rect;
-	temp_scaling_info.scaling_quality = u->surface->scaling_quality;
-
-	/* Special validation required */
-	temp_scaling_info.clip_rect = u->scaling_info->clip_rect;
-
-	if (memcmp(u->scaling_info, &temp_scaling_info,
-			sizeof(struct dc_scaling_info)) != 0)
+	if (u->scaling_info->src_rect.width != u->surface->src_rect.width
+			|| u->scaling_info->src_rect.height != u->surface->src_rect.height
+			|| u->scaling_info->clip_rect.width != u->surface->clip_rect.width
+			|| u->scaling_info->clip_rect.height != u->surface->clip_rect.height
+			|| u->scaling_info->dst_rect.width != u->surface->dst_rect.width
+			|| u->scaling_info->dst_rect.height != u->surface->dst_rect.height)
 		return UPDATE_TYPE_FULL;
 
-	/* Check Clip rectangles if not equal
-	 * difference is in offsets == > UPDATE_TYPE_FAST
-	 * difference is in dimensions == > UPDATE_TYPE_FULL
-	 */
-	if (memcmp(&u->scaling_info->clip_rect,
-			&u->surface->clip_rect, sizeof(struct rect)) != 0) {
-		if ((u->scaling_info->clip_rect.height ==
-			u->surface->clip_rect.height) &&
-			(u->scaling_info->clip_rect.width ==
-			u->surface->clip_rect.width)) {
-			return UPDATE_TYPE_FAST;
-		} else {
-			return UPDATE_TYPE_FULL;
-		}
-	}
+	if (u->scaling_info->src_rect.x != u->surface->src_rect.x
+			|| u->scaling_info->src_rect.y != u->surface->src_rect.y
+			|| u->scaling_info->clip_rect.x != u->surface->clip_rect.x
+			|| u->scaling_info->clip_rect.y != u->surface->clip_rect.y
+			|| u->scaling_info->dst_rect.x != u->surface->dst_rect.x
+			|| u->scaling_info->dst_rect.y != u->surface->dst_rect.y)
+		return UPDATE_TYPE_MED;
 
 	return UPDATE_TYPE_FAST;
 }
@@ -1200,7 +1180,6 @@ static enum surface_update_type det_surface_update(
 		overall_type = type;
 
 	if (u->in_transfer_func ||
-		u->out_transfer_func ||
 		u->hdr_static_metadata) {
 		if (overall_type < UPDATE_TYPE_MED)
 			overall_type = UPDATE_TYPE_MED;
@@ -1297,8 +1276,28 @@ void dc_update_surfaces_and_stream(struct dc *dc,
 
 	/* update current stream with the new updates */
 	if (stream_update) {
-		stream->public.src = stream_update->src;
-		stream->public.dst = stream_update->dst;
+		if ((stream_update->src.height != 0) &&
+				(stream_update->src.width != 0))
+			stream->public.src = stream_update->src;
+
+		if ((stream_update->dst.height != 0) &&
+				(stream_update->dst.width != 0))
+			stream->public.dst = stream_update->dst;
+
+		if (stream_update->out_transfer_func &&
+				stream_update->out_transfer_func !=
+				dc_stream->out_transfer_func) {
+			if (stream_update->out_transfer_func->type !=
+					TF_TYPE_UNKNOWN) {
+				if (dc_stream->out_transfer_func != NULL)
+					dc_transfer_func_release
+					(dc_stream->out_transfer_func);
+				dc_transfer_func_retain(stream_update->
+					out_transfer_func);
+				stream->public.out_transfer_func =
+					stream_update->out_transfer_func;
+			}
+		}
 	}
 
 	/* save update parameters into surface */
@@ -1344,8 +1343,7 @@ void dc_update_surfaces_and_stream(struct dc *dc,
 					srf_updates[i].plane_info->dcc;
 		}
 
-		/* not sure if we still need this */
-		if (update_type == UPDATE_TYPE_FULL) {
+		if (update_type >= UPDATE_TYPE_MED) {
 			for (j = 0; j < core_dc->res_pool->pipe_count; j++) {
 				struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
 
@@ -1380,13 +1378,6 @@ void dc_update_surfaces_and_stream(struct dc *dc,
 					srf_updates[i].in_transfer_func;
 		}
 
-		if (srf_updates[i].out_transfer_func &&
-			srf_updates[i].out_transfer_func != dc_stream->out_transfer_func) {
-			if (dc_stream->out_transfer_func != NULL)
-				dc_transfer_func_release(dc_stream->out_transfer_func);
-			dc_transfer_func_retain(srf_updates[i].out_transfer_func);
-			stream->public.out_transfer_func = srf_updates[i].out_transfer_func;
-		}
 		if (srf_updates[i].hdr_static_metadata)
 			surface->public.hdr_static_ctx =
 				*(srf_updates[i].hdr_static_metadata);
@@ -1455,11 +1446,12 @@ void dc_update_surfaces_and_stream(struct dc *dc,
 						pipe_ctx, pipe_ctx->surface);
 
 			if (is_new_pipe_surface ||
-					srf_updates[i].out_transfer_func)
+				(stream_update != NULL &&
+					stream_update->out_transfer_func !=
+							NULL)) {
 				core_dc->hwss.set_output_transfer_func(
-						pipe_ctx,
-						pipe_ctx->surface,
-						pipe_ctx->stream);
+						pipe_ctx, pipe_ctx->stream);
+			}
 
 			if (srf_updates[i].hdr_static_metadata) {
 				resource_build_info_frame(pipe_ctx);
@@ -1525,13 +1517,6 @@ const struct graphics_object_id dc_get_link_id_at_index(
 	return core_dc->links[link_index]->link_id;
 }
 
-const struct ddc_service *dc_get_ddc_at_index(
-	struct dc *dc, uint32_t link_index)
-{
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-	return core_dc->links[link_index]->ddc;
-}
-
 enum dc_irq_source dc_get_hpd_irq_source_at_index(
 	struct dc *dc, uint32_t link_index)
 {
@@ -1545,32 +1530,6 @@ const struct audio **dc_get_audios(struct dc *dc)
 	return (const struct audio **)core_dc->res_pool->audios;
 }
 
-void dc_flip_surface_addrs(
-		struct dc *dc,
-		const struct dc_surface *const surfaces[],
-		struct dc_flip_addrs flip_addrs[],
-		uint32_t count)
-{
-	struct core_dc *core_dc = DC_TO_CORE(dc);
-	int i, j;
-
-	for (i = 0; i < count; i++) {
-		struct core_surface *surface = DC_SURFACE_TO_CORE(surfaces[i]);
-
-		surface->public.address = flip_addrs[i].address;
-		surface->public.flip_immediate = flip_addrs[i].flip_immediate;
-
-		for (j = 0; j < core_dc->res_pool->pipe_count; j++) {
-			struct pipe_ctx *pipe_ctx = &core_dc->current_context->res_ctx.pipe_ctx[j];
-
-			if (pipe_ctx->surface != surface)
-				continue;
-
-			core_dc->hwss.update_plane_addr(core_dc, pipe_ctx);
-		}
-	}
-}
-
 enum dc_irq_source dc_interrupt_to_irq_source(
 		struct dc *dc,
 		uint32_t src_id,
@@ -1582,7 +1541,12 @@ enum dc_irq_source dc_interrupt_to_irq_source(
 
 void dc_interrupt_set(const struct dc *dc, enum dc_irq_source src, bool enable)
 {
-	struct core_dc *core_dc = DC_TO_CORE(dc);
+	struct core_dc *core_dc;
+
+	if (dc == NULL)
+		return;
+	core_dc = DC_TO_CORE(dc);
+
 	dal_irq_service_set(core_dc->res_pool->irqs, src, enable);
 }
 
@@ -1639,7 +1603,7 @@ bool dc_read_aux_dpcd(
 
 	struct core_link *link = core_dc->links[link_index];
 	enum ddc_result r = dal_ddc_service_read_dpcd_data(
-			link->ddc,
+			link->public.ddc,
 			false,
 			I2C_MOT_UNDEF,
 			address,
@@ -1659,7 +1623,7 @@ bool dc_write_aux_dpcd(
 	struct core_link *link = core_dc->links[link_index];
 
 	enum ddc_result r = dal_ddc_service_write_dpcd_data(
-			link->ddc,
+			link->public.ddc,
 			false,
 			I2C_MOT_UNDEF,
 			address,
@@ -1680,7 +1644,7 @@ bool dc_read_aux_i2c(
 
 		struct core_link *link = core_dc->links[link_index];
 		enum ddc_result r = dal_ddc_service_read_dpcd_data(
-			link->ddc,
+			link->public.ddc,
 			true,
 			mot,
 			address,
@@ -1701,7 +1665,7 @@ bool dc_write_aux_i2c(
 	struct core_link *link = core_dc->links[link_index];
 
 	enum ddc_result r = dal_ddc_service_write_dpcd_data(
-			link->ddc,
+			link->public.ddc,
 			true,
 			mot,
 			address,
@@ -1724,7 +1688,7 @@ bool dc_query_ddc_data(
 	struct core_link *link = core_dc->links[link_index];
 
 	bool result = dal_ddc_service_query_ddc_data(
-			link->ddc,
+			link->public.ddc,
 			address,
 			write_buf,
 			write_size,
@@ -1742,7 +1706,7 @@ bool dc_submit_i2c(
 	struct core_dc *core_dc = DC_TO_CORE(dc);
 
 	struct core_link *link = core_dc->links[link_index];
-	struct ddc_service *ddc = link->ddc;
+	struct ddc_service *ddc = link->public.ddc;
 
 	return dal_i2caux_submit_i2c_command(
 		ddc->ctx->i2caux,

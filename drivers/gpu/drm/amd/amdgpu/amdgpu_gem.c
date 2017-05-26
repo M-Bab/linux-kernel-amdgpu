@@ -569,9 +569,6 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 	uint64_t va_flags;
 	int r = 0;
 
-	if (!adev->vm_manager.enabled)
-		return -ENOTTY;
-
 	if (args->va_address < AMDGPU_VA_RESERVED_SIZE) {
 		dev_err(&dev->pdev->dev,
 			"va_address 0x%lX is in reserved area 0x%X\n",
@@ -596,6 +593,11 @@ int amdgpu_gem_va_ioctl(struct drm_device *dev, void *data,
 		dev_err(&dev->pdev->dev, "unsupported operation %d\n",
 			args->operation);
 		return -EINVAL;
+	}
+	if ((args->operation == AMDGPU_VA_OP_MAP) ||
+	    (args->operation == AMDGPU_VA_OP_REPLACE)) {
+		if (amdgpu_kms_vram_lost(adev, fpriv))
+			return -ENODEV;
 	}
 
 	INIT_LIST_HEAD(&list);

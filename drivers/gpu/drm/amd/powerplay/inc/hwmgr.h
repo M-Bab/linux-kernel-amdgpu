@@ -99,7 +99,8 @@ enum PHM_BackEnd_Magic {
 	PHM_CIslands_Magic    = 0x38AC78B0,
 	PHM_Kv_Magic          = 0xDCBBABC0,
 	PHM_VIslands_Magic    = 0x20130307,
-	PHM_Cz_Magic          = 0x67DCBA25
+	PHM_Cz_Magic          = 0x67DCBA25,
+	PHM_Rv_Magic          = 0x20161121
 };
 
 
@@ -136,11 +137,14 @@ struct phm_vce_arbiter {
 
 struct phm_gfx_arbiter {
 	uint32_t sclk;
+	uint32_t sclk_hard_min;
 	uint32_t mclk;
 	uint32_t sclk_over_drive;
 	uint32_t mclk_over_drive;
 	uint32_t sclk_threshold;
 	uint32_t num_cus;
+	uint32_t gfxclk;
+	uint32_t fclk;
 };
 
 /* Entries in the master tables */
