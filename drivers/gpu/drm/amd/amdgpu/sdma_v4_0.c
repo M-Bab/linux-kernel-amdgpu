@@ -103,8 +103,8 @@ static const u32 golden_settings_sdma_4_1[] =
 
 static const u32 golden_settings_sdma_rv1[] =
 {
-	SOC15_REG_OFFSET(SDMA0, 0, mmSDMA0_GB_ADDR_CONFIG), 0x0018773f, 0x00003002,
-	SOC15_REG_OFFSET(SDMA0, 0, mmSDMA0_GB_ADDR_CONFIG_READ), 0x0018773f, 0x00003002
+	SOC15_REG_OFFSET(SDMA0, 0, mmSDMA0_GB_ADDR_CONFIG), 0x0018773f, 0x00000002,
+	SOC15_REG_OFFSET(SDMA0, 0, mmSDMA0_GB_ADDR_CONFIG_READ), 0x0018773f, 0x00000002
 };
 
 static u32 sdma_v4_0_get_reg_offset(u32 instance, u32 internal_offset)
@@ -147,20 +147,6 @@ static void sdma_v4_0_init_golden_registers(struct amdgpu_device *adev)
 		break;
 	default:
 		break;
-	}
-}
-
-static void sdma_v4_0_print_ucode_regs(void *handle)
-{
-	int i;
-	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-
-	dev_info(adev->dev, "VEGA10 SDMA ucode registers\n");
-	for (i = 0; i < adev->sdma.num_instances; i++) {
-		dev_info(adev->dev, "  SDMA%d_UCODE_ADDR=0x%08X\n",
-			 i, RREG32(sdma_v4_0_get_reg_offset(i, mmSDMA0_UCODE_ADDR)));
-		dev_info(adev->dev, "  SDMA%d_UCODE_CHECKSUM=0x%08X\n",
-			 i, RREG32(sdma_v4_0_get_reg_offset(i, mmSDMA0_UCODE_CHECKSUM)));
 	}
 }
 
@@ -804,8 +790,6 @@ static int sdma_v4_0_load_microcode(struct amdgpu_device *adev)
 		WREG32(sdma_v4_0_get_reg_offset(i, mmSDMA0_UCODE_ADDR), adev->sdma.instance[i].fw_version);
 	}
 
-	sdma_v4_0_print_ucode_regs(adev);
-
 	return 0;
 }
 
@@ -831,7 +815,6 @@ static int sdma_v4_0_start(struct amdgpu_device *adev)
 	}
 
 	if (adev->firmware.load_type != AMDGPU_FW_LOAD_PSP) {
-		DRM_INFO("Loading via direct write\n");
 		r = sdma_v4_0_load_microcode(adev);
 		if (r)
 			return r;
@@ -868,8 +851,6 @@ static int sdma_v4_0_ring_test_ring(struct amdgpu_ring *ring)
 	int r;
 	u32 tmp;
 	u64 gpu_addr;
-
-	DRM_INFO("In Ring test func\n");
 
 	r = amdgpu_wb_get(adev, &index);
 	if (r) {
@@ -1143,10 +1124,8 @@ static void sdma_v4_0_ring_emit_vm_flush(struct amdgpu_ring *ring,
 	uint32_t req = ring->adev->gart.gart_funcs->get_invalidate_req(vm_id);
 	unsigned eng = ring->vm_inv_eng;
 
-	pd_addr = ring->adev->gart.gart_funcs->adjust_mc_addr(ring->adev, pd_addr);
-	pd_addr = pd_addr | 0x1; /* valid bit */
-	/* now only use physical base address of PDE and valid */
-	BUG_ON(pd_addr & 0xFFFF00000000003EULL);
+	pd_addr = amdgpu_gart_get_vm_pde(ring->adev, pd_addr);
+	pd_addr |= AMDGPU_PTE_VALID;
 
 	amdgpu_ring_write(ring, SDMA_PKT_HEADER_OP(SDMA_OP_SRBM_WRITE) |
 			  SDMA_PKT_SRBM_WRITE_HEADER_BYTE_EN(0xf));

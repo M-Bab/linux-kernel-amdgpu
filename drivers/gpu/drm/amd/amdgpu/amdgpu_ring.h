@@ -154,6 +154,7 @@ struct amdgpu_ring {
 	const struct amdgpu_ring_funcs	*funcs;
 	struct amdgpu_fence_driver	fence_drv;
 	struct amd_gpu_scheduler	sched;
+	struct list_head		lru_list;
 
 	struct amdgpu_bo	*ring_obj;
 	volatile uint32_t	*ring;
@@ -185,6 +186,7 @@ struct amdgpu_ring {
 	u64			cond_exe_gpu_addr;
 	volatile u32		*cond_exe_cpu_addr;
 	unsigned		vm_inv_eng;
+	bool			has_compute_vm_bug;
 #if defined(CONFIG_DEBUG_FS)
 	struct dentry *ent;
 #endif
@@ -199,6 +201,9 @@ int amdgpu_ring_init(struct amdgpu_device *adev, struct amdgpu_ring *ring,
 		     unsigned ring_size, struct amdgpu_irq_src *irq_src,
 		     unsigned irq_type);
 void amdgpu_ring_fini(struct amdgpu_ring *ring);
+int amdgpu_ring_lru_get(struct amdgpu_device *adev, int type, int *blacklist,
+			int num_blacklist, struct amdgpu_ring **ring);
+void amdgpu_ring_lru_touch(struct amdgpu_device *adev, struct amdgpu_ring *ring);
 static inline void amdgpu_ring_clear_ring(struct amdgpu_ring *ring)
 {
 	int i = 0;

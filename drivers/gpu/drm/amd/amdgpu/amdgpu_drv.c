@@ -114,6 +114,7 @@ int amdgpu_pos_buf_per_se = 0;
 int amdgpu_cntl_sb_buf_per_se = 0;
 int amdgpu_param_buf_per_se = 0;
 int amdgpu_job_hang_limit = 0;
+int amdgpu_lbpw = -1;
 
 MODULE_PARM_DESC(vramlimit, "Restrict VRAM for testing, in megabytes");
 module_param_named(vramlimit, amdgpu_vram_limit, int, 0600);
@@ -241,6 +242,21 @@ module_param_named(param_buf_per_se, amdgpu_param_buf_per_se, int, 0444);
 
 MODULE_PARM_DESC(job_hang_limit, "how much time allow a job hang and not drop it (default 0)");
 module_param_named(job_hang_limit, amdgpu_job_hang_limit, int ,0444);
+
+MODULE_PARM_DESC(lbpw, "Load Balancing Per Watt (LBPW) support (1 = enable, 0 = disable, -1 = auto)");
+module_param_named(lbpw, amdgpu_lbpw, int, 0444);
+
+#ifdef CONFIG_DRM_AMDGPU_SI
+int amdgpu_si_support = 0;
+MODULE_PARM_DESC(si_support, "SI support (1 = enabled, 0 = disabled (default))");
+module_param_named(si_support, amdgpu_si_support, int, 0444);
+#endif
+
+#ifdef CONFIG_DRM_AMDGPU_CIK
+int amdgpu_cik_support = 0;
+MODULE_PARM_DESC(cik_support, "CIK support (1 = enabled, 0 = disabled (default))");
+module_param_named(cik_support, amdgpu_cik_support, int, 0444);
+#endif
 
 
 static const struct pci_device_id pciidlist[] = {
@@ -504,6 +520,7 @@ static int amdgpu_kick_out_firmware_fb(struct pci_dev *pdev)
 static int amdgpu_pci_probe(struct pci_dev *pdev,
 			    const struct pci_device_id *ent)
 {
+	struct drm_device *dev;
 	unsigned long flags = ent->driver_data;
 	int ret;
 
@@ -526,7 +543,29 @@ static int amdgpu_pci_probe(struct pci_dev *pdev,
 	if (ret)
 		return ret;
 
-	return drm_get_pci_dev(pdev, ent, &kms_driver);
+	dev = drm_dev_alloc(&kms_driver, &pdev->dev);
+	if (IS_ERR(dev))
+		return PTR_ERR(dev);
+
+	ret = pci_enable_device(pdev);
+	if (ret)
+		goto err_free;
+
+	dev->pdev = pdev;
+
+	pci_set_drvdata(pdev, dev);
+
+	ret = drm_dev_register(dev, ent->driver_data);
+	if (ret)
+		goto err_pci;
+
+	return 0;
+
+err_pci:
+	pci_disable_device(pdev);
+err_free:
+	drm_dev_unref(dev);
+	return ret;
 }
 
 static void
@@ -534,7 +573,8 @@ amdgpu_pci_remove(struct pci_dev *pdev)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
 
-	drm_put_dev(dev);
+	drm_dev_unregister(dev);
+	drm_dev_unref(dev);
 }
 
 static void
@@ -820,7 +860,7 @@ static int __init amdgpu_init(void)
 	driver->num_ioctls = amdgpu_max_kms_ioctl;
 	amdgpu_register_atpx_handler();
 	/* let modprobe override vga console setting */
-	return drm_pci_init(driver, pdriver);
+	return pci_register_driver(pdriver);
 
 error_sched:
 	amdgpu_fence_slab_fini();
@@ -835,7 +875,7 @@ error_sync:
 static void __exit amdgpu_exit(void)
 {
 	amdgpu_amdkfd_fini();
-	drm_pci_exit(driver, pdriver);
+	pci_unregister_driver(pdriver);
 	amdgpu_unregister_atpx_handler();
 	amdgpu_sync_fini();
 	amd_sched_fence_slab_fini();

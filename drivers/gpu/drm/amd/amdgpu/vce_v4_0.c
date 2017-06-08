@@ -419,15 +419,19 @@ static int vce_v4_0_sw_init(void *handle)
 
 	if (adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) {
 		const struct common_firmware_header *hdr;
+		unsigned size = amdgpu_bo_size(adev->vce.vcpu_bo);
+
+		adev->vce.saved_bo = kmalloc(size, GFP_KERNEL);
+		if (!adev->vce.saved_bo)
+			return -ENOMEM;
+
 		hdr = (const struct common_firmware_header *)adev->vce.fw->data;
 		adev->firmware.ucode[AMDGPU_UCODE_ID_VCE].ucode_id = AMDGPU_UCODE_ID_VCE;
 		adev->firmware.ucode[AMDGPU_UCODE_ID_VCE].fw = adev->vce.fw;
 		adev->firmware.fw_size +=
 			ALIGN(le32_to_cpu(hdr->ucode_size_bytes), PAGE_SIZE);
 		DRM_INFO("PSP loading VCE firmware\n");
-	}
-
-	if (adev->firmware.load_type != AMDGPU_FW_LOAD_PSP) {
+	} else {
 		r = amdgpu_vce_resume(adev);
 		if (r)
 			return r;
@@ -465,6 +469,11 @@ static int vce_v4_0_sw_fini(void *handle)
 
 	/* free MM table */
 	amdgpu_virt_free_mm_table(adev);
+
+	if (adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) {
+		kfree(adev->vce.saved_bo);
+		adev->vce.saved_bo = NULL;
+	}
 
 	r = amdgpu_vce_suspend(adev);
 	if (r)
@@ -522,8 +531,18 @@ static int vce_v4_0_hw_fini(void *handle)
 
 static int vce_v4_0_suspend(void *handle)
 {
-	int r;
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+	int r;
+
+	if (adev->vce.vcpu_bo == NULL)
+		return 0;
+
+	if (adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) {
+		unsigned size = amdgpu_bo_size(adev->vce.vcpu_bo);
+		void *ptr = adev->vce.cpu_addr;
+
+		memcpy_fromio(adev->vce.saved_bo, ptr, size);
+	}
 
 	r = vce_v4_0_hw_fini(adev);
 	if (r)
@@ -534,12 +553,22 @@ static int vce_v4_0_suspend(void *handle)
 
 static int vce_v4_0_resume(void *handle)
 {
-	int r;
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+	int r;
 
-	r = amdgpu_vce_resume(adev);
-	if (r)
-		return r;
+	if (adev->vce.vcpu_bo == NULL)
+		return -EINVAL;
+
+	if (adev->firmware.load_type == AMDGPU_FW_LOAD_PSP) {
+		unsigned size = amdgpu_bo_size(adev->vce.vcpu_bo);
+		void *ptr = adev->vce.cpu_addr;
+
+		memcpy_toio(ptr, adev->vce.saved_bo, size);
+	} else {
+		r = amdgpu_vce_resume(adev);
+		if (r)
+			return r;
+	}
 
 	return vce_v4_0_hw_init(adev);
 }
@@ -926,10 +955,8 @@ static void vce_v4_0_emit_vm_flush(struct amdgpu_ring *ring,
 	uint32_t req = ring->adev->gart.gart_funcs->get_invalidate_req(vm_id);
 	unsigned eng = ring->vm_inv_eng;
 
-	pd_addr = ring->adev->gart.gart_funcs->adjust_mc_addr(ring->adev, pd_addr);
-	pd_addr = pd_addr | 0x1; /* valid bit */
-	/* now only use physical base address of PDE and valid */
-	BUG_ON(pd_addr & 0xFFFF00000000003EULL);
+	pd_addr = amdgpu_gart_get_vm_pde(ring->adev, pd_addr);
+	pd_addr |= AMDGPU_PTE_VALID;
 
 	amdgpu_ring_write(ring, VCE_CMD_REG_WRITE);
 	amdgpu_ring_write(ring,	(hub->ctx0_ptb_addr_hi32 + vm_id * 2) << 2);
