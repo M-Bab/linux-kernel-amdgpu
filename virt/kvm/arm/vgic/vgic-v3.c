@@ -60,6 +60,8 @@ void vgic_v3_process_maintenance(struct kvm_vcpu *vcpu)
 	cpuif->vgic_hcr &= ~ICH_HCR_UIE;
 }
 
+static bool group1_trap;
+
 void vgic_v3_set_underflow(struct kvm_vcpu *vcpu)
 {
 	struct vgic_v3_cpu_if *cpuif = &vcpu->arch.vgic_cpu.vgic_v3;
@@ -257,6 +259,8 @@ void vgic_v3_enable(struct kvm_vcpu *vcpu)
 
 	/* Get the show on the road... */
 	vgic_v3->vgic_hcr = ICH_HCR_EN;
+	if (group1_trap)
+		vgic_v3->vgic_hcr |= ICH_HCR_TALL1;
 }
 
 /* check for overlapping regions and for regions crossing the end of memory */
