@@ -30,7 +30,7 @@
 #define ICC_SRE_EL1			sys_reg(3, 0, 12, 12, 5)
 #define ICC_GRPEN1_EL1			sys_reg(3, 0, 12, 12, 7)
 #define ICC_BPR1_EL1			sys_reg(3, 0, 12, 12, 3)
-
+#define ICC_HPPIR1_EL1			sys_reg(3, 0, 12, 12, 2)
 #define ICC_SRE_EL2			sys_reg(3, 4, 12, 9, 5)
 
 /*
