@@ -28,6 +28,7 @@
 #define ICC_AP1Rn_EL1(n)		sys_reg(3, 0, 12, 9, n)
 #define ICC_EOIR1_EL1			sys_reg(3, 0, 12, 12, 1)
 #define ICC_DIR_EL1			sys_reg(3, 0, 12, 11, 1)
+#define ICC_RPR_EL1			sys_reg(3, 0, 12, 11, 3)
 #define ICC_IAR1_EL1			sys_reg(3, 0, 12, 12, 0)
 #define ICC_SGI1R_EL1			sys_reg(3, 0, 12, 11, 5)
 #define ICC_PMR_EL1			sys_reg(3, 0, 4, 6, 0)
