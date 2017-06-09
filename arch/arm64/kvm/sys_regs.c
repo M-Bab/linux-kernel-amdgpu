@@ -65,6 +65,16 @@ static bool read_from_write_only(struct kvm_vcpu *vcpu,
 	return false;
 }
 
+static bool write_to_read_only(struct kvm_vcpu *vcpu,
+			       struct sys_reg_params *params,
+			       const struct sys_reg_desc *r)
+{
+	WARN_ONCE(1, "Unexpected sys_reg write to read-only register\n");
+	print_sys_reg_instr(params);
+	kvm_inject_undefined(vcpu);
+	return false;
+}
+
 /* 3 bits per cache level, as per CLIDR, but non-existent caches always 0 */
 static u32 cache_levels;
 
@@ -1022,18 +1032,33 @@ static const struct sys_reg_desc sys_reg_descs[] = {
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b0000), Op2(0b000),
 	  NULL, reset_val, VBAR_EL1, 0 },
 
+	/* ICC_IAR0_EL1 */
+	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1000), Op2(0b000),
+	  write_to_read_only },
 	/* ICC_EOIR0_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1000), Op2(0b001),
 	  read_from_write_only },
+	/* ICC_HPPIR0_EL1 */
+	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1000), Op2(0b010),
+	  write_to_read_only },
 	/* ICC_DIR_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1011), Op2(0b001),
 	  read_from_write_only },
+	/* ICC_RPR_EL1 */
+	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1011), Op2(0b011),
+	  write_to_read_only },
 	/* ICC_SGI1R_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1011), Op2(0b101),
 	  access_gic_sgi },
+	/* ICC_IAR1_EL1 */
+	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b000),
+	  write_to_read_only },
 	/* ICC_EOIR1_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b001),
 	  read_from_write_only },
+	/* ICC_HPPIR1_EL1 */
+	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b010),
+	  write_to_read_only },
 	/* ICC_SRE_EL1 */
 	{ Op0(0b11), Op1(0b000), CRn(0b1100), CRm(0b1100), Op2(0b101),
 	  access_gic_sre },
