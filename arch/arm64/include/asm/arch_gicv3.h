@@ -29,6 +29,7 @@
 #define ICC_PMR_EL1			sys_reg(3, 0, 4, 6, 0)
 #define ICC_CTLR_EL1			sys_reg(3, 0, 12, 12, 4)
 #define ICC_SRE_EL1			sys_reg(3, 0, 12, 12, 5)
+#define ICC_GRPEN0_EL1			sys_reg(3, 0, 12, 12, 6)
 #define ICC_GRPEN1_EL1			sys_reg(3, 0, 12, 12, 7)
 #define ICC_BPR1_EL1			sys_reg(3, 0, 12, 12, 3)
 #define ICC_HPPIR1_EL1			sys_reg(3, 0, 12, 12, 2)
