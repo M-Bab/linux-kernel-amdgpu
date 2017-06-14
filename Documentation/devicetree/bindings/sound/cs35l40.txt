@@ -1,0 +1,35 @@
+CS35L40 Speaker Amplifier
+
+Required properties:
+
+  - compatible : "cirrus,cs35l40"
+
+  - reg : the SPI chip select line for the device
+
+  - VA-supply, VP-supply : power supplies for the device,
+    as covered in
+    Documentation/devicetree/bindings/regulator/regulator.txt.
+
+Optional properties:
+  - cirrus,sclk-force-output : Audio serial port SCLK force
+  output control. Forces the SCLK to continue to drive even
+  if no ASP_TXn channels are enabled.
+
+  - cirrus,lrclk-force-output : Audio serial port LRCLK force
+  output control. Forces the LRCLK to continue to drive even
+  if no ASP_TXn channels are enabled.
+
+  - cirrus,right-channel-amp : Boolean to determine which channel
+  the amplifier is to receive the audio data on. If present the
+  amplifier receives data on the right channel of I2S data.
+  If not present the amplifier receives data on the left
+  channel of I2S data
+
+Example:
+
+cs35l40: cs35l40@2 {
+	compatible = "cirrus,cs35l40";
+	reg = <2>;
+	VA-supply = <&dummy_vreg>;
+	VP-supply = <&dummy_vreg>;
+};
