@@ -1016,8 +1016,7 @@ fail:
 	if (ret == -EDEADLK)
 		goto backoff;
 
-	if (ret)
-		drm_crtc_vblank_put(crtc);
+	drm_atomic_state_put(state);
 
 	return ret;
 backoff:
