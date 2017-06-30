@@ -494,15 +494,7 @@ static int gmc_v9_0_mc_init(struct amdgpu_device *adev)
 	if (adev->mc.visible_vram_size > adev->mc.real_vram_size)
 		adev->mc.visible_vram_size = adev->mc.real_vram_size;
 
-	/* unless the user had overridden it, set the gart
-	 * size equal to the 1024 or vram, whichever is larger.
-	 */
-	if (amdgpu_gart_size == -1)
-		adev->mc.gtt_size = max((AMDGPU_DEFAULT_GTT_SIZE_MB << 20),
-					adev->mc.mc_vram_size);
-	else
-		adev->mc.gtt_size = (uint64_t)amdgpu_gart_size << 20;
-
+	amdgpu_gart_set_defaults(adev);
 	gmc_v9_0_vram_gtt_location(adev, &adev->mc);
 
 	return 0;
@@ -537,10 +529,20 @@ static int gmc_v9_0_sw_init(void *handle)
 
 	spin_lock_init(&adev->mc.invalidate_lock);
 
-	if (adev->flags & AMD_IS_APU) {
+	switch (adev->asic_type) {
+	case CHIP_RAVEN:
 		adev->mc.vram_type = AMDGPU_VRAM_TYPE_UNKNOWN;
-		amdgpu_vm_adjust_size(adev, 64);
-	} else {
+		if (adev->rev_id == 0x0 || adev->rev_id == 0x1) {
+			adev->vm_manager.vm_size = 1U << 18;
+			adev->vm_manager.block_size = 9;
+			adev->vm_manager.num_level = 3;
+		} else {
+			/* vm_size is 64GB for legacy 2-level page support*/
+			amdgpu_vm_adjust_size(adev, 64);
+			adev->vm_manager.num_level = 1;
+		}
+		break;
+	case CHIP_VEGA10:
 		/* XXX Don't know how to get VRAM type yet. */
 		adev->mc.vram_type = AMDGPU_VRAM_TYPE_HBM;
 		/*
@@ -550,10 +552,15 @@ static int gmc_v9_0_sw_init(void *handle)
 		 */
 		adev->vm_manager.vm_size = 1U << 18;
 		adev->vm_manager.block_size = 9;
-		DRM_INFO("vm size is %llu GB, block size is %u-bit\n",
-				adev->vm_manager.vm_size,
-				adev->vm_manager.block_size);
+		adev->vm_manager.num_level = 3;
+		break;
+	default:
+		break;
 	}
+
+	DRM_INFO("vm size is %llu GB, block size is %u-bit\n",
+			adev->vm_manager.vm_size,
+			adev->vm_manager.block_size);
 
 	/* This interrupt is VMC page fault.*/
 	r = amdgpu_irq_add_id(adev, AMDGPU_IH_CLIENTID_VMC, 0,
@@ -619,11 +626,6 @@ static int gmc_v9_0_sw_init(void *handle)
 	adev->vm_manager.id_mgr[AMDGPU_GFXHUB].num_ids = AMDGPU_NUM_OF_VMIDS;
 	adev->vm_manager.id_mgr[AMDGPU_MMHUB].num_ids = AMDGPU_NUM_OF_VMIDS;
 
-	/* TODO: fix num_level for APU when updating vm size and block size */
-	if (adev->flags & AMD_IS_APU)
-		adev->vm_manager.num_level = 1;
-	else
-		adev->vm_manager.num_level = 3;
 	amdgpu_vm_manager_init(adev);
 
 	return 0;
