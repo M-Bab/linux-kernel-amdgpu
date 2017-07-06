@@ -34,10 +34,8 @@ static inline void __tlbiel_pid(unsigned long pid, int set,
 	prs = 1; /* process scoped */
 	r = 1;   /* raidx format */
 
-	asm volatile("ptesync": : :"memory");
 	asm volatile(PPC_TLBIEL(%0, %4, %3, %2, %1)
 		     : : "r"(rb), "i"(r), "i"(prs), "i"(ric), "r"(rs) : "memory");
-	asm volatile("ptesync": : :"memory");
 }
 
 /*
@@ -47,9 +45,11 @@ static inline void _tlbiel_pid(unsigned long pid, unsigned long ric)
 {
 	int set;
 
+	asm volatile("ptesync": : :"memory");
 	for (set = 0; set < POWER9_TLB_SETS_RADIX ; set++) {
 		__tlbiel_pid(pid, set, ric);
 	}
+	asm volatile("ptesync": : :"memory");
 	asm volatile(PPC_INVALIDATE_ERAT "; isync" : : :"memory");
 }
 
@@ -129,6 +129,12 @@ void radix__local_flush_tlb_pwc(struct mmu_gather *tlb, unsigned long addr)
 {
 	unsigned long pid;
 	struct mm_struct *mm = tlb->mm;
+	/*
+	 * If we are doing a full mm flush, we will do a tlb flush
+	 * with RIC_FLUSH_ALL later.
+	 */
+	if (tlb->fullmm)
+		return;
 
 	preempt_disable();
 
@@ -195,6 +201,12 @@ void radix__flush_tlb_pwc(struct mmu_gather *tlb, unsigned long addr)
 	unsigned long pid;
 	struct mm_struct *mm = tlb->mm;
 
+	/*
+	 * If we are doing a full mm flush, we will do a tlb flush
+	 * with RIC_FLUSH_ALL later.
+	 */
+	if (tlb->fullmm)
+		return;
 	preempt_disable();
 
 	pid = mm->context.id;

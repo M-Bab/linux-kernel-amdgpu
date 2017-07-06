@@ -24,14 +24,20 @@
 #include "internals.h"
 
 #ifdef CONFIG_IRQ_FORCED_THREADING
-__read_mostly bool force_irqthreads;
+__read_mostly bool force_irqthreads = IS_ENABLED(CONFIG_IRQ_FORCED_THREADING_DEFAULT);
 
 static int __init setup_forced_irqthreads(char *arg)
 {
 	force_irqthreads = true;
 	return 0;
 }
+static int __init setup_no_irqthreads(char *arg)
+{
+	force_irqthreads = false;
+	return 0;
+}
 early_param("threadirqs", setup_forced_irqthreads);
+early_param("nothreadirqs", setup_no_irqthreads);
 #endif
 
 static void __synchronize_hardirq(struct irq_desc *desc)
@@ -1310,8 +1316,10 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 			ret = __irq_set_trigger(desc,
 						new->flags & IRQF_TRIGGER_MASK);
 
-			if (ret)
+			if (ret) {
+				irq_release_resources(desc);
 				goto out_mask;
+			}
 		}
 
 		desc->istate &= ~(IRQS_AUTODETECT | IRQS_SPURIOUS_DISABLED | \

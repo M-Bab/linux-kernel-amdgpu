@@ -62,6 +62,10 @@ module_param(default_ps_max_latency_us, ulong, 0644);
 MODULE_PARM_DESC(default_ps_max_latency_us,
 		 "max power saving latency for new devices; use PM QOS to change per device");
 
+static bool force_apst;
+module_param(force_apst, bool, 0644);
+MODULE_PARM_DESC(force_apst, "allow APST for newly enumerated devices even if quirked off");
+
 static LIST_HEAD(nvme_ctrl_list);
 static DEFINE_SPINLOCK(dev_list_lock);
 
@@ -1278,6 +1282,8 @@ static void nvme_configure_apst(struct nvme_ctrl *ctrl)
 
 	unsigned apste;
 	struct nvme_feat_auto_pst *table;
+	u64 max_lat_us = 0;
+	int max_ps = -1;
 	int ret;
 
 	/*
@@ -1296,9 +1302,10 @@ static void nvme_configure_apst(struct nvme_ctrl *ctrl)
 	if (!table)
 		return;
 
-	if (ctrl->ps_max_latency_us == 0) {
+	if (!ctrl->apst_enabled || ctrl->ps_max_latency_us == 0) {
 		/* Turn off APST. */
 		apste = 0;
+		dev_dbg(ctrl->device, "APST disabled\n");
 	} else {
 		__le64 target = cpu_to_le64(0);
 		int state;
@@ -1348,9 +1355,22 @@ static void nvme_configure_apst(struct nvme_ctrl *ctrl)
 
 			target = cpu_to_le64((state << 3) |
 					     (transition_ms << 8));
+
+			if (max_ps == -1)
+				max_ps = state;
+
+			if (total_latency_us > max_lat_us)
+				max_lat_us = total_latency_us;
 		}
 
 		apste = 1;
+
+		if (max_ps == -1) {
+			dev_dbg(ctrl->device, "APST enabled but no non-operational states are available\n");
+		} else {
+			dev_dbg(ctrl->device, "APST enabled: max PS = %d, max round-trip latency = %lluus, table = %*phN\n",
+				max_ps, max_lat_us, (int)sizeof(*table), table);
+		}
 	}
 
 	ret = nvme_set_features(ctrl, NVME_FEAT_AUTO_PST, apste,
@@ -1446,7 +1466,7 @@ int nvme_init_identify(struct nvme_ctrl *ctrl)
 	u64 cap;
 	int ret, page_shift;
 	u32 max_hw_sectors;
-	u8 prev_apsta;
+	bool prev_apst_enabled;
 
 	ret = ctrl->ops->reg_read32(ctrl, NVME_REG_VS, &ctrl->vs);
 	if (ret) {
@@ -1488,6 +1508,11 @@ int nvme_init_identify(struct nvme_ctrl *ctrl)
 		}
 	}
 
+	if (force_apst && (ctrl->quirks & NVME_QUIRK_NO_DEEPEST_PS)) {
+		dev_warn(ctrl->dev, "forcibly allowing all power states due to nvme_core.force_apst -- use at your own risk\n");
+		ctrl->quirks &= ~NVME_QUIRK_NO_DEEPEST_PS;
+	}
+
 	ctrl->oacs = le16_to_cpu(id->oacs);
 	ctrl->vid = le16_to_cpu(id->vid);
 	ctrl->oncs = le16_to_cpup(&id->oncs);
@@ -1509,8 +1534,18 @@ int nvme_init_identify(struct nvme_ctrl *ctrl)
 	ctrl->kas = le16_to_cpu(id->kas);
 
 	ctrl->npss = id->npss;
-	prev_apsta = ctrl->apsta;
-	ctrl->apsta = (ctrl->quirks & NVME_QUIRK_NO_APST) ? 0 : id->apsta;
+	ctrl->apsta = id->apsta;
+	prev_apst_enabled = ctrl->apst_enabled;
+	if (ctrl->quirks & NVME_QUIRK_NO_APST) {
+		if (force_apst && id->apsta) {
+			dev_warn(ctrl->device, "forcibly allowing APST due to nvme_core.force_apst -- use at your own risk\n");
+			ctrl->apst_enabled = true;
+		} else {
+			ctrl->apst_enabled = false;
+		}
+	} else {
+		ctrl->apst_enabled = id->apsta;
+	}
 	memcpy(ctrl->psd, id->psd, sizeof(ctrl->psd));
 
 	if (ctrl->ops->is_fabrics) {
@@ -1537,9 +1572,9 @@ int nvme_init_identify(struct nvme_ctrl *ctrl)
 
 	kfree(id);
 
-	if (ctrl->apsta && !prev_apsta)
+	if (ctrl->apst_enabled && !prev_apst_enabled)
 		dev_pm_qos_expose_latency_tolerance(ctrl->device);
-	else if (!ctrl->apsta && prev_apsta)
+	else if (!ctrl->apst_enabled && prev_apst_enabled)
 		dev_pm_qos_hide_latency_tolerance(ctrl->device);
 
 	nvme_configure_apst(ctrl);
@@ -2006,7 +2041,6 @@ static void nvme_ns_remove(struct nvme_ns *ns)
 		if (ns->ndev)
 			nvme_nvm_unregister_sysfs(ns);
 		del_gendisk(ns->disk);
-		blk_mq_abort_requeue_list(ns->queue);
 		blk_cleanup_queue(ns->queue);
 	}
 
@@ -2344,8 +2378,16 @@ void nvme_kill_queues(struct nvme_ctrl *ctrl)
 			continue;
 		revalidate_disk(ns->disk);
 		blk_set_queue_dying(ns->queue);
-		blk_mq_abort_requeue_list(ns->queue);
-		blk_mq_start_stopped_hw_queues(ns->queue, true);
+
+		/*
+		 * Forcibly start all queues to avoid having stuck requests.
+		 * Note that we must ensure the queues are not stopped
+		 * when the final removal happens.
+		 */
+		blk_mq_start_hw_queues(ns->queue);
+
+		/* draining requests in requeue list */
+		blk_mq_kick_requeue_list(ns->queue);
 	}
 	mutex_unlock(&ctrl->namespaces_mutex);
 }

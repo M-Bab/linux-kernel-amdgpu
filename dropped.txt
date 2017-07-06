@@ -1,0 +1,8 @@
+This is the list of patches/features which have been temporarily
+reverted or disabled for AA:
+
+All apparmor patches
+
+Possibly no longer needed:
+ UBUNTU: SAUCE: nbd: Only delay uevent until connected
+

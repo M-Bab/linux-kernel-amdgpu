@@ -116,6 +116,9 @@ static ssize_t proc_bus_pci_write(struct file *file, const char __user *buf,
 	int size = dev->cfg_size;
 	int cnt;
 
+	if (kernel_is_locked_down())
+		return -EPERM;
+
 	if (pos >= size)
 		return 0;
 	if (nbytes >= size)
@@ -195,6 +198,9 @@ static long proc_bus_pci_ioctl(struct file *file, unsigned int cmd,
 #endif /* HAVE_PCI_MMAP */
 	int ret = 0;
 
+	if (kernel_is_locked_down())
+		return -EPERM;
+
 	switch (cmd) {
 	case PCIIOC_CONTROLLER:
 		ret = pci_domain_nr(dev->bus);
@@ -231,24 +237,33 @@ static int proc_bus_pci_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct pci_dev *dev = PDE_DATA(file_inode(file));
 	struct pci_filp_private *fpriv = file->private_data;
-	int i, ret, write_combine;
+	int i, ret, write_combine = 0, res_bit;
 
-	if (!capable(CAP_SYS_RAWIO))
+	if (!capable(CAP_SYS_RAWIO) || kernel_is_locked_down())
 		return -EPERM;
+
+	if (fpriv->mmap_state == pci_mmap_io)
+		res_bit = IORESOURCE_IO;
+	else
+		res_bit = IORESOURCE_MEM;
 
 	/* Make sure the caller is mapping a real resource for this device */
 	for (i = 0; i < PCI_ROM_RESOURCE; i++) {
-		if (pci_mmap_fits(dev, i, vma,  PCI_MMAP_PROCFS))
+		if (dev->resource[i].flags & res_bit &&
+		    pci_mmap_fits(dev, i, vma,  PCI_MMAP_PROCFS))
 			break;
 	}
 
 	if (i >= PCI_ROM_RESOURCE)
 		return -ENODEV;
 
-	if (fpriv->mmap_state == pci_mmap_mem)
-		write_combine = fpriv->write_combine;
-	else
-		write_combine = 0;
+	if (fpriv->mmap_state == pci_mmap_mem &&
+	    fpriv->write_combine) {
+		if (dev->resource[i].flags & IORESOURCE_PREFETCH)
+			write_combine = 1;
+		else
+			return -EINVAL;
+	}
 	ret = pci_mmap_page_range(dev, vma,
 				  fpriv->mmap_state, write_combine);
 	if (ret < 0)

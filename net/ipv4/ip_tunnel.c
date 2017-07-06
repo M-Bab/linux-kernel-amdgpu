@@ -961,7 +961,6 @@ static void ip_tunnel_dev_free(struct net_device *dev)
 	gro_cells_destroy(&tunnel->gro_cells);
 	dst_cache_destroy(&tunnel->dst_cache);
 	free_percpu(dev->tstats);
-	free_netdev(dev);
 }
 
 void ip_tunnel_dellink(struct net_device *dev, struct list_head *head)
@@ -1113,7 +1112,7 @@ int ip_tunnel_changelink(struct net_device *dev, struct nlattr *tb[],
 	struct ip_tunnel_net *itn = net_generic(net, tunnel->ip_tnl_net_id);
 
 	if (dev == itn->fb_tunnel_dev)
-		return -EINVAL;
+		return fan_has_map(&tunnel->fan) ? 0 : -EINVAL;
 
 	t = ip_tunnel_find(itn, p, dev->type);
 
@@ -1148,7 +1147,8 @@ int ip_tunnel_init(struct net_device *dev)
 	struct iphdr *iph = &tunnel->parms.iph;
 	int err;
 
-	dev->destructor	= ip_tunnel_dev_free;
+	dev->needs_free_netdev = true;
+	dev->priv_destructor = ip_tunnel_dev_free;
 	dev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
 	if (!dev->tstats)
 		return -ENOMEM;

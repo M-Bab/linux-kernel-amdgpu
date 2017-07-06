@@ -72,6 +72,7 @@ enum {
 	PCI_PROTOCOL_VERSION_CURRENT = PCI_PROTOCOL_VERSION_1_1
 };
 
+#define CPU_AFFINITY_ALL	-1ULL
 #define PCI_CONFIG_MMIO_LENGTH	0x2000
 #define CFG_PAGE_OFFSET 0x1000
 #define CFG_PAGE_SIZE (PCI_CONFIG_MMIO_LENGTH - CFG_PAGE_OFFSET)
@@ -876,7 +877,7 @@ static void hv_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 		hv_int_desc_free(hpdev, int_desc);
 	}
 
-	int_desc = kzalloc(sizeof(*int_desc), GFP_KERNEL);
+	int_desc = kzalloc(sizeof(*int_desc), GFP_ATOMIC);
 	if (!int_desc)
 		goto drop_reference;
 
@@ -897,9 +898,13 @@ static void hv_compose_msi_msg(struct irq_data *data, struct msi_msg *msg)
 	 * processors because Hyper-V only supports 64 in a guest.
 	 */
 	affinity = irq_data_get_affinity_mask(data);
-	for_each_cpu_and(cpu, affinity, cpu_online_mask) {
-		int_pkt->int_desc.cpu_mask |=
-			(1ULL << vmbus_cpu_number_to_vp_number(cpu));
+	if (cpumask_weight(affinity) >= 32) {
+		int_pkt->int_desc.cpu_mask = CPU_AFFINITY_ALL;
+	} else {
+		for_each_cpu_and(cpu, affinity, cpu_online_mask) {
+			int_pkt->int_desc.cpu_mask |=
+				(1ULL << vmbus_cpu_number_to_vp_number(cpu));
+		}
 	}
 
 	ret = vmbus_sendpacket(hpdev->hbus->hdev->channel, int_pkt,
@@ -1326,9 +1331,11 @@ static struct hv_pci_dev *new_pcichild_device(struct hv_pcibus_device *hbus,
 	 * can have shorter names than based on the bus instance UUID.
 	 * Only the first device serial number is used for domain, so the
 	 * domain number will not change after the first device is added.
+	 * The lower 16 bits of the serial number is used, otherwise some
+	 * drivers may not be able to handle it.
 	 */
 	if (list_empty(&hbus->children))
-		hbus->sysdata.domain = desc->ser;
+		hbus->sysdata.domain = desc->ser & 0xFFFF;
 	list_add_tail(&hpdev->list_entry, &hbus->children);
 	spin_unlock_irqrestore(&hbus->device_list_lock, flags);
 	return hpdev;

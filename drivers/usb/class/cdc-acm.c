@@ -323,6 +323,12 @@ static void acm_ctrl_irq(struct urb *urb)
 		break;
 
 	case USB_CDC_NOTIFY_SERIAL_STATE:
+		if (le16_to_cpu(dr->wLength) != 2) {
+			dev_dbg(&acm->control->dev,
+				"%s - malformed serial state\n", __func__);
+			break;
+		}
+
 		newctrl = get_unaligned_le16(data);
 
 		if (!acm->clocal && (acm->ctrlin & ~newctrl & ACM_CTRL_DCD)) {
@@ -359,11 +365,10 @@ static void acm_ctrl_irq(struct urb *urb)
 
 	default:
 		dev_dbg(&acm->control->dev,
-			"%s - unknown notification %d received: index %d "
-			"len %d data0 %d data1 %d\n",
+			"%s - unknown notification %d received: index %d len %d\n",
 			__func__,
-			dr->bNotificationType, dr->wIndex,
-			dr->wLength, data[0], data[1]);
+			dr->bNotificationType, dr->wIndex, dr->wLength);
+
 		break;
 	}
 exit:
@@ -1875,6 +1880,20 @@ static const struct usb_device_id acm_ids[] = {
 	{ USB_DEVICE(0x058b, 0x0041),
 	.driver_info = IGNORE_DEVICE,
 	},
+
+	/* Exclude Exar USB serial ports */
+	{ USB_DEVICE(0x04e2, 0x1400), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1401), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1402), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1403), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1410), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1411), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1412), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1414), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1420), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1421), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1422), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1424), .driver_info = IGNORE_DEVICE, },
 
 	/* control interfaces without any protocol set */
 	{ USB_INTERFACE_INFO(USB_CLASS_COMM, USB_CDC_SUBCLASS_ACM,

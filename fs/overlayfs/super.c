@@ -832,6 +832,9 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 
 		sb->s_time_gran = ufs->upper_mnt->mnt_sb->s_time_gran;
 
+		if (ufs->upper_mnt->mnt_flags & MNT_NOSUID)
+			sb->s_iflags |= SB_I_NOSUID;
+
 		ufs->workdir = ovl_workdir_create(ufs->upper_mnt, workpath.dentry);
 		err = PTR_ERR(ufs->workdir);
 		if (IS_ERR(ufs->workdir)) {
@@ -889,6 +892,9 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 		 * will fail instead of modifying lower fs.
 		 */
 		mnt->mnt_flags |= MNT_READONLY | MNT_NOATIME;
+
+		if (mnt->mnt_flags & MNT_NOSUID)
+			sb->s_iflags |= SB_I_NOSUID;
 
 		ufs->lower_mnt[ufs->numlower] = mnt;
 		ufs->numlower++;
@@ -989,6 +995,7 @@ static struct file_system_type ovl_fs_type = {
 	.name		= "overlay",
 	.mount		= ovl_mount,
 	.kill_sb	= kill_anon_super,
+	.fs_flags	= FS_USERNS_MOUNT,
 };
 MODULE_ALIAS_FS("overlay");
 
