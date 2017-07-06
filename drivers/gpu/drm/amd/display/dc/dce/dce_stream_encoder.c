@@ -898,7 +898,9 @@ static void dce110_stream_encoder_dp_blank(
 	struct stream_encoder *enc)
 {
 	struct dce110_stream_encoder *enc110 = DCE110STRENC_FROM_STRENC(enc);
+#if defined(CONFIG_DEBUG_KERNEL) || defined(CONFIG_DEBUG_DRIVER)
 	uint32_t retries = 0;
+#endif
 	uint32_t max_retries = DP_BLANK_MAX_RETRY * 10;
 
 	/* Note: For CZ, we are changing driver default to disable
