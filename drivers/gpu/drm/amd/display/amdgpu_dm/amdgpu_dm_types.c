@@ -1469,8 +1469,7 @@ int amdgpu_dm_connector_mode_valid(
 
 	if (context) {
 		result = MODE_OK;
-		dc_resource_validate_ctx_destruct(context);
-		dm_free(context);
+		dc_release_validate_context(context);
 	}
 
 	dc_stream_release(stream);
@@ -2766,8 +2765,8 @@ void amdgpu_dm_atomic_commit_tail(
 		}
 	}
 
-	/* DC is optimized not to do anything if 'streams' didn't change. */
-	WARN_ON(!dc_commit_context(dm->dc, dm_state->context));
+	if (dm_state->context)
+		WARN_ON(!dc_commit_context(dm->dc, dm_state->context));
 
 
 	list_for_each_entry(crtc, &dev->mode_config.crtc_list, head) {
@@ -3100,9 +3099,9 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 
 	/*
 	 * This bool will be set for true for any modeset/reset
-	 * or surface update which implies non fast surfae update.
+	 * or surface update which implies non fast surface update.
 	 */
-	bool aquire_global_lock = false;
+	bool lock_and_validation_needed = false;
 
 	ret = drm_atomic_helper_check(dev, state);
 
@@ -3190,7 +3189,7 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 					new_acrtc_state->stream,
 					crtc);
 
-			aquire_global_lock = true;
+			lock_and_validation_needed = true;
 
 		} else if (modereset_required(crtc_state)) {
 
@@ -3204,7 +3203,7 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 				dc_stream_release(new_acrtc_state->stream);
 				new_acrtc_state->stream = NULL;
 
-				aquire_global_lock = true;
+				lock_and_validation_needed = true;
 			}
 		}
 
@@ -3242,7 +3241,7 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 		if (!is_scaling_state_different(con_new_state, con_old_state))
 			continue;
 
-		aquire_global_lock = true;
+		lock_and_validation_needed = true;
 	}
 
 	for_each_crtc_in_state(state, crtc, crtc_state, i) {
@@ -3292,15 +3291,9 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 						     new_acrtc_state->stream,
 						     surface);
 
-				aquire_global_lock = true;
+				lock_and_validation_needed = true;
 			}
 		}
-	}
-
-	dm_state->context = dc_get_validate_context(dc, set, set_count);
-	if (!dm_state->context) {
-		ret = -EINVAL;
-		goto fail_planes;
 	}
 
 	/*
@@ -3312,10 +3305,18 @@ int amdgpu_dm_atomic_check(struct drm_device *dev,
 	 * will wait for completion of any outstanding flip using DRMs
 	 * synchronization events.
 	 */
-	if (aquire_global_lock) {
+
+	if (lock_and_validation_needed) {
+
 		ret = do_aquire_global_lock(dev, state);
 		if (ret)
 			goto fail_planes;
+
+		dm_state->context = dc_get_validate_context(dc, set, set_count);
+		if (!dm_state->context) {
+			ret = -EINVAL;
+			goto fail_planes;
+		}
 	}
 
 	/* Must be success */
