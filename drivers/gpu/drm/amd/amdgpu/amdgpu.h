@@ -69,13 +69,16 @@
 
 #include "gpu_scheduler.h"
 #include "amdgpu_virt.h"
+#include "amdgpu_gart.h"
 
 /*
  * Modules parameters.
  */
 extern int amdgpu_modeset;
 extern int amdgpu_vram_limit;
-extern int amdgpu_gart_size;
+extern int amdgpu_vis_vram_limit;
+extern unsigned amdgpu_gart_size;
+extern int amdgpu_gtt_size;
 extern int amdgpu_moverate;
 extern int amdgpu_benchmarking;
 extern int amdgpu_testing;
@@ -106,6 +109,7 @@ extern unsigned amdgpu_pcie_gen_cap;
 extern unsigned amdgpu_pcie_lane_cap;
 extern unsigned amdgpu_cg_mask;
 extern unsigned amdgpu_pg_mask;
+extern unsigned amdgpu_sdma_phase_quantum;
 extern char *amdgpu_disable_cu;
 extern char *amdgpu_virtual_display;
 extern unsigned amdgpu_pp_feature_mask;
@@ -534,50 +538,6 @@ int amdgpu_fence_slab_init(void);
 void amdgpu_fence_slab_fini(void);
 
 /*
- * GART structures, functions & helpers
- */
-struct amdgpu_mc;
-
-#define AMDGPU_GPU_PAGE_SIZE 4096
-#define AMDGPU_GPU_PAGE_MASK (AMDGPU_GPU_PAGE_SIZE - 1)
-#define AMDGPU_GPU_PAGE_SHIFT 12
-#define AMDGPU_GPU_PAGE_ALIGN(a) (((a) + AMDGPU_GPU_PAGE_MASK) & ~AMDGPU_GPU_PAGE_MASK)
-
-struct amdgpu_gart {
-	dma_addr_t			table_addr;
-	struct amdgpu_bo		*robj;
-	void				*ptr;
-	unsigned			num_gpu_pages;
-	unsigned			num_cpu_pages;
-	unsigned			table_size;
-#ifdef CONFIG_DRM_AMDGPU_GART_DEBUGFS
-	struct page			**pages;
-#endif
-	bool				ready;
-
-	/* Asic default pte flags */
-	uint64_t			gart_pte_flags;
-
-	const struct amdgpu_gart_funcs *gart_funcs;
-};
-
-void amdgpu_gart_set_defaults(struct amdgpu_device *adev);
-int amdgpu_gart_table_ram_alloc(struct amdgpu_device *adev);
-void amdgpu_gart_table_ram_free(struct amdgpu_device *adev);
-int amdgpu_gart_table_vram_alloc(struct amdgpu_device *adev);
-void amdgpu_gart_table_vram_free(struct amdgpu_device *adev);
-int amdgpu_gart_table_vram_pin(struct amdgpu_device *adev);
-void amdgpu_gart_table_vram_unpin(struct amdgpu_device *adev);
-int amdgpu_gart_init(struct amdgpu_device *adev);
-void amdgpu_gart_fini(struct amdgpu_device *adev);
-int amdgpu_gart_unbind(struct amdgpu_device *adev, uint64_t offset,
-			int pages);
-int amdgpu_gart_bind(struct amdgpu_device *adev, uint64_t offset,
-		     int pages, struct page **pagelist,
-		     dma_addr_t *dma_addr, uint64_t flags);
-int amdgpu_ttm_recover_gart(struct amdgpu_device *adev);
-
-/*
  * VMHUB structures, functions & helpers
  */
 struct amdgpu_vmhub {
@@ -601,15 +561,14 @@ struct amdgpu_mc {
 	 * about vram size near mc fb location */
 	u64			mc_vram_size;
 	u64			visible_vram_size;
-	u64			gtt_size;
-	u64			gtt_start;
-	u64			gtt_end;
+	u64			gart_size;
+	u64			gart_start;
+	u64			gart_end;
 	u64			vram_start;
 	u64			vram_end;
 	unsigned		vram_width;
 	u64			real_vram_size;
 	int			vram_mtrr;
-	u64                     gtt_base_align;
 	u64                     mc_mask;
 	const struct firmware   *fw;	/* MC firmware */
 	uint32_t                fw_version;
@@ -1161,7 +1120,9 @@ struct amdgpu_cs_parser {
 	struct list_head		validated;
 	struct dma_fence		*fence;
 	uint64_t			bytes_moved_threshold;
+	uint64_t			bytes_moved_vis_threshold;
 	uint64_t			bytes_moved;
+	uint64_t			bytes_moved_vis;
 	struct amdgpu_bo_list_entry	*evictable;
 
 	/* user fence */
@@ -1559,6 +1520,10 @@ struct amdgpu_device {
 	spinlock_t gc_cac_idx_lock;
 	amdgpu_rreg_t			gc_cac_rreg;
 	amdgpu_wreg_t			gc_cac_wreg;
+	/* protects concurrent se_cac register access */
+	spinlock_t se_cac_idx_lock;
+	amdgpu_rreg_t			se_cac_rreg;
+	amdgpu_wreg_t			se_cac_wreg;
 	/* protects concurrent ENDPOINT (audio) register access */
 	spinlock_t audio_endpt_idx_lock;
 	amdgpu_block_rreg_t		audio_endpt_rreg;
@@ -1595,6 +1560,7 @@ struct amdgpu_device {
 		spinlock_t		lock;
 		s64			last_update_us;
 		s64			accum_us; /* accumulated microseconds */
+		s64			accum_us_vis; /* for visible VRAM */
 		u32			log2_max_MBps;
 	} mm_stats;
 
@@ -1753,6 +1719,8 @@ bool amdgpu_device_has_dc_support(struct amdgpu_device *adev);
 #define WREG32_DIDT(reg, v) adev->didt_wreg(adev, (reg), (v))
 #define RREG32_GC_CAC(reg) adev->gc_cac_rreg(adev, (reg))
 #define WREG32_GC_CAC(reg, v) adev->gc_cac_wreg(adev, (reg), (v))
+#define RREG32_SE_CAC(reg) adev->se_cac_rreg(adev, (reg))
+#define WREG32_SE_CAC(reg, v) adev->se_cac_wreg(adev, (reg), (v))
 #define RREG32_AUDIO_ENDPT(block, reg) adev->audio_endpt_rreg(adev, (block), (reg))
 #define WREG32_AUDIO_ENDPT(block, reg, v) adev->audio_endpt_wreg(adev, (block), (reg), (v))
 #define WREG32_P(reg, val, mask)				\
@@ -1891,7 +1859,8 @@ void amdgpu_pci_config_reset(struct amdgpu_device *adev);
 bool amdgpu_need_post(struct amdgpu_device *adev);
 void amdgpu_update_display_priority(struct amdgpu_device *adev);
 
-void amdgpu_cs_report_moved_bytes(struct amdgpu_device *adev, u64 num_bytes);
+void amdgpu_cs_report_moved_bytes(struct amdgpu_device *adev, u64 num_bytes,
+				  u64 num_vis_bytes);
 void amdgpu_ttm_placement_from_domain(struct amdgpu_bo *abo, u32 domain);
 bool amdgpu_ttm_bo_is_amdgpu_bo(struct ttm_buffer_object *bo);
 int amdgpu_ttm_tt_get_user_pages(struct ttm_tt *ttm, struct page **pages);
@@ -1907,7 +1876,7 @@ bool amdgpu_ttm_tt_is_readonly(struct ttm_tt *ttm);
 uint64_t amdgpu_ttm_tt_pte_flags(struct amdgpu_device *adev, struct ttm_tt *ttm,
 				 struct ttm_mem_reg *mem);
 void amdgpu_vram_location(struct amdgpu_device *adev, struct amdgpu_mc *mc, u64 base);
-void amdgpu_gtt_location(struct amdgpu_device *adev, struct amdgpu_mc *mc);
+void amdgpu_gart_location(struct amdgpu_device *adev, struct amdgpu_mc *mc);
 void amdgpu_ttm_set_active_vram_size(struct amdgpu_device *adev, u64 size);
 int amdgpu_ttm_init(struct amdgpu_device *adev);
 void amdgpu_ttm_fini(struct amdgpu_device *adev);
