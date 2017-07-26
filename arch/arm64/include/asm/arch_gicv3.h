@@ -20,16 +20,24 @@
 
 #include <asm/sysreg.h>
 
+#define ICC_IAR0_EL1			sys_reg(3, 0, 12, 8, 0)
+#define ICC_EOIR0_EL1			sys_reg(3, 0, 12, 8, 1)
+#define ICC_HPPIR0_EL1			sys_reg(3, 0, 12, 8, 2)
+#define ICC_BPR0_EL1			sys_reg(3, 0, 12, 8, 3)
+#define ICC_AP0Rn_EL1(n)		sys_reg(3, 0, 12, 8, 4 | n)
+#define ICC_AP1Rn_EL1(n)		sys_reg(3, 0, 12, 9, n)
 #define ICC_EOIR1_EL1			sys_reg(3, 0, 12, 12, 1)
 #define ICC_DIR_EL1			sys_reg(3, 0, 12, 11, 1)
+#define ICC_RPR_EL1			sys_reg(3, 0, 12, 11, 3)
 #define ICC_IAR1_EL1			sys_reg(3, 0, 12, 12, 0)
 #define ICC_SGI1R_EL1			sys_reg(3, 0, 12, 11, 5)
 #define ICC_PMR_EL1			sys_reg(3, 0, 4, 6, 0)
 #define ICC_CTLR_EL1			sys_reg(3, 0, 12, 12, 4)
 #define ICC_SRE_EL1			sys_reg(3, 0, 12, 12, 5)
+#define ICC_GRPEN0_EL1			sys_reg(3, 0, 12, 12, 6)
 #define ICC_GRPEN1_EL1			sys_reg(3, 0, 12, 12, 7)
 #define ICC_BPR1_EL1			sys_reg(3, 0, 12, 12, 3)
-
+#define ICC_HPPIR1_EL1			sys_reg(3, 0, 12, 12, 2)
 #define ICC_SRE_EL2			sys_reg(3, 4, 12, 9, 5)
 
 /*
