@@ -33,6 +33,10 @@
 #include "dce110_timing_generator.h"
 #include "dce/dce_hwseq.h"
 
+#ifdef ENABLE_FBC
+#include "dce110_compressor.h"
+#endif
+
 #include "bios/bios_parser_helper.h"
 #include "timing_generator.h"
 #include "mem_input.h"
@@ -238,7 +242,7 @@ static bool dce110_set_input_transfer_func(
 	const struct core_surface *surface)
 {
 	struct input_pixel_processor *ipp = pipe_ctx->ipp;
-	const struct core_transfer_func *tf = NULL;
+	const struct dc_transfer_func *tf = NULL;
 	struct ipp_prescale_params prescale_params = { 0 };
 	bool result = true;
 
@@ -246,7 +250,7 @@ static bool dce110_set_input_transfer_func(
 		return false;
 
 	if (surface->public.in_transfer_func)
-		tf = DC_TRANSFER_FUNC_TO_CORE(surface->public.in_transfer_func);
+		tf = surface->public.in_transfer_func;
 
 	build_prescale_params(&prescale_params, surface);
 	ipp->funcs->ipp_program_prescale(ipp, &prescale_params);
@@ -258,8 +262,8 @@ static bool dce110_set_input_transfer_func(
 		/* Default case if no input transfer function specified */
 		ipp->funcs->ipp_set_degamma(ipp,
 				IPP_DEGAMMA_MODE_HW_sRGB);
-	} else if (tf->public.type == TF_TYPE_PREDEFINED) {
-		switch (tf->public.tf) {
+	} else if (tf->type == TF_TYPE_PREDEFINED) {
+		switch (tf->tf) {
 		case TRANSFER_FUNCTION_SRGB:
 			ipp->funcs->ipp_set_degamma(ipp,
 					IPP_DEGAMMA_MODE_HW_sRGB);
@@ -279,7 +283,7 @@ static bool dce110_set_input_transfer_func(
 			result = false;
 			break;
 		}
-	} else if (tf->public.type == TF_TYPE_BYPASS) {
+	} else if (tf->type == TF_TYPE_BYPASS) {
 		ipp->funcs->ipp_set_degamma(ipp, IPP_DEGAMMA_MODE_BYPASS);
 	} else {
 		/*TF_TYPE_DISTRIBUTED_POINTS - Not supported in DCE 11*/
@@ -797,6 +801,13 @@ void dce110_unblank_stream(struct pipe_ctx *pipe_ctx,
 	pipe_ctx->stream_enc->funcs->dp_unblank(pipe_ctx->stream_enc, &params);
 }
 
+
+void dce110_set_avmute(struct pipe_ctx *pipe_ctx, bool enable)
+{
+	if (pipe_ctx != NULL && pipe_ctx->stream_enc != NULL)
+		pipe_ctx->stream_enc->funcs->set_avmute(pipe_ctx->stream_enc, enable);
+}
+
 static enum audio_dto_source translate_to_dto_source(enum controller_id crtc_id)
 {
 	switch (crtc_id) {
@@ -912,10 +923,14 @@ static void get_surface_visual_confirm_color(const struct pipe_ctx *pipe_ctx,
 		/* set boarder color to blue */
 		color->color_b_cb = color_value;
 		break;
-	case PIXEL_FORMAT_420BPP12:
-	case PIXEL_FORMAT_420BPP15:
+	case PIXEL_FORMAT_420BPP8:
 		/* set boarder color to green */
 		color->color_g_y = color_value;
+		break;
+	case PIXEL_FORMAT_420BPP10:
+		/* set boarder color to yellow */
+		color->color_g_y = color_value;
+		color->color_r_cr = color_value;
 		break;
 	case PIXEL_FORMAT_FP16:
 		/* set boarder color to white */
@@ -1087,10 +1102,11 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 			(pipe_ctx->stream->signal == SIGNAL_TYPE_DVI_DUAL_LINK) ?
 			true : false);
 
+	resource_build_info_frame(pipe_ctx);
+
 	if (!pipe_ctx_old->stream) {
 		core_link_enable_stream(pipe_ctx);
 
-	resource_build_info_frame(pipe_ctx);
 	dce110_update_info_frame(pipe_ctx);
 		if (dc_is_dp_signal(pipe_ctx->stream->signal))
 			dce110_unblank_stream(pipe_ctx,
@@ -1166,6 +1182,10 @@ static void power_down_all_hw_blocks(struct core_dc *dc)
 	power_down_controllers(dc);
 
 	power_down_clock_sources(dc);
+
+#ifdef ENABLE_FBC
+	dc->fbc_compressor->funcs->disable_fbc(dc->fbc_compressor);
+#endif
 }
 
 static void disable_vga_and_power_gate_all_controllers(
@@ -1185,8 +1205,7 @@ static void disable_vga_and_power_gate_all_controllers(
 		enable_display_pipe_clock_gating(ctx,
 				true);
 
-		dc->hwss.power_down_front_end(
-			dc, &dc->current_context->res_ctx.pipe_ctx[i]);
+		dc->hwss.power_down_front_end(dc, i);
 	}
 }
 
@@ -1340,7 +1359,7 @@ static void reset_single_pipe_hw_ctx(
 	resource_unreference_clock_source(&context->res_ctx, dc->res_pool,
 			 &pipe_ctx->clock_source);
 
-	dc->hwss.power_down_front_end((struct core_dc *)dc, pipe_ctx);
+	dc->hwss.power_down_front_end((struct core_dc *)dc, pipe_ctx->pipe_idx);
 
 	pipe_ctx->stream = NULL;
 }
@@ -1387,6 +1406,10 @@ static void set_static_screen_control(struct pipe_ctx **pipe_ctx,
 		value |= 0x80;
 	if (events->cursor_update)
 		value |= 0x2;
+
+#ifdef ENABLE_FBC
+	value |= 0x84;
+#endif
 
 	for (i = 0; i < num_pipes; i++)
 		pipe_ctx[i]->tg->funcs->
@@ -1631,6 +1654,10 @@ enum dc_status dce110_apply_ctx_to_hw(
 	}
 
 	set_safe_displaymarks(&context->res_ctx, dc->res_pool);
+
+#ifdef ENABLE_FBC
+	dc->fbc_compressor->funcs->disable_fbc(dc->fbc_compressor);
+#endif
 	/*TODO: when pplib works*/
 	apply_min_clocks(dc, context, &clocks_state, true);
 
@@ -2216,6 +2243,9 @@ static void init_hw(struct core_dc *dc)
 		abm->funcs->init_backlight(abm);
 		abm->funcs->abm_init(abm);
 	}
+#ifdef ENABLE_FBC
+	dc->fbc_compressor->funcs->power_up_fbc(dc->fbc_compressor);
+#endif
 }
 
 void dce110_fill_display_configs(
@@ -2538,17 +2568,17 @@ static void dce110_apply_ctx_for_surface(
 	}
 }
 
-static void dce110_power_down_fe(struct core_dc *dc, struct pipe_ctx *pipe)
+static void dce110_power_down_fe(struct core_dc *dc, int fe_idx)
 {
 	/* Do not power down fe when stream is active on dce*/
-	if (pipe->stream)
+	if (dc->current_context->res_ctx.pipe_ctx[fe_idx].stream)
 		return;
 
 	dc->hwss.enable_display_power_gating(
-		dc, pipe->pipe_idx, dc->ctx->dc_bios, PIPE_GATING_CONTROL_ENABLE);
-	if (pipe->xfm)
-		pipe->xfm->funcs->transform_reset(pipe->xfm);
-	memset(&pipe->scl_data, 0, sizeof(struct scaler_data));
+		dc, fe_idx, dc->ctx->dc_bios, PIPE_GATING_CONTROL_ENABLE);
+
+	dc->res_pool->transforms[fe_idx]->funcs->transform_reset(
+				dc->res_pool->transforms[fe_idx]);
 }
 
 static const struct hw_sequencer_funcs dce110_funcs = {
@@ -2578,7 +2608,8 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.set_static_screen_control = set_static_screen_control,
 	.reset_hw_ctx_wrap = reset_hw_ctx_wrap,
 	.prog_pixclk_crtc_otg = dce110_prog_pixclk_crtc_otg,
-	.setup_stereo = NULL
+	.setup_stereo = NULL,
+	.set_avmute = dce110_set_avmute,
 };
 
 bool dce110_hw_sequencer_construct(struct core_dc *dc)

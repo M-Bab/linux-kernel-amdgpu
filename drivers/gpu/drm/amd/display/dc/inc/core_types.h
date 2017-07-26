@@ -49,9 +49,6 @@ struct core_stream;
 #define DC_GAMMA_TO_CORE(dc_gamma) \
 	container_of(dc_gamma, struct core_gamma, public)
 
-#define DC_TRANSFER_FUNC_TO_CORE(dc_transfer_func) \
-	container_of(dc_transfer_func, struct core_transfer_func, public)
-
 struct core_surface {
 	struct dc_surface public;
 	struct dc_surface_status status;
@@ -60,11 +57,6 @@ struct core_surface {
 
 struct core_gamma {
 	struct dc_gamma public;
-	struct dc_context *ctx;
-};
-
-struct core_transfer_func {
-	struct dc_transfer_func public;
 	struct dc_context *ctx;
 };
 
@@ -187,6 +179,7 @@ void core_link_enable_stream(struct pipe_ctx *pipe_ctx);
 
 void core_link_disable_stream(struct pipe_ctx *pipe_ctx);
 
+void core_link_set_avmute(struct pipe_ctx *pipe_ctx, bool enable);
 /********** DAL Core*********************/
 #include "display_clock.h"
 #include "transform.h"
@@ -369,6 +362,8 @@ struct validate_context {
 #ifdef CONFIG_DRM_AMD_DC_DCN1_0
 	struct dcn_bw_internal_vars dcn_bw_vars;
 #endif
+
+	int ref_count;
 };
 
 #endif /* _CORE_TYPES_H_ */

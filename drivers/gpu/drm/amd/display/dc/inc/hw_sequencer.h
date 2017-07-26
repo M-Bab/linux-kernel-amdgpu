@@ -70,6 +70,11 @@ struct hw_sequencer_funcs {
 	void (*program_gamut_remap)(
 			struct pipe_ctx *pipe_ctx);
 
+	void (*program_csc_matrix)(
+			struct pipe_ctx *pipe_ctx,
+			enum dc_color_space colorspace,
+			uint16_t *matrix);
+
 	void (*update_plane_addr)(
 		const struct core_dc *dc,
 		struct pipe_ctx *pipe_ctx);
@@ -105,7 +110,7 @@ struct hw_sequencer_funcs {
 					struct dc_bios *dcb,
 					enum pipe_gating_control power_gating);
 
-	void (*power_down_front_end)(struct core_dc *dc, struct pipe_ctx *pipe);
+	void (*power_down_front_end)(struct core_dc *dc, int fe_idx);
 
 	void (*power_on_front_end)(struct core_dc *dc,
 			struct pipe_ctx *pipe,
@@ -147,6 +152,8 @@ struct hw_sequencer_funcs {
 	void (*setup_stereo)(
 			struct pipe_ctx *pipe_ctx,
 			struct core_dc *dc);
+
+	void (*set_avmute)(struct pipe_ctx *pipe_ctx, bool enable);
 };
 
 void color_space_to_black_color(

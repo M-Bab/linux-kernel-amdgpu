@@ -399,11 +399,11 @@ static enum pixel_format convert_pixel_format_to_dalsurface(
 		break;
 	case SURFACE_PIXEL_FORMAT_VIDEO_420_YCbCr:
 	case SURFACE_PIXEL_FORMAT_VIDEO_420_YCrCb:
-		dal_pixel_format = PIXEL_FORMAT_420BPP12;
+		dal_pixel_format = PIXEL_FORMAT_420BPP8;
 		break;
 	case SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCbCr:
 	case SURFACE_PIXEL_FORMAT_VIDEO_420_10bpc_YCrCb:
-		dal_pixel_format = PIXEL_FORMAT_420BPP15;
+		dal_pixel_format = PIXEL_FORMAT_420BPP10;
 		break;
 	case SURFACE_PIXEL_FORMAT_GRPH_ARGB16161616:
 	default:
@@ -433,8 +433,8 @@ static void calculate_viewport(struct pipe_ctx *pipe_ctx)
 	struct scaler_data *data = &pipe_ctx->scl_data;
 	struct rect surf_src = surface->src_rect;
 	struct rect clip = { 0 };
-	int vpc_div = (data->format == PIXEL_FORMAT_420BPP12
-			|| data->format == PIXEL_FORMAT_420BPP15) ? 2 : 1;
+	int vpc_div = (data->format == PIXEL_FORMAT_420BPP8
+			|| data->format == PIXEL_FORMAT_420BPP10) ? 2 : 1;
 	bool pri_split = pipe_ctx->bottom_pipe &&
 			pipe_ctx->bottom_pipe->surface == pipe_ctx->surface;
 	bool sec_split = pipe_ctx->top_pipe &&
@@ -626,7 +626,7 @@ static void calculate_scaling_ratios(struct pipe_ctx *pipe_ctx)
 
 	if (stream->public.view_format == VIEW_3D_FORMAT_SIDE_BY_SIDE)
 		pipe_ctx->scl_data.ratios.horz.value *= 2;
-	else if (surface->stereo_format == PLANE_STEREO_FORMAT_TOP_AND_BOTTOM)
+	else if (stream->public.view_format == VIEW_3D_FORMAT_TOP_AND_BOTTOM)
 		pipe_ctx->scl_data.ratios.vert.value *= 2;
 
 	pipe_ctx->scl_data.ratios.vert.value = div64_s64(
@@ -637,8 +637,8 @@ static void calculate_scaling_ratios(struct pipe_ctx *pipe_ctx)
 	pipe_ctx->scl_data.ratios.horz_c = pipe_ctx->scl_data.ratios.horz;
 	pipe_ctx->scl_data.ratios.vert_c = pipe_ctx->scl_data.ratios.vert;
 
-	if (pipe_ctx->scl_data.format == PIXEL_FORMAT_420BPP12
-			|| pipe_ctx->scl_data.format == PIXEL_FORMAT_420BPP15) {
+	if (pipe_ctx->scl_data.format == PIXEL_FORMAT_420BPP8
+			|| pipe_ctx->scl_data.format == PIXEL_FORMAT_420BPP10) {
 		pipe_ctx->scl_data.ratios.horz_c.value /= 2;
 		pipe_ctx->scl_data.ratios.vert_c.value /= 2;
 	}
@@ -648,8 +648,8 @@ static void calculate_inits_and_adj_vp(struct pipe_ctx *pipe_ctx, struct view *r
 {
 	struct scaler_data *data = &pipe_ctx->scl_data;
 	struct rect src = pipe_ctx->surface->public.src_rect;
-	int vpc_div = (data->format == PIXEL_FORMAT_420BPP12
-			|| data->format == PIXEL_FORMAT_420BPP15) ? 2 : 1;
+	int vpc_div = (data->format == PIXEL_FORMAT_420BPP8
+			|| data->format == PIXEL_FORMAT_420BPP10) ? 2 : 1;
 
 
 	if (pipe_ctx->surface->public.rotation == ROTATION_ANGLE_90 ||
@@ -1096,6 +1096,10 @@ bool resource_attach_surfaces_to_context(
 		free_pipe->surface = surface;
 
 		if (tail_pipe) {
+			free_pipe->tg = tail_pipe->tg;
+			free_pipe->stream_enc = tail_pipe->stream_enc;
+			free_pipe->audio = tail_pipe->audio;
+			free_pipe->clock_source = tail_pipe->clock_source;
 			free_pipe->top_pipe = tail_pipe;
 			tail_pipe->bottom_pipe = free_pipe;
 		}
@@ -1603,6 +1607,8 @@ static void set_avi_info_frame(
 	uint8_t *check_sum = NULL;
 	uint8_t byte_index = 0;
 	union hdmi_info_packet *hdmi_info = &info_frame.avi_info_packet.info_packet_hdmi;
+	unsigned int vic = pipe_ctx->stream->public.timing.vic;
+	enum dc_timing_3d_format format;
 
 	color_space = pipe_ctx->stream->public.output_color_space;
 	if (color_space == COLOR_SPACE_UNKNOWN)
@@ -1717,9 +1723,29 @@ static void set_avi_info_frame(
 		hdmi_info->bits.Q0_Q1   = RGB_QUANTIZATION_DEFAULT_RANGE;
 		hdmi_info->bits.YQ0_YQ1 = YYC_QUANTIZATION_LIMITED_RANGE;
 	}
-
-	hdmi_info->bits.VIC0_VIC7 =
-					stream->public.timing.vic;
+	///VIC
+	format = stream->public.timing.timing_3d_format;
+	/*todo, add 3DStereo support*/
+	if (format != TIMING_3D_FORMAT_NONE) {
+		// Based on HDMI specs hdmi vic needs to be converted to cea vic when 3D is enabled
+		switch (pipe_ctx->stream->public.timing.hdmi_vic) {
+		case 1:
+			vic = 95;
+			break;
+		case 2:
+			vic = 94;
+			break;
+		case 3:
+			vic = 93;
+			break;
+		case 4:
+			vic = 98;
+			break;
+		default:
+			break;
+		}
+	}
+	hdmi_info->bits.VIC0_VIC7 = vic;
 
 	/* pixel repetition
 	 * PR0 - PR3 start from 0 whereas pHwPathMode->mode.timing.flags.pixel
@@ -1732,7 +1758,7 @@ static void set_avi_info_frame(
 	 * barLeft:   Pixel Number of End of Left Bar.
 	 * barRight:  Pixel Number of Start of Right Bar. */
 	hdmi_info->bits.bar_top = stream->public.timing.v_border_top;
-	hdmi_info->bits.bar_bottom = (stream->public.timing.v_border_top
+	hdmi_info->bits.bar_bottom = (stream->public.timing.v_total
 			- stream->public.timing.v_border_bottom + 1);
 	hdmi_info->bits.bar_left  = stream->public.timing.h_border_left;
 	hdmi_info->bits.bar_right = (stream->public.timing.h_total
@@ -1771,6 +1797,10 @@ static void set_vendor_info_packet(
 	uint8_t checksum = 0;
 	uint32_t i = 0;
 	enum dc_timing_3d_format format;
+	// Can be different depending on packet content /*todo*/
+	// unsigned int length = pPathMode->dolbyVision ? 24 : 5;
+
+	info_packet->valid = false;
 
 	format = stream->public.timing.timing_3d_format;
 	if (stream->public.view_format == VIEW_3D_FORMAT_NONE)
@@ -2162,6 +2192,7 @@ void dc_resource_validate_ctx_copy_construct(
 		struct validate_context *dst_ctx)
 {
 	int i, j;
+	int ref_count = dst_ctx->ref_count;
 
 	*dst_ctx = *src_ctx;
 
@@ -2182,6 +2213,10 @@ void dc_resource_validate_ctx_copy_construct(
 			dc_surface_retain(
 				dst_ctx->stream_status[i].surfaces[j]);
 	}
+
+	/* context refcount should not be overridden */
+	dst_ctx->ref_count = ref_count;
+
 }
 
 struct clock_source *dc_resource_find_first_free_pll(
@@ -2300,6 +2335,9 @@ bool pipe_need_reprogram(
 		struct pipe_ctx *pipe_ctx_old,
 		struct pipe_ctx *pipe_ctx)
 {
+	if (!pipe_ctx_old->stream)
+		return false;
+
 	if (pipe_ctx_old->stream->sink != pipe_ctx->stream->sink)
 		return true;
 

@@ -51,7 +51,9 @@ struct amdgpu_bo_list_entry;
 #define AMDGPU_VM_PTB_ALIGN_SIZE   32768
 
 /* LOG2 number of continuous pages for the fragment field */
-#define AMDGPU_LOG2_PAGES_PER_FRAG 4
+#define AMDGPU_LOG2_PAGES_PER_FRAG(adev) \
+	((adev)->asic_type < CHIP_VEGA10 ? 4 : \
+	 (adev)->vm_manager.block_size)
 
 #define AMDGPU_PTE_VALID	(1ULL << 0)
 #define AMDGPU_PTE_SYSTEM	(1ULL << 1)
@@ -67,6 +69,9 @@ struct amdgpu_bo_list_entry;
 
 /* TILED for VEGA10, reserved for older ASICs  */
 #define AMDGPU_PTE_PRT		(1ULL << 51)
+
+/* PDE is handled as PTE for VEGA10 */
+#define AMDGPU_PDE_PTE		(1ULL << 54)
 
 /* VEGA10 only */
 #define AMDGPU_PTE_MTYPE(a)    ((uint64_t)a << 57)
@@ -98,6 +103,7 @@ struct amdgpu_bo_list_entry;
 struct amdgpu_vm_pt {
 	struct amdgpu_bo	*bo;
 	uint64_t		addr;
+	bool			huge_page;
 
 	/* array of page tables, one for each directory entry */
 	struct amdgpu_vm_pt	*entries;

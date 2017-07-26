@@ -37,8 +37,15 @@
 #define RENDER_TIMES_MAX_COUNT 20
 /* Threshold to exit BTR (to avoid frequent enter-exits at the lower limit) */
 #define BTR_EXIT_MARGIN 2000
+/* Number of consecutive frames to check before entering/exiting fixed refresh*/
+#define FIXED_REFRESH_ENTER_FRAME_COUNT 5
+#define FIXED_REFRESH_EXIT_FRAME_COUNT 5
 
 #define FREESYNC_REGISTRY_NAME "freesync_v1"
+
+#define FREESYNC_NO_STATIC_FOR_EXTERNAL_DP_REGKEY "DalFreeSyncNoStaticForExternalDp"
+
+#define FREESYNC_NO_STATIC_FOR_INTERNAL_REGKEY "DalFreeSyncNoStaticForInternal"
 
 struct gradual_static_ramp {
 	bool ramp_is_active;
@@ -72,8 +79,9 @@ struct below_the_range {
 };
 
 struct fixed_refresh {
-	bool fixed_refresh_active;
-	bool program_fixed_refresh;
+	bool fixed_active;
+	bool program_fixed;
+	unsigned int frame_counter;
 };
 
 struct freesync_range {
@@ -110,7 +118,8 @@ struct freesync_entity {
 };
 
 struct freesync_registry_options {
-	unsigned int min_refresh_from_edid;
+	bool drr_external_supported;
+	bool drr_internal_supported;
 };
 
 struct core_freesync {
@@ -168,13 +177,23 @@ struct mod_freesync *mod_freesync_create(struct dc *dc)
 	/* Create initial module folder in registry for freesync enable data */
 	flag.save_per_edid = true;
 	flag.save_per_link = false;
-	dm_write_persistent_data(core_dc->ctx, NULL, FREESYNC_REGISTRY_NAME, NULL, NULL,
-					0, &flag);
+	dm_write_persistent_data(core_dc->ctx, NULL, FREESYNC_REGISTRY_NAME,
+			NULL, NULL, 0, &flag);
 	flag.save_per_edid = false;
 	flag.save_per_link = false;
+
 	if (dm_read_persistent_data(core_dc->ctx, NULL, NULL,
-			"DalDrrSupport", &data, sizeof(data), &flag)) {
-		core_freesync->opts.min_refresh_from_edid = data;
+			FREESYNC_NO_STATIC_FOR_INTERNAL_REGKEY,
+			&data, sizeof(data), &flag)) {
+		core_freesync->opts.drr_internal_supported =
+			(data & 1) ? false : true;
+	}
+
+	if (dm_read_persistent_data(core_dc->ctx, NULL, NULL,
+			FREESYNC_NO_STATIC_FOR_EXTERNAL_DP_REGKEY,
+			&data, sizeof(data), &flag)) {
+		core_freesync->opts.drr_external_supported =
+				(data & 1) ? false : true;
 	}
 
 	return &core_freesync->public;
@@ -232,7 +251,7 @@ bool mod_freesync_add_stream(struct mod_freesync *mod_freesync,
 	struct core_freesync *core_freesync = NULL;
 	int persistent_freesync_enable = 0;
 	struct persistent_data_flag flag;
-	unsigned int nom_refresh_rate_micro_hz;
+	unsigned int nom_refresh_rate_uhz;
 	unsigned long long temp;
 
 	if (mod_freesync == NULL)
@@ -254,20 +273,7 @@ bool mod_freesync_add_stream(struct mod_freesync *mod_freesync,
 		temp = div_u64(temp, stream->timing.h_total);
 		temp = div_u64(temp, stream->timing.v_total);
 
-		nom_refresh_rate_micro_hz = (unsigned int) temp;
-
-		if (core_freesync->opts.min_refresh_from_edid != 0 &&
-				dc_is_embedded_signal(stream->sink->sink_signal)
-				&& (nom_refresh_rate_micro_hz -
-				core_freesync->opts.min_refresh_from_edid *
-				1000000) >= 10000000) {
-			caps->supported = true;
-			caps->min_refresh_in_micro_hz =
-				core_freesync->opts.min_refresh_from_edid *
-					1000000;
-			caps->max_refresh_in_micro_hz =
-					nom_refresh_rate_micro_hz;
-		}
+		nom_refresh_rate_uhz = (unsigned int) temp;
 
 		core_freesync->map[core_freesync->num_entities].stream = stream;
 		core_freesync->map[core_freesync->num_entities].caps = caps;
@@ -307,8 +313,8 @@ bool mod_freesync_add_stream(struct mod_freesync *mod_freesync,
 		}
 
 		if (caps->supported &&
-		    nom_refresh_rate_micro_hz >= caps->min_refresh_in_micro_hz &&
-		    nom_refresh_rate_micro_hz <= caps->max_refresh_in_micro_hz)
+			nom_refresh_rate_uhz >= caps->min_refresh_in_micro_hz &&
+			nom_refresh_rate_uhz <= caps->max_refresh_in_micro_hz)
 			core_stream->public.ignore_msa_timing_param = 1;
 
 		core_freesync->num_entities++;
@@ -422,7 +428,7 @@ static void calc_freesync_range(struct core_freesync *core_freesync,
 		min_frame_duration_in_ns) * stream->timing.pix_clk_khz),
 		stream->timing.h_total), 1000000);
 
-	/* In case of 4k free sync monitor, vmin or vmax cannot be less than vtotal */
+	/* vmin/vmax cannot be less than vtotal */
 	if (state->freesync_range.vmin < vtotal) {
 		/* Error of 1 is permissible */
 		ASSERT((state->freesync_range.vmin + 1) >= vtotal);
@@ -436,14 +442,11 @@ static void calc_freesync_range(struct core_freesync *core_freesync,
 	}
 
 	/* Determine whether BTR can be supported */
-	//if (max_frame_duration_in_ns >=
-	//		2 * min_frame_duration_in_ns)
-	//	core_freesync->map[index].caps->btr_supported = true;
-	//else
-	//	core_freesync->map[index].caps->btr_supported = false;
-
-	/* Temp, keep btr disabled */
-	core_freesync->map[index].caps->btr_supported = false;
+	if (max_frame_duration_in_ns >=
+			2 * min_frame_duration_in_ns)
+		core_freesync->map[index].caps->btr_supported = true;
+	else
+		core_freesync->map[index].caps->btr_supported = false;
 
 	/* Cache the time variables */
 	state->time.max_render_time_in_us =
@@ -553,8 +556,8 @@ static void reset_freesync_state_variables(struct freesync_state* state)
 	state->btr.inserted_frame_duration_in_us = 0;
 	state->btr.program_btr = false;
 
-	state->fixed_refresh.fixed_refresh_active = false;
-	state->fixed_refresh.program_fixed_refresh = false;
+	state->fixed_refresh.fixed_active = false;
+	state->fixed_refresh.program_fixed = false;
 }
 /*
  * Sets freesync mode on a stream depending on current freesync state.
@@ -594,7 +597,7 @@ static bool set_freesync_on_streams(struct core_freesync *core_freesync,
 			if (core_freesync->map[map_index].user_enable.
 				enable_for_gaming == true &&
 				state->fullscreen == true &&
-				state->fixed_refresh.fixed_refresh_active == false) {
+				state->fixed_refresh.fixed_active == false) {
 				/* Enable freesync */
 
 				v_total_min = state->freesync_range.vmin;
@@ -864,6 +867,11 @@ void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 		unsigned int map_index = map_index_from_stream(core_freesync,
 				streams[stream_index]);
 
+		bool is_embedded = dc_is_embedded_signal(
+				streams[stream_index]->sink->sink_signal);
+
+		struct freesync_registry_options *opts = &core_freesync->opts;
+
 		state = &core_freesync->map[map_index].state;
 
 		switch (freesync_params->state){
@@ -874,23 +882,24 @@ void mod_freesync_update_state(struct mod_freesync *mod_freesync,
 					freesync_params->windowed_fullscreen;
 			break;
 		case FREESYNC_STATE_STATIC_SCREEN:
-			/* Static screen ramp is only enabled for embedded
-			 * panels. Also change core variables only if there
-			 * is a change.
+			/* Static screen ramp is disabled by default, but can
+			 * be enabled through regkey.
 			 */
-			if (dc_is_embedded_signal(
-				streams[stream_index]->sink->sink_signal) &&
-				state->static_screen !=
-				freesync_params->enable) {
+			if ((is_embedded && opts->drr_internal_supported) ||
+				(!is_embedded && opts->drr_external_supported))
 
-				/* Change the state flag */
-				state->static_screen = freesync_params->enable;
+				if (state->static_screen !=
+						freesync_params->enable) {
 
-				/* Change static screen ramp variables */
-				set_static_ramp_variables(core_freesync,
+					/* Change the state flag */
+					state->static_screen =
+							freesync_params->enable;
+
+					/* Update static screen ramp */
+					set_static_ramp_variables(core_freesync,
 						map_index,
 						freesync_params->enable);
-			}
+				}
 			/* We program the ramp starting next VUpdate */
 			break;
 		case FREESYNC_STATE_VIDEO:
@@ -1027,6 +1036,25 @@ bool mod_freesync_get_user_enable(struct mod_freesync *mod_freesync,
 	index = map_index_from_stream(core_freesync, stream);
 
 	*user_enable = core_freesync->map[index].user_enable;
+
+	return true;
+}
+
+bool mod_freesync_get_static_ramp_active(struct mod_freesync *mod_freesync,
+		const struct dc_stream *stream,
+		bool *is_ramp_active)
+{
+	unsigned int index = 0;
+	struct core_freesync *core_freesync = NULL;
+
+	if (mod_freesync == NULL)
+		return false;
+
+	core_freesync = MOD_FREESYNC_TO_CORE(mod_freesync);
+	index = map_index_from_stream(core_freesync, stream);
+
+	*is_ramp_active =
+		core_freesync->map[index].state.static_ramp.ramp_is_active;
 
 	return true;
 }
@@ -1240,29 +1268,39 @@ static void update_timestamps(struct core_freesync *core_freesync,
 			state->btr.frame_counter = 0;
 
 		/* Exit Fixed Refresh mode */
-		} else if (state->fixed_refresh.fixed_refresh_active) {
+		} else if (state->fixed_refresh.fixed_active) {
 
-			state->fixed_refresh.program_fixed_refresh = true;
-			state->fixed_refresh.fixed_refresh_active = false;
+			state->fixed_refresh.frame_counter++;
 
+			if (state->fixed_refresh.frame_counter >
+					FIXED_REFRESH_EXIT_FRAME_COUNT) {
+				state->fixed_refresh.frame_counter = 0;
+				state->fixed_refresh.program_fixed = true;
+				state->fixed_refresh.fixed_active = false;
+			}
 		}
 
 	} else if (last_render_time_in_us > state->time.max_render_time_in_us) {
 
 		/* Enter Below the Range */
 		if (!state->btr.btr_active &&
-				core_freesync->map[map_index].caps->btr_supported) {
+			core_freesync->map[map_index].caps->btr_supported) {
 
 			state->btr.program_btr = true;
 			state->btr.btr_active = true;
 
 		/* Enter Fixed Refresh mode */
-		} else if (!state->fixed_refresh.fixed_refresh_active &&
+		} else if (!state->fixed_refresh.fixed_active &&
 			!core_freesync->map[map_index].caps->btr_supported) {
 
-			state->fixed_refresh.program_fixed_refresh = true;
-			state->fixed_refresh.fixed_refresh_active = true;
+			state->fixed_refresh.frame_counter++;
 
+			if (state->fixed_refresh.frame_counter >
+					FIXED_REFRESH_ENTER_FRAME_COUNT) {
+				state->fixed_refresh.frame_counter = 0;
+				state->fixed_refresh.program_fixed = true;
+				state->fixed_refresh.fixed_active = true;
+			}
 		}
 	}
 
@@ -1316,7 +1354,8 @@ static void apply_below_the_range(struct core_freesync *core_freesync,
 
 			frame_time_in_us = last_render_time_in_us /
 				mid_point_frames_ceil;
-			delta_from_mid_point_in_us_1 = (state->btr.mid_point_in_us >
+			delta_from_mid_point_in_us_1 =
+				(state->btr.mid_point_in_us >
 				frame_time_in_us) ?
 				(state->btr.mid_point_in_us - frame_time_in_us):
 				(frame_time_in_us - state->btr.mid_point_in_us);
@@ -1332,7 +1371,8 @@ static void apply_below_the_range(struct core_freesync *core_freesync,
 
 			frame_time_in_us = last_render_time_in_us /
 				mid_point_frames_floor;
-			delta_from_mid_point_in_us_2 = (state->btr.mid_point_in_us >
+			delta_from_mid_point_in_us_2 =
+				(state->btr.mid_point_in_us >
 				frame_time_in_us) ?
 				(state->btr.mid_point_in_us - frame_time_in_us):
 				(frame_time_in_us - state->btr.mid_point_in_us);
@@ -1374,15 +1414,15 @@ static void apply_fixed_refresh(struct core_freesync *core_freesync,
 	unsigned int vmin = 0, vmax = 0;
 	struct freesync_state *state = &core_freesync->map[map_index].state;
 
-	if (!state->fixed_refresh.program_fixed_refresh)
+	if (!state->fixed_refresh.program_fixed)
 		return;
 
-	state->fixed_refresh.program_fixed_refresh = false;
+	state->fixed_refresh.program_fixed = false;
 
 	/* Program Fixed Refresh */
 
 	/* Fixed Refresh set to "not active" so disengage */
-	if (!state->fixed_refresh.fixed_refresh_active) {
+	if (!state->fixed_refresh.fixed_active) {
 		set_freesync_on_streams(core_freesync, &stream, 1);
 
 	/* Fixed Refresh set to "active" so engage (fix to max) */

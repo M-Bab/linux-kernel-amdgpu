@@ -603,6 +603,21 @@ int amdgpu_wb_get_64bit(struct amdgpu_device *adev, u32 *wb)
 	}
 }
 
+int amdgpu_wb_get_256Bit(struct amdgpu_device *adev, u32 *wb)
+{
+	int i = 0;
+	unsigned long offset = bitmap_find_next_zero_area_off(adev->wb.used,
+				adev->wb.num_wb, 0, 8, 63, 0);
+	if ((offset + 7) < adev->wb.num_wb) {
+		for (i = 0; i < 8; i++)
+			__set_bit(offset + i, adev->wb.used);
+		*wb = offset;
+		return 0;
+	} else {
+		return -EINVAL;
+	}
+}
+
 /**
  * amdgpu_wb_free - Free a wb entry
  *
@@ -631,6 +646,23 @@ void amdgpu_wb_free_64bit(struct amdgpu_device *adev, u32 wb)
 		__clear_bit(wb, adev->wb.used);
 		__clear_bit(wb + 1, adev->wb.used);
 	}
+}
+
+/**
+ * amdgpu_wb_free_256bit - Free a wb entry
+ *
+ * @adev: amdgpu_device pointer
+ * @wb: wb index
+ *
+ * Free a wb slot allocated for use by the driver (all asics)
+ */
+void amdgpu_wb_free_256bit(struct amdgpu_device *adev, u32 wb)
+{
+	int i = 0;
+
+	if ((wb + 7) < adev->wb.num_wb)
+		for (i = 0; i < 8; i++)
+			__clear_bit(wb + i, adev->wb.used);
 }
 
 /**
@@ -2103,10 +2135,6 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	adev->gc_cac_wreg = &amdgpu_invalid_wreg;
 	adev->audio_endpt_rreg = &amdgpu_block_invalid_rreg;
 	adev->audio_endpt_wreg = &amdgpu_block_invalid_wreg;
-
-	if (amdgpu_device_has_dc_support(adev))
-		adev->ddev->driver->driver_features |= DRIVER_ATOMIC;
-
 
 	DRM_INFO("initializing kernel modesetting (%s 0x%04X:0x%04X 0x%04X:0x%04X 0x%02X).\n",
 		 amdgpu_asic_name[adev->asic_type], pdev->vendor, pdev->device,
