@@ -63,8 +63,13 @@ static int psp_sw_init(void *handle)
 		psp->smu_reload_quirk = psp_v3_1_smu_reload_quirk;
 		break;
 	case CHIP_RAVEN:
+#if 0
+		psp->init_microcode = psp_v10_0_init_microcode;
+#endif
 		psp->prep_cmd_buf = psp_v10_0_prep_cmd_buf;
 		psp->ring_init = psp_v10_0_ring_init;
+		psp->ring_create = psp_v10_0_ring_create;
+		psp->ring_destroy = psp_v10_0_ring_destroy;
 		psp->cmd_submit = psp_v10_0_cmd_submit;
 		psp->compare_sram_data = psp_v10_0_compare_sram_data;
 		break;
@@ -95,9 +100,8 @@ int psp_wait_for(struct psp_context *psp, uint32_t reg_index,
 	int i;
 	struct amdgpu_device *adev = psp->adev;
 
-	val = RREG32(reg_index);
-
 	for (i = 0; i < adev->usec_timeout; i++) {
+		val = RREG32(reg_index);
 		if (check_changed) {
 			if (val != reg_val)
 				return 0;

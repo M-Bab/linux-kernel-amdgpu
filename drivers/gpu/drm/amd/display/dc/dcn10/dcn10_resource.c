@@ -33,7 +33,7 @@
 #include "dcn10/dcn10_ipp.h"
 #include "dcn10/dcn10_mpc.h"
 #include "irq/dcn10/irq_service_dcn10.h"
-#include "dcn10/dcn10_transform.h"
+#include "dcn10/dcn10_dpp.h"
 #include "dcn10/dcn10_timing_generator.h"
 #include "dcn10/dcn10_hw_sequencer.h"
 #include "dce110/dce110_hw_sequencer.h"
@@ -136,17 +136,6 @@ enum dcn10_clk_src_array_id {
 /* macros to expend register list macro defined in HW object header file
  * end *********************/
 
-static const struct dce_disp_clk_registers disp_clk_regs = {
-		CLK_DCN10_REG_LIST()
-};
-
-static const struct dce_disp_clk_shift disp_clk_shift = {
-		CLK_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(__SHIFT)
-};
-
-static const struct dce_disp_clk_mask disp_clk_mask = {
-		CLK_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(_MASK)
-};
 
 static const struct dce_dmcu_registers dmcu_regs = {
 		DMCU_DCN10_REG_LIST()
@@ -277,7 +266,7 @@ static const struct dce110_link_enc_registers link_enc_regs[] = {
 
 #define ipp_regs(id)\
 [id] = {\
-	IPP_DCN10_REG_LIST(id),\
+	IPP_REG_LIST_DCN10(id),\
 }
 
 static const struct dcn10_ipp_registers ipp_regs[] = {
@@ -288,16 +277,16 @@ static const struct dcn10_ipp_registers ipp_regs[] = {
 };
 
 static const struct dcn10_ipp_shift ipp_shift = {
-		IPP_DCN10_MASK_SH_LIST(__SHIFT)
+		IPP_MASK_SH_LIST_DCN10(__SHIFT)
 };
 
 static const struct dcn10_ipp_mask ipp_mask = {
-		IPP_DCN10_MASK_SH_LIST(_MASK),
+		IPP_MASK_SH_LIST_DCN10(_MASK),
 };
 
 #define opp_regs(id)\
 [id] = {\
-	OPP_DCN10_REG_LIST(id),\
+	OPP_REG_LIST_DCN10(id),\
 }
 
 static const struct dcn10_opp_registers opp_regs[] = {
@@ -308,31 +297,31 @@ static const struct dcn10_opp_registers opp_regs[] = {
 };
 
 static const struct dcn10_opp_shift opp_shift = {
-		OPP_DCN10_MASK_SH_LIST(__SHIFT)
+		OPP_MASK_SH_LIST_DCN10(__SHIFT)
 };
 
 static const struct dcn10_opp_mask opp_mask = {
-		OPP_DCN10_MASK_SH_LIST(_MASK),
+		OPP_MASK_SH_LIST_DCN10(_MASK),
 };
 
 #define tf_regs(id)\
 [id] = {\
-	TF_REG_LIST_DCN(id),\
+	TF_REG_LIST_DCN10(id),\
 }
 
-static const struct dcn_transform_registers tf_regs[] = {
+static const struct dcn_dpp_registers tf_regs[] = {
 	tf_regs(0),
 	tf_regs(1),
 	tf_regs(2),
 	tf_regs(3),
 };
 
-static const struct dcn_transform_shift tf_shift = {
-		TF_REG_LIST_SH_MASK_DCN(__SHIFT)
+static const struct dcn_dpp_shift tf_shift = {
+	TF_REG_LIST_SH_MASK_DCN10(__SHIFT)
 };
 
-static const struct dcn_transform_mask tf_mask = {
-		TF_REG_LIST_SH_MASK_DCN(_MASK),
+static const struct dcn_dpp_mask tf_mask = {
+	TF_REG_LIST_SH_MASK_DCN10(_MASK),
 };
 
 
@@ -385,7 +374,7 @@ static const struct bios_registers bios_regs = {
 
 #define mi_regs(id)\
 [id] = {\
-	MI_DCN10_REG_LIST(id)\
+	MI_REG_LIST_DCN10(id)\
 }
 
 
@@ -397,11 +386,11 @@ static const struct dcn_mi_registers mi_regs[] = {
 };
 
 static const struct dcn_mi_shift mi_shift = {
-		MI_DCN10_MASK_SH_LIST(__SHIFT)
+		MI_MASK_SH_LIST_DCN10(__SHIFT)
 };
 
 static const struct dcn_mi_mask mi_mask = {
-		MI_DCN10_MASK_SH_LIST(_MASK)
+		MI_MASK_SH_LIST_DCN10(_MASK)
 };
 
 #define clk_src_regs(index, pllid)\
@@ -460,28 +449,28 @@ static const struct dc_debug debug_defaults_diags = {
 #endif
 };
 
-static void dcn10_transform_destroy(struct transform **xfm)
+static void dcn10_dpp_destroy(struct transform **xfm)
 {
-	dm_free(TO_DCN10_TRANSFORM(*xfm));
+	dm_free(TO_DCN10_DPP(*xfm));
 	*xfm = NULL;
 }
 
-static struct transform *dcn10_transform_create(
+static struct transform *dcn10_dpp_create(
 	struct dc_context *ctx,
 	uint32_t inst)
 {
-	struct dcn10_transform *transform =
-		dm_alloc(sizeof(struct dcn10_transform));
+	struct dcn10_dpp *dpp =
+		dm_alloc(sizeof(struct dcn10_dpp));
 
-	if (!transform)
+	if (!dpp)
 		return NULL;
 
-	if (dcn10_transform_construct(transform, ctx,
+	if (dcn10_dpp_construct(dpp, ctx, inst,
 			&tf_regs[inst], &tf_shift, &tf_mask))
-		return &transform->base;
+		return &dpp->base;
 
 	BREAK_TO_DEBUGGER();
-	dm_free(transform);
+	dm_free(dpp);
 	return NULL;
 }
 
@@ -721,7 +710,7 @@ static void destruct(struct dcn10_resource_pool *pool)
 			pool->base.opps[i]->funcs->opp_destroy(&pool->base.opps[i]);
 
 		if (pool->base.transforms[i] != NULL)
-			dcn10_transform_destroy(&pool->base.transforms[i]);
+			dcn10_dpp_destroy(&pool->base.transforms[i]);
 
 		if (pool->base.ipps[i] != NULL)
 			pool->base.ipps[i]->funcs->ipp_destroy(&pool->base.ipps[i]);
@@ -1338,10 +1327,7 @@ static bool construct(
 	}
 
 	if (!IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment)) {
-		pool->base.display_clock = dce120_disp_clk_create(ctx,
-				&disp_clk_regs,
-				&disp_clk_shift,
-				&disp_clk_mask);
+		pool->base.display_clock = dce120_disp_clk_create(ctx);
 		if (pool->base.display_clock == NULL) {
 			dm_error("DC: failed to create display clock!\n");
 			BREAK_TO_DEBUGGER();
@@ -1372,6 +1358,19 @@ static bool construct(
 	dml_init_instance(&dc->dml, DML_PROJECT_RAVEN1);
 	dc->dcn_ip = dcn10_ip_defaults;
 	dc->dcn_soc = dcn10_soc_defaults;
+
+	dc->dcn_soc.number_of_channels = dc->ctx->asic_id.vram_width / ddr4_dram_width;
+	ASSERT(dc->dcn_soc.number_of_channels < 3);
+	if (dc->dcn_soc.number_of_channels == 0)/*old sbios bug*/
+		dc->dcn_soc.number_of_channels = 2;
+
+	if (dc->dcn_soc.number_of_channels == 1) {
+		dc->dcn_soc.fabric_and_dram_bandwidth_vmax0p9 = 19.2f;
+		dc->dcn_soc.fabric_and_dram_bandwidth_vnom0p8 = 17.066f;
+		dc->dcn_soc.fabric_and_dram_bandwidth_vmid0p72 = 14.933f;
+		dc->dcn_soc.fabric_and_dram_bandwidth_vmin0p65 = 12.8f;
+	}
+
 	if (!dc->public.debug.disable_pplib_clock_request)
 		dcn_bw_update_from_pplib(dc);
 	dcn_bw_sync_calcs_and_dml(dc);
@@ -1388,7 +1387,7 @@ static bool construct(
 	#endif
 	}
 
-	/* mem input -> ipp -> transform -> opp -> TG */
+	/* mem input -> ipp -> dpp -> opp -> TG */
 	for (i = 0; i < pool->base.pipe_count; i++) {
 		pool->base.mis[i] = dcn10_mem_input_create(ctx, i);
 		if (pool->base.mis[i] == NULL) {
@@ -1406,12 +1405,12 @@ static bool construct(
 			goto ipp_create_fail;
 		}
 
-		pool->base.transforms[i] = dcn10_transform_create(ctx, i);
+		pool->base.transforms[i] = dcn10_dpp_create(ctx, i);
 		if (pool->base.transforms[i] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error(
-				"DC: failed to create transform!\n");
-			goto transform_create_fail;
+				"DC: failed to create dpp!\n");
+			goto dpp_create_fail;
 		}
 
 		pool->base.opps[i] = dcn10_opp_create(ctx, i);
@@ -1453,7 +1452,7 @@ disp_clk_create_fail:
 mpcc_create_fail:
 otg_create_fail:
 opp_create_fail:
-transform_create_fail:
+dpp_create_fail:
 ipp_create_fail:
 mi_create_fail:
 irqs_create_fail:

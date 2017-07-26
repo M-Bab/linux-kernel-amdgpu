@@ -93,6 +93,7 @@ static void amdgpu_ttm_bo_destroy(struct ttm_buffer_object *tbo)
 
 	bo = container_of(tbo, struct amdgpu_bo, tbo);
 
+	amdgpu_bo_kunmap(bo);
 	amdgpu_update_memory_usage(adev, &bo->tbo.mem, NULL);
 
 	drm_gem_object_release(&bo->gem_base);
@@ -734,15 +735,16 @@ int amdgpu_bo_pin_restricted(struct amdgpu_bo *bo, u32 domain,
 		dev_err(adev->dev, "%p pin failed\n", bo);
 		goto error;
 	}
-	r = amdgpu_ttm_bind(&bo->tbo, &bo->tbo.mem);
-	if (unlikely(r)) {
-		dev_err(adev->dev, "%p bind failed\n", bo);
-		goto error;
-	}
 
 	bo->pin_count = 1;
-	if (gpu_addr != NULL)
+	if (gpu_addr != NULL) {
+		r = amdgpu_ttm_bind(&bo->tbo, &bo->tbo.mem);
+		if (unlikely(r)) {
+			dev_err(adev->dev, "%p bind failed\n", bo);
+			goto error;
+		}
 		*gpu_addr = amdgpu_bo_gpu_offset(bo);
+	}
 	if (domain == AMDGPU_GEM_DOMAIN_VRAM) {
 		adev->vram_pin_size += amdgpu_bo_size(bo);
 		if (bo->flags & AMDGPU_GEM_CREATE_NO_CPU_ACCESS)
@@ -930,6 +932,8 @@ void amdgpu_bo_move_notify(struct ttm_buffer_object *bo,
 
 	abo = container_of(bo, struct amdgpu_bo, tbo);
 	amdgpu_vm_bo_invalidate(adev, abo);
+
+	amdgpu_bo_kunmap(abo);
 
 	/* remember the eviction */
 	if (evict)

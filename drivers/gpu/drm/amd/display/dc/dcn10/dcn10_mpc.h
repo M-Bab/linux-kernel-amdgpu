@@ -30,11 +30,10 @@
 #define TO_DCN10_MPCC(mpcc_base) \
 	container_of(mpcc_base, struct dcn10_mpcc, base)
 
-#define MAX_OPP 4
+#define MAX_OPP 6
 
 #define MPC_COMMON_REG_LIST_DCN1_0(inst) \
-	SRII(MUX, MPC_OUT, inst),\
-	SRII(OPP_PIPE_CONTROL, OPP_PIPE, inst)
+	SRII(MUX, MPC_OUT, inst)
 
 #define MPCC_COMMON_REG_LIST_DCN1_0(inst) \
 	SRI(MPCC_TOP_SEL, MPCC, inst),\
@@ -56,7 +55,6 @@ struct dcn_mpcc_registers {
 	uint32_t MPCC_BG_G_Y;
 	uint32_t MPCC_BG_R_CR;
 	uint32_t MPCC_BG_B_CB;
-	uint32_t OPP_PIPE_CONTROL[MAX_OPP];
 	uint32_t MUX[MAX_OPP];
 };
 
@@ -68,12 +66,12 @@ struct dcn_mpcc_registers {
 	SF(MPCC0_MPCC_CONTROL, MPCC_ALPHA_MULTIPLIED_MODE, mask_sh),\
 	SF(MPCC0_MPCC_CONTROL, MPCC_BLND_ACTIVE_OVERLAP_ONLY, mask_sh),\
 	SF(MPCC0_MPCC_STATUS, MPCC_IDLE, mask_sh),\
+	SF(MPCC0_MPCC_STATUS, MPCC_BUSY, mask_sh),\
 	SF(MPCC0_MPCC_OPP_ID, MPCC_OPP_ID, mask_sh),\
 	SF(MPCC0_MPCC_BG_G_Y, MPCC_BG_G_Y, mask_sh),\
 	SF(MPCC0_MPCC_BG_R_CR, MPCC_BG_R_CR, mask_sh),\
 	SF(MPCC0_MPCC_BG_B_CB, MPCC_BG_B_CB, mask_sh),\
-	SF(MPC_OUT0_MUX, MPC_OUT_MUX, mask_sh),\
-	SF(OPP_PIPE0_OPP_PIPE_CONTROL, OPP_PIPE_CLOCK_EN, mask_sh)
+	SF(MPC_OUT0_MUX, MPC_OUT_MUX, mask_sh)
 
 #define MPCC_REG_FIELD_LIST(type) \
 	type MPCC_TOP_SEL;\
@@ -83,12 +81,12 @@ struct dcn_mpcc_registers {
 	type MPCC_ALPHA_MULTIPLIED_MODE;\
 	type MPCC_BLND_ACTIVE_OVERLAP_ONLY;\
 	type MPCC_IDLE;\
+	type MPCC_BUSY;\
 	type MPCC_OPP_ID;\
 	type MPCC_BG_G_Y;\
 	type MPCC_BG_R_CR;\
 	type MPCC_BG_B_CB;\
 	type MPC_OUT_MUX;\
-	type OPP_PIPE_CLOCK_EN;\
 
 struct dcn_mpcc_shift {
 	MPCC_REG_FIELD_LIST(uint8_t)
@@ -103,8 +101,6 @@ struct dcn10_mpcc {
 	const struct dcn_mpcc_registers *mpcc_regs;
 	const struct dcn_mpcc_shift *mpcc_shift;
 	const struct dcn_mpcc_mask *mpcc_mask;
-
-	int opp_id;
 };
 
 void dcn10_mpcc_construct(struct dcn10_mpcc *mpcc10,

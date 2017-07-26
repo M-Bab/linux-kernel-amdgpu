@@ -221,6 +221,29 @@ static bool set_gamut_remap(struct dc *dc, const struct dc_stream *stream)
 	return ret;
 }
 
+static bool program_csc_matrix(struct dc *dc, const struct dc_stream *stream)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	struct core_stream *core_stream = DC_STREAM_TO_CORE(stream);
+	int i = 0;
+	bool ret = false;
+	struct pipe_ctx *pipes;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (core_dc->current_context->res_ctx.pipe_ctx[i].stream
+				== core_stream) {
+
+			pipes = &core_dc->current_context->res_ctx.pipe_ctx[i];
+			core_dc->hwss.program_csc_matrix(pipes,
+			core_stream->public.output_color_space,
+			core_stream->public.csc_color_matrix.matrix);
+			ret = true;
+		}
+	}
+
+	return ret;
+}
+
 static void set_static_screen_events(struct dc *dc,
 		const struct dc_stream **stream,
 		int num_streams,
@@ -373,6 +396,9 @@ static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 	core_dc->public.stream_funcs.set_gamut_remap =
 			set_gamut_remap;
 
+	core_dc->public.stream_funcs.program_csc_matrix =
+			program_csc_matrix;
+
 	core_dc->public.stream_funcs.set_dither_option =
 			set_dither_option;
 
@@ -397,7 +423,8 @@ static void allocate_dc_stream_funcs(struct core_dc *core_dc)
 
 static void destruct(struct core_dc *dc)
 {
-	dc_resource_validate_ctx_destruct(dc->current_context);
+	dc_release_validate_context(dc->current_context);
+	dc->current_context = NULL;
 
 	destroy_links(dc);
 
@@ -414,9 +441,6 @@ static void destruct(struct core_dc *dc)
 
 	if (dc->ctx->logger)
 		dal_logger_destroy(&dc->ctx->logger);
-
-	dm_free(dc->current_context);
-	dc->current_context = NULL;
 
 	dm_free(dc->ctx);
 	dc->ctx = NULL;
@@ -440,6 +464,8 @@ static bool construct(struct core_dc *dc,
 		dm_error("%s: failed to create validate ctx\n", __func__);
 		goto val_ctx_fail;
 	}
+
+	dc->current_context->ref_count++;
 
 	dc_ctx->cgs_device = init_params->cgs_device;
 	dc_ctx->driver_context = init_params->driver;
@@ -657,6 +683,8 @@ struct validate_context *dc_get_validate_context(
 	if (context == NULL)
 		goto context_alloc_fail;
 
+	++context->ref_count;
+
 	if (!is_validation_required(core_dc, set, set_count)) {
 		dc_resource_validate_ctx_copy_construct(core_dc->current_context, context);
 		return context;
@@ -672,8 +700,7 @@ context_alloc_fail:
 				__func__,
 				result);
 
-		dc_resource_validate_ctx_destruct(context);
-		dm_free(context);
+		dc_release_validate_context(context);
 		context = NULL;
 	}
 
@@ -694,6 +721,8 @@ bool dc_validate_resources(
 	if (context == NULL)
 		goto context_alloc_fail;
 
+	++context->ref_count;
+
 	result = core_dc->res_pool->funcs->validate_with_context(
 				core_dc, set, set_count, context, NULL);
 
@@ -705,8 +734,7 @@ context_alloc_fail:
 				result);
 	}
 
-	dc_resource_validate_ctx_destruct(context);
-	dm_free(context);
+	dc_release_validate_context(context);
 	context = NULL;
 
 	return result == DC_OK;
@@ -724,11 +752,12 @@ bool dc_validate_guaranteed(
 	if (context == NULL)
 		goto context_alloc_fail;
 
+	++context->ref_count;
+
 	result = core_dc->res_pool->funcs->validate_guaranteed(
 					core_dc, stream, context);
 
-	dc_resource_validate_ctx_destruct(context);
-	dm_free(context);
+	dc_release_validate_context(context);
 
 context_alloc_fail:
 	if (result != DC_OK) {
@@ -815,6 +844,23 @@ static void program_timing_sync(
 	}
 }
 
+static bool context_changed(
+		struct core_dc *dc,
+		struct validate_context *context)
+{
+	uint8_t i;
+
+	if (context->stream_count != dc->current_context->stream_count)
+		return true;
+
+	for (i = 0; i < dc->current_context->stream_count; i++) {
+		if (&dc->current_context->streams[i]->public != &context->streams[i]->public)
+			return true;
+	}
+
+	return false;
+}
+
 static bool streams_changed(
 		struct core_dc *dc,
 		const struct dc_stream *streams[],
@@ -843,6 +889,11 @@ bool dc_enable_stereo(
 	int i, j;
 	struct pipe_ctx *pipe;
 	struct core_dc *core_dc = DC_TO_CORE(dc);
+
+#ifdef ENABLE_FBC
+	struct compressor *fbc_compressor = core_dc->fbc_compressor;
+#endif
+
 	for (i = 0; i < MAX_PIPES; i++) {
 		if (context != NULL)
 			pipe = &context->res_ctx.pipe_ctx[i];
@@ -854,8 +905,110 @@ bool dc_enable_stereo(
 				core_dc->hwss.setup_stereo(pipe, core_dc);
 		}
 	}
+
+#ifdef ENABLE_FBC
+	if (fbc_compressor != NULL &&
+	    fbc_compressor->funcs->is_fbc_enabled_in_hw(core_dc->fbc_compressor,
+							&pipe->tg->inst))
+		fbc_compressor->funcs->disable_fbc(fbc_compressor);
+
+#endif
 	return ret;
 }
+
+
+/*
+ * Applies given context to HW and copy it into current context.
+ * It's up to the user to release the src context afterwards.
+ */
+static bool dc_commit_context_no_check(struct dc *dc, struct validate_context *context)
+{
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	struct dc_bios *dcb = core_dc->ctx->dc_bios;
+	enum dc_status result = DC_ERROR_UNEXPECTED;
+	struct pipe_ctx *pipe;
+	int i, j, k, l;
+	const struct dc_stream *dc_streams[MAX_STREAMS] = {0};
+
+	for (i = 0; i < context->stream_count; i++)
+		dc_streams[i] =  &context->streams[i]->public;
+
+	if (!dcb->funcs->is_accelerated_mode(dcb))
+		core_dc->hwss.enable_accelerated_mode(core_dc);
+
+	result = core_dc->hwss.apply_ctx_to_hw(core_dc, context);
+
+	program_timing_sync(core_dc, context);
+
+	for (i = 0; i < context->stream_count; i++) {
+		const struct core_sink *sink = context->streams[i]->sink;
+
+		for (j = 0; j < context->stream_status[i].surface_count; j++) {
+			struct core_surface *surface =
+					DC_SURFACE_TO_CORE(context->stream_status[i].surfaces[j]);
+
+			core_dc->hwss.apply_ctx_for_surface(core_dc, surface, context);
+
+			/*
+			 * enable stereo
+			 * TODO rework dc_enable_stereo call to work with validation sets?
+			 */
+			for (k = 0; k < MAX_PIPES; k++) {
+				pipe = &context->res_ctx.pipe_ctx[k];
+
+				for (l = 0 ; pipe && l < context->stream_count; l++)  {
+					if (context->streams[l] &&
+					    context->streams[l] == pipe->stream &&
+					    core_dc->hwss.setup_stereo)
+						core_dc->hwss.setup_stereo(pipe, core_dc);
+				}
+			}
+		}
+
+		CONN_MSG_MODE(sink->link, "{%dx%d, %dx%d@%dKhz}",
+				context->streams[i]->public.timing.h_addressable,
+				context->streams[i]->public.timing.v_addressable,
+				context->streams[i]->public.timing.h_total,
+				context->streams[i]->public.timing.v_total,
+				context->streams[i]->public.timing.pix_clk_khz);
+	}
+
+	dc_enable_stereo(dc, context, dc_streams, context->stream_count);
+
+	dc_release_validate_context(core_dc->current_context);
+
+	core_dc->current_context = context;
+
+	dc_retain_validate_context(core_dc->current_context);
+
+	return (result == DC_OK);
+}
+
+bool dc_commit_context(struct dc *dc, struct validate_context *context)
+{
+	enum dc_status result = DC_ERROR_UNEXPECTED;
+	struct core_dc *core_dc = DC_TO_CORE(dc);
+	int i;
+
+	if (false == context_changed(core_dc, context))
+		return DC_OK;
+
+	dm_logger_write(core_dc->ctx->logger, LOG_DC, "%s: %d streams\n",
+				__func__, context->stream_count);
+
+	for (i = 0; i < context->stream_count; i++) {
+		const struct dc_stream *stream = &context->streams[i]->public;
+
+		dc_stream_log(stream,
+				core_dc->ctx->logger,
+				LOG_DC);
+	}
+
+	result = dc_commit_context_no_check(dc, context);
+
+	return (result == DC_OK);
+}
+
 
 bool dc_commit_streams(
 	struct dc *dc,
@@ -863,11 +1016,10 @@ bool dc_commit_streams(
 	uint8_t stream_count)
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
-	struct dc_bios *dcb = core_dc->ctx->dc_bios;
 	enum dc_status result = DC_ERROR_UNEXPECTED;
 	struct validate_context *context;
 	struct dc_validation_set set[MAX_STREAMS] = { {0, {0} } };
-	int i, j;
+	int i;
 
 	if (false == streams_changed(core_dc, streams, stream_count))
 		return DC_OK;
@@ -898,6 +1050,8 @@ bool dc_commit_streams(
 	if (context == NULL)
 		goto context_alloc_fail;
 
+	++context->ref_count;
+
 	result = core_dc->res_pool->funcs->validate_with_context(
 			core_dc, set, stream_count, context, core_dc->current_context);
 	if (result != DC_OK){
@@ -906,48 +1060,13 @@ bool dc_commit_streams(
 					__func__,
 					result);
 		BREAK_TO_DEBUGGER();
-		dc_resource_validate_ctx_destruct(context);
 		goto fail;
 	}
 
-	if (!dcb->funcs->is_accelerated_mode(dcb)) {
-		core_dc->hwss.enable_accelerated_mode(core_dc);
-	}
-
-	if (result == DC_OK) {
-		result = core_dc->hwss.apply_ctx_to_hw(core_dc, context);
-	}
-
-	program_timing_sync(core_dc, context);
-
-	for (i = 0; i < context->stream_count; i++) {
-		const struct core_sink *sink = context->streams[i]->sink;
-
-		for (j = 0; j < context->stream_status[i].surface_count; j++) {
-			struct core_surface *surface =
-					DC_SURFACE_TO_CORE(context->stream_status[i].surfaces[j]);
-
-			core_dc->hwss.apply_ctx_for_surface(core_dc, surface, context);
-			dc_enable_stereo(dc, context, streams, stream_count);
-		}
-
-		CONN_MSG_MODE(sink->link, "{%dx%d, %dx%d@%dKhz}",
-				context->streams[i]->public.timing.h_addressable,
-				context->streams[i]->public.timing.v_addressable,
-				context->streams[i]->public.timing.h_total,
-				context->streams[i]->public.timing.v_total,
-				context->streams[i]->public.timing.pix_clk_khz);
-	}
-
-	dc_resource_validate_ctx_destruct(core_dc->current_context);
-	dm_free(core_dc->current_context);
-
-	core_dc->current_context = context;
-
-	return (result == DC_OK);
+	result = dc_commit_context_no_check(dc, context);
 
 fail:
-	dm_free(context);
+	dc_release_validate_context(context);
 
 context_alloc_fail:
 	return (result == DC_OK);
@@ -963,11 +1082,8 @@ bool dc_post_update_surfaces_to_stream(struct dc *dc)
 
 	for (i = 0; i < core_dc->res_pool->pipe_count; i++)
 		if (context->res_ctx.pipe_ctx[i].stream == NULL
-				|| context->res_ctx.pipe_ctx[i].surface == NULL) {
-			context->res_ctx.pipe_ctx[i].pipe_idx = i;
-			core_dc->hwss.power_down_front_end(
-					core_dc, &context->res_ctx.pipe_ctx[i]);
-		}
+				|| context->res_ctx.pipe_ctx[i].surface == NULL)
+			core_dc->hwss.power_down_front_end(core_dc, i);
 
 	/* 3rd param should be true, temp w/a for RV*/
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
@@ -989,7 +1105,6 @@ bool dc_commit_surfaces_to_stream(
 	struct dc_plane_info plane_info[MAX_SURFACES];
 	struct dc_scaling_info scaling_info[MAX_SURFACES];
 	int i;
-	bool ret;
 	struct dc_stream_update *stream_update =
 			dm_alloc(sizeof(struct dc_stream_update));
 
@@ -1005,11 +1120,13 @@ bool dc_commit_surfaces_to_stream(
 
 	stream_update->src = dc_stream->src;
 	stream_update->dst = dc_stream->dst;
+	stream_update->out_transfer_func = dc_stream->out_transfer_func;
 
 	for (i = 0; i < new_surface_count; i++) {
 		updates[i].surface = new_surfaces[i];
 		updates[i].gamma =
 			(struct dc_gamma *)new_surfaces[i]->gamma_correction;
+		updates[i].in_transfer_func = new_surfaces[i]->in_transfer_func;
 		flip_addr[i].address = new_surfaces[i]->address;
 		flip_addr[i].flip_immediate = new_surfaces[i]->flip_immediate;
 		plane_info[i].color_space = new_surfaces[i]->color_space;
@@ -1038,10 +1155,27 @@ bool dc_commit_surfaces_to_stream(
 			new_surface_count,
 			dc_stream, stream_update);
 
-	ret = dc_post_update_surfaces_to_stream(dc);
+	dc_post_update_surfaces_to_stream(dc);
 
 	dm_free(stream_update);
-	return ret;
+	return true;
+}
+
+void dc_retain_validate_context(struct validate_context *context)
+{
+	ASSERT(context->ref_count > 0);
+	++context->ref_count;
+}
+
+void dc_release_validate_context(struct validate_context *context)
+{
+	ASSERT(context->ref_count > 0);
+	--context->ref_count;
+
+	if (context->ref_count == 0) {
+		dc_resource_validate_ctx_destruct(context);
+		dm_free(context);
+	}
 }
 
 static bool is_surface_in_context(
@@ -1217,14 +1351,6 @@ enum surface_update_type dc_check_update_surfaces_for_stream(
 	return overall_type;
 }
 
-void dc_update_surfaces_for_stream(struct dc *dc,
-		struct dc_surface_update *surface_updates, int surface_count,
-		const struct dc_stream *dc_stream)
-{
-	dc_update_surfaces_and_stream(dc, surface_updates, surface_count,
-			dc_stream, NULL);
-}
-
 enum surface_update_type update_surface_trace_level = UPDATE_TYPE_FULL;
 
 void dc_update_surfaces_and_stream(struct dc *dc,
@@ -1238,12 +1364,19 @@ void dc_update_surfaces_and_stream(struct dc *dc,
 	enum surface_update_type update_type;
 	const struct dc_stream_status *stream_status;
 	struct core_stream *stream = DC_STREAM_TO_CORE(dc_stream);
+	struct dc_context *dc_ctx = core_dc->ctx;
 
 	stream_status = dc_stream_get_status(dc_stream);
 	ASSERT(stream_status);
 	if (!stream_status)
 		return; /* Cannot commit surface to stream that is not committed */
 
+#ifdef ENABLE_FBC
+	if (srf_updates->flip_addr) {
+		if (srf_updates->flip_addr->address.grph.addr.low_part == 0)
+			ASSERT(0);
+	}
+#endif
 	context = core_dc->current_context;
 
 	/* update current stream with the new updates */
@@ -1294,6 +1427,11 @@ void dc_update_surfaces_and_stream(struct dc *dc,
 
 		/* initialize scratch memory for building context */
 		context = dm_alloc(sizeof(*context));
+		if (context == NULL)
+				goto context_alloc_fail;
+
+		++context->ref_count;
+
 		dc_resource_validate_ctx_copy_construct(
 				core_dc->current_context, context);
 
@@ -1401,7 +1539,7 @@ void dc_update_surfaces_and_stream(struct dc *dc,
 		}
 	}
 
-	if (!surface_count)  /* reset */
+	if (surface_count == 0)
 		core_dc->hwss.apply_ctx_for_surface(core_dc, NULL, context);
 
 	/* Lock pipes for provided surfaces, or all active if full update*/
@@ -1515,16 +1653,16 @@ void dc_update_surfaces_and_stream(struct dc *dc,
 	}
 
 	if (core_dc->current_context != context) {
-		dc_resource_validate_ctx_destruct(core_dc->current_context);
-		dm_free(core_dc->current_context);
-
+		dc_release_validate_context(core_dc->current_context);
 		core_dc->current_context = context;
 	}
 	return;
 
 fail:
-	dc_resource_validate_ctx_destruct(context);
-	dm_free(context);
+	dc_release_validate_context(context);
+
+context_alloc_fail:
+	DC_ERROR("Failed to allocate new validate context!\n");
 }
 
 uint8_t dc_get_current_stream_count(const struct dc *dc)
@@ -1598,6 +1736,7 @@ void dc_set_power_state(
 	enum dc_acpi_cm_power_state power_state)
 {
 	struct core_dc *core_dc = DC_TO_CORE(dc);
+	int ref_count;
 
 	switch (power_state) {
 	case DC_ACPI_CM_POWER_STATE_D0:
@@ -1611,8 +1750,13 @@ void dc_set_power_state(
 		 * clean state, and dc hw programming optimizations will not
 		 * cause any trouble.
 		 */
+
+		/* Preserve refcount */
+		ref_count = core_dc->current_context->ref_count;
+		dc_resource_validate_ctx_destruct(core_dc->current_context);
 		memset(core_dc->current_context, 0,
 				sizeof(*core_dc->current_context));
+		core_dc->current_context->ref_count = ref_count;
 
 		break;
 	}

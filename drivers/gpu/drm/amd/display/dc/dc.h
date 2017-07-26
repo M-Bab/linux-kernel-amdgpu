@@ -118,6 +118,9 @@ struct dc_stream_funcs {
 	bool (*set_gamut_remap)(struct dc *dc,
 			const struct dc_stream *stream);
 
+	bool (*program_csc_matrix)(struct dc *dc,
+			const struct dc_stream *stream);
+
 	void (*set_static_screen_events)(struct dc *dc,
 			const struct dc_stream **stream,
 			int num_streams,
@@ -289,6 +292,8 @@ struct dc_transfer_func {
 	struct dc_transfer_func_distributed_points tf_pts;
 	enum dc_transfer_func_type type;
 	enum dc_transfer_func_predefined tf;
+	struct dc_context *ctx;
+	int ref_count;
 };
 
 struct dc_surface {
@@ -306,7 +311,7 @@ struct dc_surface {
 	struct dc_hdr_static_metadata hdr_static_ctx;
 
 	const struct dc_gamma *gamma_correction;
-	const struct dc_transfer_func *in_transfer_func;
+	struct dc_transfer_func *in_transfer_func;
 
 	enum dc_color_space color_space;
 	enum surface_pixel_format format;
@@ -380,8 +385,8 @@ void dc_gamma_retain(const struct dc_gamma *dc_gamma);
 void dc_gamma_release(const struct dc_gamma **dc_gamma);
 struct dc_gamma *dc_create_gamma(void);
 
-void dc_transfer_func_retain(const struct dc_transfer_func *dc_tf);
-void dc_transfer_func_release(const struct dc_transfer_func *dc_tf);
+void dc_transfer_func_retain(struct dc_transfer_func *dc_tf);
+void dc_transfer_func_release(struct dc_transfer_func *dc_tf);
 struct dc_transfer_func *dc_create_transfer_func(void);
 
 /*
@@ -414,9 +419,6 @@ bool dc_commit_surfaces_to_stream(
 
 bool dc_post_update_surfaces_to_stream(
 		struct dc *dc);
-
-void dc_update_surfaces_for_stream(struct dc *dc, struct dc_surface_update *updates,
-		int surface_count, const struct dc_stream *stream);
 
 /* Surface update type is used by dc_update_surfaces_and_stream
  * The update type is determined at the very beginning of the function based
@@ -464,7 +466,7 @@ struct dc_stream {
 
 	struct freesync_context freesync_ctx;
 
-	const struct dc_transfer_func *out_transfer_func;
+	struct dc_transfer_func *out_transfer_func;
 	struct colorspace_transform gamut_remap_matrix;
 	struct csc_transform csc_color_matrix;
 
@@ -579,6 +581,17 @@ void dc_resource_validate_ctx_copy_construct(
 void dc_resource_validate_ctx_destruct(struct validate_context *context);
 
 /*
+ * TODO update to make it about validation sets
+ * Set up streams and links associated to drive sinks
+ * The streams parameter is an absolute set of all active streams.
+ *
+ * After this call:
+ *   Phy, Encoder, Timing Generator are programmed and enabled.
+ *   New streams are enabled with blank stream; no memory read.
+ */
+bool dc_commit_context(struct dc *dc, struct validate_context *context);
+
+/*
  * Set up streams and links associated to drive sinks
  * The streams parameter is an absolute set of all active streams.
  *
@@ -628,6 +641,10 @@ enum surface_update_type dc_check_update_surfaces_for_stream(
 		int surface_count,
 		struct dc_stream_update *stream_update,
 		const struct dc_stream_status *stream_status);
+
+
+void dc_retain_validate_context(struct validate_context *context);
+void dc_release_validate_context(struct validate_context *context);
 
 /*******************************************************************************
  * Link Interfaces
@@ -759,7 +776,7 @@ void dc_link_dp_set_drive_settings(
 	const struct dc_link *link,
 	struct link_training_settings *lt_settings);
 
-bool dc_link_dp_perform_link_training(
+enum link_training_result dc_link_dp_perform_link_training(
 	struct dc_link *link,
 	const struct dc_link_settings *link_setting,
 	bool skip_video_pattern);

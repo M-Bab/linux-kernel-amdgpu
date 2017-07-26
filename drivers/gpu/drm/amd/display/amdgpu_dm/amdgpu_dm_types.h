@@ -27,11 +27,37 @@
 #define __AMDGPU_DM_TYPES_H__
 
 #include <drm/drmP.h>
+#include <drm/drm_atomic.h>
+#include "dc.h"
 
 struct amdgpu_framebuffer;
 struct amdgpu_display_manager;
 struct dc_validation_set;
 struct dc_surface;
+/* TODO rename to dc_stream_state */
+struct  dc_stream;
+
+
+struct dm_plane_state {
+	struct drm_plane_state base;
+	struct dc_surface *surface;
+};
+
+struct dm_crtc_state {
+	struct drm_crtc_state base;
+	const struct dc_stream *stream;
+};
+
+#define to_dm_crtc_state(x)    container_of(x, struct dm_crtc_state, base)
+
+struct dm_atomic_state {
+	struct drm_atomic_state base;
+
+	struct validate_context *context;
+};
+
+#define to_dm_atomic_state(x) container_of(x, struct dm_atomic_state, base)
+
 
 /*TODO Jodan Hersen use the one in amdgpu_dm*/
 int amdgpu_dm_plane_init(struct amdgpu_display_manager *dm,
@@ -54,6 +80,11 @@ void amdgpu_dm_connector_destroy(struct drm_connector *connector);
 void amdgpu_dm_encoder_destroy(struct drm_encoder *encoder);
 
 int amdgpu_dm_connector_get_modes(struct drm_connector *connector);
+
+int amdgpu_dm_atomic_commit(
+		struct drm_device *dev,
+		struct drm_atomic_state *state,
+		bool nonblock);
 
 void amdgpu_dm_atomic_commit_tail(
 	struct drm_atomic_state *state);

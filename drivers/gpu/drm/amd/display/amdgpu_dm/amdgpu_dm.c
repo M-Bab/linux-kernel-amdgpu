@@ -100,13 +100,16 @@ static u32 dm_vblank_get_counter(struct amdgpu_device *adev, int crtc)
 		return 0;
 	else {
 		struct amdgpu_crtc *acrtc = adev->mode_info.crtcs[crtc];
+		struct dm_crtc_state *acrtc_state = to_dm_crtc_state(
+				acrtc->base.state);
 
-		if (NULL == acrtc->stream) {
+
+		if (acrtc_state->stream == NULL) {
 			DRM_ERROR("dc_stream is NULL for crtc '%d'!\n", crtc);
 			return 0;
 		}
 
-		return dc_stream_get_vblank_counter(acrtc->stream);
+		return dc_stream_get_vblank_counter(acrtc_state->stream);
 	}
 }
 
@@ -119,8 +122,10 @@ static int dm_crtc_get_scanoutpos(struct amdgpu_device *adev, int crtc,
 		return -EINVAL;
 	else {
 		struct amdgpu_crtc *acrtc = adev->mode_info.crtcs[crtc];
+		struct dm_crtc_state *acrtc_state = to_dm_crtc_state(
+						acrtc->base.state);
 
-		if (NULL == acrtc->stream) {
+		if (acrtc_state->stream ==  NULL) {
 			DRM_ERROR("dc_stream is NULL for crtc '%d'!\n", crtc);
 			return 0;
 		}
@@ -129,7 +134,7 @@ static int dm_crtc_get_scanoutpos(struct amdgpu_device *adev, int crtc,
 		 * TODO rework base driver to use values directly.
 		 * for now parse it back into reg-format
 		 */
-		dc_stream_get_scanoutpos(acrtc->stream,
+		dc_stream_get_scanoutpos(acrtc_state->stream,
 					 &v_blank_start,
 					 &v_blank_end,
 					 &h_position,
@@ -503,6 +508,7 @@ static int dm_suspend(void *handle)
 
 	amdgpu_dm_irq_suspend(adev);
 
+	WARN_ON(adev->dm.cached_state);
 	adev->dm.cached_state = drm_atomic_helper_suspend(adev->ddev);
 
 	dc_set_power_state(
@@ -602,6 +608,9 @@ int amdgpu_dm_display_resume(struct amdgpu_device *adev )
 
 	ret = drm_atomic_helper_resume(ddev, adev->dm.cached_state);
 
+	drm_atomic_state_put(adev->dm.cached_state);
+	adev->dm.cached_state = NULL;
+
 	amdgpu_dm_irq_resume_late(adev);
 
 	return ret;
@@ -634,12 +643,49 @@ const struct amdgpu_ip_block_version dm_ip_block =
 	.funcs = &amdgpu_dm_funcs,
 };
 
-/* TODO: it is temporary non-const, should fixed later */
-static struct drm_mode_config_funcs amdgpu_dm_mode_funcs = {
+
+struct drm_atomic_state *
+dm_atomic_state_alloc(struct drm_device *dev)
+{
+	struct dm_atomic_state *state = kzalloc(sizeof(*state), GFP_KERNEL);
+
+	if (!state || drm_atomic_state_init(dev, &state->base) < 0) {
+		kfree(state);
+		return NULL;
+	}
+
+	return &state->base;
+}
+
+static void
+dm_atomic_state_clear(struct drm_atomic_state *state)
+{
+	struct dm_atomic_state *dm_state = to_dm_atomic_state(state);
+
+	if (dm_state->context) {
+		dc_release_validate_context(dm_state->context);
+		dm_state->context = NULL;
+	}
+
+	drm_atomic_state_default_clear(state);
+}
+
+static void
+dm_atomic_state_alloc_free(struct drm_atomic_state *state)
+{
+	struct dm_atomic_state *dm_state = to_dm_atomic_state(state);
+	drm_atomic_state_default_release(state);
+	kfree(dm_state);
+}
+
+static const struct drm_mode_config_funcs amdgpu_dm_mode_funcs = {
 	.fb_create = amdgpu_user_framebuffer_create,
 	.output_poll_changed = amdgpu_output_poll_changed,
 	.atomic_check = amdgpu_dm_atomic_check,
-	.atomic_commit = drm_atomic_helper_commit
+	.atomic_commit = amdgpu_dm_atomic_commit,
+	.atomic_state_alloc = dm_atomic_state_alloc,
+	.atomic_state_clear = dm_atomic_state_clear,
+	.atomic_state_free = dm_atomic_state_alloc_free
 };
 
 static struct drm_mode_config_helper_funcs amdgpu_dm_mode_config_helperfuncs = {
@@ -1426,6 +1472,7 @@ static int dm_early_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
+	adev->ddev->driver->driver_features |= DRIVER_ATOMIC;
 	amdgpu_dm_set_irq_funcs(adev);
 
 	switch (adev->asic_type) {
