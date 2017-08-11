@@ -1829,6 +1829,9 @@ static const struct usb_device_id acm_ids[] = {
 	{ USB_DEVICE(0x1576, 0x03b1), /* Maretron USB100 */
 	.driver_info = NO_UNION_NORMAL, /* reports zero length descriptor */
 	},
+	{ USB_DEVICE(0xfff0, 0x0100), /* DATECS FP-2000 */
+	.driver_info = NO_UNION_NORMAL, /* reports zero length descriptor */
+	},
 
 	{ USB_DEVICE(0x2912, 0x0001), /* ATOL FPrint */
 	.driver_info = CLEAR_HALT_CONDITIONS,
@@ -1926,6 +1929,20 @@ static const struct usb_device_id acm_ids[] = {
 	{ USB_DEVICE(0x058b, 0x0041),
 	.driver_info = IGNORE_DEVICE,
 	},
+
+	/* Exclude Exar USB serial ports */
+	{ USB_DEVICE(0x04e2, 0x1400), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1401), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1402), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1403), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1410), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1411), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1412), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1414), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1420), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1421), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1422), .driver_info = IGNORE_DEVICE, },
+	{ USB_DEVICE(0x04e2, 0x1424), .driver_info = IGNORE_DEVICE, },
 
 	/* control interfaces without any protocol set */
 	{ USB_INTERFACE_INFO(USB_CLASS_COMM, USB_CDC_SUBCLASS_ACM,

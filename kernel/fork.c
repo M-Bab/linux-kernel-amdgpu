@@ -100,6 +100,11 @@
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/task.h>
+#ifdef CONFIG_USER_NS
+extern int unprivileged_userns_clone;
+#else
+#define unprivileged_userns_clone 0
+#endif
 
 /*
  * Minimum number of threads to boot the kernel
@@ -205,19 +210,17 @@ static unsigned long *alloc_thread_stack_node(struct task_struct *tsk, int node)
 	void *stack;
 	int i;
 
-	local_irq_disable();
 	for (i = 0; i < NR_CACHED_STACKS; i++) {
-		struct vm_struct *s = this_cpu_read(cached_stacks[i]);
+		struct vm_struct *s;
+
+		s = this_cpu_xchg(cached_stacks[i], NULL);
 
 		if (!s)
 			continue;
-		this_cpu_write(cached_stacks[i], NULL);
 
 		tsk->stack_vm_area = s;
-		local_irq_enable();
 		return s->addr;
 	}
-	local_irq_enable();
 
 	stack = __vmalloc_node_range(THREAD_SIZE, THREAD_SIZE,
 				     VMALLOC_START, VMALLOC_END,
@@ -245,19 +248,15 @@ static inline void free_thread_stack(struct task_struct *tsk)
 {
 #ifdef CONFIG_VMAP_STACK
 	if (task_stack_vm_area(tsk)) {
-		unsigned long flags;
 		int i;
 
-		local_irq_save(flags);
 		for (i = 0; i < NR_CACHED_STACKS; i++) {
-			if (this_cpu_read(cached_stacks[i]))
+			if (this_cpu_cmpxchg(cached_stacks[i],
+					NULL, tsk->stack_vm_area) != NULL)
 				continue;
 
-			this_cpu_write(cached_stacks[i], tsk->stack_vm_area);
-			local_irq_restore(flags);
 			return;
 		}
-		local_irq_restore(flags);
 
 		vfree_atomic(tsk->stack);
 		return;
@@ -665,7 +664,7 @@ static __latent_entropy int dup_mmap(struct mm_struct *mm,
 			struct inode *inode = file_inode(file);
 			struct address_space *mapping = file->f_mapping;
 
-			get_file(file);
+			vma_get_file(tmp);
 			if (tmp->vm_flags & VM_DENYWRITE)
 				atomic_dec(&inode->i_writecount);
 			i_mmap_lock_write(mapping);
@@ -1532,6 +1531,10 @@ static __latent_entropy struct task_struct *copy_process(
 	if ((clone_flags & (CLONE_NEWUSER|CLONE_FS)) == (CLONE_NEWUSER|CLONE_FS))
 		return ERR_PTR(-EINVAL);
 
+	if ((clone_flags & CLONE_NEWUSER) && !unprivileged_userns_clone)
+		if (!capable(CAP_SYS_ADMIN))
+			return ERR_PTR(-EPERM);
+
 	/*
 	 * Thread groups must share signals as well, and detached threads
 	 * can only be started up within the thread group.
@@ -1637,9 +1640,9 @@ static __latent_entropy struct task_struct *copy_process(
 	prev_cputime_init(&p->prev_cputime);
 
 #ifdef CONFIG_VIRT_CPU_ACCOUNTING_GEN
-	seqcount_init(&p->vtime_seqcount);
-	p->vtime_snap = 0;
-	p->vtime_snap_whence = VTIME_INACTIVE;
+	seqcount_init(&p->vtime.seqcount);
+	p->vtime.starttime = 0;
+	p->vtime.state = VTIME_INACTIVE;
 #endif
 
 #if defined(SPLIT_RSS_COUNTING)
@@ -2326,6 +2329,12 @@ SYSCALL_DEFINE1(unshare, unsigned long, unshare_flags)
 	 */
 	if (unshare_flags & CLONE_NEWNS)
 		unshare_flags |= CLONE_FS;
+
+	if ((unshare_flags & CLONE_NEWUSER) && !unprivileged_userns_clone) {
+		err = -EPERM;
+		if (!capable(CAP_SYS_ADMIN))
+			goto bad_unshare_out;
+	}
 
 	err = check_unshare_flags(unshare_flags);
 	if (err)

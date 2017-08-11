@@ -649,6 +649,10 @@
 			/proc/<pid>/coredump_filter.
 			See also Documentation/filesystems/proc.txt.
 
+	cpufreq_driver= [X86] Allow only the named cpu frequency scaling driver
+			to register. Example: cpufreq_driver=powernow-k8
+			Format: { none | STRING }
+
 	cpuidle.off=1	[CPU_IDLE]
 			disable the cpuidle sub-system
 
@@ -1837,6 +1841,18 @@
 	kvm-amd.npt=	[KVM,AMD] Disable nested paging (virtualized MMU)
 			for all guests.
 			Default is 1 (enabled) if in 64-bit or 32-bit PAE mode.
+
+	kvm-arm.vgic_v3_group0_trap=
+			[KVM,ARM] Trap guest accesses to GICv3 group-0
+			system registers
+
+	kvm-arm.vgic_v3_group1_trap=
+			[KVM,ARM] Trap guest accesses to GICv3 group-1
+			system registers
+
+	kvm-arm.vgic_v3_common_trap=
+			[KVM,ARM] Trap guest accesses to GICv3 common
+			system registers
 
 	kvm-intel.ept=	[KVM,Intel] Disable extended page tables
 			(virtualized MMU) support on capable Intel chips.

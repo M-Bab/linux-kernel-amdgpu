@@ -1121,7 +1121,7 @@ int ip_tunnel_changelink(struct net_device *dev, struct nlattr *tb[],
 	struct ip_tunnel_net *itn = net_generic(net, tunnel->ip_tnl_net_id);
 
 	if (dev == itn->fb_tunnel_dev)
-		return -EINVAL;
+		return fan_has_map(&tunnel->fan) ? 0 : -EINVAL;
 
 	t = ip_tunnel_find(itn, p, dev->type);
 

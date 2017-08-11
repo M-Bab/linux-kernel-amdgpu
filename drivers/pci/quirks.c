@@ -25,6 +25,7 @@
 #include <linux/sched.h>
 #include <linux/ktime.h>
 #include <linux/mm.h>
+#include <linux/vgaarb.h>
 #include <asm/dma.h>	/* isa_dma_bridge_buggy */
 #include "pci.h"
 
@@ -40,6 +41,21 @@ static void quirk_mmio_always_on(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_CLASS_EARLY(PCI_ANY_ID, PCI_ANY_ID,
 				PCI_CLASS_BRIDGE_HOST, 8, quirk_mmio_always_on);
+
+/* The BAR0 ~ BAR4 of Marvell 9125 device can't be accessed
+*  by IO resource file, and need to skip the files
+*/
+static void quirk_marvell_mask_bar(struct pci_dev *dev)
+{
+	int i;
+
+	for (i = 0; i < 5; i++)
+		if (dev->resource[i].start)
+			dev->resource[i].start =
+				dev->resource[i].end = 0;
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_MARVELL_EXT, 0x9125,
+				quirk_marvell_mask_bar);
 
 /* The Mellanox Tavor device gives false positive parity errors
  * Mark this device with a broken_parity_status, to allow
@@ -2834,6 +2850,26 @@ static void quirk_hotplug_bridge(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_HINT, 0x0020, quirk_hotplug_bridge);
 
 /*
+ * Apple: Avoid programming the memory/io aperture of 00:1c.0
+ *
+ * BIOS does not declare any resource for 00:1c.0, but with
+ * hotplug flag set, thus the OS allocates:
+ * [mem 0x7fa00000 - 0x7fbfffff]
+ * [mem 0x7fc00000-0x7fdfffff 64bit pref]
+ * which is conflict with an unreported device, which
+ * causes unpredictable result such as accessing io port.
+ * So clear the hotplug flag to work around it.
+ */
+static void quirk_apple_mbp_poweroff(struct pci_dev *dev)
+{
+	if (dmi_match(DMI_PRODUCT_NAME, "MacBookPro11,4") ||
+	    dmi_match(DMI_PRODUCT_NAME, "MacBookPro11,5"))
+		dev->is_hotplug_bridge = 0;
+}
+
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x8c10, quirk_apple_mbp_poweroff);
+
+/*
  * This is a quirk for the Ricoh MMC controller found as a part of
  * some mulifunction chips.
 
@@ -4664,3 +4700,48 @@ static void quirk_intel_no_flr(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x1502, quirk_intel_no_flr);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x1503, quirk_intel_no_flr);
+
+/*
+ * The hibmc card on a HiSilicon D05 board sits behind a non-compliant
+ * bridge. The bridge has the PCI_BRIDGE_CTL_VGA config bit fixed at 0
+ * in hardware. This prevents the vgaarb from marking a card behind it
+ * as boot VGA device.
+ *
+ * However, the hibmc card is known to still work, so if we have that
+ * card behind that particular bridge (19e5:1610), mark it as the
+ * default device if none has been detected.
+ */
+static void hibmc_fixup_vgaarb(struct pci_dev *pdev)
+{
+	struct pci_dev *bridge;
+	struct pci_bus *bus;
+	u16 config;
+
+	bus = pdev->bus;
+	bridge = bus->self;
+	if (!bridge)
+		return;
+
+	if (!pci_is_bridge(bridge))
+		return;
+
+	if (bridge->vendor != PCI_VENDOR_ID_HUAWEI ||
+	    bridge->device != 0x1610)
+		return;
+
+	pci_read_config_word(bridge, PCI_BRIDGE_CONTROL,
+			     &config);
+	if (config & PCI_BRIDGE_CTL_VGA) {
+		/*
+		 * Weirdly, this bridge *is* spec compliant, so bail
+		 * and let vgaarb do its job
+		 */
+		return;
+	}
+
+	if (vga_default_device())
+		return;
+
+	vga_set_default_device(pdev);
+}
+DECLARE_PCI_FIXUP_FINAL(PCI_VENDOR_ID_HUAWEI, 0x1711, hibmc_fixup_vgaarb);

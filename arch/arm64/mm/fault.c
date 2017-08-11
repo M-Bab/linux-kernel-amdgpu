@@ -31,6 +31,7 @@
 #include <linux/highmem.h>
 #include <linux/perf_event.h>
 #include <linux/preempt.h>
+#include <linux/hugetlb.h>
 
 #include <asm/bug.h>
 #include <asm/cpufeature.h>
@@ -41,6 +42,8 @@
 #include <asm/system_misc.h>
 #include <asm/pgtable.h>
 #include <asm/tlbflush.h>
+
+#include <acpi/ghes.h>
 
 struct fault_info {
 	int	(*fn)(unsigned long addr, unsigned int esr,
@@ -239,10 +242,11 @@ static void __do_kernel_fault(struct mm_struct *mm, unsigned long addr,
  */
 static void __do_user_fault(struct task_struct *tsk, unsigned long addr,
 			    unsigned int esr, unsigned int sig, int code,
-			    struct pt_regs *regs)
+			    struct pt_regs *regs, int fault)
 {
 	struct siginfo si;
 	const struct fault_info *inf;
+	unsigned int lsb = 0;
 
 	if (unhandled_signal(tsk, sig) && show_unhandled_signals_ratelimited()) {
 		inf = esr_to_fault_info(esr);
@@ -259,6 +263,17 @@ static void __do_user_fault(struct task_struct *tsk, unsigned long addr,
 	si.si_errno = 0;
 	si.si_code = code;
 	si.si_addr = (void __user *)addr;
+	/*
+	 * Either small page or large page may be poisoned.
+	 * In other words, VM_FAULT_HWPOISON_LARGE and
+	 * VM_FAULT_HWPOISON are mutually exclusive.
+	 */
+	if (fault & VM_FAULT_HWPOISON_LARGE)
+		lsb = hstate_index_to_shift(VM_FAULT_GET_HINDEX(fault));
+	else if (fault & VM_FAULT_HWPOISON)
+		lsb = PAGE_SHIFT;
+	si.si_addr_lsb = lsb;
+
 	force_sig_info(sig, &si, tsk);
 }
 
@@ -274,7 +289,7 @@ static void do_bad_area(unsigned long addr, unsigned int esr, struct pt_regs *re
 	 */
 	if (user_mode(regs)) {
 		inf = esr_to_fault_info(esr);
-		__do_user_fault(tsk, addr, esr, inf->sig, inf->code, regs);
+		__do_user_fault(tsk, addr, esr, inf->sig, inf->code, regs, 0);
 	} else
 		__do_kernel_fault(mm, addr, esr, regs);
 }
@@ -329,7 +344,7 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 {
 	struct task_struct *tsk;
 	struct mm_struct *mm;
-	int fault, sig, code;
+	int fault, sig, code, major = 0;
 	unsigned long vm_flags = VM_READ | VM_WRITE;
 	unsigned int mm_flags = FAULT_FLAG_ALLOW_RETRY | FAULT_FLAG_KILLABLE;
 
@@ -368,6 +383,8 @@ static int __kprobes do_page_fault(unsigned long addr, unsigned int esr,
 			die("Accessing user space memory outside uaccess.h routines", regs, esr);
 	}
 
+	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, addr);
+
 	/*
 	 * As per x86, we may deadlock here. However, since the kernel only
 	 * validly references user space from well defined areas of the code,
@@ -391,24 +408,42 @@ retry:
 	}
 
 	fault = __do_page_fault(mm, addr, mm_flags, vm_flags, tsk);
+	major |= fault & VM_FAULT_MAJOR;
+
+	if (fault & VM_FAULT_RETRY) {
+		/*
+		 * If we need to retry but a fatal signal is pending,
+		 * handle the signal first. We do not need to release
+		 * the mmap_sem because it would already be released
+		 * in __lock_page_or_retry in mm/filemap.c.
+		 */
+		if (fatal_signal_pending(current))
+			return 0;
+
+		/*
+		 * Clear FAULT_FLAG_ALLOW_RETRY to avoid any risk of
+		 * starvation.
+		 */
+		if (mm_flags & FAULT_FLAG_ALLOW_RETRY) {
+			mm_flags &= ~FAULT_FLAG_ALLOW_RETRY;
+			mm_flags |= FAULT_FLAG_TRIED;
+			goto retry;
+		}
+	}
+	up_read(&mm->mmap_sem);
 
 	/*
-	 * If we need to retry but a fatal signal is pending, handle the
-	 * signal first. We do not need to release the mmap_sem because it
-	 * would already be released in __lock_page_or_retry in mm/filemap.c.
+	 * Handle the "normal" (no error) case first.
 	 */
-	if ((fault & VM_FAULT_RETRY) && fatal_signal_pending(current))
-		return 0;
-
-	/*
-	 * Major/minor page fault accounting is only done on the initial
-	 * attempt. If we go through a retry, it is extremely likely that the
-	 * page will be found in page cache at that point.
-	 */
-
-	perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS, 1, regs, addr);
-	if (mm_flags & FAULT_FLAG_ALLOW_RETRY) {
-		if (fault & VM_FAULT_MAJOR) {
+	if (likely(!(fault & (VM_FAULT_ERROR | VM_FAULT_BADMAP |
+			      VM_FAULT_BADACCESS)))) {
+		/*
+		 * Major/minor page fault accounting is only done
+		 * once. If we go through a retry, it is extremely
+		 * likely that the page will be found in page cache at
+		 * that point.
+		 */
+		if (major) {
 			tsk->maj_flt++;
 			perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS_MAJ, 1, regs,
 				      addr);
@@ -417,25 +452,9 @@ retry:
 			perf_sw_event(PERF_COUNT_SW_PAGE_FAULTS_MIN, 1, regs,
 				      addr);
 		}
-		if (fault & VM_FAULT_RETRY) {
-			/*
-			 * Clear FAULT_FLAG_ALLOW_RETRY to avoid any risk of
-			 * starvation.
-			 */
-			mm_flags &= ~FAULT_FLAG_ALLOW_RETRY;
-			mm_flags |= FAULT_FLAG_TRIED;
-			goto retry;
-		}
-	}
 
-	up_read(&mm->mmap_sem);
-
-	/*
-	 * Handle the "normal" case first - VM_FAULT_MAJOR
-	 */
-	if (likely(!(fault & (VM_FAULT_ERROR | VM_FAULT_BADMAP |
-			      VM_FAULT_BADACCESS))))
 		return 0;
+	}
 
 	/*
 	 * If we are in kernel mode at this point, we have no context to
@@ -461,6 +480,9 @@ retry:
 		 */
 		sig = SIGBUS;
 		code = BUS_ADRERR;
+	} else if (fault & (VM_FAULT_HWPOISON | VM_FAULT_HWPOISON_LARGE)) {
+		sig = SIGBUS;
+		code = BUS_MCEERR_AR;
 	} else {
 		/*
 		 * Something tried to access memory that isn't in our memory
@@ -471,7 +493,7 @@ retry:
 			SEGV_ACCERR : SEGV_MAPERR;
 	}
 
-	__do_user_fault(tsk, addr, esr, sig, code, regs);
+	__do_user_fault(tsk, addr, esr, sig, code, regs, fault);
 	return 0;
 
 no_context:
@@ -522,6 +544,47 @@ static int do_bad(unsigned long addr, unsigned int esr, struct pt_regs *regs)
 	return 1;
 }
 
+/*
+ * This abort handler deals with Synchronous External Abort.
+ * It calls notifiers, and then returns "fault".
+ */
+static int do_sea(unsigned long addr, unsigned int esr, struct pt_regs *regs)
+{
+	struct siginfo info;
+	const struct fault_info *inf;
+	int ret = 0;
+
+	inf = esr_to_fault_info(esr);
+	pr_err("Synchronous External Abort: %s (0x%08x) at 0x%016lx\n",
+		inf->name, esr, addr);
+
+	/*
+	 * Synchronous aborts may interrupt code which had interrupts masked.
+	 * Before calling out into the wider kernel tell the interested
+	 * subsystems.
+	 */
+	if (IS_ENABLED(CONFIG_ACPI_APEI_SEA)) {
+		if (interrupts_enabled(regs))
+			nmi_enter();
+
+		ret = ghes_notify_sea();
+
+		if (interrupts_enabled(regs))
+			nmi_exit();
+	}
+
+	info.si_signo = SIGBUS;
+	info.si_errno = 0;
+	info.si_code  = 0;
+	if (esr & ESR_ELx_FnV)
+		info.si_addr = NULL;
+	else
+		info.si_addr  = (void __user *)addr;
+	arm64_notify_die("", regs, &info, esr);
+
+	return ret;
+}
+
 static const struct fault_info fault_info[] = {
 	{ do_bad,		SIGBUS,  0,		"ttbr address size fault"	},
 	{ do_bad,		SIGBUS,  0,		"level 1 address size fault"	},
@@ -539,22 +602,22 @@ static const struct fault_info fault_info[] = {
 	{ do_page_fault,	SIGSEGV, SEGV_ACCERR,	"level 1 permission fault"	},
 	{ do_page_fault,	SIGSEGV, SEGV_ACCERR,	"level 2 permission fault"	},
 	{ do_page_fault,	SIGSEGV, SEGV_ACCERR,	"level 3 permission fault"	},
-	{ do_bad,		SIGBUS,  0,		"synchronous external abort"	},
+	{ do_sea,		SIGBUS,  0,		"synchronous external abort"	},
 	{ do_bad,		SIGBUS,  0,		"unknown 17"			},
 	{ do_bad,		SIGBUS,  0,		"unknown 18"			},
 	{ do_bad,		SIGBUS,  0,		"unknown 19"			},
-	{ do_bad,		SIGBUS,  0,		"synchronous external abort (translation table walk)" },
-	{ do_bad,		SIGBUS,  0,		"synchronous external abort (translation table walk)" },
-	{ do_bad,		SIGBUS,  0,		"synchronous external abort (translation table walk)" },
-	{ do_bad,		SIGBUS,  0,		"synchronous external abort (translation table walk)" },
-	{ do_bad,		SIGBUS,  0,		"synchronous parity error"	},
+	{ do_sea,		SIGBUS,  0,		"level 0 (translation table walk)"	},
+	{ do_sea,		SIGBUS,  0,		"level 1 (translation table walk)"	},
+	{ do_sea,		SIGBUS,  0,		"level 2 (translation table walk)"	},
+	{ do_sea,		SIGBUS,  0,		"level 3 (translation table walk)"	},
+	{ do_sea,		SIGBUS,  0,		"synchronous parity or ECC error" },
 	{ do_bad,		SIGBUS,  0,		"unknown 25"			},
 	{ do_bad,		SIGBUS,  0,		"unknown 26"			},
 	{ do_bad,		SIGBUS,  0,		"unknown 27"			},
-	{ do_bad,		SIGBUS,  0,		"synchronous parity error (translation table walk)" },
-	{ do_bad,		SIGBUS,  0,		"synchronous parity error (translation table walk)" },
-	{ do_bad,		SIGBUS,  0,		"synchronous parity error (translation table walk)" },
-	{ do_bad,		SIGBUS,  0,		"synchronous parity error (translation table walk)" },
+	{ do_sea,		SIGBUS,  0,		"level 0 synchronous parity error (translation table walk)"	},
+	{ do_sea,		SIGBUS,  0,		"level 1 synchronous parity error (translation table walk)"	},
+	{ do_sea,		SIGBUS,  0,		"level 2 synchronous parity error (translation table walk)"	},
+	{ do_sea,		SIGBUS,  0,		"level 3 synchronous parity error (translation table walk)"	},
 	{ do_bad,		SIGBUS,  0,		"unknown 32"			},
 	{ do_alignment_fault,	SIGBUS,  BUS_ADRALN,	"alignment fault"		},
 	{ do_bad,		SIGBUS,  0,		"unknown 34"			},
@@ -588,6 +651,23 @@ static const struct fault_info fault_info[] = {
 	{ do_bad,		SIGBUS,  0,		"page domain fault"		},
 	{ do_bad,		SIGBUS,  0,		"unknown 63"			},
 };
+
+/*
+ * Handle Synchronous External Aborts that occur in a guest kernel.
+ *
+ * The return value will be zero if the SEA was successfully handled
+ * and non-zero if there was an error processing the error or there was
+ * no error to process.
+ */
+int handle_guest_sea(phys_addr_t addr, unsigned int esr)
+{
+	int ret = -ENOENT;
+
+	if (IS_ENABLED(CONFIG_ACPI_APEI_SEA))
+		ret = ghes_notify_sea();
+
+	return ret;
+}
 
 /*
  * Dispatch a data abort to the relevant handler.
