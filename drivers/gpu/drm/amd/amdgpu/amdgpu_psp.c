@@ -448,6 +448,9 @@ static int psp_hw_fini(void *handle)
 	kfree(psp->cmd);
 	psp->cmd = NULL;
 
+	kfree(psp->cmd);
+	psp->cmd = NULL;
+
 	return 0;
 }
 
