@@ -2416,7 +2416,6 @@ static const struct drm_crtc_funcs amdgpu_dm_crtc_funcs = {
 	.destroy = amdgpu_dm_crtc_destroy,
 	.gamma_set = drm_atomic_helper_legacy_gamma_set,
 	.set_config = drm_atomic_helper_set_config,
-	.set_property = drm_atomic_helper_crtc_set_property,
 	.page_flip = drm_atomic_helper_page_flip,
 	.atomic_duplicate_state = dm_crtc_duplicate_state,
 	.atomic_destroy_state = dm_crtc_destroy_state,
