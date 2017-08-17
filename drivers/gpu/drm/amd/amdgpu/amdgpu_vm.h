@@ -99,11 +99,22 @@ struct amdgpu_bo_list_entry;
 #define AMDGPU_VM_USE_CPU_FOR_GFX (1 << 0)
 #define AMDGPU_VM_USE_CPU_FOR_COMPUTE (1 << 1)
 
+/* base structure for tracking BO usage in a VM */
+struct amdgpu_vm_bo_base {
+	/* constant after initialization */
+	struct amdgpu_vm		*vm;
+	struct amdgpu_bo		*bo;
+
+	/* protected by bo being reserved */
+	struct list_head		bo_list;
+
+	/* protected by spinlock */
+	struct list_head		vm_status;
+};
 
 struct amdgpu_vm_pt {
 	struct amdgpu_bo	*bo;
 	uint64_t		addr;
-	bool			huge_page;
 
 	/* array of page tables, one for each directory entry */
 	struct amdgpu_vm_pt	*entries;
@@ -118,7 +129,7 @@ struct amdgpu_vm {
 	spinlock_t		status_lock;
 
 	/* BOs moved, but not yet updated in the PT */
-	struct list_head	invalidated;
+	struct list_head	moved;
 
 	/* BOs cleared in the PT because of a move */
 	struct list_head	cleared;
@@ -141,8 +152,6 @@ struct amdgpu_vm {
 	u64                     client_id;
 	/* dedicated to vm */
 	struct amdgpu_vm_id	*reserved_vmid[AMDGPU_MAX_VMHUBS];
-	/* each VM will map on CSA */
-	struct amdgpu_bo_va *csa_bo_va;
 
 	/* Flag to indicate if VM tables are updated by CPU or GPU (SDMA) */
 	bool                    use_cpu_for_update;
@@ -238,8 +247,8 @@ int amdgpu_vm_update_directories(struct amdgpu_device *adev,
 int amdgpu_vm_clear_freed(struct amdgpu_device *adev,
 			  struct amdgpu_vm *vm,
 			  struct dma_fence **fence);
-int amdgpu_vm_clear_invalids(struct amdgpu_device *adev, struct amdgpu_vm *vm,
-			     struct amdgpu_sync *sync);
+int amdgpu_vm_clear_moved(struct amdgpu_device *adev, struct amdgpu_vm *vm,
+			  struct amdgpu_sync *sync);
 int amdgpu_vm_bo_update(struct amdgpu_device *adev,
 			struct amdgpu_bo_va *bo_va,
 			bool clear);

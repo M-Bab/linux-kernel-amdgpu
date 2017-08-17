@@ -778,7 +778,8 @@ static int amdgpu_bo_vm_update_pte(struct amdgpu_cs_parser *p)
 
 	if (amdgpu_sriov_vf(adev)) {
 		struct dma_fence *f;
-		bo_va = vm->csa_bo_va;
+
+		bo_va = fpriv->csa_va;
 		BUG_ON(!bo_va);
 		r = amdgpu_vm_bo_update(adev, bo_va, false);
 		if (r)
@@ -815,7 +816,7 @@ static int amdgpu_bo_vm_update_pte(struct amdgpu_cs_parser *p)
 
 	}
 
-	r = amdgpu_vm_clear_invalids(adev, vm, &p->job->sync);
+	r = amdgpu_vm_clear_moved(adev, vm, &p->job->sync);
 
 	if (amdgpu_vm_debug && p->bo_list) {
 		/* Invalidate all BOs to test for userspace bugs */
@@ -1401,7 +1402,7 @@ amdgpu_cs_find_mapping(struct amdgpu_cs_parser *parser,
 			    addr > mapping->last)
 				continue;
 
-			*bo = lobj->bo_va->bo;
+			*bo = lobj->bo_va->base.bo;
 			return mapping;
 		}
 
@@ -1410,7 +1411,7 @@ amdgpu_cs_find_mapping(struct amdgpu_cs_parser *parser,
 			    addr > mapping->last)
 				continue;
 
-			*bo = lobj->bo_va->bo;
+			*bo = lobj->bo_va->base.bo;
 			return mapping;
 		}
 	}
