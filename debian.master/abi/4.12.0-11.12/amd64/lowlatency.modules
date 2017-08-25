@@ -318,7 +318,6 @@ anatop-regulator
 ansi_cprng
 anubis
 aoe
-ap1302
 apanel
 apds9300
 apds9802als
@@ -408,7 +407,6 @@ atmel_cs
 atmel_mxt_ts
 atmel_pci
 atmtcp
-atomisp
 atp
 atp870u
 atusb
@@ -1338,8 +1336,6 @@ gb-spilib
 gb-uart
 gb-usb
 gb-vibrator
-gc0310
-gc2235
 gcm
 gdmtty
 gdmulte
@@ -1841,7 +1837,6 @@ imm
 imon
 ims-pcu
 imx074
-imx1x5
 ina209
 ina2xx
 ina2xx-adc
@@ -2247,7 +2242,6 @@ libfcoe
 libipw
 libiscsi
 libiscsi_tcp
-libmsrlisthelper
 libore
 libosd
 libsas
@@ -2269,7 +2263,6 @@ lm3533-als
 lm3533-core
 lm3533-ctrlbank
 lm3533_bl
-lm3554
 lm3630a_bl
 lm3639_bl
 lm363x-regulator
@@ -2643,7 +2636,6 @@ mt7530
 mt7601u
 mt9m001
 mt9m111
-mt9m114
 mt9t031
 mt9t112
 mt9v011
@@ -3001,15 +2993,11 @@ osd
 osst
 oti6858
 ov2640
-ov2680
-ov2722
 ov5642
-ov5693
 ov6650
 ov7640
 ov7670
 ov772x
-ov8858_driver
 ov9640
 ov9740
 overlay
