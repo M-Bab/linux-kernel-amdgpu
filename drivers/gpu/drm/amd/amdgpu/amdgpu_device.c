@@ -1063,11 +1063,11 @@ static void amdgpu_check_arguments(struct amdgpu_device *adev)
 		amdgpu_sched_jobs = roundup_pow_of_two(amdgpu_sched_jobs);
 	}
 
-	if (amdgpu_gart_size < 32) {
+	if (amdgpu_gart_size != -1 && amdgpu_gart_size < 32) {
 		/* gart size must be greater or equal to 32M */
 		dev_warn(adev->dev, "gart size (%d) too small\n",
 			 amdgpu_gart_size);
-		amdgpu_gart_size = 32;
+		amdgpu_gart_size = -1;
 	}
 
 	if (amdgpu_gtt_size != -1 && amdgpu_gtt_size < 32) {
@@ -1075,6 +1075,13 @@ static void amdgpu_check_arguments(struct amdgpu_device *adev)
 		dev_warn(adev->dev, "gtt size (%d) too small\n",
 				 amdgpu_gtt_size);
 		amdgpu_gtt_size = -1;
+	}
+
+	/* valid range is between 4 and 9 inclusive */
+	if (amdgpu_vm_fragment_size != -1 &&
+	    (amdgpu_vm_fragment_size > 9 || amdgpu_vm_fragment_size < 4)) {
+		dev_warn(adev->dev, "valid range is between 4 and 9\n");
+		amdgpu_vm_fragment_size = -1;
 	}
 
 	amdgpu_check_vm_size(adev);
@@ -1947,8 +1954,6 @@ bool amdgpu_device_asic_has_dc_support(enum amd_asic_type asic_type)
 	case CHIP_BONAIRE:
 	case CHIP_HAWAII:
 	case CHIP_KAVERI:
-	case CHIP_KABINI:
-	case CHIP_MULLINS:
 	case CHIP_CARRIZO:
 	case CHIP_STONEY:
 	case CHIP_POLARIS11:
@@ -1958,6 +1963,9 @@ bool amdgpu_device_asic_has_dc_support(enum amd_asic_type asic_type)
 	case CHIP_FIJI:
 	case CHIP_VEGA10:
 		return amdgpu_dc != 0;
+	case CHIP_KABINI:
+	case CHIP_MULLINS:
+		return amdgpu_dc > 0;
 #endif
 #if defined(CONFIG_DRM_AMD_DC) && defined(CONFIG_DRM_AMD_DC_DCN1_0)
 	case CHIP_RAVEN:
@@ -2679,12 +2687,6 @@ static int amdgpu_recover_vram_from_shadow(struct amdgpu_device *adev,
 		r = amdgpu_bo_validate(bo->shadow);
 		if (r) {
 			DRM_ERROR("bo validate failed!\n");
-			goto err;
-		}
-
-		r = amdgpu_ttm_bind(&bo->shadow->tbo, &bo->shadow->tbo.mem);
-		if (r) {
-			DRM_ERROR("%p bind failed\n", bo->shadow);
 			goto err;
 		}
 

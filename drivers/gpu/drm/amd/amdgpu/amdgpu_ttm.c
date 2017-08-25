@@ -34,6 +34,7 @@
 #include <ttm/ttm_placement.h>
 #include <ttm/ttm_module.h>
 #include <ttm/ttm_page_alloc.h>
+#include <ttm/ttm_debug.h>
 #include <drm/drmP.h>
 #include <drm/amdgpu_drm.h>
 #include <linux/seq_file.h>
@@ -667,32 +668,16 @@ static void amdgpu_trace_dma_map(struct ttm_tt *ttm)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(ttm->bdev);
 	struct amdgpu_ttm_tt *gtt = (void *)ttm;
-	unsigned i;
 
-	if (unlikely(trace_amdgpu_ttm_tt_populate_enabled())) {
-		for (i = 0; i < ttm->num_pages; i++) {
-			trace_amdgpu_ttm_tt_populate(
-				adev,
-				gtt->ttm.dma_address[i],
-				page_to_phys(ttm->pages[i]));
-		}
-	}
+	ttm_trace_dma_map(adev->dev, &gtt->ttm);
 }
 
 static void amdgpu_trace_dma_unmap(struct ttm_tt *ttm)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(ttm->bdev);
 	struct amdgpu_ttm_tt *gtt = (void *)ttm;
-	unsigned i;
 
-	if (unlikely(trace_amdgpu_ttm_tt_unpopulate_enabled())) {
-		for (i = 0; i < ttm->num_pages; i++) {
-			trace_amdgpu_ttm_tt_unpopulate(
-				adev,
-				gtt->ttm.dma_address[i],
-				page_to_phys(ttm->pages[i]));
-		}
-	}
+	ttm_trace_dma_unmap(adev->dev, &gtt->ttm);
 }
 
 /* prepare the sg table with the user pages */
@@ -931,7 +916,6 @@ static int amdgpu_ttm_tt_populate(struct ttm_tt *ttm)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(ttm->bdev);
 	struct amdgpu_ttm_tt *gtt = (void *)ttm;
-	unsigned i;
 	int r;
 	bool slave = !!(ttm->page_flags & TTM_PAGE_FLAG_SG);
 
@@ -963,27 +947,7 @@ static int amdgpu_ttm_tt_populate(struct ttm_tt *ttm)
 	}
 #endif
 
-	r = ttm_pool_populate(ttm);
-	if (r) {
-		return r;
-	}
-
-	for (i = 0; i < ttm->num_pages; i++) {
-		gtt->ttm.dma_address[i] = pci_map_page(adev->pdev, ttm->pages[i],
-						       0, PAGE_SIZE,
-						       PCI_DMA_BIDIRECTIONAL);
-		if (pci_dma_mapping_error(adev->pdev, gtt->ttm.dma_address[i])) {
-			while (i--) {
-				pci_unmap_page(adev->pdev, gtt->ttm.dma_address[i],
-					       PAGE_SIZE, PCI_DMA_BIDIRECTIONAL);
-				gtt->ttm.dma_address[i] = 0;
-			}
-			ttm_pool_unpopulate(ttm);
-			return -EFAULT;
-		}
-	}
-
-	r = 0;
+	r = ttm_populate_and_map_pages(adev->dev, &gtt->ttm);
 trace_mappings:
 	if (likely(!r))
 		amdgpu_trace_dma_map(ttm);
@@ -994,7 +958,6 @@ static void amdgpu_ttm_tt_unpopulate(struct ttm_tt *ttm)
 {
 	struct amdgpu_device *adev;
 	struct amdgpu_ttm_tt *gtt = (void *)ttm;
-	unsigned i;
 	bool slave = !!(ttm->page_flags & TTM_PAGE_FLAG_SG);
 
 	if (gtt && gtt->userptr) {
@@ -1017,14 +980,7 @@ static void amdgpu_ttm_tt_unpopulate(struct ttm_tt *ttm)
 	}
 #endif
 
-	for (i = 0; i < ttm->num_pages; i++) {
-		if (gtt->ttm.dma_address[i]) {
-			pci_unmap_page(adev->pdev, gtt->ttm.dma_address[i],
-				       PAGE_SIZE, PCI_DMA_BIDIRECTIONAL);
-		}
-	}
-
-	ttm_pool_unpopulate(ttm);
+	ttm_unmap_and_unpopulate_pages(adev->dev, &gtt->ttm);
 }
 
 int amdgpu_ttm_tt_set_userptr(struct ttm_tt *ttm, uint64_t addr,

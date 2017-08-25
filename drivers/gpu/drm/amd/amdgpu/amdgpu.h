@@ -77,7 +77,7 @@
 extern int amdgpu_modeset;
 extern int amdgpu_vram_limit;
 extern int amdgpu_vis_vram_limit;
-extern unsigned amdgpu_gart_size;
+extern int amdgpu_gart_size;
 extern int amdgpu_gtt_size;
 extern int amdgpu_moverate;
 extern int amdgpu_benchmarking;
@@ -97,6 +97,7 @@ extern int amdgpu_bapm;
 extern int amdgpu_deep_color;
 extern int amdgpu_vm_size;
 extern int amdgpu_vm_block_size;
+extern int amdgpu_vm_fragment_size;
 extern int amdgpu_vm_fault_stop;
 extern int amdgpu_vm_debug;
 extern int amdgpu_vm_update_mode;
