@@ -50,11 +50,6 @@ struct amdgpu_bo_list_entry;
 /* PTBs (Page Table Blocks) need to be aligned to 32K */
 #define AMDGPU_VM_PTB_ALIGN_SIZE   32768
 
-/* LOG2 number of continuous pages for the fragment field */
-#define AMDGPU_LOG2_PAGES_PER_FRAG(adev) \
-	((adev)->asic_type < CHIP_VEGA10 ? 4 : \
-	 (adev)->vm_manager.block_size)
-
 #define AMDGPU_PTE_VALID	(1ULL << 0)
 #define AMDGPU_PTE_SYSTEM	(1ULL << 1)
 #define AMDGPU_PTE_SNOOPED	(1ULL << 2)
@@ -200,6 +195,7 @@ struct amdgpu_vm_manager {
 	uint32_t				num_level;
 	uint64_t				vm_size;
 	uint32_t				block_size;
+	uint32_t				fragment_size;
 	/* vram base address for page table entry  */
 	u64					vram_base_offset;
 	/* vm pte handling */
@@ -275,7 +271,10 @@ int amdgpu_vm_bo_clear_mappings(struct amdgpu_device *adev,
 				uint64_t saddr, uint64_t size);
 void amdgpu_vm_bo_rmv(struct amdgpu_device *adev,
 		      struct amdgpu_bo_va *bo_va);
-void amdgpu_vm_adjust_size(struct amdgpu_device *adev, uint64_t vm_size);
+void amdgpu_vm_set_fragment_size(struct amdgpu_device *adev,
+				uint32_t fragment_size_default);
+void amdgpu_vm_adjust_size(struct amdgpu_device *adev, uint64_t vm_size,
+				uint32_t fragment_size_default);
 int amdgpu_vm_ioctl(struct drm_device *dev, void *data, struct drm_file *filp);
 bool amdgpu_vm_need_pipeline_sync(struct amdgpu_ring *ring,
 				  struct amdgpu_job *job);

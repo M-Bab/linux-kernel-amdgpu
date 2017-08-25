@@ -165,14 +165,6 @@ static int amdgpu_vm_validate_level(struct amdgpu_vm_pt *parent,
 	unsigned i;
 	int r;
 
-	if (parent->bo->shadow) {
-		struct amdgpu_bo *shadow = parent->bo->shadow;
-
-		r = amdgpu_ttm_bind(&shadow->tbo, &shadow->tbo.mem);
-		if (r)
-			return r;
-	}
-
 	if (use_cpu_for_update) {
 		r = amdgpu_bo_kmap(parent->bo, NULL);
 		if (r)
@@ -1276,7 +1268,7 @@ static void amdgpu_vm_handle_huge_pages(struct amdgpu_pte_update_params *p,
 	/* In the case of a mixed PT the PDE must point to it*/
 	if (p->adev->asic_type < CHIP_VEGA10 ||
 	    nptes != AMDGPU_VM_PTE_COUNT(p->adev) ||
-	    p->func == amdgpu_vm_do_copy_ptes ||
+	    p->src ||
 	    !(flags & AMDGPU_PTE_VALID)) {
 
 		dst = amdgpu_bo_gpu_offset(entry->bo);
@@ -1293,9 +1285,23 @@ static void amdgpu_vm_handle_huge_pages(struct amdgpu_pte_update_params *p,
 	entry->addr = (dst | flags);
 
 	if (use_cpu_update) {
+		/* In case a huge page is replaced with a system
+		 * memory mapping, p->pages_addr != NULL and
+		 * amdgpu_vm_cpu_set_ptes would try to translate dst
+		 * through amdgpu_vm_map_gart. But dst is already a
+		 * GPU address (of the page table). Disable
+		 * amdgpu_vm_map_gart temporarily.
+		 */
+		dma_addr_t *tmp;
+
+		tmp = p->pages_addr;
+		p->pages_addr = NULL;
+
 		pd_addr = (unsigned long)amdgpu_bo_kptr(parent->bo);
 		pde = pd_addr + (entry - parent->entries) * 8;
 		amdgpu_vm_cpu_set_ptes(p, pde, dst, 1, 0, flags);
+
+		p->pages_addr = tmp;
 	} else {
 		if (parent->bo->shadow) {
 			pd_addr = amdgpu_bo_gpu_offset(parent->bo->shadow);
@@ -1409,9 +1415,7 @@ static int amdgpu_vm_frag_ptes(struct amdgpu_pte_update_params	*params,
 	 * Userspace can support this by aligning virtual base address and
 	 * allocation size to the fragment size.
 	 */
-
-	/* SI and newer are optimized for 64KB */
-	unsigned pages_per_frag = AMDGPU_LOG2_PAGES_PER_FRAG(params->adev);
+	unsigned pages_per_frag = params->adev->vm_manager.fragment_size;
 	uint64_t frag_flags = AMDGPU_PTE_FRAG(pages_per_frag);
 	uint64_t frag_align = 1 << pages_per_frag;
 
@@ -2414,12 +2418,26 @@ static uint32_t amdgpu_vm_get_block_size(uint64_t vm_size)
 }
 
 /**
- * amdgpu_vm_adjust_size - adjust vm size and block size
+ * amdgpu_vm_set_fragment_size - adjust fragment size in PTE
+ *
+ * @adev: amdgpu_device pointer
+ * @fragment_size_default: the default fragment size if it's set auto
+ */
+void amdgpu_vm_set_fragment_size(struct amdgpu_device *adev, uint32_t fragment_size_default)
+{
+	if (amdgpu_vm_fragment_size == -1)
+		adev->vm_manager.fragment_size = fragment_size_default;
+	else
+		adev->vm_manager.fragment_size = amdgpu_vm_fragment_size;
+}
+
+/**
+ * amdgpu_vm_adjust_size - adjust vm size, block size and fragment size
  *
  * @adev: amdgpu_device pointer
  * @vm_size: the default vm size if it's set auto
  */
-void amdgpu_vm_adjust_size(struct amdgpu_device *adev, uint64_t vm_size)
+void amdgpu_vm_adjust_size(struct amdgpu_device *adev, uint64_t vm_size, uint32_t fragment_size_default)
 {
 	/* adjust vm size firstly */
 	if (amdgpu_vm_size == -1)
@@ -2434,8 +2452,11 @@ void amdgpu_vm_adjust_size(struct amdgpu_device *adev, uint64_t vm_size)
 	else
 		adev->vm_manager.block_size = amdgpu_vm_block_size;
 
-	DRM_INFO("vm size is %llu GB, block size is %u-bit\n",
-		adev->vm_manager.vm_size, adev->vm_manager.block_size);
+	amdgpu_vm_set_fragment_size(adev, fragment_size_default);
+
+	DRM_INFO("vm size is %llu GB, block size is %u-bit, fragment size is %u-bit\n",
+		adev->vm_manager.vm_size, adev->vm_manager.block_size,
+		adev->vm_manager.fragment_size);
 }
 
 /**

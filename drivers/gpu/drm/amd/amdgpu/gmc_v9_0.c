@@ -499,7 +499,21 @@ static int gmc_v9_0_mc_init(struct amdgpu_device *adev)
 	if (adev->mc.visible_vram_size > adev->mc.real_vram_size)
 		adev->mc.visible_vram_size = adev->mc.real_vram_size;
 
-	amdgpu_gart_set_defaults(adev);
+	/* set the gart size */
+	if (amdgpu_gart_size == -1) {
+		switch (adev->asic_type) {
+		case CHIP_VEGA10:  /* all engines support GPUVM */
+		default:
+			adev->mc.gart_size = 256ULL << 20;
+			break;
+		case CHIP_RAVEN:   /* DCE SG support */
+			adev->mc.gart_size = 1024ULL << 20;
+			break;
+		}
+	} else {
+		adev->mc.gart_size = (u64)amdgpu_gart_size << 20;
+	}
+
 	gmc_v9_0_vram_gtt_location(adev, &adev->mc);
 
 	return 0;
@@ -541,9 +555,10 @@ static int gmc_v9_0_sw_init(void *handle)
 			adev->vm_manager.vm_size = 1U << 18;
 			adev->vm_manager.block_size = 9;
 			adev->vm_manager.num_level = 3;
+			amdgpu_vm_set_fragment_size(adev, 9);
 		} else {
-			/* vm_size is 64GB for legacy 2-level page support*/
-			amdgpu_vm_adjust_size(adev, 64);
+			/* vm_size is 64GB for legacy 2-level page support */
+			amdgpu_vm_adjust_size(adev, 64, 9);
 			adev->vm_manager.num_level = 1;
 		}
 		break;
@@ -558,14 +573,16 @@ static int gmc_v9_0_sw_init(void *handle)
 		adev->vm_manager.vm_size = 1U << 18;
 		adev->vm_manager.block_size = 9;
 		adev->vm_manager.num_level = 3;
+		amdgpu_vm_set_fragment_size(adev, 9);
 		break;
 	default:
 		break;
 	}
 
-	DRM_INFO("vm size is %llu GB, block size is %u-bit\n",
+	DRM_INFO("vm size is %llu GB, block size is %u-bit,fragment size is %u-bit\n",
 			adev->vm_manager.vm_size,
-			adev->vm_manager.block_size);
+			adev->vm_manager.block_size,
+			adev->vm_manager.fragment_size);
 
 	/* This interrupt is VMC page fault.*/
 	r = amdgpu_irq_add_id(adev, AMDGPU_IH_CLIENTID_VMC, 0,
