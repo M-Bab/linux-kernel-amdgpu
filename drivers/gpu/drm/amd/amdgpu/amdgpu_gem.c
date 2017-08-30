@@ -127,35 +127,6 @@ int amdgpu_gem_object_open(struct drm_gem_object *obj,
 	return 0;
 }
 
-static int amdgpu_gem_vm_check(void *param, struct amdgpu_bo *bo)
-{
-	/* if anything is swapped out don't swap it in here,
-	   just abort and wait for the next CS */
-	if (!amdgpu_bo_gpu_accessible(bo))
-		return -ERESTARTSYS;
-
-	if (bo->shadow && !amdgpu_bo_gpu_accessible(bo->shadow))
-		return -ERESTARTSYS;
-
-	return 0;
-}
-
-static bool amdgpu_gem_vm_ready(struct amdgpu_device *adev,
-				struct amdgpu_vm *vm,
-				struct list_head *list)
-{
-	struct ttm_validate_buffer *entry;
-
-	list_for_each_entry(entry, list, head) {
-		struct amdgpu_bo *bo =
-			container_of(entry->bo, struct amdgpu_bo, tbo);
-		if (amdgpu_gem_vm_check(NULL, bo))
-			return false;
-	}
-
-	return !amdgpu_vm_validate_pt_bos(adev, vm, amdgpu_gem_vm_check, NULL);
-}
-
 void amdgpu_gem_object_close(struct drm_gem_object *obj,
 			     struct drm_file *file_priv)
 {
@@ -189,7 +160,7 @@ void amdgpu_gem_object_close(struct drm_gem_object *obj,
 	if (bo_va && --bo_va->ref_count == 0) {
 		amdgpu_vm_bo_rmv(adev, bo_va);
 
-		if (amdgpu_gem_vm_ready(adev, vm, &list)) {
+		if (amdgpu_vm_ready(vm)) {
 			struct dma_fence *fence = NULL;
 
 			r = amdgpu_vm_clear_freed(adev, vm, &fence);
@@ -215,17 +186,17 @@ int amdgpu_gem_create_ioctl(struct drm_device *dev, void *data,
 {
 	struct amdgpu_device *adev = dev->dev_private;
 	union drm_amdgpu_gem_create *args = data;
+	uint64_t flags = args->in.domain_flags;
 	uint64_t size = args->in.bo_size;
 	struct drm_gem_object *gobj;
 	uint32_t handle;
-	bool kernel = false;
 	int r;
 
 	/* reject invalid gem flags */
-	if (args->in.domain_flags & ~(AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED |
-				      AMDGPU_GEM_CREATE_NO_CPU_ACCESS |
-				      AMDGPU_GEM_CREATE_CPU_GTT_USWC |
-				      AMDGPU_GEM_CREATE_VRAM_CLEARED))
+	if (flags & ~(AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED |
+		      AMDGPU_GEM_CREATE_NO_CPU_ACCESS |
+		      AMDGPU_GEM_CREATE_CPU_GTT_USWC |
+		      AMDGPU_GEM_CREATE_VRAM_CLEARED))
 		return -EINVAL;
 
 	/* reject invalid gem domains */
@@ -240,7 +211,7 @@ int amdgpu_gem_create_ioctl(struct drm_device *dev, void *data,
 	/* create a gem object to contain this object in */
 	if (args->in.domains & (AMDGPU_GEM_DOMAIN_GDS |
 	    AMDGPU_GEM_DOMAIN_GWS | AMDGPU_GEM_DOMAIN_OA)) {
-		kernel = true;
+		flags |= AMDGPU_GEM_CREATE_NO_CPU_ACCESS;
 		if (args->in.domains == AMDGPU_GEM_DOMAIN_GDS)
 			size = size << AMDGPU_GDS_SHIFT;
 		else if (args->in.domains == AMDGPU_GEM_DOMAIN_GWS)
@@ -254,8 +225,7 @@ int amdgpu_gem_create_ioctl(struct drm_device *dev, void *data,
 
 	r = amdgpu_gem_object_create(adev, size, args->in.alignment,
 				     (u32)(0xffffffff & args->in.domains),
-				     args->in.domain_flags,
-				     kernel, &gobj);
+				     flags, false, &gobj);
 	if (r)
 		return r;
 
@@ -511,10 +481,10 @@ static void amdgpu_gem_va_update_vm(struct amdgpu_device *adev,
 				    struct list_head *list,
 				    uint32_t operation)
 {
-	int r = -ERESTARTSYS;
+	int r;
 
-	if (!amdgpu_gem_vm_ready(adev, vm, list))
-		goto error;
+	if (!amdgpu_vm_ready(vm))
+		return;
 
 	r = amdgpu_vm_update_directories(adev, vm);
 	if (r)
