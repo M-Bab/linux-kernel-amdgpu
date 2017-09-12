@@ -4419,6 +4419,7 @@ static int dm_update_crtcs_state(struct dc *dc,
 	int i;
 	struct dm_crtc_state *old_acrtc_state, *new_acrtc_state;
 	struct dm_atomic_state *dm_state = to_dm_atomic_state(state);
+	struct dc_stream_state *new_stream;
 	int ret = 0;
 
 	/*TODO Move this code into dm_crtc_atomic_check once we get rid of dc_validation_set */
@@ -4426,10 +4427,10 @@ static int dm_update_crtcs_state(struct dc *dc,
 	for_each_crtc_in_state(state, crtc, crtc_state, i) {
 		struct amdgpu_crtc *acrtc = NULL;
 		struct amdgpu_dm_connector *aconnector = NULL;
-		struct dc_stream_state *new_stream = NULL;
 		struct drm_connector_state *conn_state = NULL;
 		struct dm_connector_state *dm_conn_state = NULL;
 
+		new_stream = NULL;
 
 		old_acrtc_state = to_dm_crtc_state(crtc->state);
 		new_acrtc_state = to_dm_crtc_state(crtc_state);
@@ -4478,7 +4479,7 @@ static int dm_update_crtcs_state(struct dc *dc,
 
 
 		if (!drm_atomic_crtc_needs_modeset(crtc_state))
-				continue;
+			goto next_crtc;
 
 		DRM_DEBUG_KMS(
 			"amdgpu_crtc id:%d crtc_state_flags: enable:%d, active:%d, "
@@ -4496,7 +4497,7 @@ static int dm_update_crtcs_state(struct dc *dc,
 		if (!enable) {
 
 			if (!old_acrtc_state->stream)
-				continue;
+				goto next_crtc;
 
 			DRM_DEBUG_KMS("Disabling DRM crtc: %d\n",
 					crtc->base.id);
@@ -4507,7 +4508,7 @@ static int dm_update_crtcs_state(struct dc *dc,
 					dm_state->context,
 					old_acrtc_state->stream)) {
 				ret = -EINVAL;
-				break;
+				goto fail;
 			}
 
 			dc_stream_release(old_acrtc_state->stream);
@@ -4518,7 +4519,7 @@ static int dm_update_crtcs_state(struct dc *dc,
 		} else {/* Add stream for any updated/enabled CRTC */
 
 			if (modereset_required(crtc_state))
-				continue;
+				goto next_crtc;
 
 			if (modeset_required(crtc_state, new_stream,
 					     old_acrtc_state->stream)) {
@@ -4536,18 +4537,24 @@ static int dm_update_crtcs_state(struct dc *dc,
 						dm_state->context,
 						new_acrtc_state->stream)) {
 					ret = -EINVAL;
-					break;
+					goto fail;
 				}
 
 				*lock_and_validation_needed = true;
 			}
 		}
 
+next_crtc:
 		/* Release extra reference */
 		if (new_stream)
 			 dc_stream_release(new_stream);
 	}
 
+	return ret;
+
+fail:
+	if (new_stream)
+		dc_stream_release(new_stream);
 	return ret;
 }
 
