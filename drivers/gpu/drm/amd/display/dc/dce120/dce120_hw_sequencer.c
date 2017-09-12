@@ -25,14 +25,12 @@
 
 #include "dm_services.h"
 #include "dc.h"
-#include "core_dc.h"
 #include "core_types.h"
 #include "dce120_hw_sequencer.h"
 #include "dce/dce_hwseq.h"
 
 #include "dce110/dce110_hw_sequencer.h"
 
-/* include DCE12.0 register header files */
 #include "vega10/DC/dce_12_0_offset.h"
 #include "vega10/DC/dce_12_0_sh_mask.h"
 #include "vega10/soc15ip.h"
@@ -149,7 +147,7 @@ static void dce120_init_pte(struct dc_context *ctx, uint8_t controller_id)
 #endif
 
 static bool dce120_enable_display_power_gating(
-	struct core_dc *dc,
+	struct dc *dc,
 	uint8_t controller_id,
 	struct dc_bios *dcb,
 	enum pipe_gating_control power_gating)
@@ -247,7 +245,7 @@ static void dce120_update_dchub(
 
 
 
-bool dce120_hw_sequencer_construct(struct core_dc *dc)
+bool dce120_hw_sequencer_construct(struct dc *dc)
 {
 	/* All registers used by dce11.2 match those in dce11 in offset and
 	 * structure

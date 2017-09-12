@@ -1138,7 +1138,11 @@ static int cz_apply_state_adjust_rules(struct pp_hwmgr *hwmgr,
 
 	cz_ps->action = cz_current_ps->action;
 
-	if (!force_high && (cz_ps->action == FORCE_HIGH))
+	if (hwmgr->request_dpm_level == AMD_DPM_FORCED_LEVEL_PROFILE_PEAK)
+		cz_nbdpm_pstate_enable_disable(hwmgr, false, false);
+	else if (hwmgr->request_dpm_level == AMD_DPM_FORCED_LEVEL_PROFILE_STANDARD)
+		cz_nbdpm_pstate_enable_disable(hwmgr, false, true);
+	else if (!force_high && (cz_ps->action == FORCE_HIGH))
 		cz_ps->action = CANCEL_FORCE_HIGH;
 	else if (force_high && (cz_ps->action != FORCE_HIGH))
 		cz_ps->action = FORCE_HIGH;
@@ -1310,106 +1314,25 @@ static int cz_phm_force_dpm_lowest(struct pp_hwmgr *hwmgr)
 	return 0;
 }
 
-static int cz_phm_force_dpm_sclk(struct pp_hwmgr *hwmgr, uint32_t sclk)
-{
-	smum_send_msg_to_smc_with_parameter(hwmgr->smumgr,
-				PPSMC_MSG_SetSclkSoftMin,
-				cz_get_sclk_level(hwmgr,
-				sclk,
-				PPSMC_MSG_SetSclkSoftMin));
-
-	smum_send_msg_to_smc_with_parameter(hwmgr->smumgr,
-				PPSMC_MSG_SetSclkSoftMax,
-				cz_get_sclk_level(hwmgr,
-				sclk,
-				PPSMC_MSG_SetSclkSoftMax));
-	return 0;
-}
-
-static int cz_get_profiling_clk(struct pp_hwmgr *hwmgr, uint32_t *sclk)
-{
-	struct phm_clock_voltage_dependency_table *table =
-		hwmgr->dyn_state.vddc_dependency_on_sclk;
-	int32_t tmp_sclk;
-	int32_t count;
-
-	tmp_sclk = table->entries[table->count-1].clk * 70 / 100;
-
-	for (count = table->count-1; count >= 0; count--) {
-		if (tmp_sclk >= table->entries[count].clk) {
-			tmp_sclk = table->entries[count].clk;
-			*sclk = tmp_sclk;
-			break;
-		}
-	}
-	if (count < 0)
-		*sclk = table->entries[0].clk;
-
-	return 0;
-}
-
 static int cz_dpm_force_dpm_level(struct pp_hwmgr *hwmgr,
 				enum amd_dpm_forced_level level)
 {
-	uint32_t sclk = 0;
 	int ret = 0;
-	uint32_t profile_mode_mask = AMD_DPM_FORCED_LEVEL_PROFILE_STANDARD |
-					AMD_DPM_FORCED_LEVEL_PROFILE_MIN_SCLK |
-					AMD_DPM_FORCED_LEVEL_PROFILE_PEAK;
-
-	if (level == hwmgr->dpm_level)
-		return ret;
-
-	if (!(hwmgr->dpm_level & profile_mode_mask)) {
-		/* enter profile mode, save current level, disable gfx cg*/
-		if (level & profile_mode_mask) {
-			hwmgr->saved_dpm_level = hwmgr->dpm_level;
-			cgs_set_clockgating_state(hwmgr->device,
-						AMD_IP_BLOCK_TYPE_GFX,
-						AMD_CG_STATE_UNGATE);
-		}
-	} else {
-		/* exit profile mode, restore level, enable gfx cg*/
-		if (!(level & profile_mode_mask)) {
-			if (level == AMD_DPM_FORCED_LEVEL_PROFILE_EXIT)
-				level = hwmgr->saved_dpm_level;
-			cgs_set_clockgating_state(hwmgr->device,
-					AMD_IP_BLOCK_TYPE_GFX,
-					AMD_CG_STATE_GATE);
-		}
-	}
 
 	switch (level) {
 	case AMD_DPM_FORCED_LEVEL_HIGH:
 	case AMD_DPM_FORCED_LEVEL_PROFILE_PEAK:
 		ret = cz_phm_force_dpm_highest(hwmgr);
-		if (ret)
-			return ret;
-		hwmgr->dpm_level = level;
 		break;
 	case AMD_DPM_FORCED_LEVEL_LOW:
 	case AMD_DPM_FORCED_LEVEL_PROFILE_MIN_SCLK:
+	case AMD_DPM_FORCED_LEVEL_PROFILE_STANDARD:
 		ret = cz_phm_force_dpm_lowest(hwmgr);
-		if (ret)
-			return ret;
-		hwmgr->dpm_level = level;
 		break;
 	case AMD_DPM_FORCED_LEVEL_AUTO:
 		ret = cz_phm_unforce_dpm_levels(hwmgr);
-		if (ret)
-			return ret;
-		hwmgr->dpm_level = level;
-		break;
-	case AMD_DPM_FORCED_LEVEL_PROFILE_STANDARD:
-		ret = cz_get_profiling_clk(hwmgr, &sclk);
-		if (ret)
-			return ret;
-		hwmgr->dpm_level = level;
-		cz_phm_force_dpm_sclk(hwmgr, sclk);
 		break;
 	case AMD_DPM_FORCED_LEVEL_MANUAL:
-		hwmgr->dpm_level = level;
-		break;
 	case AMD_DPM_FORCED_LEVEL_PROFILE_EXIT:
 	default:
 		break;
@@ -1455,7 +1378,8 @@ int cz_dpm_update_uvd_dpm(struct pp_hwmgr *hwmgr, bool bgate)
 	if (!bgate) {
 		/* Stable Pstate is enabled and we need to set the UVD DPM to highest level */
 		if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
-					 PHM_PlatformCaps_StablePState)) {
+					 PHM_PlatformCaps_StablePState)
+			|| hwmgr->en_umd_pstate) {
 			cz_hwmgr->uvd_dpm.hard_min_clk =
 				   ptable->entries[ptable->count - 1].vclk;
 
@@ -1484,7 +1408,8 @@ int  cz_dpm_update_vce_dpm(struct pp_hwmgr *hwmgr)
 
 	/* Stable Pstate is enabled and we need to set the VCE DPM to highest level */
 	if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
-					 PHM_PlatformCaps_StablePState)) {
+					PHM_PlatformCaps_StablePState)
+					|| hwmgr->en_umd_pstate) {
 		cz_hwmgr->vce_dpm.hard_min_clk =
 				  ptable->entries[ptable->count - 1].ecclk;
 

@@ -78,7 +78,9 @@
 	BREAK_TO_DEBUGGER(); \
 } while (0)
 
+#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 #include <asm/fpu/api.h>
+#endif
 
 #define dm_alloc(size) kzalloc(size, GFP_KERNEL)
 #define dm_realloc(ptr, size) krealloc(ptr, size, GFP_KERNEL)
@@ -340,9 +342,8 @@ bool dm_pp_notify_wm_clock_changes(
 	const struct dc_context *ctx,
 	struct dm_pp_wm_sets_with_clock_ranges *wm_with_clock_ranges);
 
-bool dm_pp_notify_wm_clock_changes_soc15(
-	const struct dc_context *ctx,
-	struct dm_pp_wm_sets_with_clock_ranges_soc15 *wm_with_clock_ranges);
+void dm_pp_get_funcs_rv(struct dc_context *ctx,
+		struct pp_smu_funcs_rv *funcs);
 
 /* DAL calls this function to notify PP about completion of Mode Set.
  * For PP it means that current DCE clocks are those which were returned

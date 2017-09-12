@@ -10,7 +10,6 @@
 #include "core_status.h"
 #include "dpcd_defs.h"
 
-#include "core_dc.h"
 #include "resource.h"
 
 /* maximum pre emphasis level allowed for each voltage swing level*/
@@ -1303,8 +1302,6 @@ bool decide_fallback_link_setting(
 					current_link_setting->lane_count);
 		} else if (!reached_minimum_link_rate
 				(current_link_setting->link_rate)) {
-			current_link_setting->lane_count =
-				initial_link_settings.lane_count;
 			current_link_setting->link_rate =
 				reduce_link_rate(
 					current_link_setting->link_rate);
@@ -1457,6 +1454,14 @@ void decide_link_settings(struct dc_stream_state *stream,
 			link->preferred_link_setting.link_rate !=
 					LINK_RATE_UNKNOWN) {
 		*link_setting =  link->preferred_link_setting;
+		return;
+	}
+
+	/* MST doesn't perform link training for now
+	 * TODO: add MST specific link training routine
+	 */
+	if (is_mst_supported(link)) {
+		*link_setting = link->verified_link_cap;
 		return;
 	}
 
@@ -1648,8 +1653,8 @@ static bool handle_hpd_irq_psr_sink(const struct dc_link *link)
 				sizeof(psr_error_status.raw));
 
 			/* PSR error, disable and re-enable PSR */
-			dc_link_set_psr_enable(link, false);
-			dc_link_set_psr_enable(link, true);
+			dc_link_set_psr_enable(link, false, true);
+			dc_link_set_psr_enable(link, true, true);
 
 			return true;
 		} else if (psr_sink_psr_status.bits.SINK_SELF_REFRESH_STATUS ==
@@ -1745,13 +1750,13 @@ static void dp_test_send_phy_test_pattern(struct dc_link *link)
 		test_pattern = DP_TEST_PATTERN_80BIT_CUSTOM;
 		break;
 	case PHY_TEST_PATTERN_CP2520_1:
-		test_pattern = DP_TEST_PATTERN_CP2520_1;
+		test_pattern = DP_TEST_PATTERN_HBR2_COMPLIANCE_EYE;
 		break;
 	case PHY_TEST_PATTERN_CP2520_2:
 		test_pattern = DP_TEST_PATTERN_CP2520_2;
 		break;
 	case PHY_TEST_PATTERN_CP2520_3:
-		test_pattern = DP_TEST_PATTERN_CP2520_3;
+		test_pattern = DP_TEST_PATTERN_TRAINING_PATTERN4;
 		break;
 	default:
 		test_pattern = DP_TEST_PATTERN_VIDEO_MODE;
@@ -1957,11 +1962,11 @@ bool dc_link_handle_hpd_rx_irq(struct dc_link *link, union hpd_irq_data *out_hpd
 	 * so do not handle as a normal sink status change interrupt.
 	 */
 
+	if (hpd_irq_dpcd_data.bytes.device_service_irq.bits.UP_REQ_MSG_RDY)
+		return true;
+
 	/* check if we have MST msg and return since we poll for it */
-	if (hpd_irq_dpcd_data.bytes.device_service_irq.
-			bits.DOWN_REP_MSG_RDY ||
-		hpd_irq_dpcd_data.bytes.device_service_irq.
-			bits.UP_REQ_MSG_RDY)
+	if (hpd_irq_dpcd_data.bytes.device_service_irq.bits.DOWN_REP_MSG_RDY)
 		return false;
 
 	/* For now we only handle 'Downstream port status' case.
@@ -2259,6 +2264,8 @@ static void retrieve_link_cap(struct dc_link *link)
 		DP_EDP_CONFIGURATION_CAP - DP_DPCD_REV];
 	link->dpcd_caps.panel_mode_edp =
 		edp_config_cap.bits.ALT_SCRAMBLER_RESET;
+	link->dpcd_caps.dpcd_display_control_capable =
+		edp_config_cap.bits.DPCD_DISPLAY_CONTROL_CAPABLE;
 
 	link->test_pattern_enabled = false;
 	link->compliance_test_state.raw = 0;
@@ -2399,7 +2406,7 @@ bool dc_link_dp_set_test_pattern(
 	const unsigned char *p_custom_pattern,
 	unsigned int cust_pattern_size)
 {
-	struct pipe_ctx *pipes = link->dc->current_context->res_ctx.pipe_ctx;
+	struct pipe_ctx *pipes = link->dc->current_state->res_ctx.pipe_ctx;
 	struct pipe_ctx *pipe_ctx = &pipes[0];
 	unsigned int lane;
 	unsigned int i;

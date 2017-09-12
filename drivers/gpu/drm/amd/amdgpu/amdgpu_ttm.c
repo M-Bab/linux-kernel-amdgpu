@@ -609,6 +609,7 @@ struct amdgpu_ttm_tt {
 	spinlock_t              guptasklock;
 	struct list_head        guptasks;
 	atomic_t		mmu_invalidations;
+	uint32_t		last_set_pages;
 	struct list_head        list;
 };
 
@@ -622,6 +623,8 @@ int amdgpu_ttm_tt_get_user_pages(struct ttm_tt *ttm, struct page **pages)
 	if (!(gtt->userflags & AMDGPU_GEM_USERPTR_READONLY))
 		flags |= FOLL_WRITE;
 
+	down_read(&current->mm->mmap_sem);
+
 	if (gtt->userflags & AMDGPU_GEM_USERPTR_ANONONLY) {
 		/* check that we only use anonymous memory
 		   to prevent problems with writeback */
@@ -629,8 +632,10 @@ int amdgpu_ttm_tt_get_user_pages(struct ttm_tt *ttm, struct page **pages)
 		struct vm_area_struct *vma;
 
 		vma = find_vma(gtt->usermm, gtt->userptr);
-		if (!vma || vma->vm_file || vma->vm_end < end)
+		if (!vma || vma->vm_file || vma->vm_end < end) {
+			up_read(&current->mm->mmap_sem);
 			return -EPERM;
+		}
 	}
 
 	do {
@@ -657,11 +662,45 @@ int amdgpu_ttm_tt_get_user_pages(struct ttm_tt *ttm, struct page **pages)
 
 	} while (pinned < ttm->num_pages);
 
+	up_read(&current->mm->mmap_sem);
 	return 0;
 
 release_pages:
 	release_pages(pages, pinned, 0);
+	up_read(&current->mm->mmap_sem);
 	return r;
+}
+
+void amdgpu_ttm_tt_set_user_pages(struct ttm_tt *ttm, struct page **pages)
+{
+	struct amdgpu_ttm_tt *gtt = (void *)ttm;
+	unsigned i;
+
+	gtt->last_set_pages = atomic_read(&gtt->mmu_invalidations);
+	for (i = 0; i < ttm->num_pages; ++i) {
+		if (ttm->pages[i])
+			put_page(ttm->pages[i]);
+
+		ttm->pages[i] = pages ? pages[i] : NULL;
+	}
+}
+
+void amdgpu_ttm_tt_mark_user_pages(struct ttm_tt *ttm)
+{
+	struct amdgpu_ttm_tt *gtt = (void *)ttm;
+	unsigned i;
+
+	for (i = 0; i < ttm->num_pages; ++i) {
+		struct page *page = ttm->pages[i];
+
+		if (!page)
+			continue;
+
+		if (!(gtt->userflags & AMDGPU_GEM_USERPTR_READONLY))
+			set_page_dirty(page);
+
+		mark_page_accessed(page);
+	}
 }
 
 static void amdgpu_trace_dma_map(struct ttm_tt *ttm)
@@ -719,7 +758,6 @@ static void amdgpu_ttm_tt_unpin_userptr(struct ttm_tt *ttm)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(ttm->bdev);
 	struct amdgpu_ttm_tt *gtt = (void *)ttm;
-	struct sg_page_iter sg_iter;
 
 	int write = !(gtt->userflags & AMDGPU_GEM_USERPTR_READONLY);
 	enum dma_data_direction direction = write ?
@@ -732,14 +770,7 @@ static void amdgpu_ttm_tt_unpin_userptr(struct ttm_tt *ttm)
 	/* free the sg table and pages again */
 	dma_unmap_sg(adev->dev, ttm->sg->sgl, ttm->sg->nents, direction);
 
-	for_each_sg_page(ttm->sg->sgl, &sg_iter, ttm->sg->nents, 0) {
-		struct page *page = sg_page_iter_page(&sg_iter);
-		if (!(gtt->userflags & AMDGPU_GEM_USERPTR_READONLY))
-			set_page_dirty(page);
-
-		mark_page_accessed(page);
-		put_page(page);
-	}
+	amdgpu_ttm_tt_mark_user_pages(ttm);
 
 	amdgpu_trace_dma_unmap(ttm);
 
@@ -819,7 +850,7 @@ int amdgpu_ttm_bind(struct ttm_buffer_object *bo, struct ttm_mem_reg *bo_mem)
 	placement.busy_placement = &placements;
 	placements.fpfn = 0;
 	placements.lpfn = adev->mc.gart_size >> PAGE_SHIFT;
-	placements.flags = TTM_PL_MASK_CACHING | TTM_PL_FLAG_TT;
+	placements.flags = bo->mem.placement | TTM_PL_FLAG_TT;
 
 	r = ttm_bo_mem_space(bo, &placement, &tmp, true, false);
 	if (unlikely(r))
@@ -971,6 +1002,7 @@ static void amdgpu_ttm_tt_unpopulate(struct ttm_tt *ttm)
 	bool slave = !!(ttm->page_flags & TTM_PAGE_FLAG_SG);
 
 	if (gtt && gtt->userptr) {
+		amdgpu_ttm_tt_set_user_pages(ttm, NULL);
 		kfree(ttm->sg);
 		ttm->page_flags &= ~TTM_PAGE_FLAG_SG;
 		return;
@@ -1007,6 +1039,7 @@ int amdgpu_ttm_tt_set_userptr(struct ttm_tt *ttm, uint64_t addr,
 	spin_lock_init(&gtt->guptasklock);
 	INIT_LIST_HEAD(&gtt->guptasks);
 	atomic_set(&gtt->mmu_invalidations, 0);
+	gtt->last_set_pages = 0;
 
 	return 0;
 }
@@ -1057,6 +1090,16 @@ bool amdgpu_ttm_tt_userptr_invalidated(struct ttm_tt *ttm,
 
 	*last_invalidated = atomic_read(&gtt->mmu_invalidations);
 	return prev_invalidated != *last_invalidated;
+}
+
+bool amdgpu_ttm_tt_userptr_needs_pages(struct ttm_tt *ttm)
+{
+	struct amdgpu_ttm_tt *gtt = (void *)ttm;
+
+	if (gtt == NULL || !gtt->userptr)
+		return false;
+
+	return atomic_read(&gtt->mmu_invalidations) != gtt->last_set_pages;
 }
 
 bool amdgpu_ttm_tt_is_readonly(struct ttm_tt *ttm)
