@@ -164,7 +164,7 @@ static void enable_display_pipe_clock_gating(
 }
 
 static bool dce110_enable_display_power_gating(
-	struct core_dc *dc,
+	struct dc *dc,
 	uint8_t controller_id,
 	struct dc_bios *dcb,
 	enum pipe_gating_control power_gating)
@@ -667,7 +667,25 @@ static enum dc_status bios_parser_crtc_source_select(
 	crtc_source_select.signal = pipe_ctx->stream->signal;
 	crtc_source_select.enable_dp_audio = false;
 	crtc_source_select.sink_signal = pipe_ctx->stream->signal;
-	crtc_source_select.display_output_bit_depth = PANEL_8BIT_COLOR;
+
+	switch (pipe_ctx->stream->timing.display_color_depth) {
+	case COLOR_DEPTH_666:
+		crtc_source_select.display_output_bit_depth = PANEL_6BIT_COLOR;
+		break;
+	case COLOR_DEPTH_888:
+		crtc_source_select.display_output_bit_depth = PANEL_8BIT_COLOR;
+		break;
+	case COLOR_DEPTH_101010:
+		crtc_source_select.display_output_bit_depth = PANEL_10BIT_COLOR;
+		break;
+	case COLOR_DEPTH_121212:
+		crtc_source_select.display_output_bit_depth = PANEL_12BIT_COLOR;
+		break;
+	default:
+		BREAK_TO_DEBUGGER();
+		crtc_source_select.display_output_bit_depth = PANEL_8BIT_COLOR;
+		break;
+	}
 
 	dcb = sink->ctx->dc_bios;
 
@@ -758,8 +776,6 @@ void dce110_disable_stream(struct pipe_ctx *pipe_ctx)
 			pipe_ctx->stream_res.stream_enc->funcs->hdmi_audio_disable(
 					pipe_ctx->stream_res.stream_enc);
 
-		pipe_ctx->stream_res.audio = NULL;
-
 		/* TODO: notify audio driver for if audio modes list changed
 		 * add audio mode list change flag */
 		/* dal_audio_disable_azalia_audio_jack_presence(stream->audio,
@@ -780,9 +796,11 @@ void dce110_disable_stream(struct pipe_ctx *pipe_ctx)
 
 
 	/* blank at encoder level */
-	if (dc_is_dp_signal(pipe_ctx->stream->signal))
+	if (dc_is_dp_signal(pipe_ctx->stream->signal)) {
+		if (pipe_ctx->stream->sink->link->connector_signal == SIGNAL_TYPE_EDP)
+			link->link_enc->funcs->backlight_control(link->link_enc, false);
 		pipe_ctx->stream_res.stream_enc->funcs->dp_blank(pipe_ctx->stream_res.stream_enc);
-
+	}
 	link->link_enc->funcs->connect_dig_be_to_fe(
 			link->link_enc,
 			pipe_ctx->stream_res.stream_enc->id,
@@ -794,12 +812,15 @@ void dce110_unblank_stream(struct pipe_ctx *pipe_ctx,
 		struct dc_link_settings *link_settings)
 {
 	struct encoder_unblank_param params = { { 0 } };
+	struct dc_link *link = pipe_ctx->stream->sink->link;
 
 	/* only 3 items below are used by unblank */
 	params.pixel_clk_khz =
 		pipe_ctx->stream->timing.pix_clk_khz;
 	params.link_settings.link_rate = link_settings->link_rate;
 	pipe_ctx->stream_res.stream_enc->funcs->dp_unblank(pipe_ctx->stream_res.stream_enc, &params);
+	if (link->connector_signal == SIGNAL_TYPE_EDP)
+			link->link_enc->funcs->backlight_control(link->link_enc, true);
 }
 
 
@@ -830,6 +851,7 @@ static enum audio_dto_source translate_to_dto_source(enum controller_id crtc_id)
 }
 
 static void build_audio_output(
+	struct dc_state *state,
 	const struct pipe_ctx *pipe_ctx,
 	struct audio_output *audio_output)
 {
@@ -891,8 +913,8 @@ static void build_audio_output(
 	if (pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT ||
 			pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST) {
 		audio_output->pll_info.dp_dto_source_clock_in_khz =
-				pipe_ctx->dis_clk->funcs->get_dp_ref_clk_frequency(
-						pipe_ctx->dis_clk);
+				state->dis_clk->funcs->get_dp_ref_clk_frequency(
+						state->dis_clk);
 	}
 
 	audio_output->pll_info.feed_back_divider =
@@ -944,7 +966,7 @@ static void get_surface_visual_confirm_color(const struct pipe_ctx *pipe_ctx,
 	}
 }
 
-static void program_scaler(const struct core_dc *dc,
+static void program_scaler(const struct dc *dc,
 		const struct pipe_ctx *pipe_ctx)
 {
 	struct tg_color color = {0};
@@ -955,7 +977,7 @@ static void program_scaler(const struct core_dc *dc,
 		return;
 #endif
 
-	if (dc->public.debug.surface_visual_confirm)
+	if (dc->debug.surface_visual_confirm)
 		get_surface_visual_confirm_color(pipe_ctx, &color);
 	else
 		color_space_to_black_color(dc,
@@ -978,11 +1000,11 @@ static void program_scaler(const struct core_dc *dc,
 
 static enum dc_status dce110_prog_pixclk_crtc_otg(
 		struct pipe_ctx *pipe_ctx,
-		struct validate_context *context,
-		struct core_dc *dc)
+		struct dc_state *context,
+		struct dc *dc)
 {
 	struct dc_stream_state *stream = pipe_ctx->stream;
-	struct pipe_ctx *pipe_ctx_old = &dc->current_context->res_ctx.
+	struct pipe_ctx *pipe_ctx_old = &dc->current_state->res_ctx.
 			pipe_ctx[pipe_ctx->pipe_idx];
 	struct tg_color black_color = {0};
 
@@ -1034,11 +1056,11 @@ static enum dc_status dce110_prog_pixclk_crtc_otg(
 
 static enum dc_status apply_single_controller_ctx_to_hw(
 		struct pipe_ctx *pipe_ctx,
-		struct validate_context *context,
-		struct core_dc *dc)
+		struct dc_state *context,
+		struct dc *dc)
 {
 	struct dc_stream_state *stream = pipe_ctx->stream;
-	struct pipe_ctx *pipe_ctx_old = &dc->current_context->res_ctx.
+	struct pipe_ctx *pipe_ctx_old = &dc->current_state->res_ctx.
 			pipe_ctx[pipe_ctx->pipe_idx];
 
 	/*  */
@@ -1082,11 +1104,10 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 		stream->timing.timing_3d_format != TIMING_3D_FORMAT_NONE);
 
 
-/*vbios crtc_source_selection and encoder_setup will override fmt_C*/
 	pipe_ctx->stream_res.opp->funcs->opp_program_fmt(
-			pipe_ctx->stream_res.opp,
-			&stream->bit_depth_params,
-			&stream->clamping);
+		pipe_ctx->stream_res.opp,
+		&stream->bit_depth_params,
+		&stream->clamping);
 
 	if (dc_is_dp_signal(pipe_ctx->stream->signal))
 		pipe_ctx->stream_res.stream_enc->funcs->dp_set_stream_attribute(
@@ -1111,7 +1132,7 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 	resource_build_info_frame(pipe_ctx);
 	dce110_update_info_frame(pipe_ctx);
 	if (!pipe_ctx_old->stream) {
-		core_link_enable_stream(pipe_ctx);
+		core_link_enable_stream(context, pipe_ctx);
 
 
 		if (dc_is_dp_signal(pipe_ctx->stream->signal))
@@ -1146,17 +1167,25 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 
 /******************************************************************************/
 
-static void power_down_encoders(struct core_dc *dc)
+static void power_down_encoders(struct dc *dc)
 {
 	int i;
-
+	enum connector_id connector_id;
 	for (i = 0; i < dc->link_count; i++) {
+		connector_id = dal_graphics_object_id_get_connector_id(dc->links[i]->link_id);
+		if ((connector_id == CONNECTOR_ID_DISPLAY_PORT) ||
+			(connector_id == CONNECTOR_ID_EDP)) {
+
+			if (!dc->links[i]->wa_flags.dp_keep_receiver_powered)
+				dp_receiver_power_ctrl(dc->links[i], false);
+		}
+
 		dc->links[i]->link_enc->funcs->disable_output(
 				dc->links[i]->link_enc, SIGNAL_TYPE_NONE);
 	}
 }
 
-static void power_down_controllers(struct core_dc *dc)
+static void power_down_controllers(struct dc *dc)
 {
 	int i;
 
@@ -1166,7 +1195,7 @@ static void power_down_controllers(struct core_dc *dc)
 	}
 }
 
-static void power_down_clock_sources(struct core_dc *dc)
+static void power_down_clock_sources(struct dc *dc)
 {
 	int i;
 
@@ -1181,7 +1210,7 @@ static void power_down_clock_sources(struct core_dc *dc)
 	}
 }
 
-static void power_down_all_hw_blocks(struct core_dc *dc)
+static void power_down_all_hw_blocks(struct dc *dc)
 {
 	power_down_encoders(dc);
 
@@ -1196,7 +1225,7 @@ static void power_down_all_hw_blocks(struct core_dc *dc)
 }
 
 static void disable_vga_and_power_gate_all_controllers(
-		struct core_dc *dc)
+		struct dc *dc)
 {
 	int i;
 	struct timing_generator *tg;
@@ -1224,7 +1253,7 @@ static void disable_vga_and_power_gate_all_controllers(
  *  3. Enable power gating for controller
  *  4. Set acc_mode_change bit (VBIOS will clear this bit when going to FSDOS)
  */
-void dce110_enable_accelerated_mode(struct core_dc *dc)
+void dce110_enable_accelerated_mode(struct dc *dc)
 {
 	power_down_all_hw_blocks(dc);
 
@@ -1250,8 +1279,8 @@ static uint32_t compute_pstate_blackout_duration(
 }
 
 void dce110_set_displaymarks(
-	const struct core_dc *dc,
-	struct validate_context *context)
+	const struct dc *dc,
+	struct dc_state *context)
 {
 	uint8_t i, num_pipes;
 	unsigned int underlay_idx = dc->res_pool->underlay_pipe_index;
@@ -1264,7 +1293,7 @@ void dce110_set_displaymarks(
 			continue;
 
 		total_dest_line_time_ns = compute_pstate_blackout_duration(
-			dc->bw_vbios.blackout_duration, pipe_ctx->stream);
+			dc->bw_vbios->blackout_duration, pipe_ctx->stream);
 		pipe_ctx->plane_res.mi->funcs->mem_input_program_display_marks(
 			pipe_ctx->plane_res.mi,
 			context->bw.dce.nbp_state_change_wm_ns[num_pipes],
@@ -1312,37 +1341,6 @@ static void set_safe_displaymarks(
 				max_marks,
 				max_marks,
 				MAX_WATERMARK);
-	}
-}
-
-static void switch_dp_clock_sources(
-	const struct core_dc *dc,
-	struct resource_context *res_ctx)
-{
-	uint8_t i;
-	for (i = 0; i < MAX_PIPES; i++) {
-		struct pipe_ctx *pipe_ctx = &res_ctx->pipe_ctx[i];
-
-		if (pipe_ctx->stream == NULL || pipe_ctx->top_pipe)
-			continue;
-
-		if (dc_is_dp_signal(pipe_ctx->stream->signal)) {
-			struct clock_source *clk_src =
-				resource_find_used_clk_src_for_sharing(
-						res_ctx, pipe_ctx);
-
-			if (clk_src &&
-				clk_src != pipe_ctx->clock_source) {
-				resource_unreference_clock_source(
-					res_ctx, dc->res_pool,
-					&pipe_ctx->clock_source);
-				pipe_ctx->clock_source = clk_src;
-				resource_reference_clock_source(
-						res_ctx, dc->res_pool, clk_src);
-
-				dce_crtc_switch_to_clk_src(dc->hwseq, clk_src, i);
-			}
-		}
 	}
 }
 
@@ -1408,8 +1406,8 @@ static void set_static_screen_control(struct pipe_ctx **pipe_ctx,
  * may read PLL register to get pixel clock
  */
 static uint32_t get_max_pixel_clock_for_all_paths(
-	struct core_dc *dc,
-	struct validate_context *context,
+	struct dc *dc,
+	struct dc_state *context,
 	bool pre_mode_set)
 {
 	uint32_t max_pix_clk = 0;
@@ -1441,56 +1439,46 @@ static uint32_t get_max_pixel_clock_for_all_paths(
 	return max_pix_clk;
 }
 
-/* Find clock state based on clock requested. if clock value is 0, simply
+/*
+ * Find clock state based on clock requested. if clock value is 0, simply
  * set clock state as requested without finding clock state by clock value
- *TODO: when dce120_hw_sequencer.c is created, override apply_min_clock.
- *
- * TODOFPGA  remove TODO after implement dal_display_clock_get_cur_clocks_value
- * etc support for dcn1.0
  */
+
 static void apply_min_clocks(
-	struct core_dc *dc,
-	struct validate_context *context,
+	struct dc *dc,
+	struct dc_state *context,
 	enum dm_pp_clocks_state *clocks_state,
 	bool pre_mode_set)
 {
 	struct state_dependent_clocks req_clocks = {0};
-	struct pipe_ctx *pipe_ctx;
-	int i;
-
-	for (i = 0; i < MAX_PIPES; i++) {
-		pipe_ctx = &context->res_ctx.pipe_ctx[i];
-		if (pipe_ctx->dis_clk != NULL)
-			break;
-	}
 
 	if (!pre_mode_set) {
 		/* set clock_state without verification */
-		if (pipe_ctx->dis_clk->funcs->set_min_clocks_state) {
-			pipe_ctx->dis_clk->funcs->set_min_clocks_state(
-						pipe_ctx->dis_clk, *clocks_state);
+		if (context->dis_clk->funcs->set_min_clocks_state) {
+			context->dis_clk->funcs->set_min_clocks_state(
+						context->dis_clk, *clocks_state);
 			return;
 		}
 
 		/* TODO: This is incorrect. Figure out how to fix. */
-		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
-				pipe_ctx->dis_clk,
+		context->dis_clk->funcs->apply_clock_voltage_request(
+				context->dis_clk,
 				DM_PP_CLOCK_TYPE_DISPLAY_CLK,
-				pipe_ctx->dis_clk->cur_clocks_value.dispclk_in_khz,
+				context->dis_clk->cur_clocks_value.dispclk_in_khz,
 				pre_mode_set,
 				false);
 
-		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
-				pipe_ctx->dis_clk,
+		context->dis_clk->funcs->apply_clock_voltage_request(
+				context->dis_clk,
 				DM_PP_CLOCK_TYPE_PIXELCLK,
-				pipe_ctx->dis_clk->cur_clocks_value.max_pixelclk_in_khz,
+				context->dis_clk->cur_clocks_value.max_pixelclk_in_khz,
 				pre_mode_set,
 				false);
 
-		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
-				pipe_ctx->dis_clk,
+		context->dis_clk->funcs->apply_clock_voltage_request(
+				context->dis_clk,
 				DM_PP_CLOCK_TYPE_DISPLAYPHYCLK,
-				pipe_ctx->dis_clk->cur_clocks_value.max_non_dp_phyclk_in_khz,
+				context->dis_clk->cur_clocks_value.max_non_dp_phyclk_in_khz,
 				pre_mode_set,
 				false);
 		return;
@@ -1504,28 +1492,28 @@ static void apply_min_clocks(
 	req_clocks.pixel_clk_khz = get_max_pixel_clock_for_all_paths(
 			dc, context, true);
 
-	if (pipe_ctx->dis_clk->funcs->get_required_clocks_state) {
-		*clocks_state = pipe_ctx->dis_clk->funcs->get_required_clocks_state(
-				pipe_ctx->dis_clk, &req_clocks);
-		pipe_ctx->dis_clk->funcs->set_min_clocks_state(
-			pipe_ctx->dis_clk, *clocks_state);
+	if (context->dis_clk->funcs->get_required_clocks_state) {
+		*clocks_state = context->dis_clk->funcs->get_required_clocks_state(
+				context->dis_clk, &req_clocks);
+		context->dis_clk->funcs->set_min_clocks_state(
+			context->dis_clk, *clocks_state);
 	} else {
-		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
-				pipe_ctx->dis_clk,
+		context->dis_clk->funcs->apply_clock_voltage_request(
+				context->dis_clk,
 				DM_PP_CLOCK_TYPE_DISPLAY_CLK,
 				req_clocks.display_clk_khz,
 				pre_mode_set,
 				false);
 
-		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
-				pipe_ctx->dis_clk,
+		context->dis_clk->funcs->apply_clock_voltage_request(
+				context->dis_clk,
 				DM_PP_CLOCK_TYPE_PIXELCLK,
 				req_clocks.pixel_clk_khz,
 				pre_mode_set,
 				false);
 
-		pipe_ctx->dis_clk->funcs->apply_clock_voltage_request(
-				pipe_ctx->dis_clk,
+		context->dis_clk->funcs->apply_clock_voltage_request(
+				context->dis_clk,
 				DM_PP_CLOCK_TYPE_DISPLAYPHYCLK,
 				req_clocks.pixel_clk_khz,
 				pre_mode_set,
@@ -1538,8 +1526,8 @@ static void apply_min_clocks(
 /*
  *  Check if FBC can be enabled
  */
-static enum dc_status validate_fbc(struct core_dc *dc,
-		struct validate_context *context)
+static enum dc_status validate_fbc(struct dc *dc,
+		struct dc_state *context)
 {
 	struct pipe_ctx *pipe_ctx =
 			      &context->res_ctx.pipe_ctx[0];
@@ -1562,14 +1550,18 @@ static enum dc_status validate_fbc(struct core_dc *dc,
 	if (pipe_ctx->stream->sink->link->psr_enabled)
 		return DC_ERROR_UNEXPECTED;
 
+	/* Only for non-linear tiling */
+	if (pipe_ctx->plane_state->tiling_info.gfx8.array_mode == DC_ARRAY_LINEAR_GENERAL)
+		return DC_ERROR_UNEXPECTED;
+
 	return DC_OK;
 }
 
 /*
  *  Enable FBC
  */
-static enum dc_status enable_fbc(struct core_dc *dc,
-		struct validate_context *context)
+static enum dc_status enable_fbc(struct dc *dc,
+		struct dc_state *context)
 {
 	enum dc_status status = validate_fbc(dc, context);
 
@@ -1597,15 +1589,15 @@ static enum dc_status enable_fbc(struct core_dc *dc,
 #endif
 
 static enum dc_status apply_ctx_to_hw_fpga(
-		struct core_dc *dc,
-		struct validate_context *context)
+		struct dc *dc,
+		struct dc_state *context)
 {
 	enum dc_status status = DC_ERROR_UNEXPECTED;
 	int i;
 
 	for (i = 0; i < MAX_PIPES; i++) {
 		struct pipe_ctx *pipe_ctx_old =
-				&dc->current_context->res_ctx.pipe_ctx[i];
+				&dc->current_state->res_ctx.pipe_ctx[i];
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
 		if (pipe_ctx->stream == NULL)
@@ -1627,8 +1619,8 @@ static enum dc_status apply_ctx_to_hw_fpga(
 }
 
 static void dce110_reset_hw_ctx_wrap(
-		struct core_dc *dc,
-		struct validate_context *context)
+		struct dc *dc,
+		struct dc_state *context)
 {
 	int i;
 
@@ -1636,7 +1628,7 @@ static void dce110_reset_hw_ctx_wrap(
 	/* look up the targets that have been removed since last commit */
 	for (i = 0; i < MAX_PIPES; i++) {
 		struct pipe_ctx *pipe_ctx_old =
-			&dc->current_context->res_ctx.pipe_ctx[i];
+			&dc->current_state->res_ctx.pipe_ctx[i];
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
 		/* Note: We need to disable output if clock sources change,
@@ -1650,6 +1642,8 @@ static void dce110_reset_hw_ctx_wrap(
 
 		if (!pipe_ctx->stream ||
 				pipe_need_reprogram(pipe_ctx_old, pipe_ctx)) {
+			struct clock_source *old_clk = pipe_ctx_old->clock_source;
+
 			core_link_disable_stream(pipe_ctx_old);
 			pipe_ctx_old->stream_res.tg->funcs->set_blank(pipe_ctx_old->stream_res.tg, true);
 			if (!hwss_wait_for_blank_complete(pipe_ctx_old->stream_res.tg)) {
@@ -1658,10 +1652,10 @@ static void dce110_reset_hw_ctx_wrap(
 			}
 			pipe_ctx_old->stream_res.tg->funcs->disable_crtc(pipe_ctx_old->stream_res.tg);
 			pipe_ctx_old->plane_res.mi->funcs->free_mem_input(
-					pipe_ctx_old->plane_res.mi, dc->current_context->stream_count);
-			resource_unreference_clock_source(
-					&dc->current_context->res_ctx, dc->res_pool,
-					&pipe_ctx_old->clock_source);
+					pipe_ctx_old->plane_res.mi, dc->current_state->stream_count);
+
+			if (old_clk)
+				old_clk->funcs->cs_power_down(old_clk);
 
 			dc->hwss.power_down_front_end(dc, pipe_ctx_old->pipe_idx);
 
@@ -1672,8 +1666,8 @@ static void dce110_reset_hw_ctx_wrap(
 
 
 enum dc_status dce110_apply_ctx_to_hw(
-		struct core_dc *dc,
-		struct validate_context *context)
+		struct dc *dc,
+		struct dc_state *context)
 {
 	struct dc_bios *dcb = dc->ctx->dc_bios;
 	enum dc_status status;
@@ -1699,7 +1693,7 @@ enum dc_status dce110_apply_ctx_to_hw(
 	/* below is for real asic only */
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx_old =
-					&dc->current_context->res_ctx.pipe_ctx[i];
+					&dc->current_state->res_ctx.pipe_ctx[i];
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
 		if (pipe_ctx->stream == NULL || pipe_ctx->top_pipe)
@@ -1729,31 +1723,31 @@ enum dc_status dce110_apply_ctx_to_hw(
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 	if (dc->ctx->dce_version >= DCN_VERSION_1_0) {
 		if (context->bw.dcn.calc_clk.fclk_khz
-				> dc->current_context->bw.dcn.cur_clk.fclk_khz) {
+				> dc->current_state->bw.dcn.cur_clk.fclk_khz) {
 			struct dm_pp_clock_for_voltage_req clock;
 
 			clock.clk_type = DM_PP_CLOCK_TYPE_FCLK;
 			clock.clocks_in_khz = context->bw.dcn.calc_clk.fclk_khz;
 			dm_pp_apply_clock_for_voltage_request(dc->ctx, &clock);
-			dc->current_context->bw.dcn.cur_clk.fclk_khz = clock.clocks_in_khz;
+			dc->current_state->bw.dcn.cur_clk.fclk_khz = clock.clocks_in_khz;
 			context->bw.dcn.cur_clk.fclk_khz = clock.clocks_in_khz;
 		}
 		if (context->bw.dcn.calc_clk.dcfclk_khz
-				> dc->current_context->bw.dcn.cur_clk.dcfclk_khz) {
+				> dc->current_state->bw.dcn.cur_clk.dcfclk_khz) {
 			struct dm_pp_clock_for_voltage_req clock;
 
 			clock.clk_type = DM_PP_CLOCK_TYPE_DCFCLK;
 			clock.clocks_in_khz = context->bw.dcn.calc_clk.dcfclk_khz;
 			dm_pp_apply_clock_for_voltage_request(dc->ctx, &clock);
-			dc->current_context->bw.dcn.cur_clk.dcfclk_khz = clock.clocks_in_khz;
+			dc->current_state->bw.dcn.cur_clk.dcfclk_khz = clock.clocks_in_khz;
 			context->bw.dcn.cur_clk.dcfclk_khz = clock.clocks_in_khz;
 		}
 		if (context->bw.dcn.calc_clk.dispclk_khz
-				> dc->current_context->bw.dcn.cur_clk.dispclk_khz) {
+				> dc->current_state->bw.dcn.cur_clk.dispclk_khz) {
 			dc->res_pool->display_clock->funcs->set_clock(
 					dc->res_pool->display_clock,
 					context->bw.dcn.calc_clk.dispclk_khz);
-			dc->current_context->bw.dcn.cur_clk.dispclk_khz =
+			dc->current_state->bw.dcn.cur_clk.dispclk_khz =
 					context->bw.dcn.calc_clk.dispclk_khz;
 			context->bw.dcn.cur_clk.dispclk_khz =
 					context->bw.dcn.calc_clk.dispclk_khz;
@@ -1761,7 +1755,7 @@ enum dc_status dce110_apply_ctx_to_hw(
 	} else
 #endif
 	if (context->bw.dce.dispclk_khz
-			> dc->current_context->bw.dce.dispclk_khz) {
+			> dc->current_state->bw.dce.dispclk_khz) {
 		dc->res_pool->display_clock->funcs->set_clock(
 				dc->res_pool->display_clock,
 				context->bw.dce.dispclk_khz * 115 / 100);
@@ -1800,7 +1794,7 @@ enum dc_status dce110_apply_ctx_to_hw(
 		if (pipe_ctx->stream_res.audio != NULL) {
 			struct audio_output audio_output;
 
-			build_audio_output(pipe_ctx, &audio_output);
+			build_audio_output(context, pipe_ctx, &audio_output);
 
 			pipe_ctx->stream_res.audio->funcs->wall_dto_setup(
 				pipe_ctx->stream_res.audio,
@@ -1828,7 +1822,7 @@ enum dc_status dce110_apply_ctx_to_hw(
 			if (pipe_ctx->stream_res.audio != NULL) {
 				struct audio_output audio_output;
 
-				build_audio_output(pipe_ctx, &audio_output);
+				build_audio_output(context, pipe_ctx, &audio_output);
 
 				pipe_ctx->stream_res.audio->funcs->wall_dto_setup(
 					pipe_ctx->stream_res.audio,
@@ -1842,7 +1836,7 @@ enum dc_status dce110_apply_ctx_to_hw(
 
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx_old =
-					&dc->current_context->res_ctx.pipe_ctx[i];
+					&dc->current_state->res_ctx.pipe_ctx[i];
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
 		if (pipe_ctx->stream == NULL)
@@ -1862,7 +1856,7 @@ enum dc_status dce110_apply_ctx_to_hw(
 
 			struct audio_output audio_output;
 
-			build_audio_output(pipe_ctx, &audio_output);
+			build_audio_output(context, pipe_ctx, &audio_output);
 
 			if (dc_is_dp_signal(pipe_ctx->stream->signal))
 				pipe_ctx->stream_res.stream_enc->funcs->dp_audio_setup(
@@ -1901,8 +1895,6 @@ enum dc_status dce110_apply_ctx_to_hw(
 	apply_min_clocks(dc, context, &clocks_state, false);
 
 	dcb->funcs->set_scratch_critical_state(dcb, false);
-
-	switch_dp_clock_sources(dc, &context->res_ctx);
 
 #ifdef ENABLE_FBC
 	if (dc->fbc_compressor)
@@ -1965,7 +1957,7 @@ static void set_default_colors(struct pipe_ctx *pipe_ctx)
  * -------------------------------------------------|
  *
  ******************************************************************************/
-static void program_surface_visibility(const struct core_dc *dc,
+static void program_surface_visibility(const struct dc *dc,
 		struct pipe_ctx *pipe_ctx)
 {
 	enum blnd_mode blender_mode = BLND_MODE_CURRENT_PIPE;
@@ -2038,7 +2030,7 @@ static void program_gamut_remap(struct pipe_ctx *pipe_ctx)
  * TODO REMOVE, USE UPDATE INSTEAD
  */
 static void set_plane_config(
-	const struct core_dc *dc,
+	const struct dc *dc,
 	struct pipe_ctx *pipe_ctx,
 	struct resource_context *res_ctx)
 {
@@ -2117,7 +2109,7 @@ static void set_plane_config(
 	if (mi->funcs->set_blank)
 		mi->funcs->set_blank(mi, pipe_ctx->plane_state->visible);
 
-	if (dc->public.config.gpu_vm_support)
+	if (dc->config.gpu_vm_support)
 		mi->funcs->mem_input_program_pte_vm(
 				pipe_ctx->plane_res.mi,
 				plane_state->format,
@@ -2125,7 +2117,7 @@ static void set_plane_config(
 				plane_state->rotation);
 }
 
-static void update_plane_addr(const struct core_dc *dc,
+static void update_plane_addr(const struct dc *dc,
 		struct pipe_ctx *pipe_ctx)
 {
 	struct dc_plane_state *plane_state = pipe_ctx->plane_state;
@@ -2163,7 +2155,7 @@ void dce110_update_pending_status(struct pipe_ctx *pipe_ctx)
 	}
 }
 
-void dce110_power_down(struct core_dc *dc)
+void dce110_power_down(struct dc *dc)
 {
 	power_down_all_hw_blocks(dc);
 	disable_vga_and_power_gate_all_controllers(dc);
@@ -2208,7 +2200,7 @@ static bool wait_for_reset_trigger_to_occur(
 
 /* Enable timing synchronization for a group of Timing Generators. */
 static void dce110_enable_timing_synchronization(
-		struct core_dc *dc,
+		struct dc *dc,
 		int group_index,
 		int group_size,
 		struct pipe_ctx *grouped_pipes[])
@@ -2257,7 +2249,7 @@ static void dce110_enable_timing_synchronization(
 	DC_SYNC_INFO("GSL: Set-up complete.\n");
 }
 
-static void init_hw(struct core_dc *dc)
+static void init_hw(struct dc *dc)
 {
 	int i;
 	struct dc_bios *bp;
@@ -2321,7 +2313,7 @@ static void init_hw(struct core_dc *dc)
 }
 
 void dce110_fill_display_configs(
-	const struct validate_context *context,
+	const struct dc_state *context,
 	struct dm_pp_display_configuration *pp_display_cfg)
 {
 	int j;
@@ -2369,7 +2361,7 @@ void dce110_fill_display_configs(
 	pp_display_cfg->display_count = num_cfgs;
 }
 
-uint32_t dce110_get_min_vblank_time_us(const struct validate_context *context)
+uint32_t dce110_get_min_vblank_time_us(const struct dc_state *context)
 {
 	uint8_t j;
 	uint32_t min_vertical_blank_time = -1;
@@ -2394,7 +2386,7 @@ uint32_t dce110_get_min_vblank_time_us(const struct validate_context *context)
 }
 
 static int determine_sclk_from_bounding_box(
-		const struct core_dc *dc,
+		const struct dc *dc,
 		int required_sclk)
 {
 	int i;
@@ -2420,8 +2412,8 @@ static int determine_sclk_from_bounding_box(
 }
 
 static void pplib_apply_display_requirements(
-	struct core_dc *dc,
-	struct validate_context *context)
+	struct dc *dc,
+	struct dc_state *context)
 {
 	struct dm_pp_display_configuration *pp_display_cfg = &context->pp_display_cfg;
 
@@ -2474,24 +2466,24 @@ static void pplib_apply_display_requirements(
 }
 
 static void dce110_set_bandwidth(
-		struct core_dc *dc,
-		struct validate_context *context,
+		struct dc *dc,
+		struct dc_state *context,
 		bool decrease_allowed)
 {
 	dce110_set_displaymarks(dc, context);
 
-	if (decrease_allowed || context->bw.dce.dispclk_khz > dc->current_context->bw.dce.dispclk_khz) {
+	if (decrease_allowed || context->bw.dce.dispclk_khz > dc->current_state->bw.dce.dispclk_khz) {
 		dc->res_pool->display_clock->funcs->set_clock(
 				dc->res_pool->display_clock,
 				context->bw.dce.dispclk_khz * 115 / 100);
-		dc->current_context->bw.dce.dispclk_khz = context->bw.dce.dispclk_khz;
+		dc->current_state->bw.dce.dispclk_khz = context->bw.dce.dispclk_khz;
 	}
 
 	pplib_apply_display_requirements(dc, context);
 }
 
 static void dce110_program_front_end_for_pipe(
-		struct core_dc *dc, struct pipe_ctx *pipe_ctx)
+		struct dc *dc, struct pipe_ctx *pipe_ctx)
 {
 	struct mem_input *mi = pipe_ctx->plane_res.mi;
 	struct pipe_ctx *old_pipe = NULL;
@@ -2502,8 +2494,8 @@ static void dce110_program_front_end_for_pipe(
 
 	memset(&tbl_entry, 0, sizeof(tbl_entry));
 
-	if (dc->current_context)
-		old_pipe = &dc->current_context->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
+	if (dc->current_state)
+		old_pipe = &dc->current_state->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
 
 	memset(&adjust, 0, sizeof(adjust));
 	adjust.gamut_adjust_type = GRAPHICS_GAMUT_ADJUST_TYPE_BYPASS;
@@ -2572,7 +2564,7 @@ static void dce110_program_front_end_for_pipe(
 	if (mi->funcs->set_blank)
 		mi->funcs->set_blank(mi, pipe_ctx->plane_state->visible);
 
-	if (dc->public.config.gpu_vm_support)
+	if (dc->config.gpu_vm_support)
 		mi->funcs->mem_input_program_pte_vm(
 				pipe_ctx->plane_res.mi,
 				plane_state->format,
@@ -2618,10 +2610,10 @@ static void dce110_program_front_end_for_pipe(
 }
 
 static void dce110_apply_ctx_for_surface(
-		struct core_dc *dc,
+		struct dc *dc,
 		const struct dc_stream_state *stream,
 		int num_planes,
-		struct validate_context *context)
+		struct dc_state *context)
 {
 	int i, be_idx;
 
@@ -2648,10 +2640,10 @@ static void dce110_apply_ctx_for_surface(
 	}
 }
 
-static void dce110_power_down_fe(struct core_dc *dc, int fe_idx)
+static void dce110_power_down_fe(struct dc *dc, int fe_idx)
 {
 	/* Do not power down fe when stream is active on dce*/
-	if (dc->current_context->res_ctx.pipe_ctx[fe_idx].stream)
+	if (dc->current_state->res_ctx.pipe_ctx[fe_idx].stream)
 		return;
 
 	dc->hwss.enable_display_power_gating(
@@ -2662,7 +2654,7 @@ static void dce110_power_down_fe(struct core_dc *dc, int fe_idx)
 }
 
 static void dce110_wait_for_mpcc_disconnect(
-		struct core_dc *dc,
+		struct dc *dc,
 		struct resource_pool *res_pool,
 		struct pipe_ctx *pipe_ctx)
 {
@@ -2690,6 +2682,10 @@ static void program_csc_matrix(struct pipe_ctx *pipe_ctx,
 			pipe_ctx->plane_res.xfm->funcs->opp_set_csc_adjustment(pipe_ctx->plane_res.xfm, &tbl_entry);
 	}
 }
+
+static void ready_shared_resources(struct dc *dc) {}
+
+static void optimize_shared_resources(struct dc *dc) {}
 
 static const struct hw_sequencer_funcs dce110_funcs = {
 	.program_gamut_remap = program_gamut_remap,
@@ -2721,10 +2717,13 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.prog_pixclk_crtc_otg = dce110_prog_pixclk_crtc_otg,
 	.setup_stereo = NULL,
 	.set_avmute = dce110_set_avmute,
-	.wait_for_mpcc_disconnect = dce110_wait_for_mpcc_disconnect
+	.wait_for_mpcc_disconnect = dce110_wait_for_mpcc_disconnect,
+	.ready_shared_resources = ready_shared_resources,
+	.optimize_shared_resources = optimize_shared_resources,
+
 };
 
-bool dce110_hw_sequencer_construct(struct core_dc *dc)
+bool dce110_hw_sequencer_construct(struct dc *dc)
 {
 	dc->hwss = dce110_funcs;
 

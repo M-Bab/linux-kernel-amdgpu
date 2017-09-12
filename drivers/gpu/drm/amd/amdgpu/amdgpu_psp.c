@@ -57,18 +57,18 @@ static int psp_sw_init(void *handle)
 		psp->prep_cmd_buf = psp_v3_1_prep_cmd_buf;
 		psp->ring_init = psp_v3_1_ring_init;
 		psp->ring_create = psp_v3_1_ring_create;
+		psp->ring_stop = psp_v3_1_ring_stop;
 		psp->ring_destroy = psp_v3_1_ring_destroy;
 		psp->cmd_submit = psp_v3_1_cmd_submit;
 		psp->compare_sram_data = psp_v3_1_compare_sram_data;
 		psp->smu_reload_quirk = psp_v3_1_smu_reload_quirk;
 		break;
 	case CHIP_RAVEN:
-#if 0
 		psp->init_microcode = psp_v10_0_init_microcode;
-#endif
 		psp->prep_cmd_buf = psp_v10_0_prep_cmd_buf;
 		psp->ring_init = psp_v10_0_ring_init;
 		psp->ring_create = psp_v10_0_ring_create;
+		psp->ring_stop = psp_v10_0_ring_stop;
 		psp->ring_destroy = psp_v10_0_ring_destroy;
 		psp->cmd_submit = psp_v10_0_cmd_submit;
 		psp->compare_sram_data = psp_v10_0_compare_sram_data;
@@ -456,6 +456,16 @@ static int psp_hw_fini(void *handle)
 
 static int psp_suspend(void *handle)
 {
+	int ret;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+	struct psp_context *psp = &adev->psp;
+
+	ret = psp_ring_stop(psp, PSP_RING_TYPE__KM);
+	if (ret) {
+		DRM_ERROR("PSP ring stop failed\n");
+		return ret;
+	}
+
 	return 0;
 }
 

@@ -187,7 +187,7 @@ static const struct dce_ipp_mask ipp_mask = {
 
 #define transform_regs(id)\
 [id] = {\
-		XFM_COMMON_REG_LIST_DCE_BASE(id)\
+		XFM_COMMON_REG_LIST_DCE80(id)\
 }
 
 static const struct dce_transform_registers xfm_regs[] = {
@@ -200,11 +200,11 @@ static const struct dce_transform_registers xfm_regs[] = {
 };
 
 static const struct dce_transform_shift xfm_shift = {
-		XFM_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(__SHIFT)
+		XFM_COMMON_MASK_SH_LIST_DCE80(__SHIFT)
 };
 
 static const struct dce_transform_mask xfm_mask = {
-		XFM_COMMON_MASK_SH_LIST_DCE_COMMON_BASE(_MASK)
+		XFM_COMMON_MASK_SH_LIST_DCE80(_MASK)
 };
 
 #define aux_regs(id)\
@@ -684,44 +684,29 @@ static void destruct(struct dce110_resource_pool *pool)
 }
 
 static enum dc_status build_mapped_resource(
-		const struct core_dc *dc,
-		struct validate_context *context,
-		struct validate_context *old_context)
+		const struct dc *dc,
+		struct dc_state *context,
+		struct dc_stream_state *stream)
 {
 	enum dc_status status = DC_OK;
-	uint8_t i, j;
+	struct pipe_ctx *pipe_ctx = resource_get_head_pipe_for_stream(&context->res_ctx, stream);
 
-	for (i = 0; i < context->stream_count; i++) {
-		struct dc_stream_state *stream = context->streams[i];
+	if (!pipe_ctx)
+		return DC_ERROR_UNEXPECTED;
 
-		if (old_context && resource_is_stream_unchanged(old_context, stream))
-			continue;
+	status = dce110_resource_build_pipe_hw_param(pipe_ctx);
 
-		for (j = 0; j < MAX_PIPES; j++) {
-			struct pipe_ctx *pipe_ctx =
-				&context->res_ctx.pipe_ctx[j];
+	if (status != DC_OK)
+		return status;
 
-			if (context->res_ctx.pipe_ctx[j].stream != stream)
-				continue;
-
-			status = dce110_resource_build_pipe_hw_param(pipe_ctx);
-
-			if (status != DC_OK)
-				return status;
-
-			resource_build_info_frame(pipe_ctx);
-
-			/* do not need to validate non root pipes */
-			break;
-		}
-	}
+	resource_build_info_frame(pipe_ctx);
 
 	return DC_OK;
 }
 
 bool dce80_validate_bandwidth(
-	const struct core_dc *dc,
-	struct validate_context *context)
+	struct dc *dc,
+	struct dc_state *context)
 {
 	/* TODO implement when needed but for now hardcode max value*/
 	context->bw.dce.dispclk_khz = 681000;
@@ -731,19 +716,18 @@ bool dce80_validate_bandwidth(
 }
 
 static bool dce80_validate_surface_sets(
-		const struct dc_validation_set set[],
-		int set_count)
+		struct dc_state *context)
 {
 	int i;
 
-	for (i = 0; i < set_count; i++) {
-		if (set[i].plane_count == 0)
+	for (i = 0; i < context->stream_count; i++) {
+		if (context->stream_status[i].plane_count == 0)
 			continue;
 
-		if (set[i].plane_count > 1)
+		if (context->stream_status[i].plane_count > 1)
 			return false;
 
-		if (set[i].plane_states[0]->format
+		if (context->stream_status[i].plane_states[0]->format
 				>= SURFACE_PIXEL_FORMAT_VIDEO_BEGIN)
 			return false;
 	}
@@ -751,53 +735,20 @@ static bool dce80_validate_surface_sets(
 	return true;
 }
 
-enum dc_status dce80_validate_with_context(
-		const struct core_dc *dc,
-		const struct dc_validation_set set[],
-		int set_count,
-		struct validate_context *context,
-		struct validate_context *old_context)
+enum dc_status dce80_validate_global(
+		struct dc *dc,
+		struct dc_state *context)
 {
-	struct dc_context *dc_ctx = dc->ctx;
-	enum dc_status result = DC_ERROR_UNEXPECTED;
-	int i;
-
-	if (!dce80_validate_surface_sets(set, set_count))
+	if (!dce80_validate_surface_sets(context))
 		return DC_FAIL_SURFACE_VALIDATE;
 
-	for (i = 0; i < set_count; i++) {
-		context->streams[i] = set[i].stream;
-		dc_stream_retain(context->streams[i]);
-		context->stream_count++;
-	}
-
-	result = resource_map_pool_resources(dc, context, old_context);
-
-	if (result == DC_OK)
-		result = resource_map_clock_resources(dc, context, old_context);
-
-	if (!resource_validate_attach_surfaces(set, set_count,
-			old_context, context, dc->res_pool)) {
-		DC_ERROR("Failed to attach surface to stream!\n");
-		return DC_FAIL_ATTACH_SURFACES;
-	}
-
-	if (result == DC_OK)
-		result = build_mapped_resource(dc, context, old_context);
-
-	if (result == DC_OK)
-		result = resource_build_scaling_params_for_context(dc, context);
-
-	if (result == DC_OK)
-		result = dce80_validate_bandwidth(dc, context);
-
-	return result;
+	return DC_OK;
 }
 
 enum dc_status dce80_validate_guaranteed(
-		const struct core_dc *dc,
+		struct dc *dc,
 		struct dc_stream_state *dc_stream,
-		struct validate_context *context)
+		struct dc_state *context)
 {
 	enum dc_status result = DC_ERROR_UNEXPECTED;
 
@@ -805,17 +756,17 @@ enum dc_status dce80_validate_guaranteed(
 	dc_stream_retain(context->streams[0]);
 	context->stream_count++;
 
-	result = resource_map_pool_resources(dc, context, NULL);
+	result = resource_map_pool_resources(dc, context, dc_stream);
 
 	if (result == DC_OK)
-		result = resource_map_clock_resources(dc, context, NULL);
+		result = resource_map_clock_resources(dc, context, dc_stream);
 
 	if (result == DC_OK)
-		result = build_mapped_resource(dc, context, NULL);
+		result = build_mapped_resource(dc, context, dc_stream);
 
 	if (result == DC_OK) {
 		validate_guaranteed_copy_streams(
-				context, dc->public.caps.max_streams);
+				context, dc->caps.max_streams);
 		result = resource_build_scaling_params_for_context(dc, context);
 	}
 
@@ -837,15 +788,16 @@ static void dce80_destroy_resource_pool(struct resource_pool **pool)
 static const struct resource_funcs dce80_res_pool_funcs = {
 	.destroy = dce80_destroy_resource_pool,
 	.link_enc_create = dce80_link_encoder_create,
-	.validate_with_context = dce80_validate_with_context,
 	.validate_guaranteed = dce80_validate_guaranteed,
 	.validate_bandwidth = dce80_validate_bandwidth,
-	.validate_plane = dce100_validate_plane
+	.validate_plane = dce100_validate_plane,
+	.add_stream_to_ctx = dce100_add_stream_to_ctx,
+	.validate_global = dce80_validate_global
 };
 
 static bool dce80_construct(
 	uint8_t num_virtual_links,
-	struct core_dc *dc,
+	struct dc *dc,
 	struct dce110_resource_pool *pool)
 {
 	unsigned int i;
@@ -865,9 +817,9 @@ static bool dce80_construct(
 	 *************************************************/
 	pool->base.underlay_pipe_index = NO_UNDERLAY_PIPE;
 	pool->base.pipe_count = res_cap.num_timing_generator;
-	dc->public.caps.max_downscale_ratio = 200;
-	dc->public.caps.i2c_speed_in_khz = 40;
-	dc->public.caps.max_cursor_size = 128;
+	dc->caps.max_downscale_ratio = 200;
+	dc->caps.i2c_speed_in_khz = 40;
+	dc->caps.max_cursor_size = 128;
 
 	/*************************************************
 	 *  Create resources                             *
@@ -974,7 +926,7 @@ static bool dce80_construct(
 		}
 	}
 
-	dc->public.caps.max_planes =  pool->base.pipe_count;
+	dc->caps.max_planes =  pool->base.pipe_count;
 
 	if (!resource_construct(num_virtual_links, dc, &pool->base,
 			&res_create_funcs))
@@ -993,7 +945,7 @@ res_create_fail:
 
 struct resource_pool *dce80_create_resource_pool(
 	uint8_t num_virtual_links,
-	struct core_dc *dc)
+	struct dc *dc)
 {
 	struct dce110_resource_pool *pool =
 		dm_alloc(sizeof(struct dce110_resource_pool));
@@ -1010,7 +962,7 @@ struct resource_pool *dce80_create_resource_pool(
 
 static bool dce81_construct(
 	uint8_t num_virtual_links,
-	struct core_dc *dc,
+	struct dc *dc,
 	struct dce110_resource_pool *pool)
 {
 	unsigned int i;
@@ -1030,9 +982,9 @@ static bool dce81_construct(
 	 *************************************************/
 	pool->base.underlay_pipe_index = NO_UNDERLAY_PIPE;
 	pool->base.pipe_count = res_cap_81.num_timing_generator;
-	dc->public.caps.max_downscale_ratio = 200;
-	dc->public.caps.i2c_speed_in_khz = 40;
-	dc->public.caps.max_cursor_size = 128;
+	dc->caps.max_downscale_ratio = 200;
+	dc->caps.i2c_speed_in_khz = 40;
+	dc->caps.max_cursor_size = 128;
 
 	/*************************************************
 	 *  Create resources                             *
@@ -1139,7 +1091,7 @@ static bool dce81_construct(
 		}
 	}
 
-	dc->public.caps.max_planes =  pool->base.pipe_count;
+	dc->caps.max_planes =  pool->base.pipe_count;
 
 	if (!resource_construct(num_virtual_links, dc, &pool->base,
 			&res_create_funcs))
@@ -1158,7 +1110,7 @@ res_create_fail:
 
 struct resource_pool *dce81_create_resource_pool(
 	uint8_t num_virtual_links,
-	struct core_dc *dc)
+	struct dc *dc)
 {
 	struct dce110_resource_pool *pool =
 		dm_alloc(sizeof(struct dce110_resource_pool));
@@ -1175,7 +1127,7 @@ struct resource_pool *dce81_create_resource_pool(
 
 static bool dce83_construct(
 	uint8_t num_virtual_links,
-	struct core_dc *dc,
+	struct dc *dc,
 	struct dce110_resource_pool *pool)
 {
 	unsigned int i;
@@ -1195,9 +1147,9 @@ static bool dce83_construct(
 	 *************************************************/
 	pool->base.underlay_pipe_index = NO_UNDERLAY_PIPE;
 	pool->base.pipe_count = res_cap_83.num_timing_generator;
-	dc->public.caps.max_downscale_ratio = 200;
-	dc->public.caps.i2c_speed_in_khz = 40;
-	dc->public.caps.max_cursor_size = 128;
+	dc->caps.max_downscale_ratio = 200;
+	dc->caps.i2c_speed_in_khz = 40;
+	dc->caps.max_cursor_size = 128;
 
 	/*************************************************
 	 *  Create resources                             *
@@ -1300,7 +1252,7 @@ static bool dce83_construct(
 		}
 	}
 
-	dc->public.caps.max_planes =  pool->base.pipe_count;
+	dc->caps.max_planes =  pool->base.pipe_count;
 
 	if (!resource_construct(num_virtual_links, dc, &pool->base,
 			&res_create_funcs))
@@ -1319,7 +1271,7 @@ res_create_fail:
 
 struct resource_pool *dce83_create_resource_pool(
 	uint8_t num_virtual_links,
-	struct core_dc *dc)
+	struct dc *dc)
 {
 	struct dce110_resource_pool *pool =
 		dm_alloc(sizeof(struct dce110_resource_pool));

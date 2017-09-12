@@ -723,44 +723,29 @@ static struct clock_source *find_matching_pll(
 }
 
 static enum dc_status build_mapped_resource(
-		const struct core_dc *dc,
-		struct validate_context *context,
-		struct validate_context *old_context)
+		const struct dc *dc,
+		struct dc_state *context,
+		struct dc_stream_state *stream)
 {
 	enum dc_status status = DC_OK;
-	uint8_t i, j;
+	struct pipe_ctx *pipe_ctx = resource_get_head_pipe_for_stream(&context->res_ctx, stream);
 
-	for (i = 0; i < context->stream_count; i++) {
-		struct dc_stream_state *stream = context->streams[i];
+	if (!pipe_ctx)
+		return DC_ERROR_UNEXPECTED;
 
-		if (old_context && resource_is_stream_unchanged(old_context, stream))
-			continue;
+	status = dce110_resource_build_pipe_hw_param(pipe_ctx);
 
-		for (j = 0; j < MAX_PIPES; j++) {
-			struct pipe_ctx *pipe_ctx =
-				&context->res_ctx.pipe_ctx[j];
+	if (status != DC_OK)
+		return status;
 
-			if (context->res_ctx.pipe_ctx[j].stream != stream)
-				continue;
-
-			status = dce110_resource_build_pipe_hw_param(pipe_ctx);
-
-			if (status != DC_OK)
-				return status;
-
-			resource_build_info_frame(pipe_ctx);
-
-			/* do not need to validate non root pipes */
-			break;
-		}
-	}
+	resource_build_info_frame(pipe_ctx);
 
 	return DC_OK;
 }
 
 bool dce112_validate_bandwidth(
-	const struct core_dc *dc,
-	struct validate_context *context)
+	struct dc *dc,
+	struct dc_state *context)
 {
 	bool result = false;
 
@@ -771,8 +756,8 @@ bool dce112_validate_bandwidth(
 
 	if (bw_calcs(
 			dc->ctx,
-			&dc->bw_dceip,
-			&dc->bw_vbios,
+			dc->bw_dceip,
+			dc->bw_vbios,
 			context->res_ctx.pipe_ctx,
 			dc->res_pool->pipe_count,
 			&context->bw.dce))
@@ -783,7 +768,7 @@ bool dce112_validate_bandwidth(
 			"%s: Bandwidth validation failed!",
 			__func__);
 
-	if (memcmp(&dc->current_context->bw.dce,
+	if (memcmp(&dc->current_state->bw.dce,
 			&context->bw.dce, sizeof(context->bw.dce))) {
 		struct log_entry log_entry;
 		dm_logger_open(
@@ -837,65 +822,51 @@ bool dce112_validate_bandwidth(
 }
 
 enum dc_status resource_map_phy_clock_resources(
-		const struct core_dc *dc,
-		struct validate_context *context,
-		struct validate_context *old_context)
+		const struct dc *dc,
+		struct dc_state *context,
+		struct dc_stream_state *stream)
 {
-	uint8_t i, j;
 
 	/* acquire new resources */
-	for (i = 0; i < context->stream_count; i++) {
-		struct dc_stream_state *stream = context->streams[i];
+	struct pipe_ctx *pipe_ctx = resource_get_head_pipe_for_stream(
+			&context->res_ctx, stream);
 
-		if (old_context && resource_is_stream_unchanged(old_context, stream))
-			continue;
+	if (!pipe_ctx)
+		return DC_ERROR_UNEXPECTED;
 
-		for (j = 0; j < MAX_PIPES; j++) {
-			struct pipe_ctx *pipe_ctx =
-				&context->res_ctx.pipe_ctx[j];
+	if (dc_is_dp_signal(pipe_ctx->stream->signal)
+		|| pipe_ctx->stream->signal == SIGNAL_TYPE_VIRTUAL)
+		pipe_ctx->clock_source =
+				dc->res_pool->dp_clock_source;
+	else
+		pipe_ctx->clock_source = find_matching_pll(
+			&context->res_ctx, dc->res_pool,
+			stream);
 
-			if (context->res_ctx.pipe_ctx[j].stream != stream)
-				continue;
+	if (pipe_ctx->clock_source == NULL)
+		return DC_NO_CLOCK_SOURCE_RESOURCE;
 
-			if (dc_is_dp_signal(pipe_ctx->stream->signal)
-				|| pipe_ctx->stream->signal == SIGNAL_TYPE_VIRTUAL)
-				pipe_ctx->clock_source =
-						dc->res_pool->dp_clock_source;
-			else
-				pipe_ctx->clock_source = find_matching_pll(
-					&context->res_ctx, dc->res_pool,
-					stream);
-
-			if (pipe_ctx->clock_source == NULL)
-				return DC_NO_CLOCK_SOURCE_RESOURCE;
-
-			resource_reference_clock_source(
-				&context->res_ctx,
-				dc->res_pool,
-				pipe_ctx->clock_source);
-
-			/* only one cs per stream regardless of mpo */
-			break;
-		}
-	}
+	resource_reference_clock_source(
+		&context->res_ctx,
+		dc->res_pool,
+		pipe_ctx->clock_source);
 
 	return DC_OK;
 }
 
 static bool dce112_validate_surface_sets(
-		const struct dc_validation_set set[],
-		int set_count)
+		struct dc_state *context)
 {
 	int i;
 
-	for (i = 0; i < set_count; i++) {
-		if (set[i].plane_count == 0)
+	for (i = 0; i < context->stream_count; i++) {
+		if (context->stream_status[i].plane_count == 0)
 			continue;
 
-		if (set[i].plane_count > 1)
+		if (context->stream_status[i].plane_count > 1)
 			return false;
 
-		if (set[i].plane_states[0]->format
+		if (context->stream_status[i].plane_states[0]->format
 				>= SURFACE_PIXEL_FORMAT_VIDEO_BEGIN)
 			return false;
 	}
@@ -903,42 +874,49 @@ static bool dce112_validate_surface_sets(
 	return true;
 }
 
-enum dc_status dce112_validate_with_context(
-		const struct core_dc *dc,
-		const struct dc_validation_set set[],
-		int set_count,
-		struct validate_context *context,
-		struct validate_context *old_context)
+enum dc_status dce112_add_stream_to_ctx(
+		struct dc *dc,
+		struct dc_state *new_ctx,
+		struct dc_stream_state *dc_stream)
 {
-	struct dc_context *dc_ctx = dc->ctx;
 	enum dc_status result = DC_ERROR_UNEXPECTED;
-	int i;
 
-	if (!dce112_validate_surface_sets(set, set_count))
-		return DC_FAIL_SURFACE_VALIDATE;
-
-	for (i = 0; i < set_count; i++) {
-		context->streams[i] = set[i].stream;
-		dc_stream_retain(context->streams[i]);
-		context->stream_count++;
-	}
-
-	result = resource_map_pool_resources(dc, context, old_context);
+	result = resource_map_pool_resources(dc, new_ctx, dc_stream);
 
 	if (result == DC_OK)
-		result = resource_map_phy_clock_resources(dc, context, old_context);
+		result = resource_map_phy_clock_resources(dc, new_ctx, dc_stream);
 
-	if (!resource_validate_attach_surfaces(set, set_count,
-			old_context, context, dc->res_pool)) {
-		DC_ERROR("Failed to attach surface to stream!\n");
-		return DC_FAIL_ATTACH_SURFACES;
-	}
 
 	if (result == DC_OK)
-		result = build_mapped_resource(dc, context, old_context);
+		result = build_mapped_resource(dc, new_ctx, dc_stream);
+
+	return result;
+}
+
+enum dc_status dce112_validate_guaranteed(
+		struct dc *dc,
+		struct dc_stream_state *stream,
+		struct dc_state *context)
+{
+	enum dc_status result = DC_ERROR_UNEXPECTED;
+
+	context->streams[0] = stream;
+	dc_stream_retain(context->streams[0]);
+	context->stream_count++;
+
+	result = resource_map_pool_resources(dc, context, stream);
 
 	if (result == DC_OK)
+		result = resource_map_phy_clock_resources(dc, context, stream);
+
+	if (result == DC_OK)
+		result = build_mapped_resource(dc, context, stream);
+
+	if (result == DC_OK) {
+		validate_guaranteed_copy_streams(
+				context, dc->caps.max_streams);
 		result = resource_build_scaling_params_for_context(dc, context);
+	}
 
 	if (result == DC_OK)
 		if (!dce112_validate_bandwidth(dc, context))
@@ -947,36 +925,14 @@ enum dc_status dce112_validate_with_context(
 	return result;
 }
 
-enum dc_status dce112_validate_guaranteed(
-		const struct core_dc *dc,
-		struct dc_stream_state *stream,
-		struct validate_context *context)
+enum dc_status dce112_validate_global(
+		struct dc *dc,
+		struct dc_state *context)
 {
-	enum dc_status result = DC_ERROR_UNEXPECTED;
+	if (!dce112_validate_surface_sets(context))
+		return DC_FAIL_SURFACE_VALIDATE;
 
-	context->streams[0] = stream;
-	dc_stream_retain(context->streams[0]);
-	context->stream_count++;
-
-	result = resource_map_pool_resources(dc, context, NULL);
-
-	if (result == DC_OK)
-		result = resource_map_phy_clock_resources(dc, context, NULL);
-
-	if (result == DC_OK)
-		result = build_mapped_resource(dc, context, NULL);
-
-	if (result == DC_OK) {
-		validate_guaranteed_copy_streams(
-				context, dc->public.caps.max_streams);
-		result = resource_build_scaling_params_for_context(dc, context);
-	}
-
-	if (result == DC_OK)
-		if (!dce112_validate_bandwidth(dc, context))
-			result = DC_FAIL_BANDWIDTH_VALIDATE;
-
-	return result;
+	return DC_OK;
 }
 
 static void dce112_destroy_resource_pool(struct resource_pool **pool)
@@ -991,13 +947,14 @@ static void dce112_destroy_resource_pool(struct resource_pool **pool)
 static const struct resource_funcs dce112_res_pool_funcs = {
 	.destroy = dce112_destroy_resource_pool,
 	.link_enc_create = dce112_link_encoder_create,
-	.validate_with_context = dce112_validate_with_context,
 	.validate_guaranteed = dce112_validate_guaranteed,
 	.validate_bandwidth = dce112_validate_bandwidth,
-	.validate_plane = dce100_validate_plane
+	.validate_plane = dce100_validate_plane,
+	.add_stream_to_ctx = dce112_add_stream_to_ctx,
+	.validate_global = dce112_validate_global
 };
 
-static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
+static void bw_calcs_data_update_from_pplib(struct dc *dc)
 {
 	struct dm_pp_clock_levels_with_latency eng_clks = {0};
 	struct dm_pp_clock_levels_with_latency mem_clks = {0};
@@ -1018,21 +975,21 @@ static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 				DM_PP_CLOCK_TYPE_ENGINE_CLK,
 				&clks);
 		/* convert all the clock fro kHz to fix point mHz */
-		dc->bw_vbios.high_sclk = bw_frc_to_fixed(
+		dc->bw_vbios->high_sclk = bw_frc_to_fixed(
 				clks.clocks_in_khz[clks.num_levels-1], 1000);
-		dc->bw_vbios.mid1_sclk  = bw_frc_to_fixed(
+		dc->bw_vbios->mid1_sclk  = bw_frc_to_fixed(
 				clks.clocks_in_khz[clks.num_levels/8], 1000);
-		dc->bw_vbios.mid2_sclk  = bw_frc_to_fixed(
+		dc->bw_vbios->mid2_sclk  = bw_frc_to_fixed(
 				clks.clocks_in_khz[clks.num_levels*2/8], 1000);
-		dc->bw_vbios.mid3_sclk  = bw_frc_to_fixed(
+		dc->bw_vbios->mid3_sclk  = bw_frc_to_fixed(
 				clks.clocks_in_khz[clks.num_levels*3/8], 1000);
-		dc->bw_vbios.mid4_sclk  = bw_frc_to_fixed(
+		dc->bw_vbios->mid4_sclk  = bw_frc_to_fixed(
 				clks.clocks_in_khz[clks.num_levels*4/8], 1000);
-		dc->bw_vbios.mid5_sclk  = bw_frc_to_fixed(
+		dc->bw_vbios->mid5_sclk  = bw_frc_to_fixed(
 				clks.clocks_in_khz[clks.num_levels*5/8], 1000);
-		dc->bw_vbios.mid6_sclk  = bw_frc_to_fixed(
+		dc->bw_vbios->mid6_sclk  = bw_frc_to_fixed(
 				clks.clocks_in_khz[clks.num_levels*6/8], 1000);
-		dc->bw_vbios.low_sclk  = bw_frc_to_fixed(
+		dc->bw_vbios->low_sclk  = bw_frc_to_fixed(
 				clks.clocks_in_khz[0], 1000);
 
 		/*do memory clock*/
@@ -1041,12 +998,12 @@ static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 				DM_PP_CLOCK_TYPE_MEMORY_CLK,
 				&clks);
 
-		dc->bw_vbios.low_yclk = bw_frc_to_fixed(
+		dc->bw_vbios->low_yclk = bw_frc_to_fixed(
 			clks.clocks_in_khz[0] * MEMORY_TYPE_MULTIPLIER, 1000);
-		dc->bw_vbios.mid_yclk = bw_frc_to_fixed(
+		dc->bw_vbios->mid_yclk = bw_frc_to_fixed(
 			clks.clocks_in_khz[clks.num_levels>>1] * MEMORY_TYPE_MULTIPLIER,
 			1000);
-		dc->bw_vbios.high_yclk = bw_frc_to_fixed(
+		dc->bw_vbios->high_yclk = bw_frc_to_fixed(
 			clks.clocks_in_khz[clks.num_levels-1] * MEMORY_TYPE_MULTIPLIER,
 			1000);
 
@@ -1054,21 +1011,21 @@ static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 	}
 
 	/* convert all the clock fro kHz to fix point mHz  TODO: wloop data */
-	dc->bw_vbios.high_sclk = bw_frc_to_fixed(
+	dc->bw_vbios->high_sclk = bw_frc_to_fixed(
 		eng_clks.data[eng_clks.num_levels-1].clocks_in_khz, 1000);
-	dc->bw_vbios.mid1_sclk  = bw_frc_to_fixed(
+	dc->bw_vbios->mid1_sclk  = bw_frc_to_fixed(
 		eng_clks.data[eng_clks.num_levels/8].clocks_in_khz, 1000);
-	dc->bw_vbios.mid2_sclk  = bw_frc_to_fixed(
+	dc->bw_vbios->mid2_sclk  = bw_frc_to_fixed(
 		eng_clks.data[eng_clks.num_levels*2/8].clocks_in_khz, 1000);
-	dc->bw_vbios.mid3_sclk  = bw_frc_to_fixed(
+	dc->bw_vbios->mid3_sclk  = bw_frc_to_fixed(
 		eng_clks.data[eng_clks.num_levels*3/8].clocks_in_khz, 1000);
-	dc->bw_vbios.mid4_sclk  = bw_frc_to_fixed(
+	dc->bw_vbios->mid4_sclk  = bw_frc_to_fixed(
 		eng_clks.data[eng_clks.num_levels*4/8].clocks_in_khz, 1000);
-	dc->bw_vbios.mid5_sclk  = bw_frc_to_fixed(
+	dc->bw_vbios->mid5_sclk  = bw_frc_to_fixed(
 		eng_clks.data[eng_clks.num_levels*5/8].clocks_in_khz, 1000);
-	dc->bw_vbios.mid6_sclk  = bw_frc_to_fixed(
+	dc->bw_vbios->mid6_sclk  = bw_frc_to_fixed(
 		eng_clks.data[eng_clks.num_levels*6/8].clocks_in_khz, 1000);
-	dc->bw_vbios.low_sclk  = bw_frc_to_fixed(
+	dc->bw_vbios->low_sclk  = bw_frc_to_fixed(
 			eng_clks.data[0].clocks_in_khz, 1000);
 
 	/*do memory clock*/
@@ -1082,12 +1039,12 @@ static void bw_calcs_data_update_from_pplib(struct core_dc *dc)
 	 * ALSO always convert UMA clock (from PPLIB)  to YCLK (HW formula):
 	 * YCLK = UMACLK*m_memoryTypeMultiplier
 	 */
-	dc->bw_vbios.low_yclk = bw_frc_to_fixed(
+	dc->bw_vbios->low_yclk = bw_frc_to_fixed(
 		mem_clks.data[0].clocks_in_khz * MEMORY_TYPE_MULTIPLIER, 1000);
-	dc->bw_vbios.mid_yclk = bw_frc_to_fixed(
+	dc->bw_vbios->mid_yclk = bw_frc_to_fixed(
 		mem_clks.data[mem_clks.num_levels>>1].clocks_in_khz * MEMORY_TYPE_MULTIPLIER,
 		1000);
-	dc->bw_vbios.high_yclk = bw_frc_to_fixed(
+	dc->bw_vbios->high_yclk = bw_frc_to_fixed(
 		mem_clks.data[mem_clks.num_levels-1].clocks_in_khz * MEMORY_TYPE_MULTIPLIER,
 		1000);
 
@@ -1153,7 +1110,7 @@ const struct resource_caps *dce112_resource_cap(
 
 static bool construct(
 	uint8_t num_virtual_links,
-	struct core_dc *dc,
+	struct dc *dc,
 	struct dce110_resource_pool *pool)
 {
 	unsigned int i;
@@ -1170,9 +1127,9 @@ static bool construct(
 	 *************************************************/
 	pool->base.underlay_pipe_index = NO_UNDERLAY_PIPE;
 	pool->base.pipe_count = pool->base.res_cap->num_timing_generator;
-	dc->public.caps.max_downscale_ratio = 200;
-	dc->public.caps.i2c_speed_in_khz = 100;
-	dc->public.caps.max_cursor_size = 128;
+	dc->caps.max_downscale_ratio = 200;
+	dc->caps.i2c_speed_in_khz = 100;
+	dc->caps.max_cursor_size = 128;
 
 	/*************************************************
 	 *  Create resources                             *
@@ -1319,13 +1276,13 @@ static bool construct(
 			  &res_create_funcs))
 		goto res_create_fail;
 
-	dc->public.caps.max_planes =  pool->base.pipe_count;
+	dc->caps.max_planes =  pool->base.pipe_count;
 
 	/* Create hardware sequencer */
 	if (!dce112_hw_sequencer_construct(dc))
 		goto res_create_fail;
 
-	bw_calcs_init(&dc->bw_dceip, &dc->bw_vbios, dc->ctx->asic_id);
+	bw_calcs_init(dc->bw_dceip, dc->bw_vbios, dc->ctx->asic_id);
 
 	bw_calcs_data_update_from_pplib(dc);
 
@@ -1338,7 +1295,7 @@ res_create_fail:
 
 struct resource_pool *dce112_create_resource_pool(
 	uint8_t num_virtual_links,
-	struct core_dc *dc)
+	struct dc *dc)
 {
 	struct dce110_resource_pool *pool =
 		dm_alloc(sizeof(struct dce110_resource_pool));

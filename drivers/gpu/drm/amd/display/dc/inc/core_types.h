@@ -32,7 +32,10 @@
 #include "ddc_service_types.h"
 #include "dc_bios_types.h"
 #include "mem_input.h"
+#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 #include "mpc.h"
+#endif
+#include "dwb.h"
 
 #define MAX_CLOCK_SOURCES 7
 
@@ -45,11 +48,12 @@ void enable_surface_flip_reporting(struct dc_plane_state *plane_state,
 #include "clock_source.h"
 #include "audio.h"
 #include "hw_sequencer_types.h"
+#include "dm_pp_smu.h"
 
 
 /************ link *****************/
 struct link_init_data {
-	const struct core_dc *dc;
+	const struct dc *dc;
 	struct dc_context *ctx; /* TODO: remove 'dal' when DC is complete. */
 	uint32_t connector_index; /* this will be mapped to the HPD pins */
 	uint32_t link_index; /* this is mapped to DAL display_index
@@ -66,7 +70,9 @@ enum dc_status dc_link_validate_mode_timing(
 
 void core_link_resume(struct dc_link *link);
 
-void core_link_enable_stream(struct pipe_ctx *pipe_ctx);
+void core_link_enable_stream(
+		struct dc_state *state,
+		struct pipe_ctx *pipe_ctx);
 
 void core_link_disable_stream(struct pipe_ctx *pipe_ctx);
 
@@ -76,34 +82,38 @@ void core_link_set_avmute(struct pipe_ctx *pipe_ctx, bool enable);
 #include "transform.h"
 
 struct resource_pool;
-struct validate_context;
+struct dc_state;
 struct resource_context;
 
 struct resource_funcs {
 	void (*destroy)(struct resource_pool **pool);
 	struct link_encoder *(*link_enc_create)(
 			const struct encoder_init_data *init);
-	enum dc_status (*validate_with_context)(
-					const struct core_dc *dc,
-					const struct dc_validation_set set[],
-					int set_count,
-					struct validate_context *context,
-					struct validate_context *old_context);
 
 	enum dc_status (*validate_guaranteed)(
-					const struct core_dc *dc,
+					struct dc *dc,
 					struct dc_stream_state *stream,
-					struct validate_context *context);
+					struct dc_state *context);
 
 	bool (*validate_bandwidth)(
-					const struct core_dc *dc,
-					struct validate_context *context);
+					struct dc *dc,
+					struct dc_state *context);
+
+	enum dc_status (*validate_global)(
+		struct dc *dc,
+		struct dc_state *context);
 
 	struct pipe_ctx *(*acquire_idle_pipe_for_layer)(
-			struct validate_context *context,
+			struct dc_state *context,
 			const struct resource_pool *pool,
 			struct dc_stream_state *stream);
+
 	enum dc_status (*validate_plane)(const struct dc_plane_state *plane_state);
+
+	enum dc_status (*add_stream_to_ctx)(
+			struct dc *dc,
+			struct dc_state *new_ctx,
+			struct dc_stream_state *dc_stream);
 };
 
 struct audio_support{
@@ -121,9 +131,12 @@ struct resource_pool {
 	struct output_pixel_processor *opps[MAX_PIPES];
 	struct timing_generator *timing_generators[MAX_PIPES];
 	struct stream_encoder *stream_enc[MAX_PIPES * 2];
-#ifdef CONFIG_DRM_AMD_DC_DCN1_0
+
 	struct mpc *mpc;
-#endif
+	struct pp_smu_funcs_rv *pp_smu;
+	struct pp_smu_display_requirement_rv pp_smu_req;
+
+	struct dwbc *dwbc[MAX_DWB_PIPES];
 
 	unsigned int pipe_count;
 	unsigned int underlay_pipe_index;
@@ -177,7 +190,6 @@ struct pipe_ctx {
 	struct plane_resource plane_res;
 	struct stream_resource stream_res;
 
-	struct display_clock *dis_clk;
 	struct clock_source *clock_source;
 
 	struct pll_settings pll_settings;
@@ -193,6 +205,7 @@ struct pipe_ctx {
 	struct _vcs_dpi_display_rq_regs_st rq_regs;
 	struct _vcs_dpi_display_pipe_dest_params_st pipe_dlg_param;
 #endif
+	struct dwbc *dwbc;
 };
 
 struct resource_context {
@@ -219,7 +232,6 @@ struct dce_bw_output {
 	int blackout_recovery_time_us;
 };
 
-#ifdef CONFIG_DRM_AMD_DC_DCN1_0
 struct dcn_bw_clocks {
 	int dispclk_khz;
 	bool dppclk_div;
@@ -235,16 +247,13 @@ struct dcn_bw_output {
 	struct dcn_bw_clocks calc_clk;
 	struct dcn_watermark_set watermarks;
 };
-#endif
 
 union bw_context {
-#ifdef CONFIG_DRM_AMD_DC_DCN1_0
 	struct dcn_bw_output dcn;
-#endif
 	struct dce_bw_output dce;
 };
 
-struct validate_context {
+struct dc_state {
 	struct dc_stream_state *streams[MAX_PIPES];
 	struct dc_stream_status stream_status[MAX_PIPES];
 	uint8_t stream_count;
@@ -260,7 +269,9 @@ struct validate_context {
 	struct dcn_bw_internal_vars dcn_bw_vars;
 #endif
 
-	int ref_count;
+	struct display_clock *dis_clk;
+
+	atomic_t ref_count;
 };
 
 #endif /* _CORE_TYPES_H_ */
