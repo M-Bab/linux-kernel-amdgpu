@@ -75,7 +75,7 @@ static struct nvmf_host *nvmf_host_default(void)
 
 	kref_init(&host->ref);
 	snprintf(host->nqn, NVMF_NQN_SIZE,
-		"nqn.2014-08.org.nvmexpress:NVMf:uuid:%pUb", &host->id);
+		"nqn.2014-08.org.nvmexpress:uuid:%pUb", &host->id);
 
 	mutex_lock(&nvmf_hosts_mutex);
 	list_add_tail(&host->list, &nvmf_hosts);
@@ -794,7 +794,8 @@ static int nvmf_check_allowed_opts(struct nvmf_ctrl_options *opts,
 		int i;
 
 		for (i = 0; i < ARRAY_SIZE(opt_tokens); i++) {
-			if (opt_tokens[i].token & ~allowed_opts) {
+			if ((opt_tokens[i].token & opts->mask) &&
+			    (opt_tokens[i].token & ~allowed_opts)) {
 				pr_warn("invalid parameter '%s'\n",
 					opt_tokens[i].pattern);
 			}

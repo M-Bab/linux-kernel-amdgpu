@@ -1,3 +1,8 @@
+The amd-staging-4.13 linux kernel, forward-patched to the latest security level and configured.
+
+More information and amd64 builds available here:
+https://github.com/M-Bab/linux-kernel-amdgpu-binaries
+
 Linux kernel
 ============
 
