@@ -63,6 +63,8 @@
 #include <linux/compat.h>
 #include <linux/vmalloc.h>
 
+#include <trace/events/fs.h>
+
 #include <linux/uaccess.h>
 #include <asm/mmu_context.h>
 #include <asm/tlb.h>
@@ -109,6 +111,14 @@ bool path_noexec(const struct path *path)
 	return (path->mnt->mnt_flags & MNT_NOEXEC) ||
 	       (path->mnt->mnt_sb->s_iflags & SB_I_NOEXEC);
 }
+EXPORT_SYMBOL_GPL(path_noexec);
+
+bool path_nosuid(const struct path *path)
+{
+	return !mnt_may_suid(path->mnt) ||
+	       (path->mnt->mnt_sb->s_iflags & SB_I_NOSUID);
+}
+EXPORT_SYMBOL(path_nosuid);
 
 #ifdef CONFIG_USELIB
 /*
@@ -864,6 +874,8 @@ static struct file *do_open_execat(int fd, struct filename *name, int flags)
 	if (name->name[0] != '\0')
 		fsnotify_open(file);
 
+	trace_open_exec(name->name);
+
 out:
 	return file;
 
@@ -1452,6 +1464,7 @@ static void check_unsafe_exec(struct linux_binprm *bprm)
 {
 	struct task_struct *p = current, *t;
 	unsigned n_fs;
+	bool fs_recheck;
 
 	if (p->ptrace)
 		bprm->unsafe |= LSM_UNSAFE_PTRACE;
@@ -1463,6 +1476,8 @@ static void check_unsafe_exec(struct linux_binprm *bprm)
 	if (task_no_new_privs(current))
 		bprm->unsafe |= LSM_UNSAFE_NO_NEW_PRIVS;
 
+recheck:
+	fs_recheck = false;
 	t = p;
 	n_fs = 1;
 	spin_lock(&p->fs->lock);
@@ -1470,12 +1485,18 @@ static void check_unsafe_exec(struct linux_binprm *bprm)
 	while_each_thread(p, t) {
 		if (t->fs == p->fs)
 			n_fs++;
+		if (t->flags & (PF_EXITING | PF_FORKNOEXEC))
+			fs_recheck  = true;
 	}
 	rcu_read_unlock();
 
-	if (p->fs->users > n_fs)
+	if (p->fs->users > n_fs) {
+		if (fs_recheck) {
+			spin_unlock(&p->fs->lock);
+			goto recheck;
+		}
 		bprm->unsafe |= LSM_UNSAFE_SHARE;
-	else
+	} else
 		p->fs->in_exec = 1;
 	spin_unlock(&p->fs->lock);
 }
@@ -1496,7 +1517,7 @@ static void bprm_fill_uid(struct linux_binprm *bprm)
 	bprm->cred->euid = current_euid();
 	bprm->cred->egid = current_egid();
 
-	if (!mnt_may_suid(bprm->file->f_path.mnt))
+	if (path_nosuid(&bprm->file->f_path))
 		return;
 
 	if (task_no_new_privs(current))

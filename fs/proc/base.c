@@ -664,8 +664,15 @@ int proc_setattr(struct dentry *dentry, struct iattr *attr)
 {
 	int error;
 	struct inode *inode = d_inode(dentry);
+	struct user_namespace *s_user_ns;
 
 	if (attr->ia_valid & ATTR_MODE)
+		return -EPERM;
+
+	/* Don't let anyone mess with weird proc files */
+	s_user_ns = inode->i_sb->s_user_ns;
+	if (!kuid_has_mapping(s_user_ns, inode->i_uid) ||
+	    !kgid_has_mapping(s_user_ns, inode->i_gid))
 		return -EPERM;
 
 	error = setattr_prepare(dentry, attr);
@@ -1986,7 +1993,7 @@ static int map_files_get_link(struct dentry *dentry, struct path *path)
 	down_read(&mm->mmap_sem);
 	vma = find_exact_vma(mm, vm_start, vm_end);
 	if (vma && vma->vm_file) {
-		*path = vma->vm_file->f_path;
+		*path = vma_pr_or_file(vma)->f_path;
 		path_get(path);
 		rc = 0;
 	}

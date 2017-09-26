@@ -6,10 +6,18 @@
  */
 
 #include <sys/types.h>
-#include <asm/siginfo.h>
-#define __have_siginfo_t 1
-#define __have_sigval_t 1
-#define __have_sigevent_t 1
+
+/*
+ * glibc 2.26 and later have SIGSYS in siginfo_t. Before that,
+ * we need to use the kernel's siginfo.h file and trick glibc
+ * into accepting it.
+ */
+#if !__GLIBC_PREREQ(2, 26)
+# include <asm/siginfo.h>
+# define __have_siginfo_t 1
+# define __have_sigval_t 1
+# define __have_sigevent_t 1
+#endif
 
 #include <errno.h>
 #include <linux/filter.h>
@@ -74,7 +82,12 @@
 #define SECCOMP_RET_ERRNO       0x00050000U /* returns an errno */
 #define SECCOMP_RET_TRACE       0x7ff00000U /* pass to a tracer or disallow */
 #define SECCOMP_RET_ALLOW       0x7fff0000U /* allow */
+#endif
+#ifndef SECCOMP_RET_LOG
+#define SECCOMP_RET_LOG       0x7ffc0000U /* allow after logging */
+#endif
 
+#ifndef SECCOMP_RET_ACTION
 /* Masks for the return value sections. */
 #define SECCOMP_RET_ACTION      0x7fff0000U
 #define SECCOMP_RET_DATA        0x0000ffffU
@@ -340,6 +353,28 @@ TEST(empty_prog)
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog);
 	EXPECT_EQ(-1, ret);
 	EXPECT_EQ(EINVAL, errno);
+}
+
+TEST(log_all)
+{
+	struct sock_filter filter[] = {
+		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_LOG),
+	};
+	struct sock_fprog prog = {
+		.len = (unsigned short)ARRAY_SIZE(filter),
+		.filter = filter,
+	};
+	long ret;
+	pid_t parent = getppid();
+
+	ret = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+	ASSERT_EQ(0, ret);
+
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &prog);
+	ASSERT_EQ(0, ret);
+
+	/* getppid() should succeed and be logged (no check for logging) */
+	EXPECT_EQ(parent, syscall(__NR_getppid));
 }
 
 TEST_SIGNAL(unknown_ret_is_kill_inside, SIGSYS)
@@ -676,7 +711,7 @@ TEST_F_SIGNAL(TRAP, ign, SIGSYS)
 	syscall(__NR_getpid);
 }
 
-static struct siginfo TRAP_info;
+static siginfo_t TRAP_info;
 static volatile int TRAP_nr;
 static void TRAP_action(int nr, siginfo_t *info, void *void_context)
 {
@@ -735,6 +770,7 @@ TEST_F(TRAP, handler)
 
 FIXTURE_DATA(precedence) {
 	struct sock_fprog allow;
+	struct sock_fprog log;
 	struct sock_fprog trace;
 	struct sock_fprog error;
 	struct sock_fprog trap;
@@ -745,6 +781,13 @@ FIXTURE_SETUP(precedence)
 {
 	struct sock_filter allow_insns[] = {
 		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ALLOW),
+	};
+	struct sock_filter log_insns[] = {
+		BPF_STMT(BPF_LD|BPF_W|BPF_ABS,
+			offsetof(struct seccomp_data, nr)),
+		BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_getpid, 1, 0),
+		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ALLOW),
+		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_LOG),
 	};
 	struct sock_filter trace_insns[] = {
 		BPF_STMT(BPF_LD|BPF_W|BPF_ABS,
@@ -782,6 +825,7 @@ FIXTURE_SETUP(precedence)
 	memcpy(self->_x.filter, &_x##_insns, sizeof(_x##_insns)); \
 	self->_x.len = (unsigned short)ARRAY_SIZE(_x##_insns)
 	FILTER_ALLOC(allow);
+	FILTER_ALLOC(log);
 	FILTER_ALLOC(trace);
 	FILTER_ALLOC(error);
 	FILTER_ALLOC(trap);
@@ -792,6 +836,7 @@ FIXTURE_TEARDOWN(precedence)
 {
 #define FILTER_FREE(_x) if (self->_x.filter) free(self->_x.filter)
 	FILTER_FREE(allow);
+	FILTER_FREE(log);
 	FILTER_FREE(trace);
 	FILTER_FREE(error);
 	FILTER_FREE(trap);
@@ -808,6 +853,8 @@ TEST_F(precedence, allow_ok)
 	ASSERT_EQ(0, ret);
 
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->allow);
+	ASSERT_EQ(0, ret);
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->log);
 	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->trace);
 	ASSERT_EQ(0, ret);
@@ -832,6 +879,8 @@ TEST_F_SIGNAL(precedence, kill_is_highest, SIGSYS)
 	ASSERT_EQ(0, ret);
 
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->allow);
+	ASSERT_EQ(0, ret);
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->log);
 	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->trace);
 	ASSERT_EQ(0, ret);
@@ -864,6 +913,8 @@ TEST_F_SIGNAL(precedence, kill_is_highest_in_any_order, SIGSYS)
 	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->error);
 	ASSERT_EQ(0, ret);
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->log);
+	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->trace);
 	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->trap);
@@ -884,6 +935,8 @@ TEST_F_SIGNAL(precedence, trap_is_second, SIGSYS)
 	ASSERT_EQ(0, ret);
 
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->allow);
+	ASSERT_EQ(0, ret);
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->log);
 	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->trace);
 	ASSERT_EQ(0, ret);
@@ -910,6 +963,8 @@ TEST_F_SIGNAL(precedence, trap_is_second_in_any_order, SIGSYS)
 	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->trap);
 	ASSERT_EQ(0, ret);
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->log);
+	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->trace);
 	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->error);
@@ -931,6 +986,8 @@ TEST_F(precedence, errno_is_third)
 
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->allow);
 	ASSERT_EQ(0, ret);
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->log);
+	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->trace);
 	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->error);
@@ -949,6 +1006,8 @@ TEST_F(precedence, errno_is_third_in_any_order)
 	ret = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
 	ASSERT_EQ(0, ret);
 
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->log);
+	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->error);
 	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->trace);
@@ -971,6 +1030,8 @@ TEST_F(precedence, trace_is_fourth)
 
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->allow);
 	ASSERT_EQ(0, ret);
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->log);
+	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->trace);
 	ASSERT_EQ(0, ret);
 	/* Should work just fine. */
@@ -992,10 +1053,52 @@ TEST_F(precedence, trace_is_fourth_in_any_order)
 	ASSERT_EQ(0, ret);
 	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->allow);
 	ASSERT_EQ(0, ret);
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->log);
+	ASSERT_EQ(0, ret);
 	/* Should work just fine. */
 	EXPECT_EQ(parent, syscall(__NR_getppid));
 	/* No ptracer */
 	EXPECT_EQ(-1, syscall(__NR_getpid));
+}
+
+TEST_F(precedence, log_is_fifth)
+{
+	pid_t mypid, parent;
+	long ret;
+
+	mypid = getpid();
+	parent = getppid();
+	ret = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+	ASSERT_EQ(0, ret);
+
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->allow);
+	ASSERT_EQ(0, ret);
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->log);
+	ASSERT_EQ(0, ret);
+	/* Should work just fine. */
+	EXPECT_EQ(parent, syscall(__NR_getppid));
+	/* Should also work just fine */
+	EXPECT_EQ(mypid, syscall(__NR_getpid));
+}
+
+TEST_F(precedence, log_is_fifth_in_any_order)
+{
+	pid_t mypid, parent;
+	long ret;
+
+	mypid = getpid();
+	parent = getppid();
+	ret = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+	ASSERT_EQ(0, ret);
+
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->log);
+	ASSERT_EQ(0, ret);
+	ret = prctl(PR_SET_SECCOMP, SECCOMP_MODE_FILTER, &self->allow);
+	ASSERT_EQ(0, ret);
+	/* Should work just fine. */
+	EXPECT_EQ(parent, syscall(__NR_getppid));
+	/* Should also work just fine */
+	EXPECT_EQ(mypid, syscall(__NR_getpid));
 }
 
 #ifndef PTRACE_O_TRACESECCOMP
@@ -1683,8 +1786,16 @@ TEST_F_SIGNAL(TRACE_syscall, kill_after_ptrace, SIGSYS)
 #define SECCOMP_SET_MODE_FILTER 1
 #endif
 
+#ifndef SECCOMP_GET_ACTION_AVAIL
+#define SECCOMP_GET_ACTION_AVAIL 2
+#endif
+
 #ifndef SECCOMP_FILTER_FLAG_TSYNC
 #define SECCOMP_FILTER_FLAG_TSYNC 1
+#endif
+
+#ifndef SECCOMP_FILTER_FLAG_LOG
+#define SECCOMP_FILTER_FLAG_LOG 2
 #endif
 
 #ifndef seccomp
@@ -1780,6 +1891,67 @@ TEST(seccomp_syscall_mode_lock)
 	ret = seccomp(SECCOMP_SET_MODE_STRICT, 0, NULL);
 	EXPECT_EQ(EINVAL, errno) {
 		TH_LOG("Switched to mode strict!");
+	}
+}
+
+/*
+ * Test detection of known and unknown filter flags. Userspace needs to be able
+ * to check if a filter flag is supported by the current kernel and a good way
+ * of doing that is by attempting to enter filter mode, with the flag bit in
+ * question set, and a NULL pointer for the _args_ parameter. EFAULT indicates
+ * that the flag is valid and EINVAL indicates that the flag is invalid.
+ */
+TEST(detect_seccomp_filter_flags)
+{
+	unsigned int flags[] = { SECCOMP_FILTER_FLAG_TSYNC,
+				 SECCOMP_FILTER_FLAG_LOG };
+	unsigned int flag, all_flags;
+	int i;
+	long ret;
+
+	/* Test detection of known-good filter flags */
+	for (i = 0, all_flags = 0; i < ARRAY_SIZE(flags); i++) {
+		flag = flags[i];
+		ret = seccomp(SECCOMP_SET_MODE_FILTER, flag, NULL);
+		ASSERT_NE(ENOSYS, errno) {
+			TH_LOG("Kernel does not support seccomp syscall!");
+		}
+		EXPECT_EQ(-1, ret);
+		EXPECT_EQ(EFAULT, errno) {
+			TH_LOG("Failed to detect that a known-good filter flag (0x%X) is supported!",
+			       flag);
+		}
+
+		all_flags |= flag;
+	}
+
+	/* Test detection of all known-good filter flags */
+	ret = seccomp(SECCOMP_SET_MODE_FILTER, all_flags, NULL);
+	EXPECT_EQ(-1, ret);
+	EXPECT_EQ(EFAULT, errno) {
+		TH_LOG("Failed to detect that all known-good filter flags (0x%X) are supported!",
+		       all_flags);
+	}
+
+	/* Test detection of an unknown filter flag */
+	flag = -1;
+	ret = seccomp(SECCOMP_SET_MODE_FILTER, flag, NULL);
+	EXPECT_EQ(-1, ret);
+	EXPECT_EQ(EINVAL, errno) {
+		TH_LOG("Failed to detect that an unknown filter flag (0x%X) is unsupported!",
+		       flag);
+	}
+
+	/*
+	 * Test detection of an unknown filter flag that may simply need to be
+	 * added to this test
+	 */
+	flag = flags[ARRAY_SIZE(flags) - 1] << 1;
+	ret = seccomp(SECCOMP_SET_MODE_FILTER, flag, NULL);
+	EXPECT_EQ(-1, ret);
+	EXPECT_EQ(EINVAL, errno) {
+		TH_LOG("Failed to detect that an unknown filter flag (0x%X) is unsupported! Does a new flag need to be added to this test?",
+		       flag);
 	}
 }
 
@@ -2421,6 +2593,99 @@ TEST(syscall_restart)
 		_metadata->passed = 0;
 }
 
+TEST_SIGNAL(filter_flag_log, SIGSYS)
+{
+	struct sock_filter allow_filter[] = {
+		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ALLOW),
+	};
+	struct sock_filter kill_filter[] = {
+		BPF_STMT(BPF_LD|BPF_W|BPF_ABS,
+			offsetof(struct seccomp_data, nr)),
+		BPF_JUMP(BPF_JMP|BPF_JEQ|BPF_K, __NR_getpid, 0, 1),
+		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_KILL),
+		BPF_STMT(BPF_RET|BPF_K, SECCOMP_RET_ALLOW),
+	};
+	struct sock_fprog allow_prog = {
+		.len = (unsigned short)ARRAY_SIZE(allow_filter),
+		.filter = allow_filter,
+	};
+	struct sock_fprog kill_prog = {
+		.len = (unsigned short)ARRAY_SIZE(kill_filter),
+		.filter = kill_filter,
+	};
+	long ret;
+	pid_t parent = getppid();
+
+	ret = prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+	ASSERT_EQ(0, ret);
+
+	/* Verify that the FILTER_FLAG_LOG flag isn't accepted in strict mode */
+	ret = seccomp(SECCOMP_SET_MODE_STRICT, SECCOMP_FILTER_FLAG_LOG,
+		      &allow_prog);
+	ASSERT_NE(ENOSYS, errno) {
+		TH_LOG("Kernel does not support seccomp syscall!");
+	}
+	EXPECT_NE(0, ret) {
+		TH_LOG("Kernel accepted FILTER_FLAG_LOG flag in strict mode!");
+	}
+	EXPECT_EQ(EINVAL, errno) {
+		TH_LOG("Kernel returned unexpected errno for FILTER_FLAG_LOG flag in strict mode!");
+	}
+
+	/* Verify that a simple, permissive filter can be added with no flags */
+	ret = seccomp(SECCOMP_SET_MODE_FILTER, 0, &allow_prog);
+	EXPECT_EQ(0, ret);
+
+	/* See if the same filter can be added with the FILTER_FLAG_LOG flag */
+	ret = seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_LOG,
+		      &allow_prog);
+	ASSERT_NE(EINVAL, errno) {
+		TH_LOG("Kernel does not support the FILTER_FLAG_LOG flag!");
+	}
+	EXPECT_EQ(0, ret);
+
+	/* Ensure that the kill filter works with the FILTER_FLAG_LOG flag */
+	ret = seccomp(SECCOMP_SET_MODE_FILTER, SECCOMP_FILTER_FLAG_LOG,
+		      &kill_prog);
+	EXPECT_EQ(0, ret);
+
+	EXPECT_EQ(parent, syscall(__NR_getppid));
+	/* getpid() should never return. */
+	EXPECT_EQ(0, syscall(__NR_getpid));
+}
+
+TEST(get_action_avail)
+{
+	__u32 actions[] = { SECCOMP_RET_KILL,  SECCOMP_RET_TRAP,
+			    SECCOMP_RET_ERRNO, SECCOMP_RET_TRACE,
+			    SECCOMP_RET_LOG,   SECCOMP_RET_ALLOW };
+	__u32 unknown_action = 0x10000000U;
+	int i;
+	long ret;
+
+	ret = seccomp(SECCOMP_GET_ACTION_AVAIL, 0, &actions[0]);
+	ASSERT_NE(ENOSYS, errno) {
+		TH_LOG("Kernel does not support seccomp syscall!");
+	}
+	ASSERT_NE(EINVAL, errno) {
+		TH_LOG("Kernel does not support SECCOMP_GET_ACTION_AVAIL operation!");
+	}
+	EXPECT_EQ(ret, 0);
+
+	for (i = 0; i < ARRAY_SIZE(actions); i++) {
+		ret = seccomp(SECCOMP_GET_ACTION_AVAIL, 0, &actions[i]);
+		EXPECT_EQ(ret, 0) {
+			TH_LOG("Expected action (0x%X) not available!",
+			       actions[i]);
+		}
+	}
+
+	/* Check that an unknown action is handled properly (EOPNOTSUPP) */
+	ret = seccomp(SECCOMP_GET_ACTION_AVAIL, 0, &unknown_action);
+	EXPECT_EQ(ret, -1);
+	EXPECT_EQ(errno, EOPNOTSUPP);
+}
+
 /*
  * TODO:
  * - add microbenchmarks
@@ -2429,6 +2694,8 @@ TEST(syscall_restart)
  * - endianness checking when appropriate
  * - 64-bit arg prodding
  * - arch value testing (x86 modes especially)
+ * - verify that FILTER_FLAG_LOG filters generate log messages
+ * - verify that RET_LOG generates log messages
  * - ...
  */
 

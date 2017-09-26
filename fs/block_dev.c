@@ -1669,9 +1669,14 @@ struct block_device *blkdev_get_by_path(const char *path, fmode_t mode,
 					void *holder)
 {
 	struct block_device *bdev;
+	int perm = 0;
 	int err;
 
-	bdev = lookup_bdev(path);
+	if (mode & FMODE_READ)
+		perm |= MAY_READ;
+	if (mode & FMODE_WRITE)
+		perm |= MAY_WRITE;
+	bdev = lookup_bdev(path, perm);
 	if (IS_ERR(bdev))
 		return bdev;
 
@@ -1749,6 +1754,20 @@ static int blkdev_open(struct inode * inode, struct file * filp)
 	bdev = bd_acquire(inode);
 	if (bdev == NULL)
 		return -ENOMEM;
+
+	/*
+	 * A negative i_writecount for bdev->bd_inode means that the bdev
+	 * or one of its paritions is mounted in a user namespace. Deny
+	 * writing for non-root in this case, otherwise an unprivileged
+	 * user can attack the kernel by modifying the backing store of a
+	 * mounted filesystem.
+	 */
+	if ((filp->f_mode & FMODE_WRITE) &&
+	    !file_ns_capable(filp, &init_user_ns, CAP_SYS_ADMIN) &&
+	    !atomic_inc_unless_negative(&bdev->bd_inode->i_writecount)) {
+		bdput(bdev);
+		return -EBUSY;
+	}
 
 	filp->f_mapping = bdev->bd_inode->i_mapping;
 	filp->f_wb_err = filemap_sample_wb_err(filp->f_mapping);
@@ -1846,6 +1865,9 @@ EXPORT_SYMBOL(blkdev_put);
 static int blkdev_close(struct inode * inode, struct file * filp)
 {
 	struct block_device *bdev = I_BDEV(bdev_file_inode(filp));
+	if (filp->f_mode & FMODE_WRITE &&
+	    !file_ns_capable(filp, &init_user_ns, CAP_SYS_ADMIN))
+		atomic_dec(&bdev->bd_inode->i_writecount);
 	blkdev_put(bdev, filp->f_mode);
 	return 0;
 }
@@ -2056,12 +2078,14 @@ EXPORT_SYMBOL(ioctl_by_bdev);
 /**
  * lookup_bdev  - lookup a struct block_device by name
  * @pathname:	special file representing the block device
+ * @mask:	rights to check for (%MAY_READ, %MAY_WRITE, %MAY_EXEC)
  *
  * Get a reference to the blockdevice at @pathname in the current
  * namespace if possible and return it.  Return ERR_PTR(error)
- * otherwise.
+ * otherwise.  If @mask is non-zero, check for access rights to the
+ * inode at @pathname.
  */
-struct block_device *lookup_bdev(const char *pathname)
+struct block_device *lookup_bdev(const char *pathname, int mask)
 {
 	struct block_device *bdev;
 	struct inode *inode;
@@ -2076,6 +2100,11 @@ struct block_device *lookup_bdev(const char *pathname)
 		return ERR_PTR(error);
 
 	inode = d_backing_inode(path.dentry);
+	if (mask != 0 && !capable(CAP_SYS_ADMIN)) {
+		error = __inode_permission(inode, mask);
+		if (error)
+			goto fail;
+	}
 	error = -ENOTBLK;
 	if (!S_ISBLK(inode->i_mode))
 		goto fail;

@@ -56,7 +56,12 @@ Module.symvers
 #
 # Debian directory (make deb-pkg)
 #
-/debian/
+#/debian/
+
+#
+# Snap directory (make snap-pkg)
+#
+/snap/
 
 #
 # tar directory (make tar*-pkg)
