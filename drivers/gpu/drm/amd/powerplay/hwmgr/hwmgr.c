@@ -26,8 +26,8 @@
 #include <linux/kernel.h>
 #include <linux/slab.h>
 #include <linux/types.h>
+#include <linux/pci.h>
 #include <drm/amdgpu_drm.h>
-#include "cgs_common.h"
 #include "power_state.h"
 #include "hwmgr.h"
 #include "pppcielanes.h"
@@ -36,6 +36,15 @@
 #include "pp_acpi.h"
 #include "amd_acpi.h"
 #include "pp_psm.h"
+
+extern const struct pp_smumgr_func ci_smu_funcs;
+extern const struct pp_smumgr_func cz_smu_funcs;
+extern const struct pp_smumgr_func iceland_smu_funcs;
+extern const struct pp_smumgr_func tonga_smu_funcs;
+extern const struct pp_smumgr_func fiji_smu_funcs;
+extern const struct pp_smumgr_func polaris10_smu_funcs;
+extern const struct pp_smumgr_func vega10_smu_funcs;
+extern const struct pp_smumgr_func rv_smu_funcs;
 
 extern int cz_init_function_pointers(struct pp_hwmgr *hwmgr);
 static int polaris_set_asic_special_caps(struct pp_hwmgr *hwmgr);
@@ -51,6 +60,75 @@ uint8_t convert_to_vid(uint16_t vddc)
 	return (uint8_t) ((6200 - (vddc * VOLTAGE_SCALE)) / 25);
 }
 
+static int phm_get_pci_bus_devfn(struct pp_hwmgr *hwmgr,
+		struct cgs_system_info *sys_info)
+{
+	sys_info->size = sizeof(struct cgs_system_info);
+	sys_info->info_id = CGS_SYSTEM_INFO_PCIE_BUS_DEVFN;
+
+	return cgs_query_system_info(hwmgr->device, sys_info);
+}
+
+static int phm_thermal_l2h_irq(void *private_data,
+		 unsigned src_id, const uint32_t *iv_entry)
+{
+	struct pp_hwmgr *hwmgr = (struct pp_hwmgr *)private_data;
+	struct cgs_system_info sys_info = {0};
+	int result;
+
+	result = phm_get_pci_bus_devfn(hwmgr, &sys_info);
+	if (result)
+		return -EINVAL;
+
+	pr_warn("GPU over temperature range detected on PCIe %lld:%lld.%lld!\n",
+			PCI_BUS_NUM(sys_info.value),
+			PCI_SLOT(sys_info.value),
+			PCI_FUNC(sys_info.value));
+	return 0;
+}
+
+static int phm_thermal_h2l_irq(void *private_data,
+		 unsigned src_id, const uint32_t *iv_entry)
+{
+	struct pp_hwmgr *hwmgr = (struct pp_hwmgr *)private_data;
+	struct cgs_system_info sys_info = {0};
+	int result;
+
+	result = phm_get_pci_bus_devfn(hwmgr, &sys_info);
+	if (result)
+		return -EINVAL;
+
+	pr_warn("GPU under temperature range detected on PCIe %lld:%lld.%lld!\n",
+			PCI_BUS_NUM(sys_info.value),
+			PCI_SLOT(sys_info.value),
+			PCI_FUNC(sys_info.value));
+	return 0;
+}
+
+static int phm_ctf_irq(void *private_data,
+		 unsigned src_id, const uint32_t *iv_entry)
+{
+	struct pp_hwmgr *hwmgr = (struct pp_hwmgr *)private_data;
+	struct cgs_system_info sys_info = {0};
+	int result;
+
+	result = phm_get_pci_bus_devfn(hwmgr, &sys_info);
+	if (result)
+		return -EINVAL;
+
+	pr_warn("GPU Critical Temperature Fault detected on PCIe %lld:%lld.%lld!\n",
+			PCI_BUS_NUM(sys_info.value),
+			PCI_SLOT(sys_info.value),
+			PCI_FUNC(sys_info.value));
+	return 0;
+}
+
+static const struct cgs_irq_src_funcs thermal_irq_src[3] = {
+	{NULL, phm_thermal_l2h_irq},
+	{NULL, phm_thermal_h2l_irq},
+	{NULL, phm_ctf_irq}
+};
+
 int hwmgr_early_init(struct pp_instance *handle)
 {
 	struct pp_hwmgr *hwmgr;
@@ -63,7 +141,6 @@ int hwmgr_early_init(struct pp_instance *handle)
 		return -ENOMEM;
 
 	handle->hwmgr = hwmgr;
-	hwmgr->smumgr = handle->smu_mgr;
 	hwmgr->device = handle->device;
 	hwmgr->chip_family = handle->chip_family;
 	hwmgr->chip_id = handle->chip_id;
@@ -75,9 +152,11 @@ int hwmgr_early_init(struct pp_instance *handle)
 	hwmgr_init_default_caps(hwmgr);
 	hwmgr_set_user_specify_caps(hwmgr);
 	hwmgr->fan_ctrl_is_in_default_mode = true;
+	hwmgr->reload_fw = 1;
 
 	switch (hwmgr->chip_family) {
 	case AMDGPU_FAMILY_CI:
+		hwmgr->smumgr_funcs = &ci_smu_funcs;
 		ci_set_asic_special_caps(hwmgr);
 		hwmgr->feature_mask &= ~(PP_VBI_TIME_SUPPORT_MASK |
 					PP_ENABLE_GFX_CG_THRU_SMU);
@@ -85,21 +164,25 @@ int hwmgr_early_init(struct pp_instance *handle)
 		smu7_init_function_pointers(hwmgr);
 		break;
 	case AMDGPU_FAMILY_CZ:
+		hwmgr->smumgr_funcs = &cz_smu_funcs;
 		cz_init_function_pointers(hwmgr);
 		break;
 	case AMDGPU_FAMILY_VI:
 		switch (hwmgr->chip_id) {
 		case CHIP_TOPAZ:
+			hwmgr->smumgr_funcs = &iceland_smu_funcs;
 			topaz_set_asic_special_caps(hwmgr);
 			hwmgr->feature_mask &= ~ (PP_VBI_TIME_SUPPORT_MASK |
 						PP_ENABLE_GFX_CG_THRU_SMU);
 			hwmgr->pp_table_version = PP_TABLE_V0;
 			break;
 		case CHIP_TONGA:
+			hwmgr->smumgr_funcs = &tonga_smu_funcs;
 			tonga_set_asic_special_caps(hwmgr);
 			hwmgr->feature_mask &= ~PP_VBI_TIME_SUPPORT_MASK;
 			break;
 		case CHIP_FIJI:
+			hwmgr->smumgr_funcs = &fiji_smu_funcs;
 			fiji_set_asic_special_caps(hwmgr);
 			hwmgr->feature_mask &= ~ (PP_VBI_TIME_SUPPORT_MASK |
 						PP_ENABLE_GFX_CG_THRU_SMU);
@@ -107,6 +190,7 @@ int hwmgr_early_init(struct pp_instance *handle)
 		case CHIP_POLARIS11:
 		case CHIP_POLARIS10:
 		case CHIP_POLARIS12:
+			hwmgr->smumgr_funcs = &polaris10_smu_funcs;
 			polaris_set_asic_special_caps(hwmgr);
 			hwmgr->feature_mask &= ~(PP_UVD_HANDSHAKE_MASK);
 			break;
@@ -118,6 +202,7 @@ int hwmgr_early_init(struct pp_instance *handle)
 	case AMDGPU_FAMILY_AI:
 		switch (hwmgr->chip_id) {
 		case CHIP_VEGA10:
+			hwmgr->smumgr_funcs = &vega10_smu_funcs;
 			vega10_hwmgr_init(hwmgr);
 			break;
 		default:
@@ -127,6 +212,7 @@ int hwmgr_early_init(struct pp_instance *handle)
 	case AMDGPU_FAMILY_RV:
 		switch (hwmgr->chip_id) {
 		case CHIP_RAVEN:
+			hwmgr->smumgr_funcs = &rv_smu_funcs;
 			rv_init_function_pointers(hwmgr);
 			break;
 		default:
@@ -176,6 +262,10 @@ int hwmgr_hw_init(struct pp_instance *handle)
 		goto err2;
 	ret = phm_start_thermal_controller(hwmgr, NULL);
 	ret |= psm_set_performance_states(hwmgr);
+	if (ret)
+		goto err2;
+
+	ret = phm_register_thermal_interrupt(hwmgr, &thermal_irq_src);
 	if (ret)
 		goto err2;
 
@@ -361,7 +451,7 @@ int phm_wait_on_register(struct pp_hwmgr *hwmgr, uint32_t index,
  * reached the given value.The indirect space is described by giving
  * the memory-mapped index of the indirect index register.
  */
-void phm_wait_on_indirect_register(struct pp_hwmgr *hwmgr,
+int phm_wait_on_indirect_register(struct pp_hwmgr *hwmgr,
 				uint32_t indirect_port,
 				uint32_t index,
 				uint32_t value,
@@ -369,14 +459,50 @@ void phm_wait_on_indirect_register(struct pp_hwmgr *hwmgr,
 {
 	if (hwmgr == NULL || hwmgr->device == NULL) {
 		pr_err("Invalid Hardware Manager!");
-		return;
+		return -EINVAL;
 	}
 
 	cgs_write_register(hwmgr->device, indirect_port, index);
-	phm_wait_on_register(hwmgr, indirect_port + 1, mask, value);
+	return phm_wait_on_register(hwmgr, indirect_port + 1, mask, value);
 }
 
+int phm_wait_for_register_unequal(struct pp_hwmgr *hwmgr,
+					uint32_t index,
+					uint32_t value, uint32_t mask)
+{
+	uint32_t i;
+	uint32_t cur_value;
 
+	if (hwmgr == NULL || hwmgr->device == NULL)
+		return -EINVAL;
+
+	for (i = 0; i < hwmgr->usec_timeout; i++) {
+		cur_value = cgs_read_register(hwmgr->device,
+									index);
+		if ((cur_value & mask) != (value & mask))
+			break;
+		udelay(1);
+	}
+
+	/* timeout means wrong logic */
+	if (i == hwmgr->usec_timeout)
+		return -ETIME;
+	return 0;
+}
+
+int phm_wait_for_indirect_register_unequal(struct pp_hwmgr *hwmgr,
+						uint32_t indirect_port,
+						uint32_t index,
+						uint32_t value,
+						uint32_t mask)
+{
+	if (hwmgr == NULL || hwmgr->device == NULL)
+		return -EINVAL;
+
+	cgs_write_register(hwmgr->device, indirect_port, index);
+	return phm_wait_for_register_unequal(hwmgr, indirect_port + 1,
+						value, mask);
+}
 
 bool phm_cf_want_uvd_power_gating(struct pp_hwmgr *hwmgr)
 {
@@ -745,7 +871,7 @@ void phm_apply_dal_min_voltage_request(struct pp_hwmgr *hwmgr)
 	for (i = 0; i < vddc_table->count; i++) {
 		if (req_vddc <= vddc_table->entries[i].vddc) {
 			req_volt = (((uint32_t)vddc_table->entries[i].vddc) * VOLTAGE_SCALE);
-			smum_send_msg_to_smc_with_parameter(hwmgr->smumgr,
+			smum_send_msg_to_smc_with_parameter(hwmgr,
 					PPSMC_MSG_VddC_Request, req_volt);
 			return;
 		}

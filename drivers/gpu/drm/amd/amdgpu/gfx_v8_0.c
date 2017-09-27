@@ -2113,6 +2113,7 @@ static int gfx_v8_0_sw_fini(void *handle)
 	amdgpu_gfx_compute_mqd_sw_fini(adev);
 	amdgpu_gfx_kiq_free_ring(&adev->gfx.kiq.ring, &adev->gfx.kiq.irq);
 	amdgpu_gfx_kiq_fini(adev);
+	amdgpu_bo_free_kernel(&adev->virt.csa_obj, &adev->virt.csa_vmid0_addr, NULL);
 
 	gfx_v8_0_mec_fini(adev);
 	gfx_v8_0_rlc_fini(adev);
@@ -4811,7 +4812,7 @@ static int gfx_v8_0_kiq_init_queue(struct amdgpu_ring *ring)
 
 	gfx_v8_0_kiq_setting(ring);
 
-	if (adev->gfx.in_reset) { /* for GPU_RESET case */
+	if (adev->in_sriov_reset) { /* for GPU_RESET case */
 		/* reset MQD to a clean status */
 		if (adev->gfx.mec.mqd_backup[mqd_idx])
 			memcpy(mqd, adev->gfx.mec.mqd_backup[mqd_idx], sizeof(struct vi_mqd_allocation));
@@ -4848,7 +4849,7 @@ static int gfx_v8_0_kcq_init_queue(struct amdgpu_ring *ring)
 	struct vi_mqd *mqd = ring->mqd_ptr;
 	int mqd_idx = ring - &adev->gfx.compute_ring[0];
 
-	if (!adev->gfx.in_reset && !adev->gfx.in_suspend) {
+	if (!adev->in_sriov_reset && !adev->gfx.in_suspend) {
 		memset((void *)mqd, 0, sizeof(struct vi_mqd_allocation));
 		((struct vi_mqd_allocation *)mqd)->dynamic_cu_mask = 0xFFFFFFFF;
 		((struct vi_mqd_allocation *)mqd)->dynamic_rb_mask = 0xFFFFFFFF;
@@ -4860,7 +4861,7 @@ static int gfx_v8_0_kcq_init_queue(struct amdgpu_ring *ring)
 
 		if (adev->gfx.mec.mqd_backup[mqd_idx])
 			memcpy(adev->gfx.mec.mqd_backup[mqd_idx], mqd, sizeof(struct vi_mqd_allocation));
-	} else if (adev->gfx.in_reset) { /* for GPU_RESET case */
+	} else if (adev->in_sriov_reset) { /* for GPU_RESET case */
 		/* reset MQD to a clean status */
 		if (adev->gfx.mec.mqd_backup[mqd_idx])
 			memcpy(mqd, adev->gfx.mec.mqd_backup[mqd_idx], sizeof(struct vi_mqd_allocation));
@@ -5033,12 +5034,69 @@ static int gfx_v8_0_hw_init(void *handle)
 	return r;
 }
 
+static int gfx_v8_0_kcq_disable(struct amdgpu_ring *kiq_ring,struct amdgpu_ring *ring)
+{
+	struct amdgpu_device *adev = kiq_ring->adev;
+	uint32_t scratch, tmp = 0;
+	int r, i;
+
+	r = amdgpu_gfx_scratch_get(adev, &scratch);
+	if (r) {
+		DRM_ERROR("Failed to get scratch reg (%d).\n", r);
+		return r;
+	}
+	WREG32(scratch, 0xCAFEDEAD);
+
+	r = amdgpu_ring_alloc(kiq_ring, 10);
+	if (r) {
+		DRM_ERROR("Failed to lock KIQ (%d).\n", r);
+		amdgpu_gfx_scratch_free(adev, scratch);
+		return r;
+	}
+
+	/* unmap queues */
+	amdgpu_ring_write(kiq_ring, PACKET3(PACKET3_UNMAP_QUEUES, 4));
+	amdgpu_ring_write(kiq_ring, /* Q_sel: 0, vmid: 0, engine: 0, num_Q: 1 */
+						PACKET3_UNMAP_QUEUES_ACTION(1) | /* RESET_QUEUES */
+						PACKET3_UNMAP_QUEUES_QUEUE_SEL(0) |
+						PACKET3_UNMAP_QUEUES_ENGINE_SEL(0) |
+						PACKET3_UNMAP_QUEUES_NUM_QUEUES(1));
+	amdgpu_ring_write(kiq_ring, PACKET3_UNMAP_QUEUES_DOORBELL_OFFSET0(ring->doorbell_index));
+	amdgpu_ring_write(kiq_ring, 0);
+	amdgpu_ring_write(kiq_ring, 0);
+	amdgpu_ring_write(kiq_ring, 0);
+	/* write to scratch for completion */
+	amdgpu_ring_write(kiq_ring, PACKET3(PACKET3_SET_UCONFIG_REG, 1));
+	amdgpu_ring_write(kiq_ring, (scratch - PACKET3_SET_UCONFIG_REG_START));
+	amdgpu_ring_write(kiq_ring, 0xDEADBEEF);
+	amdgpu_ring_commit(kiq_ring);
+
+	for (i = 0; i < adev->usec_timeout; i++) {
+		tmp = RREG32(scratch);
+		if (tmp == 0xDEADBEEF)
+			break;
+		DRM_UDELAY(1);
+	}
+	if (i >= adev->usec_timeout) {
+		DRM_ERROR("KCQ disabled failed (scratch(0x%04X)=0x%08X)\n", scratch, tmp);
+		r = -EINVAL;
+	}
+	amdgpu_gfx_scratch_free(adev, scratch);
+	return r;
+}
+
 static int gfx_v8_0_hw_fini(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
+	int i;
 
 	amdgpu_irq_put(adev, &adev->gfx.priv_reg_irq, 0);
 	amdgpu_irq_put(adev, &adev->gfx.priv_inst_irq, 0);
+
+	/* disable KCQ to avoid CPC touch memory not valid anymore */
+	for (i = 0; i < adev->gfx.num_compute_rings; i++)
+		gfx_v8_0_kcq_disable(&adev->gfx.kiq.ring, &adev->gfx.compute_ring[i]);
+
 	if (amdgpu_sriov_vf(adev)) {
 		pr_debug("For SRIOV client, shouldn't do anything.\n");
 		return 0;

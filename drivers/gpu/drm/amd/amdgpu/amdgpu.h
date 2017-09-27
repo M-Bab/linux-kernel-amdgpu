@@ -93,7 +93,7 @@ extern int amdgpu_dpm;
 extern int amdgpu_fw_load_type;
 extern int amdgpu_aspm;
 extern int amdgpu_runtime_pm;
-extern unsigned amdgpu_ip_block_mask;
+extern uint amdgpu_ip_block_mask;
 extern int amdgpu_bapm;
 extern int amdgpu_deep_color;
 extern int amdgpu_vm_size;
@@ -107,14 +107,14 @@ extern int amdgpu_sched_jobs;
 extern int amdgpu_sched_hw_submission;
 extern int amdgpu_no_evict;
 extern int amdgpu_direct_gma_size;
-extern unsigned amdgpu_pcie_gen_cap;
-extern unsigned amdgpu_pcie_lane_cap;
-extern unsigned amdgpu_cg_mask;
-extern unsigned amdgpu_pg_mask;
-extern unsigned amdgpu_sdma_phase_quantum;
+extern uint amdgpu_pcie_gen_cap;
+extern uint amdgpu_pcie_lane_cap;
+extern uint amdgpu_cg_mask;
+extern uint amdgpu_pg_mask;
+extern uint amdgpu_sdma_phase_quantum;
 extern char *amdgpu_disable_cu;
 extern char *amdgpu_virtual_display;
-extern unsigned amdgpu_pp_feature_mask;
+extern uint amdgpu_pp_feature_mask;
 extern int amdgpu_vram_page_split;
 extern int amdgpu_ngg;
 extern int amdgpu_prim_buf_per_se;
@@ -296,14 +296,25 @@ struct amdgpu_buffer_funcs {
 
 /* provided by hw blocks that can write ptes, e.g., sdma */
 struct amdgpu_vm_pte_funcs {
+	/* number of dw to reserve per operation */
+	unsigned	copy_pte_num_dw;
+
 	/* copy pte entries from GART */
 	void (*copy_pte)(struct amdgpu_ib *ib,
 			 uint64_t pe, uint64_t src,
 			 unsigned count);
+
 	/* write pte one entry at a time with addr mapping */
 	void (*write_pte)(struct amdgpu_ib *ib, uint64_t pe,
 			  uint64_t value, unsigned count,
 			  uint32_t incr);
+
+	/* maximum nums of PTEs/PDEs in a single operation */
+	uint32_t	set_max_nums_pte_pde;
+
+	/* number of dw to reserve per operation */
+	unsigned	set_pte_pde_num_dw;
+
 	/* for linear pte/pde updates without addr mapping */
 	void (*set_pte_pde)(struct amdgpu_ib *ib,
 			    uint64_t pe,
@@ -404,6 +415,7 @@ void amdgpu_gem_prime_unpin(struct drm_gem_object *obj);
 struct reservation_object *amdgpu_gem_prime_res_obj(struct drm_gem_object *);
 void *amdgpu_gem_prime_vmap(struct drm_gem_object *obj);
 void amdgpu_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr);
+int amdgpu_gem_prime_mmap(struct drm_gem_object *obj, struct vm_area_struct *vma);
 int amdgpu_gem_debugfs_init(struct amdgpu_device *adev);
 
 /* sub-allocation manager, it has to be protected by another lock.
@@ -737,8 +749,8 @@ struct amdgpu_ctx_mgr {
 struct amdgpu_ctx *amdgpu_ctx_get(struct amdgpu_fpriv *fpriv, uint32_t id);
 int amdgpu_ctx_put(struct amdgpu_ctx *ctx);
 
-uint64_t amdgpu_ctx_add_fence(struct amdgpu_ctx *ctx, struct amdgpu_ring *ring,
-			      struct dma_fence *fence);
+int amdgpu_ctx_add_fence(struct amdgpu_ctx *ctx, struct amdgpu_ring *ring,
+			      struct dma_fence *fence, uint64_t *seq);
 struct dma_fence *amdgpu_ctx_get_fence(struct amdgpu_ctx *ctx,
 				   struct amdgpu_ring *ring, uint64_t seq);
 
@@ -1020,7 +1032,6 @@ struct amdgpu_gfx {
 	/* reset mask */
 	uint32_t                        grbm_soft_reset;
 	uint32_t                        srbm_soft_reset;
-	bool                            in_reset;
 	/* s3/s4 mask */
 	bool                            in_suspend;
 	/* NGG */
@@ -1190,6 +1201,9 @@ struct amdgpu_firmware {
 
 	/* gpu info firmware data pointer */
 	const struct firmware *gpu_info_fw;
+
+	void *fw_buf_ptr;
+	uint64_t fw_buf_mc;
 };
 
 /*
@@ -1592,6 +1606,7 @@ struct amdgpu_device {
 
 	/* record last mm index being written through WREG32*/
 	unsigned long last_mm_index;
+	bool                            in_sriov_reset;
 };
 
 static inline struct amdgpu_device *amdgpu_ttm_adev(struct ttm_bo_device *bdev)

@@ -1791,10 +1791,8 @@ static int amdgpu_fini(struct amdgpu_device *adev)
 		adev->ip_blocks[i].status.late_initialized = false;
 	}
 
-	if (amdgpu_sriov_vf(adev)) {
-		amdgpu_bo_free_kernel(&adev->virt.csa_obj, &adev->virt.csa_vmid0_addr, NULL);
+	if (amdgpu_sriov_vf(adev))
 		amdgpu_virt_release_full_gpu(adev, false);
-	}
 
 	return 0;
 }
@@ -2645,7 +2643,8 @@ static bool amdgpu_need_full_reset(struct amdgpu_device *adev)
 		if ((adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_GMC) ||
 		    (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_SMC) ||
 		    (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_ACP) ||
-		    (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_DCE)) {
+		    (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_DCE) ||
+		     adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_PSP) {
 			if (adev->ip_blocks[i].status.hang) {
 				DRM_INFO("Some block need full reset!\n");
 				return true;
@@ -2753,7 +2752,7 @@ int amdgpu_sriov_gpu_reset(struct amdgpu_device *adev, struct amdgpu_job *job)
 
 	mutex_lock(&adev->virt.lock_reset);
 	atomic_inc(&adev->gpu_reset_counter);
-	adev->gfx.in_reset = true;
+	adev->in_sriov_reset = true;
 
 	/* block TTM */
 	resched = ttm_bo_lock_delayed_workqueue(&adev->mman.bdev);
@@ -2864,7 +2863,7 @@ give_up_reset:
 		dev_info(adev->dev, "GPU reset successed!\n");
 	}
 
-	adev->gfx.in_reset = false;
+	adev->in_sriov_reset = false;
 	mutex_unlock(&adev->virt.lock_reset);
 	return r;
 }
