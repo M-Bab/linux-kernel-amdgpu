@@ -32,6 +32,7 @@
 #include "ppatomctrl.h"
 #include "hwmgr_ppt.h"
 #include "power_state.h"
+#include "cgs_linux.h"
 
 struct pp_instance;
 struct pp_hwmgr;
@@ -59,10 +60,6 @@ struct vi_dpm_level {
 struct vi_dpm_table {
 	uint32_t count;
 	struct vi_dpm_level dpm_level[1];
-};
-
-enum PP_Result {
-	PP_Result_TableImmediateExit = 0x13,
 };
 
 #define PCIE_PERF_REQ_REMOVE_REGISTRY   0
@@ -102,13 +99,6 @@ enum PHM_BackEnd_Magic {
 	PHM_Cz_Magic          = 0x67DCBA25,
 	PHM_Rv_Magic          = 0x20161121
 };
-
-
-#define PHM_PCIE_POWERGATING_TARGET_GFX            0
-#define PHM_PCIE_POWERGATING_TARGET_DDI            1
-#define PHM_PCIE_POWERGATING_TARGET_PLLCASCADE     2
-#define PHM_PCIE_POWERGATING_TARGET_PHY            3
-
 
 struct phm_set_power_state_input {
 	const struct pp_hw_power_state *pcurrent_state;
@@ -243,6 +233,39 @@ struct phm_acpclock_voltage_dependency_table {
 struct phm_vce_clock_voltage_dependency_table {
 	uint8_t count;
 	struct phm_vce_clock_voltage_dependency_record entries[1];
+};
+
+struct pp_smumgr_func {
+	int (*smu_init)(struct pp_hwmgr  *hwmgr);
+	int (*smu_fini)(struct pp_hwmgr  *hwmgr);
+	int (*start_smu)(struct pp_hwmgr  *hwmgr);
+	int (*check_fw_load_finish)(struct pp_hwmgr  *hwmgr,
+				    uint32_t firmware);
+	int (*request_smu_load_fw)(struct pp_hwmgr  *hwmgr);
+	int (*request_smu_load_specific_fw)(struct pp_hwmgr  *hwmgr,
+					    uint32_t firmware);
+	int (*get_argument)(struct pp_hwmgr  *hwmgr);
+	int (*send_msg_to_smc)(struct pp_hwmgr  *hwmgr, uint16_t msg);
+	int (*send_msg_to_smc_with_parameter)(struct pp_hwmgr  *hwmgr,
+					  uint16_t msg, uint32_t parameter);
+	int (*download_pptable_settings)(struct pp_hwmgr  *hwmgr,
+					 void **table);
+	int (*upload_pptable_settings)(struct pp_hwmgr  *hwmgr);
+	int (*update_smc_table)(struct pp_hwmgr *hwmgr, uint32_t type);
+	int (*process_firmware_header)(struct pp_hwmgr *hwmgr);
+	int (*update_sclk_threshold)(struct pp_hwmgr *hwmgr);
+	int (*thermal_setup_fan_table)(struct pp_hwmgr *hwmgr);
+	int (*thermal_avfs_enable)(struct pp_hwmgr *hwmgr);
+	int (*init_smc_table)(struct pp_hwmgr *hwmgr);
+	int (*populate_all_graphic_levels)(struct pp_hwmgr *hwmgr);
+	int (*populate_all_memory_levels)(struct pp_hwmgr *hwmgr);
+	int (*initialize_mc_reg_table)(struct pp_hwmgr *hwmgr);
+	uint32_t (*get_offsetof)(uint32_t type, uint32_t member);
+	uint32_t (*get_mac_definition)(uint32_t value);
+	bool (*is_dpm_running)(struct pp_hwmgr *hwmgr);
+	int (*populate_requested_graphic_levels)(struct pp_hwmgr *hwmgr,
+			struct amd_pp_profile *request);
+	bool (*is_hw_avfs_present)(struct pp_hwmgr  *hwmgr);
 };
 
 struct pp_hwmgr_func {
@@ -716,10 +739,17 @@ struct pp_hwmgr {
 	void *pptable;
 	struct phm_platform_descriptor platform_descriptor;
 	void *backend;
+
+	void *smu_backend;
+	const struct pp_smumgr_func *smumgr_funcs;
+	bool is_kicker;
+	bool reload_fw;
+
 	enum PP_DAL_POWERLEVEL dal_power_level;
 	struct phm_dynamic_state_info dyn_state;
 	const struct pp_hwmgr_func *hwmgr_func;
 	const struct pp_table_func *pptable_func;
+
 	struct pp_power_state    *ps;
 	enum pp_power_source  power_source;
 	uint32_t num_ps;
@@ -746,6 +776,11 @@ struct pp_hwmgr {
 	bool en_umd_pstate;
 };
 
+struct cgs_irq_src_funcs {
+	cgs_irq_source_set_func_t set;
+	cgs_irq_handler_func_t handler;
+};
+
 extern int hwmgr_early_init(struct pp_instance *handle);
 extern int hwmgr_hw_init(struct pp_instance *handle);
 extern int hwmgr_hw_fini(struct pp_instance *handle);
@@ -757,12 +792,19 @@ extern int hwmgr_handle_task(struct pp_instance *handle,
 extern int phm_wait_on_register(struct pp_hwmgr *hwmgr, uint32_t index,
 				uint32_t value, uint32_t mask);
 
-extern void phm_wait_on_indirect_register(struct pp_hwmgr *hwmgr,
+extern int phm_wait_on_indirect_register(struct pp_hwmgr *hwmgr,
 				uint32_t indirect_port,
 				uint32_t index,
 				uint32_t value,
 				uint32_t mask);
 
+extern int phm_wait_for_register_unequal(struct pp_hwmgr *hwmgr,
+					uint32_t index,
+					uint32_t value, uint32_t mask);
+extern int phm_wait_for_indirect_register_unequal(
+				struct pp_hwmgr *hwmgr,
+				uint32_t indirect_port, uint32_t index,
+				uint32_t value, uint32_t mask);
 
 
 extern bool phm_cf_want_uvd_power_gating(struct pp_hwmgr *hwmgr);
@@ -847,5 +889,58 @@ extern int phm_get_voltage_evv_on_sclk(struct pp_hwmgr *hwmgr, uint8_t voltage_t
 	PHM_WAIT_INDIRECT_REGISTER(hwmgr, port, reg, (fieldval)	\
 			<< PHM_FIELD_SHIFT(reg, field), PHM_FIELD_MASK(reg, field))
 
+#define PHM_WAIT_INDIRECT_REGISTER_UNEQUAL_GIVEN_INDEX(hwmgr, port, index, value, mask)    \
+		phm_wait_for_indirect_register_unequal(hwmgr,                   \
+				mm##port##_INDEX, index, value, mask)
+
+#define PHM_WAIT_INDIRECT_REGISTER_UNEQUAL(hwmgr, port, reg, value, mask)    \
+		PHM_WAIT_INDIRECT_REGISTER_UNEQUAL_GIVEN_INDEX(hwmgr, port, ix##reg, value, mask)
+
+#define PHM_WAIT_INDIRECT_FIELD_UNEQUAL(hwmgr, port, reg, field, fieldval)                          \
+		PHM_WAIT_INDIRECT_REGISTER_UNEQUAL(hwmgr, port, reg, \
+				(fieldval) << PHM_FIELD_SHIFT(reg, field), \
+					PHM_FIELD_MASK(reg, field) )
+
+
+#define PHM_WAIT_VFPF_INDIRECT_REGISTER_UNEQUAL_GIVEN_INDEX(hwmgr,	\
+				port, index, value, mask)		\
+	phm_wait_for_indirect_register_unequal(hwmgr,			\
+		mm##port##_INDEX_11, index, value, mask)
+
+#define PHM_WAIT_VFPF_INDIRECT_REGISTER_UNEQUAL(hwmgr, port, reg, value, mask)     \
+		PHM_WAIT_VFPF_INDIRECT_REGISTER_UNEQUAL_GIVEN_INDEX(hwmgr, port, ix##reg, value, mask)
+
+#define PHM_WAIT_VFPF_INDIRECT_FIELD_UNEQUAL(hwmgr, port, reg, field, fieldval) \
+	PHM_WAIT_VFPF_INDIRECT_REGISTER_UNEQUAL(hwmgr, port, reg,	\
+		(fieldval) << PHM_FIELD_SHIFT(reg, field),		\
+		PHM_FIELD_MASK(reg, field))
+
+
+#define PHM_WAIT_VFPF_INDIRECT_REGISTER_GIVEN_INDEX(hwmgr,		\
+				port, index, value, mask)		\
+	phm_wait_on_indirect_register(hwmgr,				\
+		mm##port##_INDEX_11, index, value, mask)
+
+#define PHM_WAIT_VFPF_INDIRECT_REGISTER(hwmgr, port, reg, value, mask) \
+	PHM_WAIT_VFPF_INDIRECT_REGISTER_GIVEN_INDEX(hwmgr, port, ix##reg, value, mask)
+
+#define PHM_WAIT_VFPF_INDIRECT_FIELD(hwmgr, port, reg, field, fieldval) \
+	PHM_WAIT_VFPF_INDIRECT_REGISTER(hwmgr, port, reg,		\
+		(fieldval) << PHM_FIELD_SHIFT(reg, field),		\
+		PHM_FIELD_MASK(reg, field))
+
+#define PHM_WAIT_REGISTER_UNEQUAL_GIVEN_INDEX(hwmgr,         \
+							index, value, mask) \
+		phm_wait_for_register_unequal(hwmgr,            \
+					index, value, mask)
+
+#define PHM_WAIT_REGISTER_UNEQUAL(hwmgr, reg, value, mask)		\
+	PHM_WAIT_REGISTER_UNEQUAL_GIVEN_INDEX(hwmgr,			\
+				mm##reg, value, mask)
+
+#define PHM_WAIT_FIELD_UNEQUAL(hwmgr, reg, field, fieldval)		\
+	PHM_WAIT_REGISTER_UNEQUAL(hwmgr, reg,				\
+		(fieldval) << PHM_FIELD_SHIFT(reg, field),		\
+		PHM_FIELD_MASK(reg, field))
 
 #endif /* _HWMGR_H_ */

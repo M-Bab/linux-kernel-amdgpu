@@ -34,7 +34,6 @@
 #include <drm/ttm/ttm_placement.h>
 #include <drm/ttm/ttm_module.h>
 #include <drm/ttm/ttm_page_alloc.h>
-#include <drm/ttm/ttm_debug.h>
 #include <drm/drmP.h>
 #include <drm/amdgpu_drm.h>
 #include <linux/seq_file.h>
@@ -43,6 +42,7 @@
 #include <linux/swap.h>
 #include <linux/pagemap.h>
 #include <linux/debugfs.h>
+#include <linux/iommu.h>
 #include "amdgpu.h"
 #include "amdgpu_trace.h"
 #include "bif/bif_4_1_d.h"
@@ -703,22 +703,6 @@ void amdgpu_ttm_tt_mark_user_pages(struct ttm_tt *ttm)
 	}
 }
 
-static void amdgpu_trace_dma_map(struct ttm_tt *ttm)
-{
-	struct amdgpu_device *adev = amdgpu_ttm_adev(ttm->bdev);
-	struct amdgpu_ttm_tt *gtt = (void *)ttm;
-
-	ttm_trace_dma_map(adev->dev, &gtt->ttm);
-}
-
-static void amdgpu_trace_dma_unmap(struct ttm_tt *ttm)
-{
-	struct amdgpu_device *adev = amdgpu_ttm_adev(ttm->bdev);
-	struct amdgpu_ttm_tt *gtt = (void *)ttm;
-
-	ttm_trace_dma_unmap(adev->dev, &gtt->ttm);
-}
-
 /* prepare the sg table with the user pages */
 static int amdgpu_ttm_tt_pin_userptr(struct ttm_tt *ttm)
 {
@@ -745,8 +729,6 @@ static int amdgpu_ttm_tt_pin_userptr(struct ttm_tt *ttm)
 	drm_prime_sg_to_page_addr_arrays(ttm->sg, ttm->pages,
 					 gtt->ttm.dma_address, ttm->num_pages);
 
-	amdgpu_trace_dma_map(ttm);
-
 	return 0;
 
 release_sg:
@@ -771,8 +753,6 @@ static void amdgpu_ttm_tt_unpin_userptr(struct ttm_tt *ttm)
 	dma_unmap_sg(adev->dev, ttm->sg->sgl, ttm->sg->nents, direction);
 
 	amdgpu_ttm_tt_mark_user_pages(ttm);
-
-	amdgpu_trace_dma_unmap(ttm);
 
 	sg_free_table(ttm->sg);
 }
@@ -957,7 +937,6 @@ static int amdgpu_ttm_tt_populate(struct ttm_tt *ttm)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(ttm->bdev);
 	struct amdgpu_ttm_tt *gtt = (void *)ttm;
-	int r;
 	bool slave = !!(ttm->page_flags & TTM_PAGE_FLAG_SG);
 
 	if (ttm->state != tt_unpopulated)
@@ -977,22 +956,16 @@ static int amdgpu_ttm_tt_populate(struct ttm_tt *ttm)
 		drm_prime_sg_to_page_addr_arrays(ttm->sg, ttm->pages,
 						 gtt->ttm.dma_address, ttm->num_pages);
 		ttm->state = tt_unbound;
-		r = 0;
-		goto trace_mappings;
+		return 0;
 	}
 
 #ifdef CONFIG_SWIOTLB
 	if (swiotlb_nr_tbl()) {
-		r = ttm_dma_populate(&gtt->ttm, adev->dev);
-		goto trace_mappings;
+		return ttm_dma_populate(&gtt->ttm, adev->dev);
 	}
 #endif
 
-	r = ttm_populate_and_map_pages(adev->dev, &gtt->ttm);
-trace_mappings:
-	if (likely(!r))
-		amdgpu_trace_dma_map(ttm);
-	return r;
+	return ttm_populate_and_map_pages(adev->dev, &gtt->ttm);
 }
 
 static void amdgpu_ttm_tt_unpopulate(struct ttm_tt *ttm)
@@ -1012,8 +985,6 @@ static void amdgpu_ttm_tt_unpopulate(struct ttm_tt *ttm)
 		return;
 
 	adev = amdgpu_ttm_adev(ttm->bdev);
-
-	amdgpu_trace_dma_unmap(ttm);
 
 #ifdef CONFIG_SWIOTLB
 	if (swiotlb_nr_tbl()) {
@@ -1556,8 +1527,8 @@ int amdgpu_fill_buffer(struct amdgpu_bo *bo,
 		       struct dma_fence **fence)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
-	/* max_bytes applies to SDMA_OP_PTEPDE as well as SDMA_OP_CONST_FILL*/
-	uint32_t max_bytes = adev->mman.buffer_funcs->fill_max_bytes;
+	uint32_t max_bytes = 8 *
+			adev->vm_manager.vm_pte_funcs->set_max_nums_pte_pde;
 	struct amdgpu_ring *ring = adev->mman.buffer_funcs_ring;
 
 	struct drm_mm_node *mm_node;
@@ -1589,8 +1560,8 @@ int amdgpu_fill_buffer(struct amdgpu_bo *bo,
 		++mm_node;
 	}
 
-	/* 10 double words for each SDMA_OP_PTEPDE cmd */
-	num_dw = num_loops * 10;
+	/* num of dwords for each SDMA_OP_PTEPDE cmd */
+	num_dw = num_loops * adev->vm_manager.vm_pte_funcs->set_pte_pde_num_dw;
 
 	/* for IB padding */
 	num_dw += 64;
@@ -1809,6 +1780,53 @@ static const struct file_operations amdgpu_ttm_gtt_fops = {
 
 #endif
 
+static ssize_t amdgpu_iova_to_phys_read(struct file *f, char __user *buf,
+				   size_t size, loff_t *pos)
+{
+	struct amdgpu_device *adev = file_inode(f)->i_private;
+	int r;
+	uint64_t phys;
+	struct iommu_domain *dom;
+
+	// always return 8 bytes
+	if (size != 8)
+		return -EINVAL;
+
+	// only accept page addresses
+	if (*pos & 0xFFF)
+		return -EINVAL;
+
+	dom = iommu_get_domain_for_dev(adev->dev);
+	if (dom)
+		phys = iommu_iova_to_phys(dom, *pos);
+	else
+		phys = *pos;
+
+	r = copy_to_user(buf, &phys, 8);
+	if (r)
+		return -EFAULT;
+
+	return 8;
+}
+
+static const struct file_operations amdgpu_ttm_iova_fops = {
+	.owner = THIS_MODULE,
+	.read = amdgpu_iova_to_phys_read,
+	.llseek = default_llseek
+};
+
+static const struct {
+	char *name;
+	const struct file_operations *fops;
+	int domain;
+} ttm_debugfs_entries[] = {
+	{ "amdgpu_vram", &amdgpu_ttm_vram_fops, TTM_PL_VRAM },
+#ifdef CONFIG_DRM_AMDGPU_GART_DEBUGFS
+	{ "amdgpu_gtt", &amdgpu_ttm_gtt_fops, TTM_PL_TT },
+#endif
+	{ "amdgpu_iova", &amdgpu_ttm_iova_fops, TTM_PL_SYSTEM },
+};
+
 #endif
 
 static int amdgpu_ttm_debugfs_init(struct amdgpu_device *adev)
@@ -1819,22 +1837,21 @@ static int amdgpu_ttm_debugfs_init(struct amdgpu_device *adev)
 	struct drm_minor *minor = adev->ddev->primary;
 	struct dentry *ent, *root = minor->debugfs_root;
 
-	ent = debugfs_create_file("amdgpu_vram", S_IFREG | S_IRUGO, root,
-				  adev, &amdgpu_ttm_vram_fops);
-	if (IS_ERR(ent))
-		return PTR_ERR(ent);
-	i_size_write(ent->d_inode, adev->mc.mc_vram_size);
-	adev->mman.vram = ent;
+	for (count = 0; count < ARRAY_SIZE(ttm_debugfs_entries); count++) {
+		ent = debugfs_create_file(
+				ttm_debugfs_entries[count].name,
+				S_IFREG | S_IRUGO, root,
+				adev,
+				ttm_debugfs_entries[count].fops);
+		if (IS_ERR(ent))
+			return PTR_ERR(ent);
+		if (ttm_debugfs_entries[count].domain == TTM_PL_VRAM)
+			i_size_write(ent->d_inode, adev->mc.mc_vram_size);
+		else if (ttm_debugfs_entries[count].domain == TTM_PL_TT)
+			i_size_write(ent->d_inode, adev->mc.gart_size);
+		adev->mman.debugfs_entries[count] = ent;
+	}
 
-#ifdef CONFIG_DRM_AMDGPU_GART_DEBUGFS
-	ent = debugfs_create_file("amdgpu_gtt", S_IFREG | S_IRUGO, root,
-				  adev, &amdgpu_ttm_gtt_fops);
-	if (IS_ERR(ent))
-		return PTR_ERR(ent);
-	i_size_write(ent->d_inode, adev->mc.gart_size);
-	adev->mman.gtt = ent;
-
-#endif
 	count = ARRAY_SIZE(amdgpu_ttm_debugfs_list);
 
 #ifdef CONFIG_SWIOTLB
@@ -1844,7 +1861,6 @@ static int amdgpu_ttm_debugfs_init(struct amdgpu_device *adev)
 
 	return amdgpu_debugfs_add_files(adev, amdgpu_ttm_debugfs_list, count);
 #else
-
 	return 0;
 #endif
 }
@@ -1852,14 +1868,9 @@ static int amdgpu_ttm_debugfs_init(struct amdgpu_device *adev)
 static void amdgpu_ttm_debugfs_fini(struct amdgpu_device *adev)
 {
 #if defined(CONFIG_DEBUG_FS)
+	unsigned i;
 
-	debugfs_remove(adev->mman.vram);
-	adev->mman.vram = NULL;
-
-#ifdef CONFIG_DRM_AMDGPU_GART_DEBUGFS
-	debugfs_remove(adev->mman.gtt);
-	adev->mman.gtt = NULL;
-#endif
-
+	for (i = 0; i < ARRAY_SIZE(ttm_debugfs_entries); i++)
+		debugfs_remove(adev->mman.debugfs_entries[i]);
 #endif
 }

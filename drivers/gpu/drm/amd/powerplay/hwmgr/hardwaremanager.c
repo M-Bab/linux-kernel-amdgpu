@@ -27,8 +27,8 @@
 #include "power_state.h"
 
 
-#define TEMP_RANGE_MIN (90 * 1000)
-#define TEMP_RANGE_MAX (120 * 1000)
+#define TEMP_RANGE_MIN (0)
+#define TEMP_RANGE_MAX (80 * 1000)
 
 #define PHM_FUNC_CHECK(hw) \
 	do {							\
@@ -210,10 +210,10 @@ int phm_register_thermal_interrupt(struct pp_hwmgr *hwmgr, const void *info)
 {
 	PHM_FUNC_CHECK(hwmgr);
 
-	if (hwmgr->hwmgr_func->register_internal_thermal_interrupt == NULL)
-		return -EINVAL;
+	if (hwmgr->hwmgr_func->register_internal_thermal_interrupt != NULL)
+		return hwmgr->hwmgr_func->register_internal_thermal_interrupt(hwmgr, info);
 
-	return hwmgr->hwmgr_func->register_internal_thermal_interrupt(hwmgr, info);
+	return 0;
 }
 
 /**

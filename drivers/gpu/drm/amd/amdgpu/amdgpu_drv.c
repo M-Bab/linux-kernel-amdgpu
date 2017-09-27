@@ -92,7 +92,7 @@ int amdgpu_dpm = -1;
 int amdgpu_fw_load_type = -1;
 int amdgpu_aspm = -1;
 int amdgpu_runtime_pm = -1;
-unsigned amdgpu_ip_block_mask = 0xffffffff;
+uint amdgpu_ip_block_mask = 0xffffffff;
 int amdgpu_bapm = -1;
 int amdgpu_deep_color = 0;
 int amdgpu_vm_size = -1;
@@ -108,14 +108,14 @@ int amdgpu_sched_jobs = 32;
 int amdgpu_sched_hw_submission = 2;
 int amdgpu_no_evict = 0;
 int amdgpu_direct_gma_size = 0;
-unsigned amdgpu_pcie_gen_cap = 0;
-unsigned amdgpu_pcie_lane_cap = 0;
-unsigned amdgpu_cg_mask = 0xffffffff;
-unsigned amdgpu_pg_mask = 0xffffffff;
-unsigned amdgpu_sdma_phase_quantum = 32;
+uint amdgpu_pcie_gen_cap = 0;
+uint amdgpu_pcie_lane_cap = 0;
+uint amdgpu_cg_mask = 0xffffffff;
+uint amdgpu_pg_mask = 0xffffffff;
+uint amdgpu_sdma_phase_quantum = 32;
 char *amdgpu_disable_cu = NULL;
 char *amdgpu_virtual_display = NULL;
-unsigned amdgpu_pp_feature_mask = 0xffffffff;
+uint amdgpu_pp_feature_mask = 0xffffffff;
 int amdgpu_ngg = 0;
 int amdgpu_prim_buf_per_se = 0;
 int amdgpu_pos_buf_per_se = 0;
@@ -613,6 +613,8 @@ amdgpu_pci_remove(struct pci_dev *pdev)
 
 	drm_dev_unregister(dev);
 	drm_dev_unref(dev);
+	pci_disable_device(pdev);
+	pci_set_drvdata(pdev, NULL);
 }
 
 static void
@@ -857,6 +859,7 @@ static struct drm_driver kms_driver = {
 	.gem_prime_import_sg_table = amdgpu_gem_prime_import_sg_table,
 	.gem_prime_vmap = amdgpu_gem_prime_vmap,
 	.gem_prime_vunmap = amdgpu_gem_prime_vunmap,
+	.gem_prime_mmap = amdgpu_gem_prime_mmap,
 
 	.name = DRIVER_NAME,
 	.desc = DRIVER_DESC,
