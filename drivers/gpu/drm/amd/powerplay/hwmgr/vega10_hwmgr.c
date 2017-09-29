@@ -56,7 +56,7 @@
 
 #define HBM_MEMORY_CHANNEL_WIDTH    128
 
-uint32_t channel_number[] = {1, 2, 0, 4, 0, 8, 0, 16, 2};
+static const uint32_t channel_number[] = {1, 2, 0, 4, 0, 8, 0, 16, 2};
 
 #define MEM_FREQ_LOW_LATENCY        25000
 #define MEM_FREQ_HIGH_LATENCY       80000
@@ -81,7 +81,7 @@ uint32_t channel_number[] = {1, 2, 0, 4, 0, 8, 0, 16, 2};
 static int vega10_force_clock_level(struct pp_hwmgr *hwmgr,
 		enum pp_clock_type type, uint32_t mask);
 
-const ULONG PhwVega10_Magic = (ULONG)(PHM_VIslands_Magic);
+static const ULONG PhwVega10_Magic = (ULONG)(PHM_VIslands_Magic);
 
 struct vega10_power_state *cast_phw_vega10_power_state(
 				  struct pp_hw_power_state *hw_ps)
@@ -2393,7 +2393,7 @@ static int vega10_populate_and_upload_avfs_fuse_override(struct pp_hwmgr *hwmgr)
 
 	serial_number = ((uint64_t)bottom32 << 32) | top32;
 
-	if (pp_override_get_default_fuse_value(serial_number, vega10_fuses_default, &fuse) == 0) {
+	if (pp_override_get_default_fuse_value(serial_number, &fuse) == 0) {
 		avfs_fuse_table->VFT0_b  = fuse.VFT0_b;
 		avfs_fuse_table->VFT0_m1 = fuse.VFT0_m1;
 		avfs_fuse_table->VFT0_m2 = fuse.VFT0_m2;

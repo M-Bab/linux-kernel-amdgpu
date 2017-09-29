@@ -30,6 +30,9 @@
 #include "pp_instance.h"
 #include "power_state.h"
 
+static int pp_dpm_dispatch_tasks(void *handle, enum amd_pp_task task_id,
+		void *input, void *output);
+
 static inline int pp_check(struct pp_instance *handle)
 {
 	if (handle == NULL || handle->pp_valid != PP_VALID)
@@ -47,10 +50,50 @@ static inline int pp_check(struct pp_instance *handle)
 	return 0;
 }
 
+static int amd_powerplay_create(struct amd_pp_init *pp_init,
+				void **handle)
+{
+	struct pp_instance *instance;
+
+	if (pp_init == NULL || handle == NULL)
+		return -EINVAL;
+
+	instance = kzalloc(sizeof(struct pp_instance), GFP_KERNEL);
+	if (instance == NULL)
+		return -ENOMEM;
+
+	instance->pp_valid = PP_VALID;
+	instance->chip_family = pp_init->chip_family;
+	instance->chip_id = pp_init->chip_id;
+	instance->pm_en = pp_init->pm_en;
+	instance->feature_mask = pp_init->feature_mask;
+	instance->device = pp_init->device;
+	mutex_init(&instance->pp_lock);
+	*handle = instance;
+	return 0;
+}
+
+static int amd_powerplay_destroy(void *handle)
+{
+	struct pp_instance *instance = (struct pp_instance *)handle;
+
+	kfree(instance->hwmgr);
+	instance->hwmgr = NULL;
+
+	kfree(instance);
+	instance = NULL;
+	return 0;
+}
+
 static int pp_early_init(void *handle)
 {
 	int ret;
-	struct pp_instance *pp_handle = (struct pp_instance *)handle;
+	struct pp_instance *pp_handle = NULL;
+
+	pp_handle = cgs_register_pp_handle(handle, amd_powerplay_create);
+
+	if (!pp_handle)
+		return -EINVAL;
 
 	ret = hwmgr_early_init(pp_handle);
 	if (ret)
@@ -145,6 +188,25 @@ static int pp_hw_fini(void *handle)
 
 	return 0;
 }
+
+static int pp_late_init(void *handle)
+{
+	struct pp_instance *pp_handle = (struct pp_instance *)handle;
+	int ret = 0;
+
+	ret = pp_check(pp_handle);
+	if (ret == 0)
+		pp_dpm_dispatch_tasks(pp_handle,
+					AMD_PP_TASK_COMPLETE_INIT, NULL, NULL);
+
+	return 0;
+}
+
+static void pp_late_fini(void *handle)
+{
+	amd_powerplay_destroy(handle);
+}
+
 
 static bool pp_is_idle(void *handle)
 {
@@ -254,11 +316,12 @@ static int pp_resume(void *handle)
 const struct amd_ip_funcs pp_ip_funcs = {
 	.name = "powerplay",
 	.early_init = pp_early_init,
-	.late_init = NULL,
+	.late_init = pp_late_init,
 	.sw_init = pp_sw_init,
 	.sw_fini = pp_sw_fini,
 	.hw_init = pp_hw_init,
 	.hw_fini = pp_hw_fini,
+	.late_fini = pp_late_fini,
 	.suspend = pp_suspend,
 	.resume = pp_resume,
 	.is_idle = pp_is_idle,
@@ -1121,41 +1184,6 @@ const struct amd_pm_funcs pp_dpm_funcs = {
 	.set_power_profile_state = pp_dpm_set_power_profile_state,
 	.switch_power_profile = pp_dpm_switch_power_profile,
 };
-
-int amd_powerplay_create(struct amd_pp_init *pp_init,
-				void **handle)
-{
-	struct pp_instance *instance;
-
-	if (pp_init == NULL || handle == NULL)
-		return -EINVAL;
-
-	instance = kzalloc(sizeof(struct pp_instance), GFP_KERNEL);
-	if (instance == NULL)
-		return -ENOMEM;
-
-	instance->pp_valid = PP_VALID;
-	instance->chip_family = pp_init->chip_family;
-	instance->chip_id = pp_init->chip_id;
-	instance->pm_en = pp_init->pm_en;
-	instance->feature_mask = pp_init->feature_mask;
-	instance->device = pp_init->device;
-	mutex_init(&instance->pp_lock);
-	*handle = instance;
-	return 0;
-}
-
-int amd_powerplay_destroy(void *handle)
-{
-	struct pp_instance *instance = (struct pp_instance *)handle;
-
-	kfree(instance->hwmgr);
-	instance->hwmgr = NULL;
-
-	kfree(instance);
-	instance = NULL;
-	return 0;
-}
 
 int amd_powerplay_reset(void *handle)
 {
