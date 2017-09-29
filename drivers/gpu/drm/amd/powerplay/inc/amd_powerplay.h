@@ -268,15 +268,11 @@ struct pp_display_clock_request {
 								state << PP_STATE_SHIFT)
 
 struct amd_powerplay {
+	struct cgs_device *cgs_device;
 	void *pp_handle;
 	const struct amd_ip_funcs *ip_funcs;
 	const struct amd_pm_funcs *pp_funcs;
 };
-
-int amd_powerplay_create(struct amd_pp_init *pp_init,
-				void **handle);
-
-int amd_powerplay_destroy(void *handle);
 
 int amd_powerplay_reset(void *handle);
 
