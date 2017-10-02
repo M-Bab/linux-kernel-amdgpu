@@ -1243,7 +1243,7 @@ int vega10_enable_didt_config(struct pp_hwmgr *hwmgr)
 		}
 
 		if (0 == result) {
-			result = vega10_enable_smc_features(hwmgr->smumgr, true, data->smu_features[GNLD_DIDT].smu_feature_bitmap);
+			result = vega10_enable_smc_features(hwmgr, true, data->smu_features[GNLD_DIDT].smu_feature_bitmap);
 			PP_ASSERT_WITH_CODE((0 == result), "[EnableDiDtConfig] Attempt to Enable DiDt feature Failed!", return result);
 			data->smu_features[GNLD_DIDT].enabled = true;
 		}
@@ -1290,7 +1290,7 @@ int vega10_disable_didt_config(struct pp_hwmgr *hwmgr)
 		}
 
 		if (0 == result) {
-			result = vega10_enable_smc_features(hwmgr->smumgr, false, data->smu_features[GNLD_DIDT].smu_feature_bitmap);
+			result = vega10_enable_smc_features(hwmgr, false, data->smu_features[GNLD_DIDT].smu_feature_bitmap);
 			PP_ASSERT_WITH_CODE((0 == result), "[DisableDiDtConfig] Attempt to Disable DiDt feature Failed!", return result);
 			data->smu_features[GNLD_DIDT].enabled = false;
 		}
