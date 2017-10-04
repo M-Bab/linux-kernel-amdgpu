@@ -55,6 +55,8 @@ MODULE_PARM_DESC(quirk, "RT5645 pdata quirk override");
 
 #define RT5645_HWEQ_NUM 57
 
+#define TIME_TO_POWER_MS 400
+
 static const struct regmap_range_cfg rt5645_ranges[] = {
 	{
 		.name = "PR",
@@ -3703,6 +3705,7 @@ static int rt5645_i2c_probe(struct i2c_client *i2c,
 	int ret, i;
 	unsigned int val;
 	struct regmap *regmap;
+	int timeout = TIME_TO_POWER_MS;
 
 	rt5645 = devm_kzalloc(&i2c->dev, sizeof(struct rt5645_priv),
 				GFP_KERNEL);
@@ -3776,6 +3779,15 @@ static int rt5645_i2c_probe(struct i2c_client *i2c,
 		return ret;
 	}
 	regmap_read(regmap, RT5645_VENDOR_ID2, &val);
+
+	/*
+	 * Read for 400msec, as it is the interval required between
+	 * read and power On.
+	 */
+	while (val != RT5645_DEVICE_ID && val != RT5650_DEVICE_ID && --timeout) {
+		msleep(1);
+		regmap_read(regmap, RT5645_VENDOR_ID2, &val);
+	}
 
 	switch (val) {
 	case RT5645_DEVICE_ID:
