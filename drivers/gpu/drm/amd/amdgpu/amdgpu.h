@@ -47,6 +47,8 @@
 #include <drm/amdgpu_drm.h>
 
 #include <kgd_kfd_interface.h>
+#include "dm_pp_interface.h"
+#include "kgd_pp_interface.h"
 
 #include "amd_shared.h"
 #include "amdgpu_mode.h"
@@ -59,7 +61,6 @@
 #include "amdgpu_sync.h"
 #include "amdgpu_ring.h"
 #include "amdgpu_vm.h"
-#include "amd_powerplay.h"
 #include "amdgpu_dpm.h"
 #include "amdgpu_acp.h"
 #include "amdgpu_uvd.h"
@@ -67,10 +68,10 @@
 #include "amdgpu_vcn.h"
 #include "amdgpu_mn.h"
 #include "amdgpu_dm.h"
-
 #include "gpu_scheduler.h"
 #include "amdgpu_virt.h"
 #include "amdgpu_gart.h"
+
 
 /*
  * Modules parameters.
@@ -1397,6 +1398,13 @@ typedef void (*amdgpu_wreg_t)(struct amdgpu_device*, uint32_t, uint32_t);
 
 typedef uint32_t (*amdgpu_block_rreg_t)(struct amdgpu_device*, uint32_t, uint32_t);
 typedef void (*amdgpu_block_wreg_t)(struct amdgpu_device*, uint32_t, uint32_t, uint32_t);
+
+struct amd_powerplay {
+	struct cgs_device *cgs_device;
+	void *pp_handle;
+	const struct amd_ip_funcs *ip_funcs;
+	const struct amd_pm_funcs *pp_funcs;
+};
 
 #define AMDGPU_RESET_MAGIC_NUM 64
 struct amdgpu_device {
