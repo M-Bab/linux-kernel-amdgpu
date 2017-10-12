@@ -92,7 +92,7 @@ struct dc_context {
 	bool created_bios;
 	struct gpio_service *gpio_service;
 	struct i2caux *i2caux;
-#ifdef ENABLE_FBC
+#if defined(CONFIG_DRM_AMD_DC_FBC)
 	uint64_t fbc_gpu_addr;
 #endif
 };
@@ -151,6 +151,7 @@ enum dc_edid_status {
 	EDID_BAD_INPUT,
 	EDID_NO_RESPONSE,
 	EDID_BAD_CHECKSUM,
+	EDID_THE_SAME,
 };
 
 /* audio capability from EDID*/
@@ -429,14 +430,14 @@ union audio_sample_rates {
 };
 
 struct audio_speaker_flags {
-    uint32_t FL_FR:1;
-    uint32_t LFE:1;
-    uint32_t FC:1;
-    uint32_t RL_RR:1;
-    uint32_t RC:1;
-    uint32_t FLC_FRC:1;
-    uint32_t RLC_RRC:1;
-    uint32_t SUPPORT_AI:1;
+	uint32_t FL_FR:1;
+	uint32_t LFE:1;
+	uint32_t FC:1;
+	uint32_t RL_RR:1;
+	uint32_t RC:1;
+	uint32_t FLC_FRC:1;
+	uint32_t RLC_RRC:1;
+	uint32_t SUPPORT_AI:1;
 };
 
 struct audio_speaker_info {

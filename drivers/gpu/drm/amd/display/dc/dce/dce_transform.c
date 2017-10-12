@@ -306,7 +306,7 @@ static const uint16_t *get_filter_coeffs_16p(int taps, struct fixed31_32 ratio)
 	else if (taps == 3)
 		return get_filter_3tap_16p(ratio);
 	else if (taps == 2)
-		return filter_2tap_16p;
+		return get_filter_2tap_16p();
 	else if (taps == 1)
 		return NULL;
 	else {
@@ -1375,7 +1375,7 @@ static void regamma_config_regions_and_segments(
 
 
 
-bool dce110_opp_program_regamma_pwl(
+void dce110_opp_program_regamma_pwl(
 	struct transform *xfm,
 	const struct pwl_params *params)
 {
@@ -1386,8 +1386,6 @@ bool dce110_opp_program_regamma_pwl(
 
 	/* Program PWL */
 	program_pwl(xfm_dce, params);
-
-	return true;
 }
 
 void dce110_opp_power_on_regamma_lut(
@@ -1437,7 +1435,7 @@ static const struct transform_funcs dce_transform_funcs = {
 /* Constructor, Destructor               */
 /*****************************************/
 
-bool dce_transform_construct(
+void dce_transform_construct(
 	struct dce_transform *xfm_dce,
 	struct dc_context *ctx,
 	uint32_t inst,
@@ -1462,6 +1460,4 @@ bool dce_transform_construct(
 
 	xfm_dce->lb_bits_per_entry = LB_BITS_PER_ENTRY;
 	xfm_dce->lb_memory_size = LB_TOTAL_NUMBER_OF_ENTRIES; /*0x6B0*/
-
-	return true;
 }

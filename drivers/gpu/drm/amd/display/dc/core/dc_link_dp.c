@@ -32,6 +32,14 @@ enum {
 	LINK_TRAINING_MAX_CR_RETRY = 100
 };
 
+static bool decide_fallback_link_setting(
+		struct dc_link_settings initial_link_settings,
+		struct dc_link_settings *current_link_setting,
+		enum link_training_result training_result);
+static struct dc_link_settings get_common_supported_link_settings (
+		struct dc_link_settings link_setting_a,
+		struct dc_link_settings link_setting_b);
+
 static void wait_for_training_aux_rd_interval(
 	struct dc_link *link,
 	uint32_t default_wait_in_micro_secs)
@@ -1150,7 +1158,7 @@ bool dp_hbr_verify_link_cap(
 	return success;
 }
 
-struct dc_link_settings get_common_supported_link_settings (
+static struct dc_link_settings get_common_supported_link_settings (
 		struct dc_link_settings link_setting_a,
 		struct dc_link_settings link_setting_b)
 {
@@ -1191,17 +1199,17 @@ struct dc_link_settings get_common_supported_link_settings (
 	return link_settings;
 }
 
-bool reached_minimum_lane_count(enum dc_lane_count lane_count)
+static inline bool reached_minimum_lane_count(enum dc_lane_count lane_count)
 {
 	return lane_count <= LANE_COUNT_ONE;
 }
 
-bool reached_minimum_link_rate(enum dc_link_rate link_rate)
+static inline bool reached_minimum_link_rate(enum dc_link_rate link_rate)
 {
 	return link_rate <= LINK_RATE_LOW;
 }
 
-enum dc_lane_count reduce_lane_count(enum dc_lane_count lane_count)
+static enum dc_lane_count reduce_lane_count(enum dc_lane_count lane_count)
 {
 	switch (lane_count) {
 	case LANE_COUNT_FOUR:
@@ -1215,7 +1223,7 @@ enum dc_lane_count reduce_lane_count(enum dc_lane_count lane_count)
 	}
 }
 
-enum dc_link_rate reduce_link_rate(enum dc_link_rate link_rate)
+static enum dc_link_rate reduce_link_rate(enum dc_link_rate link_rate)
 {
 	switch (link_rate) {
 	case LINK_RATE_HIGH3:
@@ -1231,7 +1239,7 @@ enum dc_link_rate reduce_link_rate(enum dc_link_rate link_rate)
 	}
 }
 
-enum dc_lane_count increase_lane_count(enum dc_lane_count lane_count)
+static enum dc_lane_count increase_lane_count(enum dc_lane_count lane_count)
 {
 	switch (lane_count) {
 	case LANE_COUNT_ONE:
@@ -1243,7 +1251,7 @@ enum dc_lane_count increase_lane_count(enum dc_lane_count lane_count)
 	}
 }
 
-enum dc_link_rate increase_link_rate(enum dc_link_rate link_rate)
+static enum dc_link_rate increase_link_rate(enum dc_link_rate link_rate)
 {
 	switch (link_rate) {
 	case LINK_RATE_LOW:
@@ -1265,7 +1273,7 @@ enum dc_link_rate increase_link_rate(enum dc_link_rate link_rate)
  *			false - has reached minimum setting
  *					and no further fallback could be done
  */
-bool decide_fallback_link_setting(
+static bool decide_fallback_link_setting(
 		struct dc_link_settings initial_link_settings,
 		struct dc_link_settings *current_link_setting,
 		enum link_training_result training_result)
@@ -1465,10 +1473,10 @@ void decide_link_settings(struct dc_stream_state *stream,
 		return;
 	}
 
-    /* search for the minimum link setting that:
-     * 1. is supported according to the link training result
-     * 2. could support the b/w requested by the timing
-     */
+	/* search for the minimum link setting that:
+	 * 1. is supported according to the link training result
+	 * 2. could support the b/w requested by the timing
+	 */
 	while (current_link_setting.link_rate <=
 			link->verified_link_cap.link_rate) {
 		link_bw = bandwidth_in_kbps_from_link_settings(
@@ -1692,6 +1700,12 @@ static void dp_test_send_link_training(struct dc_link *link)
 	dp_retrain_link_dp_test(link, &link_settings, false);
 }
 
+/* TODO hbr2 compliance eye output is unstable
+ * (toggling on and off) with debugger break
+ * This caueses intermittent PHY automation failure
+ * Need to look into the root cause */
+static uint8_t force_tps4_for_cp2520 = 1;
+
 static void dp_test_send_phy_test_pattern(struct dc_link *link)
 {
 	union phy_test_pattern dpcd_test_pattern;
@@ -1750,10 +1764,16 @@ static void dp_test_send_phy_test_pattern(struct dc_link *link)
 		test_pattern = DP_TEST_PATTERN_80BIT_CUSTOM;
 		break;
 	case PHY_TEST_PATTERN_CP2520_1:
-		test_pattern = DP_TEST_PATTERN_HBR2_COMPLIANCE_EYE;
+		/* CP2520 pattern is unstable, temporarily use TPS4 instead */
+		test_pattern = (force_tps4_for_cp2520 == 1) ?
+				DP_TEST_PATTERN_TRAINING_PATTERN4 :
+				DP_TEST_PATTERN_HBR2_COMPLIANCE_EYE;
 		break;
 	case PHY_TEST_PATTERN_CP2520_2:
-		test_pattern = DP_TEST_PATTERN_CP2520_2;
+		/* CP2520 pattern is unstable, temporarily use TPS4 instead */
+		test_pattern = (force_tps4_for_cp2520 == 1) ?
+				DP_TEST_PATTERN_TRAINING_PATTERN4 :
+				DP_TEST_PATTERN_HBR2_COMPLIANCE_EYE;
 		break;
 	case PHY_TEST_PATTERN_CP2520_3:
 		test_pattern = DP_TEST_PATTERN_TRAINING_PATTERN4;

@@ -54,14 +54,12 @@ static inline uint64_t complete_integer_division_u64(
 	return result;
 }
 
-#define BITS_PER_FRACTIONAL_PART \
-	32
 
 #define FRACTIONAL_PART_MASK \
-	((1ULL << BITS_PER_FRACTIONAL_PART) - 1)
+	((1ULL << FIXED31_32_BITS_PER_FRACTIONAL_PART) - 1)
 
 #define GET_INTEGER_PART(x) \
-	((x) >> BITS_PER_FRACTIONAL_PART)
+	((x) >> FIXED31_32_BITS_PER_FRACTIONAL_PART)
 
 #define GET_FRACTIONAL_PART(x) \
 	(FRACTIONAL_PART_MASK & (x))
@@ -89,7 +87,7 @@ struct fixed31_32 dal_fixed31_32_from_fraction(
 
 	/* determine fractional part */
 	{
-		uint32_t i = BITS_PER_FRACTIONAL_PART;
+		uint32_t i = FIXED31_32_BITS_PER_FRACTIONAL_PART;
 
 		do {
 			remainder <<= 1;
@@ -120,89 +118,16 @@ struct fixed31_32 dal_fixed31_32_from_fraction(
 	return res;
 }
 
-struct fixed31_32 dal_fixed31_32_from_int(
+struct fixed31_32 dal_fixed31_32_from_int_nonconst(
 	int64_t arg)
 {
 	struct fixed31_32 res;
 
 	ASSERT((LONG_MIN <= arg) && (arg <= LONG_MAX));
 
-	res.value = arg << BITS_PER_FRACTIONAL_PART;
+	res.value = arg << FIXED31_32_BITS_PER_FRACTIONAL_PART;
 
 	return res;
-}
-
-struct fixed31_32 dal_fixed31_32_neg(
-	struct fixed31_32 arg)
-{
-	struct fixed31_32 res;
-
-	res.value = -arg.value;
-
-	return res;
-}
-
-struct fixed31_32 dal_fixed31_32_abs(
-	struct fixed31_32 arg)
-{
-	if (arg.value < 0)
-		return dal_fixed31_32_neg(arg);
-	else
-		return arg;
-}
-
-bool dal_fixed31_32_lt(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2)
-{
-	return arg1.value < arg2.value;
-}
-
-bool dal_fixed31_32_le(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2)
-{
-	return arg1.value <= arg2.value;
-}
-
-bool dal_fixed31_32_eq(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2)
-{
-	return arg1.value == arg2.value;
-}
-
-struct fixed31_32 dal_fixed31_32_min(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2)
-{
-	if (arg1.value <= arg2.value)
-		return arg1;
-	else
-		return arg2;
-}
-
-struct fixed31_32 dal_fixed31_32_max(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2)
-{
-	if (arg1.value <= arg2.value)
-		return arg2;
-	else
-		return arg1;
-}
-
-struct fixed31_32 dal_fixed31_32_clamp(
-	struct fixed31_32 arg,
-	struct fixed31_32 min_value,
-	struct fixed31_32 max_value)
-{
-	if (dal_fixed31_32_le(arg, min_value))
-		return min_value;
-	else if (dal_fixed31_32_le(max_value, arg))
-		return max_value;
-	else
-		return arg;
 }
 
 struct fixed31_32 dal_fixed31_32_shl(
@@ -215,19 +140,6 @@ struct fixed31_32 dal_fixed31_32_shl(
 		((arg.value < 0) && (arg.value >= LLONG_MIN >> shift)));
 
 	res.value = arg.value << shift;
-
-	return res;
-}
-
-struct fixed31_32 dal_fixed31_32_shr(
-	struct fixed31_32 arg,
-	uint8_t shift)
-{
-	struct fixed31_32 res;
-
-	ASSERT(shift < 64);
-
-	res.value = arg.value >> shift;
 
 	return res;
 }
@@ -246,24 +158,6 @@ struct fixed31_32 dal_fixed31_32_add(
 	return res;
 }
 
-struct fixed31_32 dal_fixed31_32_add_int(
-	struct fixed31_32 arg1,
-	int32_t arg2)
-{
-	return dal_fixed31_32_add(
-		arg1,
-		dal_fixed31_32_from_int(arg2));
-}
-
-struct fixed31_32 dal_fixed31_32_sub_int(
-	struct fixed31_32 arg1,
-	int32_t arg2)
-{
-	return dal_fixed31_32_sub(
-		arg1,
-		dal_fixed31_32_from_int(arg2));
-}
-
 struct fixed31_32 dal_fixed31_32_sub(
 	struct fixed31_32 arg1,
 	struct fixed31_32 arg2)
@@ -276,15 +170,6 @@ struct fixed31_32 dal_fixed31_32_sub(
 	res.value = arg1.value - arg2.value;
 
 	return res;
-}
-
-struct fixed31_32 dal_fixed31_32_mul_int(
-	struct fixed31_32 arg1,
-	int32_t arg2)
-{
-	return dal_fixed31_32_mul(
-		arg1,
-		dal_fixed31_32_from_int(arg2));
 }
 
 struct fixed31_32 dal_fixed31_32_mul(
@@ -311,7 +196,7 @@ struct fixed31_32 dal_fixed31_32_mul(
 
 	ASSERT(res.value <= LONG_MAX);
 
-	res.value <<= BITS_PER_FRACTIONAL_PART;
+	res.value <<= FIXED31_32_BITS_PER_FRACTIONAL_PART;
 
 	tmp = arg1_int * arg2_fra;
 
@@ -327,7 +212,7 @@ struct fixed31_32 dal_fixed31_32_mul(
 
 	tmp = arg1_fra * arg2_fra;
 
-	tmp = (tmp >> BITS_PER_FRACTIONAL_PART) +
+	tmp = (tmp >> FIXED31_32_BITS_PER_FRACTIONAL_PART) +
 		(tmp >= (uint64_t)dal_fixed31_32_half.value);
 
 	ASSERT(tmp <= (uint64_t)(LLONG_MAX - res.value));
@@ -357,7 +242,7 @@ struct fixed31_32 dal_fixed31_32_sqr(
 
 	ASSERT(res.value <= LONG_MAX);
 
-	res.value <<= BITS_PER_FRACTIONAL_PART;
+	res.value <<= FIXED31_32_BITS_PER_FRACTIONAL_PART;
 
 	tmp = arg_int * arg_fra;
 
@@ -371,7 +256,7 @@ struct fixed31_32 dal_fixed31_32_sqr(
 
 	tmp = arg_fra * arg_fra;
 
-	tmp = (tmp >> BITS_PER_FRACTIONAL_PART) +
+	tmp = (tmp >> FIXED31_32_BITS_PER_FRACTIONAL_PART) +
 		(tmp >= (uint64_t)dal_fixed31_32_half.value);
 
 	ASSERT(tmp <= (uint64_t)(LLONG_MAX - res.value));
@@ -379,24 +264,6 @@ struct fixed31_32 dal_fixed31_32_sqr(
 	res.value += tmp;
 
 	return res;
-}
-
-struct fixed31_32 dal_fixed31_32_div_int(
-	struct fixed31_32 arg1,
-	int64_t arg2)
-{
-	return dal_fixed31_32_from_fraction(
-		arg1.value,
-		dal_fixed31_32_from_int(arg2).value);
-}
-
-struct fixed31_32 dal_fixed31_32_div(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2)
-{
-	return dal_fixed31_32_from_fraction(
-		arg1.value,
-		arg2.value);
 }
 
 struct fixed31_32 dal_fixed31_32_recip(
@@ -682,7 +549,7 @@ static inline uint32_t ux_dy(
 	/* 4. make space for fractional part to be filled in after integer */
 	result <<= fractional_bits;
 	/* 5. shrink fixed point fractional part to of fractional_bits width*/
-	fractional_part >>= BITS_PER_FRACTIONAL_PART - fractional_bits;
+	fractional_part >>= FIXED31_32_BITS_PER_FRACTIONAL_PART - fractional_bits;
 	/* 6. merge the result */
 	return result | fractional_part;
 }

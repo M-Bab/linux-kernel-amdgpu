@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Advanced Micro Devices, Inc.
+ * Copyright 2017 Valve Corporation
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,26 +19,16 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
+ * Authors: Andres Rodriguez <andresx7@gmail.com>
  */
-#ifndef POLARIS10_SMC_H
-#define POLARIS10_SMC_H
 
-#include "smumgr.h"
+#ifndef __AMDGPU_SCHED_H__
+#define __AMDGPU_SCHED_H__
 
+#include <drm/drmP.h>
 
-int polaris10_populate_all_graphic_levels(struct pp_hwmgr *hwmgr);
-int polaris10_populate_all_memory_levels(struct pp_hwmgr *hwmgr);
-int polaris10_init_smc_table(struct pp_hwmgr *hwmgr);
-int polaris10_thermal_setup_fan_table(struct pp_hwmgr *hwmgr);
-int polaris10_thermal_avfs_enable(struct pp_hwmgr *hwmgr);
-int polaris10_update_smc_table(struct pp_hwmgr *hwmgr, uint32_t type);
-int polaris10_update_sclk_threshold(struct pp_hwmgr *hwmgr);
-uint32_t polaris10_get_offsetof(uint32_t type, uint32_t member);
-uint32_t polaris10_get_mac_definition(uint32_t value);
-int polaris10_process_firmware_header(struct pp_hwmgr *hwmgr);
-bool polaris10_is_dpm_running(struct pp_hwmgr *hwmgr);
-int polaris10_populate_requested_graphic_levels(struct pp_hwmgr *hwmgr,
-		struct amd_pp_profile *request);
+enum amd_sched_priority amdgpu_to_sched_priority(int amdgpu_priority);
+int amdgpu_sched_ioctl(struct drm_device *dev, void *data,
+		       struct drm_file *filp);
 
-#endif
-
+#endif // __AMDGPU_SCHED_H__

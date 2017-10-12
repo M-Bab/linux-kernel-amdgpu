@@ -481,7 +481,7 @@ struct dce_transform {
 	bool prescaler_on;
 };
 
-bool dce_transform_construct(struct dce_transform *xfm_dce,
+void dce_transform_construct(struct dce_transform *xfm_dce,
 	struct dc_context *ctx,
 	uint32_t inst,
 	const struct dce_transform_registers *regs,
@@ -506,7 +506,7 @@ void dce110_opp_power_on_regamma_lut(
 	struct transform *xfm,
 	bool power_on);
 
-bool dce110_opp_program_regamma_pwl(
+void dce110_opp_program_regamma_pwl(
 	struct transform *xfm,
 	const struct pwl_params *params);
 

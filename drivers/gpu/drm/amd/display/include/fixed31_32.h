@@ -28,6 +28,8 @@
 
 #include "os_types.h"
 
+#define FIXED31_32_BITS_PER_FRACTIONAL_PART 32
+
 /*
  * @brief
  * Arithmetic operations on real numbers
@@ -78,8 +80,17 @@ struct fixed31_32 dal_fixed31_32_from_fraction(
  * @brief
  * result = arg
  */
-struct fixed31_32 dal_fixed31_32_from_int(
-	int64_t arg);
+struct fixed31_32 dal_fixed31_32_from_int_nonconst(int64_t arg);
+static inline struct fixed31_32 dal_fixed31_32_from_int(int64_t arg)
+{
+	if (__builtin_constant_p(arg)) {
+		struct fixed31_32 res;
+		BUILD_BUG_ON((LONG_MIN > arg) || (arg > LONG_MAX));
+		res.value = arg << FIXED31_32_BITS_PER_FRACTIONAL_PART;
+		return res;
+	} else
+		return dal_fixed31_32_from_int_nonconst(arg);
+}
 
 /*
  * @brief
@@ -90,15 +101,26 @@ struct fixed31_32 dal_fixed31_32_from_int(
  * @brief
  * result = -arg
  */
-struct fixed31_32 dal_fixed31_32_neg(
-	struct fixed31_32 arg);
+static inline struct fixed31_32 dal_fixed31_32_neg(struct fixed31_32 arg)
+{
+	struct fixed31_32 res;
+
+	res.value = -arg.value;
+
+	return res;
+}
 
 /*
  * @brief
  * result = abs(arg) := (arg >= 0) ? arg : -arg
  */
-struct fixed31_32 dal_fixed31_32_abs(
-	struct fixed31_32 arg);
+static inline struct fixed31_32 dal_fixed31_32_abs(struct fixed31_32 arg)
+{
+	if (arg.value < 0)
+		return dal_fixed31_32_neg(arg);
+	else
+		return arg;
+}
 
 /*
  * @brief
@@ -109,41 +131,57 @@ struct fixed31_32 dal_fixed31_32_abs(
  * @brief
  * result = arg1 < arg2
  */
-bool dal_fixed31_32_lt(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2);
+static inline bool dal_fixed31_32_lt(struct fixed31_32 arg1,
+				     struct fixed31_32 arg2)
+{
+	return arg1.value < arg2.value;
+}
 
 /*
  * @brief
  * result = arg1 <= arg2
  */
-bool dal_fixed31_32_le(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2);
+static inline bool dal_fixed31_32_le(struct fixed31_32 arg1,
+				     struct fixed31_32 arg2)
+{
+	return arg1.value <= arg2.value;
+}
 
 /*
  * @brief
  * result = arg1 == arg2
  */
-bool dal_fixed31_32_eq(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2);
+static inline bool dal_fixed31_32_eq(struct fixed31_32 arg1,
+				     struct fixed31_32 arg2)
+{
+	return arg1.value == arg2.value;
+}
 
 /*
  * @brief
  * result = min(arg1, arg2) := (arg1 <= arg2) ? arg1 : arg2
  */
-struct fixed31_32 dal_fixed31_32_min(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2);
+static inline struct fixed31_32 dal_fixed31_32_min(struct fixed31_32 arg1,
+						   struct fixed31_32 arg2)
+{
+	if (arg1.value <= arg2.value)
+		return arg1;
+	else
+		return arg2;
+}
 
 /*
  * @brief
  * result = max(arg1, arg2) := (arg1 <= arg2) ? arg2 : arg1
  */
-struct fixed31_32 dal_fixed31_32_max(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2);
+static inline struct fixed31_32 dal_fixed31_32_max(struct fixed31_32 arg1,
+						   struct fixed31_32 arg2)
+{
+	if (arg1.value <= arg2.value)
+		return arg2;
+	else
+		return arg1;
+}
 
 /*
  * @brief
@@ -151,10 +189,18 @@ struct fixed31_32 dal_fixed31_32_max(
  * result = | arg, when min_value < arg < max_value
  *          | max_value, when arg >= max_value
  */
-struct fixed31_32 dal_fixed31_32_clamp(
+static inline struct fixed31_32 dal_fixed31_32_clamp(
 	struct fixed31_32 arg,
 	struct fixed31_32 min_value,
-	struct fixed31_32 max_value);
+	struct fixed31_32 max_value)
+{
+	if (dal_fixed31_32_le(arg, min_value))
+		return min_value;
+	else if (dal_fixed31_32_le(max_value, arg))
+		return max_value;
+	else
+		return arg;
+}
 
 /*
  * @brief
@@ -173,9 +219,14 @@ struct fixed31_32 dal_fixed31_32_shl(
  * @brief
  * result = arg >> shift
  */
-struct fixed31_32 dal_fixed31_32_shr(
+static inline struct fixed31_32 dal_fixed31_32_shr(
 	struct fixed31_32 arg,
-	uint8_t shift);
+	uint8_t shift)
+{
+	struct fixed31_32 res;
+	res.value = arg.value >> shift;
+	return res;
+}
 
 /*
  * @brief
@@ -194,17 +245,12 @@ struct fixed31_32 dal_fixed31_32_add(
  * @brief
  * result = arg1 + arg2
  */
-struct fixed31_32 dal_fixed31_32_add_int(
-	struct fixed31_32 arg1,
-	int32_t arg2);
-
-/*
- * @brief
- * result = arg1 - arg2
- */
-struct fixed31_32 dal_fixed31_32_sub_int(
-	struct fixed31_32 arg1,
-	int32_t arg2);
+static inline struct fixed31_32 dal_fixed31_32_add_int(struct fixed31_32 arg1,
+						       int32_t arg2)
+{
+	return dal_fixed31_32_add(arg1,
+				  dal_fixed31_32_from_int(arg2));
+}
 
 /*
  * @brief
@@ -216,16 +262,20 @@ struct fixed31_32 dal_fixed31_32_sub(
 
 /*
  * @brief
- * Binary multiplicative operators
+ * result = arg1 - arg2
  */
+static inline struct fixed31_32 dal_fixed31_32_sub_int(struct fixed31_32 arg1,
+						       int32_t arg2)
+{
+	return dal_fixed31_32_sub(arg1,
+				  dal_fixed31_32_from_int(arg2));
+}
+
 
 /*
  * @brief
- * result = arg1 * arg2
+ * Binary multiplicative operators
  */
-struct fixed31_32 dal_fixed31_32_mul_int(
-	struct fixed31_32 arg1,
-	int32_t arg2);
 
 /*
  * @brief
@@ -234,6 +284,18 @@ struct fixed31_32 dal_fixed31_32_mul_int(
 struct fixed31_32 dal_fixed31_32_mul(
 	struct fixed31_32 arg1,
 	struct fixed31_32 arg2);
+
+
+/*
+ * @brief
+ * result = arg1 * arg2
+ */
+static inline struct fixed31_32 dal_fixed31_32_mul_int(struct fixed31_32 arg1,
+						       int32_t arg2)
+{
+	return dal_fixed31_32_mul(arg1,
+				  dal_fixed31_32_from_int(arg2));
+}
 
 /*
  * @brief
@@ -246,17 +308,23 @@ struct fixed31_32 dal_fixed31_32_sqr(
  * @brief
  * result = arg1 / arg2
  */
-struct fixed31_32 dal_fixed31_32_div_int(
-	struct fixed31_32 arg1,
-	int64_t arg2);
+static inline struct fixed31_32 dal_fixed31_32_div_int(struct fixed31_32 arg1,
+						       int64_t arg2)
+{
+	return dal_fixed31_32_from_fraction(arg1.value,
+					    dal_fixed31_32_from_int(arg2).value);
+}
 
 /*
  * @brief
  * result = arg1 / arg2
  */
-struct fixed31_32 dal_fixed31_32_div(
-	struct fixed31_32 arg1,
-	struct fixed31_32 arg2);
+static inline struct fixed31_32 dal_fixed31_32_div(struct fixed31_32 arg1,
+						   struct fixed31_32 arg2)
+{
+	return dal_fixed31_32_from_fraction(arg1.value,
+					    arg2.value);
+}
 
 /*
  * @brief

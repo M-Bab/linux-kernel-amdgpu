@@ -34,7 +34,7 @@
 static void destruct(struct dc_sink *sink)
 {
 	if (sink->dc_container_id) {
-		dm_free(sink->dc_container_id);
+		kfree(sink->dc_container_id);
 		sink->dc_container_id = NULL;
 	}
 }
@@ -63,24 +63,24 @@ static bool construct(struct dc_sink *sink, const struct dc_sink_init_data *init
 
 void dc_sink_retain(struct dc_sink *sink)
 {
-	ASSERT(atomic_read(&sink->ref_count) > 0);
-	atomic_inc(&sink->ref_count);
+	kref_get(&sink->refcount);
+}
+
+static void dc_sink_free(struct kref *kref)
+{
+	struct dc_sink *sink = container_of(kref, struct dc_sink, refcount);
+	destruct(sink);
+	kfree(sink);
 }
 
 void dc_sink_release(struct dc_sink *sink)
 {
-	ASSERT(atomic_read(&sink->ref_count) > 0);
-	atomic_dec(&sink->ref_count);
-
-	if (atomic_read(&sink->ref_count) == 0) {
-		destruct(sink);
-		dm_free(sink);
-	}
+	kref_put(&sink->refcount, dc_sink_free);
 }
 
 struct dc_sink *dc_sink_create(const struct dc_sink_init_data *init_params)
 {
-	struct dc_sink *sink = dm_alloc(sizeof(*sink));
+	struct dc_sink *sink = kzalloc(sizeof(*sink), GFP_KERNEL);
 
 	if (NULL == sink)
 		goto alloc_fail;
@@ -88,48 +88,15 @@ struct dc_sink *dc_sink_create(const struct dc_sink_init_data *init_params)
 	if (false == construct(sink, init_params))
 		goto construct_fail;
 
-	atomic_inc(&sink->ref_count);
+	kref_init(&sink->refcount);
 
 	return sink;
 
 construct_fail:
-	dm_free(sink);
+	kfree(sink);
 
 alloc_fail:
 	return NULL;
-}
-
-bool dc_sink_get_container_id(struct dc_sink *dc_sink, struct dc_container_id *container_id)
-{
-	if (dc_sink && container_id && dc_sink->dc_container_id) {
-		memmove(&container_id->guid, &dc_sink->dc_container_id->guid,
-			sizeof(container_id->guid));
-		memmove(&container_id->portId, &dc_sink->dc_container_id->portId,
-			sizeof(container_id->portId));
-		container_id->manufacturerName = dc_sink->dc_container_id->manufacturerName;
-		container_id->productCode = dc_sink->dc_container_id->productCode;
-		return true;
-	}
-	return false;
-}
-
-bool dc_sink_set_container_id(struct dc_sink *dc_sink, const struct dc_container_id *container_id)
-{
-	if (dc_sink && container_id) {
-		if (!dc_sink->dc_container_id)
-			dc_sink->dc_container_id = dm_alloc(sizeof(*dc_sink->dc_container_id));
-
-		if (dc_sink->dc_container_id) {
-			memmove(&dc_sink->dc_container_id->guid, &container_id->guid,
-				sizeof(container_id->guid));
-			memmove(&dc_sink->dc_container_id->portId, &container_id->portId,
-				sizeof(container_id->portId));
-			dc_sink->dc_container_id->manufacturerName = container_id->manufacturerName;
-			dc_sink->dc_container_id->productCode = container_id->productCode;
-			return true;
-		}
-	}
-	return false;
 }
 
 /*******************************************************************************

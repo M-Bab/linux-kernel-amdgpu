@@ -406,30 +406,25 @@ static const struct irq_service_funcs irq_service_funcs_dce110 = {
 		.to_dal_irq_source = to_dal_irq_source_dce110
 };
 
-bool construct(
+static void construct(
 	struct irq_service *irq_service,
 	struct irq_service_init_data *init_data)
 {
-	if (!dal_irq_service_construct(irq_service, init_data))
-		return false;
+	dal_irq_service_construct(irq_service, init_data);
 
 	irq_service->info = irq_source_info_dce110;
 	irq_service->funcs = &irq_service_funcs_dce110;
-
-	return true;
 }
 
 struct irq_service *dal_irq_service_dce110_create(
 	struct irq_service_init_data *init_data)
 {
-	struct irq_service *irq_service = dm_alloc(sizeof(*irq_service));
+	struct irq_service *irq_service = kzalloc(sizeof(*irq_service),
+						  GFP_KERNEL);
 
 	if (!irq_service)
 		return NULL;
 
-	if (construct(irq_service, init_data))
-		return irq_service;
-
-	dm_free(irq_service);
-	return NULL;
+	construct(irq_service, init_data);
+	return irq_service;
 }

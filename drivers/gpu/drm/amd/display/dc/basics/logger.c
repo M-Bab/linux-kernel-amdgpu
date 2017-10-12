@@ -64,45 +64,14 @@ static const struct dc_log_type_info log_type_info_tbl[] = {
 };
 
 
-#define DC_DEFAULT_LOG_MASK ((1 << LOG_ERROR) | \
-		(1 << LOG_WARNING) | \
-		(1 << LOG_EVENT_MODE_SET) | \
-		(1 << LOG_EVENT_DETECTION) | \
-		(1 << LOG_EVENT_LINK_TRAINING) | \
-		(1 << LOG_EVENT_LINK_LOSS) | \
-		(1 << LOG_EVENT_UNDERFLOW) | \
-		(1 << LOG_RESOURCE) | \
-		(1 << LOG_FEATURE_OVERRIDE) | \
-		(1 << LOG_DETECTION_EDID_PARSER) | \
-		(1 << LOG_DC) | \
-		(1 << LOG_HW_HOTPLUG) | \
-		(1 << LOG_HW_SET_MODE) | \
-		(1 << LOG_HW_RESUME_S3) | \
-		(1 << LOG_HW_HPD_IRQ) | \
-		(1 << LOG_SYNC) | \
-		(1 << LOG_BANDWIDTH_VALIDATION) | \
-		(1 << LOG_MST) | \
-		(1 << LOG_DETECTION_DP_CAPS) | \
-		(1 << LOG_BACKLIGHT)) | \
-		(1 << LOG_I2C_AUX) | \
-		(1 << LOG_IF_TRACE) | \
-		(1 << LOG_DTN) /* | \
-		(1 << LOG_DEBUG) | \
-		(1 << LOG_BIOS) | \
-		(1 << LOG_SURFACE) | \
-		(1 << LOG_SCALER) | \
-		(1 << LOG_DML) | \
-		(1 << LOG_HW_LINK_TRAINING) | \
-		(1 << LOG_HW_AUDIO)| \
-		(1 << LOG_BANDWIDTH_CALCS)*/
-
 /* ----------- Object init and destruction ----------- */
-static bool construct(struct dc_context *ctx, struct dal_logger *logger)
+static bool construct(struct dc_context *ctx, struct dal_logger *logger,
+		      uint32_t log_mask)
 {
 	/* malloc buffer and init offsets */
 	logger->log_buffer_size = DAL_LOGGER_BUFFER_MAX_SIZE;
-	logger->log_buffer = (char *)dm_alloc(logger->log_buffer_size *
-		sizeof(char));
+	logger->log_buffer = (char *)kzalloc(logger->log_buffer_size * sizeof(char),
+					     GFP_KERNEL);
 
 	if (!logger->log_buffer)
 		return false;
@@ -111,8 +80,6 @@ static bool construct(struct dc_context *ctx, struct dal_logger *logger)
 	logger->buffer_read_offset = 0;
 	logger->buffer_write_offset = 0;
 
-	logger->write_wrap_count = 0;
-	logger->read_wrap_count = 0;
 	logger->open_count = 0;
 
 	logger->flags.bits.ENABLE_CONSOLE = 1;
@@ -120,7 +87,7 @@ static bool construct(struct dc_context *ctx, struct dal_logger *logger)
 
 	logger->ctx = ctx;
 
-	logger->mask = DC_DEFAULT_LOG_MASK;
+	logger->mask = log_mask;
 
 	return true;
 }
@@ -128,20 +95,21 @@ static bool construct(struct dc_context *ctx, struct dal_logger *logger)
 static void destruct(struct dal_logger *logger)
 {
 	if (logger->log_buffer) {
-		dm_free(logger->log_buffer);
+		kfree(logger->log_buffer);
 		logger->log_buffer = NULL;
 	}
 }
 
-struct dal_logger *dal_logger_create(struct dc_context *ctx)
+struct dal_logger *dal_logger_create(struct dc_context *ctx, uint32_t log_mask)
 {
 	/* malloc struct */
-	struct dal_logger *logger = dm_alloc(sizeof(struct dal_logger));
+	struct dal_logger *logger = kzalloc(sizeof(struct dal_logger),
+					    GFP_KERNEL);
 
 	if (!logger)
 		return NULL;
-	if (!construct(ctx, logger)) {
-		dm_free(logger);
+	if (!construct(ctx, logger, log_mask)) {
+		kfree(logger);
 		return NULL;
 	}
 
@@ -153,7 +121,7 @@ uint32_t dal_logger_destroy(struct dal_logger **logger)
 	if (logger == NULL || *logger == NULL)
 		return 1;
 	destruct(*logger);
-	dm_free(*logger);
+	kfree(*logger);
 	*logger = NULL;
 
 	return 0;
@@ -192,23 +160,24 @@ static void log_to_debug_console(struct log_entry *entry)
 }
 
 /* Print everything unread existing in log_buffer to debug console*/
-static void flush_to_debug_console(struct dal_logger *logger)
+void dm_logger_flush_buffer(struct dal_logger *logger, bool should_warn)
 {
-	int i = logger->buffer_read_offset;
-	char *string_start = &logger->log_buffer[i];
+	char *string_start = &logger->log_buffer[logger->buffer_read_offset];
 
-	dm_output_to_console(
-		"---------------- FLUSHING LOG BUFFER ----------------\n");
-	while (i < logger->buffer_write_offset)	{
+	if (should_warn)
+		dm_output_to_console(
+			"---------------- FLUSHING LOG BUFFER ----------------\n");
+	while (logger->buffer_read_offset < logger->buffer_write_offset) {
 
-		if (logger->log_buffer[i] == '\0') {
+		if (logger->log_buffer[logger->buffer_read_offset] == '\0') {
 			dm_output_to_console("%s", string_start);
-			string_start = (char *)logger->log_buffer + i + 1;
+			string_start = logger->log_buffer + logger->buffer_read_offset + 1;
 		}
-		i++;
+		logger->buffer_read_offset++;
 	}
-	dm_output_to_console(
-		"-------------- END FLUSHING LOG BUFFER --------------\n\n");
+	if (should_warn)
+		dm_output_to_console(
+			"-------------- END FLUSHING LOG BUFFER --------------\n\n");
 }
 
 static void log_to_internal_buffer(struct log_entry *entry)
@@ -225,35 +194,17 @@ static void log_to_internal_buffer(struct log_entry *entry)
 
 	if (size > 0 && size < logger->log_buffer_size) {
 
-		int total_free_space = 0;
-		int space_before_wrap = 0;
+		int buffer_space = logger->log_buffer_size -
+				logger->buffer_write_offset;
 
-		if (logger->buffer_write_offset > logger->buffer_read_offset) {
-			total_free_space = logger->log_buffer_size -
-					logger->buffer_write_offset +
-					logger->buffer_read_offset;
-			space_before_wrap = logger->log_buffer_size -
-					logger->buffer_write_offset;
-		} else if (logger->buffer_write_offset <
-				logger->buffer_read_offset) {
-			total_free_space = logger->log_buffer_size -
-					logger->buffer_read_offset +
-					logger->buffer_write_offset;
-			space_before_wrap = total_free_space;
-		} else if (logger->write_wrap_count !=
-				logger->read_wrap_count) {
-			/* Buffer is completely full already */
-			total_free_space = 0;
-			space_before_wrap = 0;
-		} else {
+		if (logger->buffer_write_offset == logger->buffer_read_offset) {
 			/* Buffer is empty, start writing at beginning */
-			total_free_space = logger->log_buffer_size;
-			space_before_wrap = logger->log_buffer_size;
+			buffer_space = logger->log_buffer_size;
 			logger->buffer_write_offset = 0;
 			logger->buffer_read_offset = 0;
 		}
 
-		if (space_before_wrap > size) {
+		if (buffer_space > size) {
 			/* No wrap around, copy 'size' bytes
 			 * from 'entry->buf' to 'log_buffer'
 			 */
@@ -262,28 +213,12 @@ static void log_to_internal_buffer(struct log_entry *entry)
 					entry->buf, size);
 			logger->buffer_write_offset += size;
 
-		} else if (total_free_space > size) {
-			/* We have enough room without flushing,
-			 * but need to wrap around */
-
-			int space_after_wrap = total_free_space -
-					space_before_wrap;
-
-			memmove(logger->log_buffer +
-					logger->buffer_write_offset,
-					entry->buf, space_before_wrap);
-			memmove(logger->log_buffer, entry->buf +
-					space_before_wrap, space_after_wrap);
-
-			logger->buffer_write_offset = space_after_wrap;
-			logger->write_wrap_count++;
-
 		} else {
 			/* Not enough room remaining, we should flush
 			 * existing logs */
 
 			/* Flush existing unread logs to console */
-			flush_to_debug_console(logger);
+			dm_logger_flush_buffer(logger, true);
 
 			/* Start writing to beginning of buffer */
 			memmove(logger->log_buffer, entry->buf, size);
@@ -355,9 +290,10 @@ void dm_logger_write(
 		log_heading(&entry);
 
 		size = dm_log_to_buffer(
-			buffer, LOG_MAX_LINE_SIZE, msg, args);
+			buffer, LOG_MAX_LINE_SIZE - 1, msg, args);
 
-		entry.buf_offset += size;
+		buffer[entry.buf_offset + size] = '\0';
+		entry.buf_offset += size + 1;
 
 		/* --Flush log_entry buffer-- */
 		/* print to kernel console */
@@ -421,7 +357,8 @@ void dm_logger_open(
 	entry->type = log_type;
 	entry->logger = logger;
 
-	entry->buf = dm_alloc(DAL_LOGGER_BUFFER_MAX_SIZE * sizeof(char));
+	entry->buf = kzalloc(DAL_LOGGER_BUFFER_MAX_SIZE * sizeof(char),
+			     GFP_KERNEL);
 
 	entry->buf_offset = 0;
 	entry->max_buf_bytes = DAL_LOGGER_BUFFER_MAX_SIZE * sizeof(char);
@@ -452,7 +389,7 @@ void dm_logger_close(struct log_entry *entry)
 
 cleanup:
 	if (entry->buf) {
-		dm_free(entry->buf);
+		kfree(entry->buf);
 		entry->buf = NULL;
 		entry->buf_offset = 0;
 		entry->max_buf_bytes = 0;

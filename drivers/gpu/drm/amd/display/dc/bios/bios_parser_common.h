@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Advanced Micro Devices, Inc.
+ * Copyright 2012-15 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,22 +19,15 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
+ * Authors: AMD
+ *
  */
-#ifndef _ICELAND_SMC_H
-#define _ICELAND_SMC_H
 
-#include "smumgr.h"
+#ifndef __BIOS_PARSER_COMMON_H__
+#define __BIOS_PARSER_COMMON_H__
 
+#include "dm_services.h"
+#include "ObjectID.h"
 
-int iceland_populate_all_graphic_levels(struct pp_hwmgr *hwmgr);
-int iceland_populate_all_memory_levels(struct pp_hwmgr *hwmgr);
-int iceland_init_smc_table(struct pp_hwmgr *hwmgr);
-int iceland_thermal_setup_fan_table(struct pp_hwmgr *hwmgr);
-int iceland_update_sclk_threshold(struct pp_hwmgr *hwmgr);
-uint32_t iceland_get_offsetof(uint32_t type, uint32_t member);
-uint32_t iceland_get_mac_definition(uint32_t value);
-int iceland_process_firmware_header(struct pp_hwmgr *hwmgr);
-int iceland_initialize_mc_reg_table(struct pp_hwmgr *hwmgr);
-bool iceland_is_dpm_running(struct pp_hwmgr *hwmgr);
+struct graphics_object_id object_id_from_bios_object_id(uint32_t bios_object_id);
 #endif
-

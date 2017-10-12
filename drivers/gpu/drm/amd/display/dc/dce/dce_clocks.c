@@ -51,7 +51,7 @@
 	clk_dce->base.ctx
 
 /* Max clock values for each state indexed by "enum clocks_state": */
-static struct state_dependent_clocks dce80_max_clks_by_state[] = {
+static const struct state_dependent_clocks dce80_max_clks_by_state[] = {
 /* ClocksStateInvalid - should not be used */
 { .display_clk_khz = 0, .pixel_clk_khz = 0 },
 /* ClocksStateUltraLow - not expected to be used for DCE 8.0 */
@@ -63,7 +63,7 @@ static struct state_dependent_clocks dce80_max_clks_by_state[] = {
 /* ClocksStatePerformance */
 { .display_clk_khz = 600000, .pixel_clk_khz = 400000 } };
 
-static struct state_dependent_clocks dce110_max_clks_by_state[] = {
+static const struct state_dependent_clocks dce110_max_clks_by_state[] = {
 /*ClocksStateInvalid - should not be used*/
 { .display_clk_khz = 0, .pixel_clk_khz = 0 },
 /*ClocksStateUltraLow - currently by HW design team not supposed to be used*/
@@ -75,7 +75,7 @@ static struct state_dependent_clocks dce110_max_clks_by_state[] = {
 /*ClocksStatePerformance*/
 { .display_clk_khz = 643000, .pixel_clk_khz = 400000 } };
 
-static struct state_dependent_clocks dce112_max_clks_by_state[] = {
+static const struct state_dependent_clocks dce112_max_clks_by_state[] = {
 /*ClocksStateInvalid - should not be used*/
 { .display_clk_khz = 0, .pixel_clk_khz = 0 },
 /*ClocksStateUltraLow - currently by HW design team not supposed to be used*/
@@ -87,7 +87,7 @@ static struct state_dependent_clocks dce112_max_clks_by_state[] = {
 /*ClocksStatePerformance*/
 { .display_clk_khz = 1132000, .pixel_clk_khz = 600000 } };
 
-static struct state_dependent_clocks dce120_max_clks_by_state[] = {
+static const struct state_dependent_clocks dce120_max_clks_by_state[] = {
 /*ClocksStateInvalid - should not be used*/
 { .display_clk_khz = 0, .pixel_clk_khz = 0 },
 /*ClocksStateUltraLow - currently by HW design team not supposed to be used*/
@@ -719,7 +719,7 @@ struct display_clock *dce_disp_clk_create(
 	const struct dce_disp_clk_shift *clk_shift,
 	const struct dce_disp_clk_mask *clk_mask)
 {
-	struct dce_disp_clk *clk_dce = dm_alloc(sizeof(*clk_dce));
+	struct dce_disp_clk *clk_dce = kzalloc(sizeof(*clk_dce), GFP_KERNEL);
 
 	if (clk_dce == NULL) {
 		BREAK_TO_DEBUGGER();
@@ -742,7 +742,7 @@ struct display_clock *dce110_disp_clk_create(
 	const struct dce_disp_clk_shift *clk_shift,
 	const struct dce_disp_clk_mask *clk_mask)
 {
-	struct dce_disp_clk *clk_dce = dm_alloc(sizeof(*clk_dce));
+	struct dce_disp_clk *clk_dce = kzalloc(sizeof(*clk_dce), GFP_KERNEL);
 
 	if (clk_dce == NULL) {
 		BREAK_TO_DEBUGGER();
@@ -767,7 +767,7 @@ struct display_clock *dce112_disp_clk_create(
 	const struct dce_disp_clk_shift *clk_shift,
 	const struct dce_disp_clk_mask *clk_mask)
 {
-	struct dce_disp_clk *clk_dce = dm_alloc(sizeof(*clk_dce));
+	struct dce_disp_clk *clk_dce = kzalloc(sizeof(*clk_dce), GFP_KERNEL);
 
 	if (clk_dce == NULL) {
 		BREAK_TO_DEBUGGER();
@@ -788,7 +788,7 @@ struct display_clock *dce112_disp_clk_create(
 
 struct display_clock *dce120_disp_clk_create(struct dc_context *ctx)
 {
-	struct dce_disp_clk *clk_dce = dm_alloc(sizeof(*clk_dce));
+	struct dce_disp_clk *clk_dce = kzalloc(sizeof(*clk_dce), GFP_KERNEL);
 	struct dm_pp_clock_levels_with_voltage clk_level_info = {0};
 
 	if (clk_dce == NULL) {
@@ -822,6 +822,6 @@ void dce_disp_clk_destroy(struct display_clock **disp_clk)
 {
 	struct dce_disp_clk *clk_dce = TO_DCE_CLOCKS(*disp_clk);
 
-	dm_free(clk_dce);
+	kfree(clk_dce);
 	*disp_clk = NULL;
 }
