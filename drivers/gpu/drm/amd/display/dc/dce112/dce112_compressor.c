@@ -791,7 +791,7 @@ void dce112_compressor_set_fbc_invalidation_triggers(
 	dm_write_reg(compressor->ctx, addr, value);
 }
 
-bool dce112_compressor_construct(struct dce112_compressor *compressor,
+void dce112_compressor_construct(struct dce112_compressor *compressor,
 	struct dc_context *ctx)
 {
 	struct dc_bios *bp = ctx->dc_bios;
@@ -833,27 +833,22 @@ bool dce112_compressor_construct(struct dce112_compressor *compressor,
 		compressor->base.embedded_panel_v_size =
 			panel_info.lcd_timing.vertical_addressable;
 	}
-	return true;
 }
 
 struct compressor *dce112_compressor_create(struct dc_context *ctx)
 {
 	struct dce112_compressor *cp110 =
-		dm_alloc(sizeof(struct dce112_compressor));
+		kzalloc(sizeof(struct dce112_compressor), GFP_KERNEL);
 
 	if (!cp110)
 		return NULL;
 
-	if (dce112_compressor_construct(cp110, ctx))
-		return &cp110->base;
-
-	BREAK_TO_DEBUGGER();
-	dm_free(cp110);
-	return NULL;
+	dce112_compressor_construct(cp110, ctx);
+	return &cp110->base;
 }
 
 void dce112_compressor_destroy(struct compressor **compressor)
 {
-	dm_free(TO_DCE112_COMPRESSOR(*compressor));
+	kfree(TO_DCE112_COMPRESSOR(*compressor));
 	*compressor = NULL;
 }

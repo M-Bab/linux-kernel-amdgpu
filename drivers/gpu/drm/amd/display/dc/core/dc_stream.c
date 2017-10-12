@@ -56,7 +56,7 @@ static void update_stream_signal(struct dc_stream_state *stream)
 	}
 }
 
-static bool construct(struct dc_stream_state *stream,
+static void construct(struct dc_stream_state *stream,
 	struct dc_sink *dc_sink_data)
 {
 	uint32_t i = 0;
@@ -104,7 +104,6 @@ static bool construct(struct dc_stream_state *stream,
 	stream->status.link = stream->sink->link;
 
 	update_stream_signal(stream);
-	return true;
 }
 
 static void destruct(struct dc_stream_state *stream)
@@ -119,20 +118,21 @@ static void destruct(struct dc_stream_state *stream)
 
 void dc_stream_retain(struct dc_stream_state *stream)
 {
-	ASSERT(atomic_read(&stream->ref_count) > 0);
-	atomic_inc(&stream->ref_count);
+	kref_get(&stream->refcount);
+}
+
+static void dc_stream_free(struct kref *kref)
+{
+	struct dc_stream_state *stream = container_of(kref, struct dc_stream_state, refcount);
+
+	destruct(stream);
+	kfree(stream);
 }
 
 void dc_stream_release(struct dc_stream_state *stream)
 {
 	if (stream != NULL) {
-		ASSERT(atomic_read(&stream->ref_count) > 0);
-		atomic_dec(&stream->ref_count);
-
-		if (atomic_read(&stream->ref_count) == 0) {
-			destruct(stream);
-			dm_free(stream);
-		}
+		kref_put(&stream->refcount, dc_stream_free);
 	}
 }
 
@@ -142,25 +142,17 @@ struct dc_stream_state *dc_create_stream_for_sink(
 	struct dc_stream_state *stream;
 
 	if (sink == NULL)
-		goto alloc_fail;
+		return NULL;
 
-	stream = dm_alloc(sizeof(struct dc_stream_state));
+	stream = kzalloc(sizeof(struct dc_stream_state), GFP_KERNEL);
+	if (stream == NULL)
+		return NULL;
 
-	if (NULL == stream)
-		goto alloc_fail;
+	construct(stream, sink);
 
-	if (false == construct(stream, sink))
-			goto construct_fail;
-
-	atomic_inc(&stream->ref_count);
+	kref_init(&stream->refcount);
 
 	return stream;
-
-construct_fail:
-	dm_free(stream);
-
-alloc_fail:
-	return NULL;
 }
 
 struct dc_stream_status *dc_stream_get_status(
@@ -181,7 +173,7 @@ struct dc_stream_status *dc_stream_get_status(
  * Update the cursor attributes and set cursor surface address
  */
 bool dc_stream_set_cursor_attributes(
-	const struct dc_stream_state *stream,
+	struct dc_stream_state *stream,
 	const struct dc_cursor_attributes *attributes)
 {
 	int i;
@@ -197,20 +189,50 @@ bool dc_stream_set_cursor_attributes(
 			return false;
 	}
 
+	if (attributes->address.quad_part == 0) {
+		dm_error("DC: Cursor address is 0!\n");
+		return false;
+	}
+
 	core_dc = stream->ctx->dc;
 	res_ctx = &core_dc->current_state->res_ctx;
 
 	for (i = 0; i < MAX_PIPES; i++) {
 		struct pipe_ctx *pipe_ctx = &res_ctx->pipe_ctx[i];
 
-		if (pipe_ctx->stream != stream || !pipe_ctx->plane_res.ipp)
+		if (pipe_ctx->stream != stream || (!pipe_ctx->plane_res.xfm && !pipe_ctx->plane_res.dpp))
 			continue;
 		if (pipe_ctx->top_pipe && pipe_ctx->plane_state != pipe_ctx->top_pipe->plane_state)
 			continue;
 
-		pipe_ctx->plane_res.ipp->funcs->ipp_cursor_set_attributes(
-				pipe_ctx->plane_res.ipp, attributes);
+
+		if (pipe_ctx->plane_res.ipp->funcs->ipp_cursor_set_attributes != NULL)
+			pipe_ctx->plane_res.ipp->funcs->ipp_cursor_set_attributes(
+						pipe_ctx->plane_res.ipp, attributes);
+
+		if (pipe_ctx->plane_res.hubp != NULL &&
+				pipe_ctx->plane_res.hubp->funcs->set_cursor_attributes != NULL)
+			pipe_ctx->plane_res.hubp->funcs->set_cursor_attributes(
+					pipe_ctx->plane_res.hubp, attributes);
+
+		if (pipe_ctx->plane_res.mi != NULL &&
+				pipe_ctx->plane_res.mi->funcs->set_cursor_attributes != NULL)
+			pipe_ctx->plane_res.mi->funcs->set_cursor_attributes(
+					pipe_ctx->plane_res.mi, attributes);
+
+
+		if (pipe_ctx->plane_res.xfm != NULL &&
+				pipe_ctx->plane_res.xfm->funcs->set_cursor_attributes != NULL)
+			pipe_ctx->plane_res.xfm->funcs->set_cursor_attributes(
+				pipe_ctx->plane_res.xfm, attributes);
+
+		if (pipe_ctx->plane_res.dpp != NULL &&
+				pipe_ctx->plane_res.dpp->funcs->set_cursor_attributes != NULL)
+			pipe_ctx->plane_res.dpp->funcs->set_cursor_attributes(
+				pipe_ctx->plane_res.dpp, attributes);
 	}
+
+	stream->cursor_attributes = *attributes;
 
 	return true;
 }
@@ -239,6 +261,10 @@ bool dc_stream_set_cursor_position(
 	for (i = 0; i < MAX_PIPES; i++) {
 		struct pipe_ctx *pipe_ctx = &res_ctx->pipe_ctx[i];
 		struct input_pixel_processor *ipp = pipe_ctx->plane_res.ipp;
+		struct mem_input *mi = pipe_ctx->plane_res.mi;
+		struct hubp *hubp = pipe_ctx->plane_res.hubp;
+		struct transform *xfm = pipe_ctx->plane_res.xfm;
+		struct dpp *dpp = pipe_ctx->plane_res.dpp;
 		struct dc_cursor_position pos_cpy = *position;
 		struct dc_cursor_mi_param param = {
 			.pixel_clk_khz = stream->timing.pix_clk_khz,
@@ -249,7 +275,9 @@ bool dc_stream_set_cursor_position(
 		};
 
 		if (pipe_ctx->stream != stream ||
-				!pipe_ctx->plane_res.ipp || !pipe_ctx->plane_state)
+				(!pipe_ctx->plane_res.mi  && !pipe_ctx->plane_res.hubp) ||
+				!pipe_ctx->plane_state ||
+				(!pipe_ctx->plane_res.xfm && !pipe_ctx->plane_res.dpp))
 			continue;
 
 		if (pipe_ctx->plane_state->address.type
@@ -259,7 +287,22 @@ bool dc_stream_set_cursor_position(
 		if (pipe_ctx->top_pipe && pipe_ctx->plane_state != pipe_ctx->top_pipe->plane_state)
 			pos_cpy.enable = false;
 
-		ipp->funcs->ipp_cursor_set_position(ipp, &pos_cpy, &param);
+
+		if (ipp->funcs->ipp_cursor_set_position != NULL)
+			ipp->funcs->ipp_cursor_set_position(ipp, &pos_cpy, &param);
+
+		if (mi != NULL && mi->funcs->set_cursor_position != NULL)
+			mi->funcs->set_cursor_position(mi, &pos_cpy, &param);
+
+		if (hubp != NULL && hubp->funcs->set_cursor_position != NULL)
+			hubp->funcs->set_cursor_position(hubp, &pos_cpy, &param);
+
+		if (xfm != NULL && xfm->funcs->set_cursor_position != NULL)
+			xfm->funcs->set_cursor_position(xfm, &pos_cpy, &param, hubp->curs_attr.width);
+
+		if (dpp != NULL && dpp->funcs->set_cursor_position != NULL)
+			dpp->funcs->set_cursor_position(dpp, &pos_cpy, &param, hubp->curs_attr.width);
+
 	}
 
 	return true;

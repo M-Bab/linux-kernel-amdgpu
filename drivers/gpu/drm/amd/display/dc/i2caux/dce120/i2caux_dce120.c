@@ -101,25 +101,18 @@ struct i2caux *dal_i2caux_dce120_create(
 	struct dc_context *ctx)
 {
 	struct i2caux_dce110 *i2caux_dce110 =
-		dm_alloc(sizeof(struct i2caux_dce110));
+		kzalloc(sizeof(struct i2caux_dce110), GFP_KERNEL);
 
 	if (!i2caux_dce110) {
 		ASSERT_CRITICAL(false);
 		return NULL;
 	}
 
-	if (dal_i2caux_dce110_construct(
-			i2caux_dce110,
-			ctx,
-			dce120_aux_regs,
-			dce120_hw_engine_regs,
-			&i2c_shift,
-			&i2c_mask))
-		return &i2caux_dce110->base;
-
-	ASSERT_CRITICAL(false);
-
-	dm_free(i2caux_dce110);
-
-	return NULL;
+	dal_i2caux_dce110_construct(i2caux_dce110,
+				    ctx,
+				    dce120_aux_regs,
+				    dce120_hw_engine_regs,
+				    &i2c_shift,
+				    &i2c_mask);
+	return &i2caux_dce110->base;
 }

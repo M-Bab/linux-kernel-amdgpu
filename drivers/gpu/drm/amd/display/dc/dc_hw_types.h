@@ -204,6 +204,8 @@ enum surface_pixel_format {
 	/*grow 444 video here if necessary */
 };
 
+
+
 /* Pixel format */
 enum pixel_format {
 	/*graph*/
@@ -420,6 +422,7 @@ enum dc_gamma_type {
 };
 
 struct dc_gamma {
+	struct kref refcount;
 	enum dc_gamma_type type;
 	unsigned int num_entries;
 
@@ -431,9 +434,6 @@ struct dc_gamma {
 
 	/* private to DC core */
 	struct dc_context *ctx;
-
-	/* private to dc_surface.c */
-	atomic_t ref_count;
 };
 
 /* Used by both ipp amd opp functions*/

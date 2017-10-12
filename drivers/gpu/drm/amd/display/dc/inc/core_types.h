@@ -32,10 +32,10 @@
 #include "ddc_service_types.h"
 #include "dc_bios_types.h"
 #include "mem_input.h"
+#include "hubp.h"
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 #include "mpc.h"
 #endif
-#include "dwb.h"
 
 #define MAX_CLOCK_SOURCES 7
 
@@ -47,7 +47,6 @@ void enable_surface_flip_reporting(struct dc_plane_state *plane_state,
 #include "stream_encoder.h"
 #include "clock_source.h"
 #include "audio.h"
-#include "hw_sequencer_types.h"
 #include "dm_pp_smu.h"
 
 
@@ -58,6 +57,11 @@ struct link_init_data {
 	uint32_t connector_index; /* this will be mapped to the HPD pins */
 	uint32_t link_index; /* this is mapped to DAL display_index
 				TODO: remove it when DC is complete. */
+};
+
+enum {
+	FREE_ACQUIRED_RESOURCE = 0,
+	KEEP_ACQUIRED_RESOURCE = 1,
 };
 
 struct dc_link *link_create(const struct link_init_data *init_params);
@@ -74,12 +78,13 @@ void core_link_enable_stream(
 		struct dc_state *state,
 		struct pipe_ctx *pipe_ctx);
 
-void core_link_disable_stream(struct pipe_ctx *pipe_ctx);
+void core_link_disable_stream(struct pipe_ctx *pipe_ctx, int option);
 
 void core_link_set_avmute(struct pipe_ctx *pipe_ctx, bool enable);
 /********** DAL Core*********************/
 #include "display_clock.h"
 #include "transform.h"
+#include "dpp.h"
 
 struct resource_pool;
 struct dc_state;
@@ -108,7 +113,7 @@ struct resource_funcs {
 			const struct resource_pool *pool,
 			struct dc_stream_state *stream);
 
-	enum dc_status (*validate_plane)(const struct dc_plane_state *plane_state);
+	enum dc_status (*validate_plane)(const struct dc_plane_state *plane_state, struct dc_caps *caps);
 
 	enum dc_status (*add_stream_to_ctx)(
 			struct dc *dc,
@@ -126,8 +131,10 @@ struct audio_support{
 
 struct resource_pool {
 	struct mem_input *mis[MAX_PIPES];
+	struct hubp *hubps[MAX_PIPES];
 	struct input_pixel_processor *ipps[MAX_PIPES];
 	struct transform *transforms[MAX_PIPES];
+	struct dpp *dpps[MAX_PIPES];
 	struct output_pixel_processor *opps[MAX_PIPES];
 	struct timing_generator *timing_generators[MAX_PIPES];
 	struct stream_encoder *stream_enc[MAX_PIPES * 2];
@@ -135,8 +142,6 @@ struct resource_pool {
 	struct mpc *mpc;
 	struct pp_smu_funcs_rv *pp_smu;
 	struct pp_smu_display_requirement_rv pp_smu_req;
-
-	struct dwbc *dwbc[MAX_DWB_PIPES];
 
 	unsigned int pipe_count;
 	unsigned int underlay_pipe_index;
@@ -177,10 +182,11 @@ struct stream_resource {
 
 struct plane_resource {
 	struct scaler_data scl_data;
-
+	struct hubp *hubp;
 	struct mem_input *mi;
 	struct input_pixel_processor *ipp;
 	struct transform *xfm;
+	struct dpp *dpp;
 };
 
 struct pipe_ctx {
@@ -271,7 +277,7 @@ struct dc_state {
 
 	struct display_clock *dis_clk;
 
-	atomic_t ref_count;
+	struct kref refcount;
 };
 
 #endif /* _CORE_TYPES_H_ */

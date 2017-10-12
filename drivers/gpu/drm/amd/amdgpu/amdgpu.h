@@ -104,6 +104,7 @@ extern int amdgpu_vm_fault_stop;
 extern int amdgpu_vm_debug;
 extern int amdgpu_vm_update_mode;
 extern int amdgpu_dc;
+extern int amdgpu_dc_log;
 extern int amdgpu_sched_jobs;
 extern int amdgpu_sched_hw_submission;
 extern int amdgpu_no_evict;
@@ -735,10 +736,14 @@ struct amdgpu_ctx {
 	struct amdgpu_device    *adev;
 	struct amdgpu_queue_mgr queue_mgr;
 	unsigned		reset_counter;
+	uint32_t		vram_lost_counter;
 	spinlock_t		ring_lock;
 	struct dma_fence	**fences;
 	struct amdgpu_ctx_ring	rings[AMDGPU_MAX_RINGS];
-	bool preamble_presented;
+	bool			preamble_presented;
+	enum amd_sched_priority init_priority;
+	enum amd_sched_priority override_priority;
+	struct mutex            lock;
 };
 
 struct amdgpu_ctx_mgr {
@@ -755,12 +760,17 @@ int amdgpu_ctx_add_fence(struct amdgpu_ctx *ctx, struct amdgpu_ring *ring,
 			      struct dma_fence *fence, uint64_t *seq);
 struct dma_fence *amdgpu_ctx_get_fence(struct amdgpu_ctx *ctx,
 				   struct amdgpu_ring *ring, uint64_t seq);
+void amdgpu_ctx_priority_override(struct amdgpu_ctx *ctx,
+				  enum amd_sched_priority priority);
 
 int amdgpu_ctx_ioctl(struct drm_device *dev, void *data,
 		     struct drm_file *filp);
 
+int amdgpu_ctx_wait_prev_fence(struct amdgpu_ctx *ctx, unsigned ring_id);
+
 void amdgpu_ctx_mgr_init(struct amdgpu_ctx_mgr *mgr);
 void amdgpu_ctx_mgr_fini(struct amdgpu_ctx_mgr *mgr);
+
 
 /*
  * file private structure
@@ -773,7 +783,6 @@ struct amdgpu_fpriv {
 	struct mutex		bo_list_lock;
 	struct idr		bo_list_handles;
 	struct amdgpu_ctx_mgr	ctx_mgr;
-	u32			vram_lost_counter;
 };
 
 /*
@@ -1038,6 +1047,10 @@ struct amdgpu_gfx {
 	bool                            in_suspend;
 	/* NGG */
 	struct amdgpu_ngg		ngg;
+
+	/* pipe reservation */
+	struct mutex			pipe_reserve_mutex;
+	DECLARE_BITMAP			(pipe_reserve_bitmap, AMDGPU_MAX_COMPUTE_QUEUES);
 };
 
 int amdgpu_ib_get(struct amdgpu_device *adev, struct amdgpu_vm *vm,
@@ -1116,6 +1129,7 @@ struct amdgpu_job {
 	uint32_t		gds_base, gds_size;
 	uint32_t		gws_base, gws_size;
 	uint32_t		oa_base, oa_size;
+	uint32_t		vram_lost_counter;
 
 	/* user fence handling */
 	uint64_t		uf_addr;
@@ -1385,6 +1399,18 @@ struct amdgpu_atcs {
 };
 
 /*
+ * Firmware VRAM reservation
+ */
+struct amdgpu_fw_vram_usage {
+	u64 start_offset;
+	u64 size;
+	struct amdgpu_bo *reserved_bo;
+	void *va;
+};
+
+int amdgpu_fw_reserve_vram_init(struct amdgpu_device *adev);
+
+/*
  * CGS
  */
 struct cgs_device *amdgpu_cgs_create_device(struct amdgpu_device *adev);
@@ -1599,6 +1625,8 @@ struct amdgpu_device {
 	struct delayed_work     late_init_work;
 
 	struct amdgpu_virt	virt;
+	/* firmware VRAM reservation */
+	struct amdgpu_fw_vram_usage fw_vram_usage;
 
 	/* link all shadow bo */
 	struct list_head                shadow_list;
@@ -1853,8 +1881,6 @@ static inline bool amdgpu_has_atpx(void) { return false; }
 extern const struct drm_ioctl_desc amdgpu_ioctls_kms[];
 extern const int amdgpu_max_kms_ioctl;
 
-bool amdgpu_kms_vram_lost(struct amdgpu_device *adev,
-			  struct amdgpu_fpriv *fpriv);
 int amdgpu_driver_load_kms(struct drm_device *dev, unsigned long flags);
 void amdgpu_driver_unload_kms(struct drm_device *dev);
 void amdgpu_driver_lastclose_kms(struct drm_device *dev);

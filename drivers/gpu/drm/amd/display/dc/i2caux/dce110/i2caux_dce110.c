@@ -68,7 +68,7 @@ static void destroy(
 
 	destruct(i2caux_dce110);
 
-	dm_free(i2caux_dce110);
+	kfree(i2caux_dce110);
 
 	*i2c_engine = NULL;
 }
@@ -196,7 +196,7 @@ static const struct dce110_i2c_hw_engine_mask i2c_mask = {
 		I2C_COMMON_MASK_SH_LIST_DCE110(_MASK)
 };
 
-bool dal_i2caux_dce110_construct(
+void dal_i2caux_dce110_construct(
 	struct i2caux_dce110 *i2caux_dce110,
 	struct dc_context *ctx,
 	const struct dce110_aux_registers aux_regs[],
@@ -217,10 +217,7 @@ bool dal_i2caux_dce110_construct(
 
 	base = &i2caux_dce110->base;
 
-	if (!dal_i2caux_construct(base, ctx)) {
-		ASSERT_CRITICAL(false);
-		return false;
-	}
+	dal_i2caux_construct(base, ctx);
 
 	i2caux_dce110->base.funcs = &i2caux_funcs;
 	i2caux_dce110->i2c_hw_buffer_in_use = false;
@@ -278,8 +275,6 @@ bool dal_i2caux_dce110_construct(
 	} while (i < ARRAY_SIZE(hw_aux_lines));
 
 	/*TODO Generic I2C SW and HW*/
-
-	return true;
 }
 
 /*
@@ -299,25 +294,18 @@ struct i2caux *dal_i2caux_dce110_create(
 	struct dc_context *ctx)
 {
 	struct i2caux_dce110 *i2caux_dce110 =
-		dm_alloc(sizeof(struct i2caux_dce110));
+		kzalloc(sizeof(struct i2caux_dce110), GFP_KERNEL);
 
 	if (!i2caux_dce110) {
 		ASSERT_CRITICAL(false);
 		return NULL;
 	}
 
-	if (dal_i2caux_dce110_construct(
-			i2caux_dce110,
-			ctx,
-			dce110_aux_regs,
-			i2c_hw_engine_regs,
-			&i2c_shift,
-			&i2c_mask))
-		return &i2caux_dce110->base;
-
-	ASSERT_CRITICAL(false);
-
-	dm_free(i2caux_dce110);
-
-	return NULL;
+	dal_i2caux_dce110_construct(i2caux_dce110,
+				    ctx,
+				    dce110_aux_regs,
+				    i2c_hw_engine_regs,
+				    &i2c_shift,
+				    &i2c_mask);
+	return &i2caux_dce110->base;
 }

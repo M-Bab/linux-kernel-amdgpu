@@ -82,10 +82,6 @@
 #include <asm/fpu/api.h>
 #endif
 
-#define dm_alloc(size) kzalloc(size, GFP_KERNEL)
-#define dm_realloc(ptr, size) krealloc(ptr, size, GFP_KERNEL)
-#define dm_free(ptr) kfree(ptr)
-
 irq_handler_idx dm_register_interrupt(
 	struct dc_context *ctx,
 	struct dc_interrupt_params *int_params,
@@ -99,6 +95,9 @@ irq_handler_idx dm_register_interrupt(
  *
  */
 
+/* enable for debugging new code, this adds 50k to the driver size. */
+/* #define DM_CHECK_ADDR_0 */
+
 #define dm_read_reg(ctx, address)	\
 		dm_read_reg_func(ctx, address, __func__)
 
@@ -108,12 +107,12 @@ static inline uint32_t dm_read_reg_func(
 	const char *func_name)
 {
 	uint32_t value;
-
+#ifdef DM_CHECK_ADDR_0
 	if (address == 0) {
 		DC_ERR("invalid register read; address = 0\n");
 		return 0;
 	}
-
+#endif
 	value = cgs_read_register(ctx->cgs_device, address);
 
 	return value;
@@ -128,10 +127,12 @@ static inline void dm_write_reg_func(
 	uint32_t value,
 	const char *func_name)
 {
+#ifdef DM_CHECK_ADDR_0
 	if (address == 0) {
 		DC_ERR("invalid register write. address = 0");
 		return;
 	}
+#endif
 	cgs_write_register(ctx->cgs_device, address, value);
 }
 
@@ -233,52 +234,6 @@ unsigned int generic_reg_wait(const struct dc_context *ctx,
 		(value),\
 		block ## reg_num ## _ ## reg_name ## __ ## reg_field ## _MASK,\
 		block ## reg_num ## _ ## reg_name ## __ ## reg_field ## __SHIFT)
-
-/* TODO get rid of this pos*/
-static inline bool wait_reg_func(
-	const struct dc_context *ctx,
-	uint32_t addr,
-	uint32_t mask,
-	uint8_t shift,
-	uint32_t condition_value,
-	unsigned int interval_us,
-	unsigned int timeout_us)
-{
-	uint32_t field_value;
-	uint32_t reg_val;
-	unsigned int count = 0;
-
-	if (IS_FPGA_MAXIMUS_DC(ctx->dce_environment))
-		timeout_us *= 655;  /* 6553 give about 30 second before time out */
-
-	do {
-		/* try once without sleeping */
-		if (count > 0) {
-			if (interval_us >= 1000)
-				msleep(interval_us/1000);
-			else
-				udelay(interval_us);
-		}
-		reg_val = dm_read_reg(ctx, addr);
-		field_value = get_reg_field_value_ex(reg_val, mask, shift);
-		count += interval_us;
-
-	} while (field_value != condition_value && count <= timeout_us);
-
-	ASSERT(count <= timeout_us);
-
-	return count <= timeout_us;
-}
-
-#define wait_reg(ctx, inst_offset, reg_name, reg_field, condition_value)\
-	wait_reg_func(\
-		ctx,\
-		mm##reg_name + inst_offset + DCE_BASE.instance[0].segment[mm##reg_name##_BASE_IDX],\
-		reg_name ## __ ## reg_field ## _MASK,\
-		reg_name ## __ ## reg_field ## __SHIFT,\
-		condition_value,\
-		20000,\
-		200000)
 
 /**************************************
  * Power Play (PP) interfaces
@@ -448,9 +403,6 @@ bool dm_read_persistent_data(struct dc_context *ctx,
 		unsigned int size,
 		struct persistent_data_flag *flag);
 
-void dm_delay_in_microseconds
-	(struct dc_context *ctx, unsigned int microSeconds);
-
 bool dm_query_extended_brightness_caps
 	(struct dc_context *ctx, enum dm_acpi_display_type display,
 			struct dm_acpi_atif_backlight_caps *pCaps);
@@ -464,6 +416,8 @@ bool dm_dmcu_set_pipe(struct dc_context *ctx, unsigned int controller_id);
  */
 #define dm_log_to_buffer(buffer, size, fmt, args)\
 	vsnprintf(buffer, size, fmt, args)
+
+unsigned long long dm_get_timestamp(struct dc_context *ctx);
 
 /*
  * Debug and verification hooks

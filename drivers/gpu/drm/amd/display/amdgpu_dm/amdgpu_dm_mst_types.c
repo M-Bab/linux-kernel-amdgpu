@@ -56,11 +56,11 @@ static inline char *side_band_msg_type_to_str(uint32_t address)
 	return str;
 }
 
-void log_dpcd(uint8_t type,
-		uint32_t address,
-		uint8_t *data,
-		uint32_t size,
-		bool res)
+static void log_dpcd(uint8_t type,
+		     uint32_t address,
+		     uint8_t *data,
+		     uint32_t size,
+		     bool res)
 {
 	DRM_DEBUG_KMS("Op: %s, addr: %04x, SideBand Msg: %s, Op res: %s\n",
 			(type == DP_AUX_NATIVE_READ) ||
@@ -77,9 +77,11 @@ void log_dpcd(uint8_t type,
 }
 #endif
 
-static ssize_t dm_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg *msg)
+static ssize_t dm_dp_aux_transfer(struct drm_dp_aux *aux,
+				  struct drm_dp_aux_msg *msg)
 {
-	enum i2c_mot_mode mot = (msg->request & DP_AUX_I2C_MOT) ? I2C_MOT_TRUE : I2C_MOT_FALSE;
+	enum i2c_mot_mode mot = (msg->request & DP_AUX_I2C_MOT) ?
+		I2C_MOT_TRUE : I2C_MOT_FALSE;
 	enum ddc_result res;
 
 	switch (msg->request & ~DP_AUX_I2C_MOT) {
@@ -125,10 +127,10 @@ static ssize_t dm_dp_aux_transfer(struct drm_dp_aux *aux, struct drm_dp_aux_msg 
 
 #ifdef TRACE_DPCD
 	log_dpcd(msg->request,
-			msg->address,
-			msg->buffer,
-			msg->size,
-			r == DDC_RESULT_SUCESSFULL);
+		 msg->address,
+		 msg->buffer,
+		 msg->size,
+		 r == DDC_RESULT_SUCESSFULL);
 #endif
 
 	return msg->size;
@@ -172,14 +174,60 @@ static const struct drm_connector_funcs dm_dp_mst_connector_funcs = {
 	.atomic_get_property = amdgpu_dm_connector_atomic_get_property
 };
 
+static int dm_connector_update_modes(struct drm_connector *connector,
+				struct edid *edid)
+{
+	int ret;
+
+	ret = drm_add_edid_modes(connector, edid);
+	drm_edid_to_eld(connector, edid);
+
+	return ret;
+}
+
 static int dm_dp_mst_get_modes(struct drm_connector *connector)
 {
 	struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
 	int ret = 0;
 
-	ret = drm_add_edid_modes(&aconnector->base, aconnector->edid);
+	if (!aconnector)
+		return dm_connector_update_modes(connector, NULL);
 
-	drm_edid_to_eld(&aconnector->base, aconnector->edid);
+	if (!aconnector->edid) {
+		struct edid *edid;
+		struct dc_sink *dc_sink;
+		struct dc_sink_init_data init_params = {
+				.link = aconnector->dc_link,
+				.sink_signal = SIGNAL_TYPE_DISPLAY_PORT_MST };
+		edid = drm_dp_mst_get_edid(connector, &aconnector->mst_port->mst_mgr, aconnector->port);
+
+		if (!edid) {
+			drm_mode_connector_update_edid_property(
+				&aconnector->base,
+				NULL);
+			return ret;
+		}
+
+		aconnector->edid = edid;
+
+		dc_sink = dc_link_add_remote_sink(
+			aconnector->dc_link,
+			(uint8_t *)edid,
+			(edid->extensions + 1) * EDID_LENGTH,
+			&init_params);
+
+		dc_sink->priv = aconnector;
+		aconnector->dc_sink = dc_sink;
+
+		if (aconnector->dc_sink)
+			amdgpu_dm_add_sink_to_freesync_module(
+					connector, edid);
+
+		drm_mode_connector_update_edid_property(
+						&aconnector->base, edid);
+	}
+
+	ret = dm_connector_update_modes(connector, aconnector->edid);
 
 	return ret;
 }
@@ -229,18 +277,20 @@ dm_dp_create_fake_mst_encoder(struct amdgpu_dm_connector *connector)
 	return amdgpu_encoder;
 }
 
-static struct drm_connector *dm_dp_add_mst_connector(struct drm_dp_mst_topology_mgr *mgr,
-							 struct drm_dp_mst_port *port,
-							 const char *pathprop)
+static struct drm_connector *
+dm_dp_add_mst_connector(struct drm_dp_mst_topology_mgr *mgr,
+			struct drm_dp_mst_port *port,
+			const char *pathprop)
 {
 	struct amdgpu_dm_connector *master = container_of(mgr, struct amdgpu_dm_connector, mst_mgr);
 	struct drm_device *dev = master->base.dev;
 	struct amdgpu_device *adev = dev->dev_private;
 	struct amdgpu_dm_connector *aconnector;
 	struct drm_connector *connector;
+	struct drm_connector_list_iter conn_iter;
 
-	drm_modeset_lock(&dev->mode_config.connection_mutex, NULL);
-	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
+	drm_connector_list_iter_begin(dev, &conn_iter);
+	drm_for_each_connector_iter(connector, &conn_iter) {
 		aconnector = to_amdgpu_dm_connector(connector);
 		if (aconnector->mst_port == master
 				&& !aconnector->port) {
@@ -250,11 +300,11 @@ static struct drm_connector *dm_dp_add_mst_connector(struct drm_dp_mst_topology_
 			aconnector->port = port;
 			drm_mode_connector_set_path_property(connector, pathprop);
 
-			drm_modeset_unlock(&dev->mode_config.connection_mutex);
+			drm_connector_list_iter_end(&conn_iter);
 			return &aconnector->base;
 		}
 	}
-	drm_modeset_unlock(&dev->mode_config.connection_mutex);
+	drm_connector_list_iter_end(&conn_iter);
 
 	aconnector = kzalloc(sizeof(*aconnector), GFP_KERNEL);
 	if (!aconnector)
@@ -311,9 +361,8 @@ static struct drm_connector *dm_dp_add_mst_connector(struct drm_dp_mst_topology_
 	return connector;
 }
 
-static void dm_dp_destroy_mst_connector(
-	struct drm_dp_mst_topology_mgr *mgr,
-	struct drm_connector *connector)
+static void dm_dp_destroy_mst_connector(struct drm_dp_mst_topology_mgr *mgr,
+					struct drm_connector *connector)
 {
 	struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
 
@@ -341,91 +390,19 @@ static void dm_dp_mst_hotplug(struct drm_dp_mst_topology_mgr *mgr)
 {
 	struct amdgpu_dm_connector *master = container_of(mgr, struct amdgpu_dm_connector, mst_mgr);
 	struct drm_device *dev = master->base.dev;
-	struct amdgpu_device *adev = dev->dev_private;
-	struct drm_connector *connector;
-	struct amdgpu_dm_connector *aconnector;
-	struct edid *edid;
-	struct dc_sink *dc_sink;
 
-	drm_modeset_lock_all(dev);
-	list_for_each_entry(connector, &dev->mode_config.connector_list, head) {
-		aconnector = to_amdgpu_dm_connector(connector);
-		if (aconnector->port &&
-				aconnector->port->pdt != DP_PEER_DEVICE_NONE &&
-				aconnector->port->pdt != DP_PEER_DEVICE_MST_BRANCHING &&
-				!aconnector->dc_sink) {
-			/*
-			 * This is plug in case, where port has been created but
-			 * sink hasn't been created yet
-			 */
-			if (!aconnector->edid) {
-				struct dc_sink_init_data init_params = {
-						.link = aconnector->dc_link,
-						.sink_signal = SIGNAL_TYPE_DISPLAY_PORT_MST};
-				edid = drm_dp_mst_get_edid(connector, &aconnector->mst_port->mst_mgr, aconnector->port);
-
-				if (!edid) {
-					drm_mode_connector_update_edid_property(
-						&aconnector->base,
-						NULL);
-					continue;
-				}
-
-				aconnector->edid = edid;
-
-				dc_sink = dc_link_add_remote_sink(
-					aconnector->dc_link,
-					(uint8_t *)edid,
-					(edid->extensions + 1) * EDID_LENGTH,
-					&init_params);
-
-				dc_sink->priv = aconnector;
-				aconnector->dc_sink = dc_sink;
-
-				if (aconnector->dc_sink)
-					amdgpu_dm_add_sink_to_freesync_module(
-							connector,
-							edid);
-
-				dm_restore_drm_connector_state(connector->dev, connector);
-			} else
-				edid = aconnector->edid;
-
-			DRM_DEBUG_KMS("edid retrieved %p\n", edid);
-
-			drm_mode_connector_update_edid_property(
-				&aconnector->base,
-				aconnector->edid);
-		}
-	}
-	drm_modeset_unlock_all(dev);
-
-	schedule_work(&adev->dm.mst_hotplug_work);
+	drm_kms_helper_hotplug_event(dev);
 }
 
 static void dm_dp_mst_register_connector(struct drm_connector *connector)
 {
 	struct drm_device *dev = connector->dev;
 	struct amdgpu_device *adev = dev->dev_private;
-	int i;
 
-	drm_modeset_lock_all(dev);
-	if (adev->mode_info.rfbdev) {
-		/*Do not add if already registered in past*/
-		for (i = 0; i < adev->mode_info.rfbdev->helper.connector_count; i++) {
-			if (adev->mode_info.rfbdev->helper.connector_info[i]->connector
-					== connector) {
-				drm_modeset_unlock_all(dev);
-				return;
-			}
-		}
-
+	if (adev->mode_info.rfbdev)
 		drm_fb_helper_add_one_connector(&adev->mode_info.rfbdev->helper, connector);
-	}
 	else
 		DRM_ERROR("adev->mode_info.rfbdev is NULL\n");
-
-	drm_modeset_unlock_all(dev);
 
 	drm_connector_register(connector);
 
@@ -438,9 +415,8 @@ static const struct drm_dp_mst_topology_cbs dm_mst_cbs = {
 	.register_connector = dm_dp_mst_register_connector
 };
 
-void amdgpu_dm_initialize_dp_connector(
-	struct amdgpu_display_manager *dm,
-	struct amdgpu_dm_connector *aconnector)
+void amdgpu_dm_initialize_dp_connector(struct amdgpu_display_manager *dm,
+				       struct amdgpu_dm_connector *aconnector)
 {
 	aconnector->dm_dp_aux.aux.name = "dmdc";
 	aconnector->dm_dp_aux.aux.dev = dm->adev->dev;

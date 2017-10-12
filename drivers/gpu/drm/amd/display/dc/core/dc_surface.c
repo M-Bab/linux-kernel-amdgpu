@@ -30,16 +30,14 @@
 /* DC core (private) */
 #include "core_types.h"
 #include "transform.h"
+#include "dpp.h"
 
 /*******************************************************************************
  * Private functions
  ******************************************************************************/
-static bool construct(struct dc_context *ctx, struct dc_plane_state *plane_state)
+static void construct(struct dc_context *ctx, struct dc_plane_state *plane_state)
 {
 	plane_state->ctx = ctx;
-	memset(&plane_state->hdr_static_ctx,
-			0, sizeof(struct dc_hdr_static_metadata));
-	return true;
 }
 
 static void destruct(struct dc_plane_state *plane_state)
@@ -68,23 +66,16 @@ struct dc_plane_state *dc_create_plane_state(struct dc *dc)
 {
 	struct dc *core_dc = dc;
 
-	struct dc_plane_state *plane_state = dm_alloc(sizeof(*plane_state));
+	struct dc_plane_state *plane_state = kzalloc(sizeof(*plane_state),
+						     GFP_KERNEL);
 
 	if (NULL == plane_state)
-		goto alloc_fail;
+		return NULL;
 
-	if (false == construct(core_dc->ctx, plane_state))
-		goto construct_fail;
-
-	atomic_inc(&plane_state->ref_count);
+	kref_init(&plane_state->refcount);
+	construct(core_dc->ctx, plane_state);
 
 	return plane_state;
-
-construct_fail:
-	dm_free(plane_state);
-
-alloc_fail:
-	return NULL;
 }
 
 const struct dc_plane_status *dc_plane_get_status(
@@ -122,47 +113,46 @@ const struct dc_plane_status *dc_plane_get_status(
 
 void dc_plane_state_retain(struct dc_plane_state *plane_state)
 {
-	ASSERT(atomic_read(&plane_state->ref_count) > 0);
-	atomic_inc(&plane_state->ref_count);
+	kref_get(&plane_state->refcount);
+}
+
+static void dc_plane_state_free(struct kref *kref)
+{
+	struct dc_plane_state *plane_state = container_of(kref, struct dc_plane_state, refcount);
+	destruct(plane_state);
+	kfree(plane_state);
 }
 
 void dc_plane_state_release(struct dc_plane_state *plane_state)
 {
-	ASSERT(atomic_read(&plane_state->ref_count) > 0);
-	atomic_dec(&plane_state->ref_count);
-
-	if (atomic_read(&plane_state->ref_count) == 0) {
-		destruct(plane_state);
-		dm_free(plane_state);
-	}
+	kref_put(&plane_state->refcount, dc_plane_state_free);
 }
 
 void dc_gamma_retain(struct dc_gamma *gamma)
 {
-	ASSERT(atomic_read(&gamma->ref_count) > 0);
-	atomic_inc(&gamma->ref_count);
+	kref_get(&gamma->refcount);
+}
+
+static void dc_gamma_free(struct kref *kref)
+{
+	struct dc_gamma *gamma = container_of(kref, struct dc_gamma, refcount);
+	kfree(gamma);
 }
 
 void dc_gamma_release(struct dc_gamma **gamma)
 {
-	ASSERT(atomic_read(&(*gamma)->ref_count) > 0);
-	atomic_dec(&(*gamma)->ref_count);
-
-	if (atomic_read(&(*gamma)->ref_count) == 0)
-		dm_free((*gamma));
-
+	kref_put(&(*gamma)->refcount, dc_gamma_free);
 	*gamma = NULL;
 }
 
 struct dc_gamma *dc_create_gamma()
 {
-	struct dc_gamma *gamma = dm_alloc(sizeof(*gamma));
+	struct dc_gamma *gamma = kzalloc(sizeof(*gamma), GFP_KERNEL);
 
 	if (gamma == NULL)
 		goto alloc_fail;
 
-	atomic_inc(&gamma->ref_count);
-
+	kref_init(&gamma->refcount);
 	return gamma;
 
 alloc_fail:
@@ -171,27 +161,28 @@ alloc_fail:
 
 void dc_transfer_func_retain(struct dc_transfer_func *tf)
 {
-	ASSERT(atomic_read(&tf->ref_count) > 0);
-	atomic_inc(&tf->ref_count);
+	kref_get(&tf->refcount);
+}
+
+static void dc_transfer_func_free(struct kref *kref)
+{
+	struct dc_transfer_func *tf = container_of(kref, struct dc_transfer_func, refcount);
+	kfree(tf);
 }
 
 void dc_transfer_func_release(struct dc_transfer_func *tf)
 {
-	ASSERT(atomic_read(&tf->ref_count) > 0);
-	atomic_dec(&tf->ref_count);
-
-	if (atomic_read(&tf->ref_count) == 0)
-		dm_free(tf);
+	kref_put(&tf->refcount, dc_transfer_func_free);
 }
 
 struct dc_transfer_func *dc_create_transfer_func()
 {
-	struct dc_transfer_func *tf = dm_alloc(sizeof(*tf));
+	struct dc_transfer_func *tf = kzalloc(sizeof(*tf), GFP_KERNEL);
 
 	if (tf == NULL)
 		goto alloc_fail;
 
-	atomic_inc(&tf->ref_count);
+	kref_init(&tf->refcount);
 
 	return tf;
 

@@ -137,7 +137,7 @@ static void dce_dmcu_set_psr_enable(struct dmcu *dmcu, bool enable, bool wait)
 					if (psr_state == 0)
 						break;
 				}
-				dm_delay_in_microseconds(dmcu->ctx, 10);
+				udelay(10);
 		}
 	}
 }
@@ -378,7 +378,7 @@ static void dcn10_dmcu_set_psr_enable(struct dmcu *dmcu, bool enable, bool wait)
 			if (psr_state == 0)
 				break;
 		}
-		dm_delay_in_microseconds(dmcu->ctx, 500);
+		udelay(500);
 	}
 
 	/* assert if max retry hit */
@@ -573,7 +573,7 @@ struct dmcu *dce_dmcu_create(
 	const struct dce_dmcu_shift *dmcu_shift,
 	const struct dce_dmcu_mask *dmcu_mask)
 {
-	struct dce_dmcu *dmcu_dce = dm_alloc(sizeof(*dmcu_dce));
+	struct dce_dmcu *dmcu_dce = kzalloc(sizeof(*dmcu_dce), GFP_KERNEL);
 
 	if (dmcu_dce == NULL) {
 		BREAK_TO_DEBUGGER();
@@ -595,7 +595,7 @@ struct dmcu *dcn10_dmcu_create(
 	const struct dce_dmcu_shift *dmcu_shift,
 	const struct dce_dmcu_mask *dmcu_mask)
 {
-	struct dce_dmcu *dmcu_dce = dm_alloc(sizeof(*dmcu_dce));
+	struct dce_dmcu *dmcu_dce = kzalloc(sizeof(*dmcu_dce), GFP_KERNEL);
 
 	if (dmcu_dce == NULL) {
 		BREAK_TO_DEBUGGER();
@@ -615,6 +615,6 @@ void dce_dmcu_destroy(struct dmcu **dmcu)
 {
 	struct dce_dmcu *dmcu_dce = TO_DCE_DMCU(*dmcu);
 
-	dm_free(dmcu_dce);
+	kfree(dmcu_dce);
 	*dmcu = NULL;
 }

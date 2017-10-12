@@ -59,7 +59,7 @@ static void destroy(
 {
 	destruct(*i2c_engine);
 
-	dm_free(*i2c_engine);
+	kfree(*i2c_engine);
 
 	*i2c_engine = NULL;
 }
@@ -73,36 +73,25 @@ static const struct i2caux_funcs i2caux_funcs = {
 	.acquire_aux_engine = NULL,
 };
 
-static bool construct(
+static void construct(
 	struct i2caux *i2caux,
 	struct dc_context *ctx)
 {
-	if (!dal_i2caux_construct(i2caux, ctx)) {
-		ASSERT_CRITICAL(false);
-		return false;
-	}
-
+	dal_i2caux_construct(i2caux, ctx);
 	i2caux->funcs = &i2caux_funcs;
-
-	return true;
 }
 
 struct i2caux *dal_i2caux_diag_fpga_create(
 	struct dc_context *ctx)
 {
-	struct i2caux *i2caux =	dm_alloc(sizeof(struct i2caux));
+	struct i2caux *i2caux =	kzalloc(sizeof(struct i2caux),
+					       GFP_KERNEL);
 
 	if (!i2caux) {
 		ASSERT_CRITICAL(false);
 		return NULL;
 	}
 
-	if (construct(i2caux, ctx))
-		return i2caux;
-
-	ASSERT_CRITICAL(false);
-
-	dm_free(i2caux);
-
-	return NULL;
+	construct(i2caux, ctx);
+	return i2caux;
 }

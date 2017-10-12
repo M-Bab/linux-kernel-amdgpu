@@ -1238,8 +1238,8 @@ void dce110_timing_generator_setup_global_swap_lock(
 			DCP_GSL_CONTROL,
 			DCP_GSL_HSYNC_FLIP_FORCE_DELAY);
 
-        /* Keep signal low (pending high) during 6 lines.
-         * Also defines minimum interval before re-checking signal. */
+	/* Keep signal low (pending high) during 6 lines.
+	 * Also defines minimum interval before re-checking signal. */
 	set_reg_field_value(value,
 			HFLIP_CHECK_DELAY,
 			DCP_GSL_CONTROL,
@@ -1941,15 +1941,12 @@ static const struct timing_generator_funcs dce110_tg_funcs = {
 		.arm_vert_intr = dce110_arm_vert_intr,
 };
 
-bool dce110_timing_generator_construct(
+void dce110_timing_generator_construct(
 	struct dce110_timing_generator *tg110,
 	struct dc_context *ctx,
 	uint32_t instance,
 	const struct dce110_timing_generator_offsets *offsets)
 {
-	if (!tg110)
-		return false;
-
 	tg110->controller_id = CONTROLLER_ID_D0 + instance;
 	tg110->base.inst = instance;
 
@@ -1966,6 +1963,4 @@ bool dce110_timing_generator_construct(
 	tg110->min_h_blank = 56;
 	tg110->min_h_front_porch = 4;
 	tg110->min_h_back_porch = 4;
-
-	return true;
 }

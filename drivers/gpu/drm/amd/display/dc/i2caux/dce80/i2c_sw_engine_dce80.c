@@ -103,7 +103,7 @@ static void destroy(
 
 	destruct(sw_engine);
 
-	dm_free(sw_engine);
+	kfree(sw_engine);
 
 	*engine = NULL;
 }
@@ -133,7 +133,7 @@ static const struct engine_funcs engine_funcs = {
 	.submit_request = dal_i2c_sw_engine_submit_request,
 };
 
-static bool construct(
+static void construct(
 	struct i2c_sw_engine_dce80 *engine,
 	const struct i2c_sw_engine_dce80_create_arg *arg)
 {
@@ -142,17 +142,12 @@ static bool construct(
 	arg_base.ctx = arg->ctx;
 	arg_base.default_speed = arg->default_speed;
 
-	if (!dal_i2c_sw_engine_construct(&engine->base, &arg_base)) {
-		BREAK_TO_DEBUGGER();
-		return false;
-	}
+	dal_i2c_sw_engine_construct(&engine->base, &arg_base);
 
 	engine->base.base.base.funcs = &engine_funcs;
 	engine->base.base.funcs = &i2c_engine_funcs;
 	engine->base.default_speed = arg->default_speed;
 	engine->engine_id = arg->engine_id;
-
-	return true;
 }
 
 struct i2c_engine *dal_i2c_sw_engine_dce80_create(
@@ -165,20 +160,14 @@ struct i2c_engine *dal_i2c_sw_engine_dce80_create(
 		return NULL;
 	}
 
-	engine = dm_alloc(sizeof(struct i2c_sw_engine_dce80));
+	engine = kzalloc(sizeof(struct i2c_sw_engine_dce80), GFP_KERNEL);
 
 	if (!engine) {
 		BREAK_TO_DEBUGGER();
 		return NULL;
 	}
 
-	if (construct(engine, arg))
-		return &engine->base.base;
-
-	BREAK_TO_DEBUGGER();
-
-	dm_free(engine);
-
-	return NULL;
+	construct(engine, arg);
+	return &engine->base.base;
 }
 

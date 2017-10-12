@@ -126,11 +126,11 @@ struct aux_payloads {
 	struct vector payloads;
 };
 
-struct i2c_payloads *dal_ddc_i2c_payloads_create(struct dc_context *ctx, uint32_t count)
+static struct i2c_payloads *dal_ddc_i2c_payloads_create(struct dc_context *ctx, uint32_t count)
 {
 	struct i2c_payloads *payloads;
 
-	payloads = dm_alloc(sizeof(struct i2c_payloads));
+	payloads = kzalloc(sizeof(struct i2c_payloads), GFP_KERNEL);
 
 	if (!payloads)
 		return NULL;
@@ -139,36 +139,36 @@ struct i2c_payloads *dal_ddc_i2c_payloads_create(struct dc_context *ctx, uint32_
 		&payloads->payloads, ctx, count, sizeof(struct i2c_payload)))
 		return payloads;
 
-	dm_free(payloads);
+	kfree(payloads);
 	return NULL;
 
 }
 
-struct i2c_payload *dal_ddc_i2c_payloads_get(struct i2c_payloads *p)
+static struct i2c_payload *dal_ddc_i2c_payloads_get(struct i2c_payloads *p)
 {
 	return (struct i2c_payload *)p->payloads.container;
 }
 
-uint32_t  dal_ddc_i2c_payloads_get_count(struct i2c_payloads *p)
+static uint32_t dal_ddc_i2c_payloads_get_count(struct i2c_payloads *p)
 {
 	return p->payloads.count;
 }
 
-void dal_ddc_i2c_payloads_destroy(struct i2c_payloads **p)
+static void dal_ddc_i2c_payloads_destroy(struct i2c_payloads **p)
 {
 	if (!p || !*p)
 		return;
 	dal_vector_destruct(&(*p)->payloads);
-	dm_free(*p);
+	kfree(*p);
 	*p = NULL;
 
 }
 
-struct aux_payloads *dal_ddc_aux_payloads_create(struct dc_context *ctx, uint32_t count)
+static struct aux_payloads *dal_ddc_aux_payloads_create(struct dc_context *ctx, uint32_t count)
 {
 	struct aux_payloads *payloads;
 
-	payloads = dm_alloc(sizeof(struct aux_payloads));
+	payloads = kzalloc(sizeof(struct aux_payloads), GFP_KERNEL);
 
 	if (!payloads)
 		return NULL;
@@ -177,27 +177,27 @@ struct aux_payloads *dal_ddc_aux_payloads_create(struct dc_context *ctx, uint32_
 		&payloads->payloads, ctx, count, sizeof(struct aux_payload)))
 		return payloads;
 
-	dm_free(payloads);
+	kfree(payloads);
 	return NULL;
 }
 
-struct aux_payload *dal_ddc_aux_payloads_get(struct aux_payloads *p)
+static struct aux_payload *dal_ddc_aux_payloads_get(struct aux_payloads *p)
 {
 	return (struct aux_payload *)p->payloads.container;
 }
 
-uint32_t  dal_ddc_aux_payloads_get_count(struct aux_payloads *p)
+static uint32_t  dal_ddc_aux_payloads_get_count(struct aux_payloads *p)
 {
 	return p->payloads.count;
 }
 
-void dal_ddc_aux_payloads_destroy(struct aux_payloads **p)
+static void dal_ddc_aux_payloads_destroy(struct aux_payloads **p)
 {
 	if (!p || !*p)
 		return;
 
 	dal_vector_destruct(&(*p)->payloads);
-	dm_free(*p);
+	kfree(*p);
 	*p = NULL;
 }
 
@@ -245,7 +245,7 @@ void dal_ddc_aux_payloads_add(
 	}
 }
 
-static bool construct(
+static void construct(
 	struct ddc_service *ddc_service,
 	struct ddc_service_init_data *init_data)
 {
@@ -282,7 +282,6 @@ static bool construct(
 		connector_id == CONNECTOR_ID_LVDS;
 
 	ddc_service->wa.raw = 0;
-	return true;
 }
 
 struct ddc_service *dal_ddc_service_create(
@@ -290,16 +289,13 @@ struct ddc_service *dal_ddc_service_create(
 {
 	struct ddc_service *ddc_service;
 
-	ddc_service = dm_alloc(sizeof(struct ddc_service));
+	ddc_service = kzalloc(sizeof(struct ddc_service), GFP_KERNEL);
 
 	if (!ddc_service)
 		return NULL;
 
-	if (construct(ddc_service, init_data))
-		return ddc_service;
-
-	dm_free(ddc_service);
-	return NULL;
+	construct(ddc_service, init_data);
+	return ddc_service;
 }
 
 static void destruct(struct ddc_service *ddc)
@@ -315,7 +311,7 @@ void dal_ddc_service_destroy(struct ddc_service **ddc)
 		return;
 	}
 	destruct(*ddc);
-	dm_free(*ddc);
+	kfree(*ddc);
 	*ddc = NULL;
 }
 

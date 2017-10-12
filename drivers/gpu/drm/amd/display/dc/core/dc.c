@@ -38,6 +38,7 @@
 #include "bios_parser_interface.h"
 #include "include/irq_service_interface.h"
 #include "transform.h"
+#include "dpp.h"
 #include "timing_generator.h"
 #include "virtual/virtual_link_encoder.h"
 
@@ -47,9 +48,8 @@
 #include "dc_link_ddc.h"
 #include "dm_helpers.h"
 #include "mem_input.h"
+#include "hubp.h"
 
-
-char dc_ver[] = DC_VER;
 
 /*******************************************************************************
  * Private functions
@@ -113,7 +113,7 @@ static bool create_links(
 	}
 
 	for (i = 0; i < num_virtual_links; i++) {
-		struct dc_link *link = dm_alloc(sizeof(*link));
+		struct dc_link *link = kzalloc(sizeof(*link), GFP_KERNEL);
 		struct encoder_init_data enc_init = {0};
 
 		if (link == NULL) {
@@ -127,7 +127,7 @@ static bool create_links(
 		link->link_id.type = OBJECT_TYPE_CONNECTOR;
 		link->link_id.id = CONNECTOR_ID_VIRTUAL;
 		link->link_id.enum_id = ENUM_ID_1;
-		link->link_enc = dm_alloc(sizeof(*link->link_enc));
+		link->link_enc = kzalloc(sizeof(*link->link_enc), GFP_KERNEL);
 
 		enc_init.ctx = dc->ctx;
 		enc_init.channel = CHANNEL_ID_UNKNOWN;
@@ -329,15 +329,24 @@ static void set_test_pattern(
 			cust_pattern_size);
 }
 
-void set_dither_option(struct dc_stream_state *stream,
+static void set_dither_option(struct dc_stream_state *stream,
 		enum dc_dither_option option)
 {
 	struct bit_depth_reduction_params params;
 	struct dc_link *link = stream->status.link;
-	struct pipe_ctx *pipes = link->dc->current_state->res_ctx.pipe_ctx;
+	struct pipe_ctx *pipes = NULL;
+	int i;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (link->dc->current_state->res_ctx.pipe_ctx[i].stream ==
+				stream) {
+			pipes = &link->dc->current_state->res_ctx.pipe_ctx[i];
+			break;
+		}
+	}
 
 	memset(&params, 0, sizeof(params));
-	if (!stream)
+	if (!pipes)
 		return;
 	if (option > DITHER_OPTION_MAX)
 		return;
@@ -349,6 +358,36 @@ void set_dither_option(struct dc_stream_state *stream,
 	stream->bit_depth_params = params;
 	pipes->stream_res.opp->funcs->
 		opp_program_bit_depth_reduction(pipes->stream_res.opp, &params);
+}
+
+void set_dpms(
+	struct dc *dc,
+	struct dc_stream_state *stream,
+	bool dpms_off)
+{
+	struct pipe_ctx *pipe_ctx = NULL;
+	int i;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (dc->current_state->res_ctx.pipe_ctx[i].stream == stream) {
+			pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[i];
+			break;
+		}
+	}
+
+	if (!pipe_ctx) {
+		ASSERT(0);
+		return;
+	}
+
+	if (stream->dpms_off != dpms_off) {
+		stream->dpms_off = dpms_off;
+		if (dpms_off)
+			core_link_disable_stream(pipe_ctx,
+					KEEP_ACQUIRED_RESOURCE);
+		else
+			core_link_enable_stream(dc->current_state, pipe_ctx);
+	}
 }
 
 static void allocate_dc_stream_funcs(struct dc  *dc)
@@ -372,6 +411,9 @@ static void allocate_dc_stream_funcs(struct dc  *dc)
 
 	dc->stream_funcs.set_dither_option =
 			set_dither_option;
+
+	dc->stream_funcs.set_dpms =
+			set_dpms;
 
 	dc->link_funcs.set_drive_settings =
 			set_drive_settings;
@@ -413,20 +455,20 @@ static void destruct(struct dc *dc)
 	if (dc->ctx->logger)
 		dal_logger_destroy(&dc->ctx->logger);
 
-	dm_free(dc->ctx);
+	kfree(dc->ctx);
 	dc->ctx = NULL;
 
-	dm_free(dc->bw_vbios);
+	kfree(dc->bw_vbios);
 	dc->bw_vbios = NULL;
 
-	dm_free(dc->bw_dceip);
+	kfree(dc->bw_dceip);
 	dc->bw_dceip = NULL;
 
 #ifdef CONFIG_DRM_AMD_DC_DCN1_0
-	dm_free(dc->dcn_soc);
+	kfree(dc->dcn_soc);
 	dc->dcn_soc = NULL;
 
-	dm_free(dc->dcn_ip);
+	kfree(dc->dcn_ip);
 	dc->dcn_ip = NULL;
 
 #endif
@@ -436,12 +478,15 @@ static bool construct(struct dc *dc,
 		const struct dc_init_data *init_params)
 {
 	struct dal_logger *logger;
-	struct dc_context *dc_ctx = dm_alloc(sizeof(*dc_ctx));
-	struct bw_calcs_dceip *dc_dceip = dm_alloc(sizeof(*dc_dceip));
-	struct bw_calcs_vbios *dc_vbios = dm_alloc(sizeof(*dc_vbios));
+	struct dc_context *dc_ctx = kzalloc(sizeof(*dc_ctx), GFP_KERNEL);
+	struct bw_calcs_dceip *dc_dceip = kzalloc(sizeof(*dc_dceip),
+						  GFP_KERNEL);
+	struct bw_calcs_vbios *dc_vbios = kzalloc(sizeof(*dc_vbios),
+						  GFP_KERNEL);
 #ifdef CONFIG_DRM_AMD_DC_DCN1_0
-	struct dcn_soc_bounding_box *dcn_soc = dm_alloc(sizeof(*dcn_soc));
-	struct dcn_ip_params *dcn_ip = dm_alloc(sizeof(*dcn_ip));
+	struct dcn_soc_bounding_box *dcn_soc = kzalloc(sizeof(*dcn_soc),
+						       GFP_KERNEL);
+	struct dcn_ip_params *dcn_ip = kzalloc(sizeof(*dcn_ip), GFP_KERNEL);
 #endif
 
 	enum dce_version dc_version = DCE_VERSION_UNKNOWN;
@@ -480,14 +525,12 @@ static bool construct(struct dc *dc,
 		goto fail;
 	}
 
-	dc->current_state = dm_alloc(sizeof(*dc->current_state));
+	dc->current_state = dc_create_state();
 
 	if (!dc->current_state) {
 		dm_error("%s: failed to create validate ctx\n", __func__);
 		goto fail;
 	}
-
-	atomic_inc(&dc->current_state->ref_count);
 
 	dc_ctx->cgs_device = init_params->cgs_device;
 	dc_ctx->driver_context = init_params->driver;
@@ -495,7 +538,7 @@ static bool construct(struct dc *dc,
 	dc_ctx->asic_id = init_params->asic_id;
 
 	/* Create logger */
-	logger = dal_logger_create(dc_ctx);
+	logger = dal_logger_create(dc_ctx, init_params->log_mask);
 
 	if (!logger) {
 		/* can *not* call logger. call base driver 'print error' */
@@ -508,7 +551,7 @@ static bool construct(struct dc *dc,
 
 	dc_version = resource_parse_asic_id(init_params->asic_id);
 	dc->ctx->dce_version = dc_version;
-#ifdef ENABLE_FBC
+#if defined(CONFIG_DRM_AMD_DC_FBC)
 	dc->ctx->fbc_gpu_addr = init_params->fbc_gpu_addr;
 #endif
 	/* Resource should construct all asic specific resources.
@@ -576,37 +619,13 @@ fail:
 	return false;
 }
 
-/*
-void ProgramPixelDurationV(unsigned int pixelClockInKHz )
-{
-	fixed31_32 pixel_duration = Fixed31_32(100000000, pixelClockInKHz) * 10;
-	unsigned int pixDurationInPico = round(pixel_duration);
-
-	DPG_PIPE_ARBITRATION_CONTROL1 arb_control;
-
-	arb_control.u32All = ReadReg (mmDPGV0_PIPE_ARBITRATION_CONTROL1);
-	arb_control.bits.PIXEL_DURATION = pixDurationInPico;
-	WriteReg (mmDPGV0_PIPE_ARBITRATION_CONTROL1, arb_control.u32All);
-
-	arb_control.u32All = ReadReg (mmDPGV1_PIPE_ARBITRATION_CONTROL1);
-	arb_control.bits.PIXEL_DURATION = pixDurationInPico;
-	WriteReg (mmDPGV1_PIPE_ARBITRATION_CONTROL1, arb_control.u32All);
-
-	WriteReg (mmDPGV0_PIPE_ARBITRATION_CONTROL2, 0x4000800);
-	WriteReg (mmDPGV0_REPEATER_PROGRAM, 0x11);
-
-	WriteReg (mmDPGV1_PIPE_ARBITRATION_CONTROL2, 0x4000800);
-	WriteReg (mmDPGV1_REPEATER_PROGRAM, 0x11);
-}
-*/
-
 /*******************************************************************************
  * Public functions
  ******************************************************************************/
 
 struct dc *dc_create(const struct dc_init_data *init_params)
  {
-	struct dc *dc = dm_alloc(sizeof(*dc));
+	struct dc *dc = kzalloc(sizeof(*dc), GFP_KERNEL);
 	unsigned int full_pipe_count;
 
 	if (NULL == dc)
@@ -640,7 +659,7 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 	return dc;
 
 construct_fail:
-	dm_free(dc);
+	kfree(dc);
 
 alloc_fail:
 	return NULL;
@@ -649,42 +668,8 @@ alloc_fail:
 void dc_destroy(struct dc **dc)
 {
 	destruct(*dc);
-	dm_free(*dc);
+	kfree(*dc);
 	*dc = NULL;
-}
-
-bool dc_validate_guaranteed(
-		struct dc *dc,
-		struct dc_stream_state *stream)
-{
-	enum dc_status result = DC_ERROR_UNEXPECTED;
-	struct dc_state *context;
-
-	if (!dc_validate_stream(dc, stream))
-		return false;
-
-	context = dm_alloc(sizeof(struct dc_state));
-	if (context == NULL)
-		goto context_alloc_fail;
-
-	dc_resource_state_construct(dc, dc->current_state);
-
-	atomic_inc(&context->ref_count);
-
-	result = dc->res_pool->funcs->validate_guaranteed(
-					dc, stream, context);
-
-	dc_release_state(context);
-
-context_alloc_fail:
-	if (result != DC_OK) {
-		dm_logger_write(dc->ctx->logger, LOG_WARNING,
-			"%s:guaranteed validation failed, dc_status:%d\n",
-			__func__,
-			result);
-		}
-
-	return (result == DC_OK);
 }
 
 static void program_timing_sync(
@@ -822,40 +807,30 @@ static bool dc_commit_state_no_check(struct dc *dc, struct dc_state *context)
 	if (!dcb->funcs->is_accelerated_mode(dcb))
 		dc->hwss.enable_accelerated_mode(dc);
 
-	dc->hwss.ready_shared_resources(dc);
-
-	for (i = 0; i < dc->res_pool->pipe_count; i++) {
-		pipe = &context->res_ctx.pipe_ctx[i];
-		dc->hwss.wait_for_mpcc_disconnect(dc, dc->res_pool, pipe);
-	}
-	result = dc->hwss.apply_ctx_to_hw(dc, context);
-
-	program_timing_sync(dc, context);
-
 	for (i = 0; i < context->stream_count; i++) {
 		const struct dc_sink *sink = context->streams[i]->sink;
 
-		for (j = 0; j < context->stream_status[i].plane_count; j++) {
-			dc->hwss.apply_ctx_for_surface(
-					dc, context->streams[i],
-					context->stream_status[i].plane_count,
-					context);
+		dc->hwss.apply_ctx_for_surface(
+				dc, context->streams[i],
+				context->stream_status[i].plane_count,
+				context);
 
-			/*
-			 * enable stereo
-			 * TODO rework dc_enable_stereo call to work with validation sets?
-			 */
-			for (k = 0; k < MAX_PIPES; k++) {
-				pipe = &context->res_ctx.pipe_ctx[k];
+		/*
+		 * enable stereo
+		 * TODO rework dc_enable_stereo call to work with validation sets?
+		 */
+		for (k = 0; k < MAX_PIPES; k++) {
+			pipe = &context->res_ctx.pipe_ctx[k];
 
-				for (l = 0 ; pipe && l < context->stream_count; l++)  {
-					if (context->streams[l] &&
-					    context->streams[l] == pipe->stream &&
-					    dc->hwss.setup_stereo)
-						dc->hwss.setup_stereo(pipe, dc);
-				}
+			for (l = 0 ; pipe && l < context->stream_count; l++)  {
+				if (context->streams[l] &&
+					context->streams[l] == pipe->stream &&
+					dc->hwss.setup_stereo)
+					dc->hwss.setup_stereo(pipe, dc);
 			}
 		}
+
+
 
 		CONN_MSG_MODE(sink->link, "{%dx%d, %dx%d@%dKhz}",
 				context->streams[i]->timing.h_addressable,
@@ -865,7 +840,26 @@ static bool dc_commit_state_no_check(struct dc *dc, struct dc_state *context)
 				context->streams[i]->timing.pix_clk_khz);
 	}
 
+	dc->hwss.ready_shared_resources(dc, context);
+
+	for (i = 0; i < dc->res_pool->pipe_count; i++) {
+		pipe = &context->res_ctx.pipe_ctx[i];
+		dc->hwss.wait_for_mpcc_disconnect(dc, dc->res_pool, pipe);
+	}
+	result = dc->hwss.apply_ctx_to_hw(dc, context);
+
+	program_timing_sync(dc, context);
+
 	dc_enable_stereo(dc, context, dc_streams, context->stream_count);
+
+	for (i = 0; i < context->stream_count; i++) {
+		for (j = 0; j < MAX_PIPES; j++) {
+			pipe = &context->res_ctx.pipe_ctx[j];
+
+			if (!pipe->top_pipe && pipe->stream == context->streams[i])
+				dc->hwss.pipe_control_lock(dc, pipe, false);
+		}
+	}
 
 	dc_release_state(dc->current_state);
 
@@ -928,7 +922,8 @@ bool dc_commit_planes_to_stream(
 		struct dc *dc,
 		struct dc_plane_state **plane_states,
 		uint8_t new_plane_count,
-		struct dc_stream_state *dc_stream)
+		struct dc_stream_state *dc_stream,
+		struct dc_state *state)
 {
 	struct dc_surface_update updates[MAX_SURFACES];
 	struct dc_flip_addrs flip_addr[MAX_SURFACES];
@@ -936,7 +931,7 @@ bool dc_commit_planes_to_stream(
 	struct dc_scaling_info scaling_info[MAX_SURFACES];
 	int i;
 	struct dc_stream_update *stream_update =
-			dm_alloc(sizeof(struct dc_stream_update));
+			kzalloc(sizeof(struct dc_stream_update), GFP_KERNEL);
 
 	if (!stream_update) {
 		BREAK_TO_DEBUGGER();
@@ -979,33 +974,43 @@ bool dc_commit_planes_to_stream(
 		updates[i].scaling_info = &scaling_info[i];
 	}
 
-	dc_update_planes_and_stream(
+	dc_commit_updates_for_stream(
 			dc,
 			updates,
 			new_plane_count,
-			dc_stream, stream_update);
+			dc_stream, stream_update, plane_states, state);
 
-	dc_post_update_surfaces_to_stream(dc);
-
-	dm_free(stream_update);
+	kfree(stream_update);
 	return true;
+}
+
+struct dc_state *dc_create_state(void)
+{
+	struct dc_state *context = kzalloc(sizeof(struct dc_state),
+					   GFP_KERNEL);
+
+	if (!context)
+		return NULL;
+
+	kref_init(&context->refcount);
+	return context;
 }
 
 void dc_retain_state(struct dc_state *context)
 {
-	ASSERT(atomic_read(&context->ref_count) > 0);
-	atomic_inc(&context->ref_count);
+	kref_get(&context->refcount);
+}
+
+static void dc_state_free(struct kref *kref)
+{
+	struct dc_state *context = container_of(kref, struct dc_state, refcount);
+	dc_resource_state_destruct(context);
+	kfree(context);
 }
 
 void dc_release_state(struct dc_state *context)
 {
-	ASSERT(atomic_read(&context->ref_count) > 0);
-	atomic_dec(&context->ref_count);
-
-	if (atomic_read(&context->ref_count) == 0) {
-		dc_resource_state_destruct(context);
-		dm_free(context);
-	}
+	kref_put(&context->refcount, dc_state_free);
 }
 
 static bool is_surface_in_context(
@@ -1077,7 +1082,6 @@ static enum surface_update_type get_plane_info_update_type(
 	temp_plane_info.plane_size = u->surface->plane_size;
 	temp_plane_info.rotation = u->surface->rotation;
 	temp_plane_info.stereo_format = u->surface->stereo_format;
-	temp_plane_info.tiling_info = u->surface->tiling_info;
 
 	if (surface_index == 0)
 		temp_plane_info.visible = u->plane_info->visible;
@@ -1090,10 +1094,26 @@ static enum surface_update_type get_plane_info_update_type(
 
 	if (pixel_format_to_bpp(u->plane_info->format) !=
 			pixel_format_to_bpp(u->surface->format)) {
+		/* different bytes per element will require full bandwidth
+		 * and DML calculation
+		 */
 		return UPDATE_TYPE_FULL;
-	} else {
-		return UPDATE_TYPE_MED;
 	}
+
+	if (memcmp(&u->plane_info->tiling_info, &u->surface->tiling_info,
+			sizeof(union dc_tiling_info)) != 0) {
+		/* todo: below are HW dependent, we should add a hook to
+		 * DCE/N resource and validated there.
+		 */
+		if (u->plane_info->tiling_info.gfx9.swizzle != DC_SW_LINEAR) {
+			/* swizzled mode requires RQ to be setup properly,
+			 * thus need to run DML to calculate RQ settings
+			 */
+			return UPDATE_TYPE_FULL;
+		}
+	}
+
+	return UPDATE_TYPE_MED;
 }
 
 static enum surface_update_type  get_scaling_info_update_type(
@@ -1195,196 +1215,22 @@ static struct dc_stream_status *stream_get_status(
 	return NULL;
 }
 
-enum surface_update_type update_surface_trace_level = UPDATE_TYPE_FULL;
+static const enum surface_update_type update_surface_trace_level = UPDATE_TYPE_FULL;
 
-void dc_update_planes_and_stream(struct dc *dc,
-		struct dc_surface_update *srf_updates, int surface_count,
+
+static void commit_planes_for_stream(struct dc *dc,
+		struct dc_surface_update *srf_updates,
+		int surface_count,
 		struct dc_stream_state *stream,
-		struct dc_stream_update *stream_update)
+		struct dc_stream_update *stream_update,
+		enum surface_update_type update_type,
+		struct dc_state *context)
 {
-	struct dc_state *context;
 	int i, j;
-	enum surface_update_type update_type;
-	const struct dc_stream_status *stream_status;
-	struct dc_context *dc_ctx = dc->ctx;
-
-	stream_status = dc_stream_get_status(stream);
-
-	ASSERT(stream_status);
-	if (!stream_status)
-		return; /* Cannot commit surface to stream that is not committed */
-
-#ifdef ENABLE_FBC
-	if (srf_updates->flip_addr) {
-		if (srf_updates->flip_addr->address.grph.addr.low_part == 0)
-			ASSERT(0);
-	}
-#endif
-	context = dc->current_state;
-
-	/* update current stream with the new updates */
-	if (stream_update) {
-		if ((stream_update->src.height != 0) &&
-				(stream_update->src.width != 0))
-			stream->src = stream_update->src;
-
-		if ((stream_update->dst.height != 0) &&
-				(stream_update->dst.width != 0))
-			stream->dst = stream_update->dst;
-
-		if (stream_update->out_transfer_func &&
-				stream_update->out_transfer_func !=
-						stream->out_transfer_func) {
-			if (stream->out_transfer_func != NULL)
-				dc_transfer_func_release(stream->out_transfer_func);
-			dc_transfer_func_retain(stream_update->out_transfer_func);
-			stream->out_transfer_func =
-				stream_update->out_transfer_func;
-		}
-	}
-
-	/* do not perform surface update if surface has invalid dimensions
-	 * (all zero) and no scaling_info is provided
-	 */
-	if (surface_count > 0 &&
-			srf_updates->surface->src_rect.width == 0 &&
-			srf_updates->surface->src_rect.height == 0 &&
-			srf_updates->surface->dst_rect.width == 0 &&
-			srf_updates->surface->dst_rect.height == 0 &&
-			!srf_updates->scaling_info) {
-		ASSERT(false);
-		return;
-	}
-
-	update_type = dc_check_update_surfaces_for_stream(
-			dc, srf_updates, surface_count, stream_update, stream_status);
-
-	if (update_type >= update_surface_trace_level)
-		update_surface_trace(dc, srf_updates, surface_count);
-
-	if (update_type >= UPDATE_TYPE_FULL) {
-		struct dc_plane_state *new_planes[MAX_SURFACES] = {0};
-
-		for (i = 0; i < surface_count; i++)
-			new_planes[i] = srf_updates[i].surface;
-
-		/* initialize scratch memory for building context */
-		context = dm_alloc(sizeof(*context));
-		if (context == NULL) {
-			DC_ERROR("Failed to allocate new validate context!\n");
-			return;
-		}
-
-		atomic_inc(&context->ref_count);
-
-		dc_resource_state_copy_construct(
-				dc->current_state, context);
-
-		/*remove old surfaces from context */
-		if (!dc_rem_all_planes_for_stream(dc, stream, context)) {
-
-			BREAK_TO_DEBUGGER();
-			goto fail;
-		}
-
-		/* add surface to context */
-		if (!dc_add_all_planes_for_stream(dc, stream, new_planes, surface_count, context)) {
-
-			BREAK_TO_DEBUGGER();
-			goto fail;
-		}
-	}
-
-	/* save update parameters into surface */
-	for (i = 0; i < surface_count; i++) {
-		struct dc_plane_state *surface = srf_updates[i].surface;
-
-		if (srf_updates[i].flip_addr) {
-			surface->address = srf_updates[i].flip_addr->address;
-			surface->flip_immediate =
-					srf_updates[i].flip_addr->flip_immediate;
-		}
-
-		if (srf_updates[i].scaling_info) {
-			surface->scaling_quality =
-					srf_updates[i].scaling_info->scaling_quality;
-			surface->dst_rect =
-					srf_updates[i].scaling_info->dst_rect;
-			surface->src_rect =
-					srf_updates[i].scaling_info->src_rect;
-			surface->clip_rect =
-					srf_updates[i].scaling_info->clip_rect;
-		}
-
-		if (srf_updates[i].plane_info) {
-			surface->color_space =
-					srf_updates[i].plane_info->color_space;
-			surface->format =
-					srf_updates[i].plane_info->format;
-			surface->plane_size =
-					srf_updates[i].plane_info->plane_size;
-			surface->rotation =
-					srf_updates[i].plane_info->rotation;
-			surface->horizontal_mirror =
-					srf_updates[i].plane_info->horizontal_mirror;
-			surface->stereo_format =
-					srf_updates[i].plane_info->stereo_format;
-			surface->tiling_info =
-					srf_updates[i].plane_info->tiling_info;
-			surface->visible =
-					srf_updates[i].plane_info->visible;
-			surface->per_pixel_alpha =
-					srf_updates[i].plane_info->per_pixel_alpha;
-			surface->dcc =
-					srf_updates[i].plane_info->dcc;
-		}
-
-		if (update_type >= UPDATE_TYPE_MED) {
-			for (j = 0; j < dc->res_pool->pipe_count; j++) {
-				struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
-
-				if (pipe_ctx->plane_state != surface)
-					continue;
-
-				resource_build_scaling_params(pipe_ctx);
-			}
-		}
-
-		if (srf_updates[i].gamma &&
-			srf_updates[i].gamma != surface->gamma_correction) {
-			if (surface->gamma_correction != NULL)
-				dc_gamma_release(&surface->gamma_correction);
-
-			dc_gamma_retain(srf_updates[i].gamma);
-			surface->gamma_correction = srf_updates[i].gamma;
-		}
-
-		if (srf_updates[i].in_transfer_func &&
-			srf_updates[i].in_transfer_func != surface->in_transfer_func) {
-			if (surface->in_transfer_func != NULL)
-				dc_transfer_func_release(
-						surface->
-						in_transfer_func);
-
-			dc_transfer_func_retain(
-					srf_updates[i].in_transfer_func);
-			surface->in_transfer_func =
-					srf_updates[i].in_transfer_func;
-		}
-
-		if (srf_updates[i].hdr_static_metadata)
-			surface->hdr_static_ctx =
-				*(srf_updates[i].hdr_static_metadata);
-	}
 
 	if (update_type == UPDATE_TYPE_FULL) {
-		if (!dc->res_pool->funcs->validate_bandwidth(dc, context)) {
-			BREAK_TO_DEBUGGER();
-			goto fail;
-		} else {
-			dc->hwss.set_bandwidth(dc, context, false);
-			context_clock_trace(dc, context);
-		}
+		dc->hwss.set_bandwidth(dc, context, false);
+		context_clock_trace(dc, context);
 	}
 
 	if (update_type > UPDATE_TYPE_FAST) {
@@ -1395,8 +1241,14 @@ void dc_update_planes_and_stream(struct dc *dc,
 		}
 	}
 
-	if (surface_count == 0)
+	if (surface_count == 0) {
+		/*
+		 * In case of turning off screen, no need to program front end a second time.
+		 * just return after program front end.
+		 */
 		dc->hwss.apply_ctx_for_surface(dc, stream, surface_count, context);
+		return;
+	}
 
 	/* Lock pipes for provided surfaces, or all active if full update*/
 	for (i = 0; i < surface_count; i++) {
@@ -1422,10 +1274,6 @@ void dc_update_planes_and_stream(struct dc *dc,
 	/* Full fe update*/
 	for (j = 0; j < dc->res_pool->pipe_count; j++) {
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
-		struct pipe_ctx *cur_pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[j];
-		bool is_new_pipe_surface = cur_pipe_ctx->plane_state != pipe_ctx->plane_state;
-		struct dc_cursor_position position = { 0 };
-
 
 		if (update_type != UPDATE_TYPE_FULL || !pipe_ctx->plane_state)
 			continue;
@@ -1435,17 +1283,6 @@ void dc_update_planes_and_stream(struct dc *dc,
 
 			dc->hwss.apply_ctx_for_surface(
 					dc, pipe_ctx->stream, stream_status->plane_count, context);
-		}
-
-		/* TODO: this is a hack w/a for switching from mpo to pipe split */
-		dc_stream_set_cursor_position(pipe_ctx->stream, &position);
-
-		if (is_new_pipe_surface) {
-			dc->hwss.update_plane_addr(dc, pipe_ctx);
-			dc->hwss.set_input_transfer_func(
-					pipe_ctx, pipe_ctx->plane_state);
-			dc->hwss.set_output_transfer_func(
-					pipe_ctx, pipe_ctx->stream);
 		}
 	}
 
@@ -1472,7 +1309,9 @@ void dc_update_planes_and_stream(struct dc *dc,
 			if (update_type == UPDATE_TYPE_FAST)
 				continue;
 
-			if (srf_updates[i].in_transfer_func)
+			/* work around to program degamma regs for split pipe after set mode. */
+			if (srf_updates[i].in_transfer_func || (pipe_ctx->top_pipe &&
+					pipe_ctx->top_pipe->plane_state == pipe_ctx->plane_state))
 				dc->hwss.set_input_transfer_func(
 						pipe_ctx, pipe_ctx->plane_state);
 
@@ -1508,16 +1347,79 @@ void dc_update_planes_and_stream(struct dc *dc,
 			break;
 		}
 	}
+}
+
+void dc_commit_updates_for_stream(struct dc *dc,
+		struct dc_surface_update *srf_updates,
+		int surface_count,
+		struct dc_stream_state *stream,
+		struct dc_stream_update *stream_update,
+		struct dc_plane_state **plane_states,
+		struct dc_state *state)
+{
+	const struct dc_stream_status *stream_status;
+	enum surface_update_type update_type;
+	struct dc_state *context;
+	struct dc_context *dc_ctx = dc->ctx;
+	int i, j;
+
+	stream_status = dc_stream_get_status(stream);
+	context = dc->current_state;
+
+	update_type = dc_check_update_surfaces_for_stream(
+				dc, srf_updates, surface_count, stream_update, stream_status);
+
+	if (update_type >= update_surface_trace_level)
+		update_surface_trace(dc, srf_updates, surface_count);
+
+
+	if (update_type >= UPDATE_TYPE_FULL) {
+
+		/* initialize scratch memory for building context */
+		context = dc_create_state();
+		if (context == NULL) {
+			DC_ERROR("Failed to allocate new validate context!\n");
+			return;
+		}
+
+		dc_resource_state_copy_construct(state, context);
+	}
+
+
+	for (i = 0; i < surface_count; i++) {
+		struct dc_plane_state *surface = srf_updates[i].surface;
+
+		/* TODO: On flip we don't build the state, so it still has the
+		 * old address. Which is why we are updating the address here
+		 */
+		if (srf_updates[i].flip_addr)
+			surface->address = srf_updates[i].flip_addr->address;
+
+		if (update_type >= UPDATE_TYPE_MED) {
+			for (j = 0; j < dc->res_pool->pipe_count; j++) {
+				struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
+
+				if (pipe_ctx->plane_state != surface)
+					continue;
+
+				resource_build_scaling_params(pipe_ctx);
+			}
+		}
+	}
+
+	commit_planes_for_stream(
+				dc,
+				srf_updates,
+				surface_count,
+				stream,
+				stream_update,
+				update_type,
+				context);
+
+	if (update_type >= UPDATE_TYPE_FULL)
+		dc_post_update_surfaces_to_stream(dc);
 
 	if (dc->current_state != context) {
-
-		/* Since memory free requires elevated IRQL, an interrupt
-		 * request is generated by mem free. If this happens
-		 * between freeing and reassigning the context, our vsync
-		 * interrupt will call into dc and cause a memory
-		 * corruption BSOD. Hence, we first reassign the context,
-		 * then free the old context.
-		 */
 
 		struct dc_state *old = dc->current_state;
 
@@ -1525,10 +1427,9 @@ void dc_update_planes_and_stream(struct dc *dc,
 		dc_release_state(old);
 
 	}
+
 	return;
 
-fail:
-	dc_release_state(context);
 }
 
 uint8_t dc_get_current_stream_count(struct dc *dc)
@@ -1541,37 +1442,6 @@ struct dc_stream_state *dc_get_stream_at_index(struct dc *dc, uint8_t i)
 	if (i < dc->current_state->stream_count)
 		return dc->current_state->streams[i];
 	return NULL;
-}
-
-struct dc_link *dc_get_link_at_index(struct dc *dc, uint32_t link_index)
-{
-	return dc->links[link_index];
-}
-
-struct dwbc *dc_get_dwb_at_pipe(struct dc *dc, uint32_t pipe)
-{
-	if ((pipe >= dwb_pipe0) && (pipe < dwb_pipe_max_num)) {
-		return dc->res_pool->dwbc[(int)pipe];
-	} else {
-		return NULL;
-	}
-}
-
-const struct graphics_object_id dc_get_link_id_at_index(
-	struct dc *dc, uint32_t link_index)
-{
-	return dc->links[link_index]->link_id;
-}
-
-enum dc_irq_source dc_get_hpd_irq_source_at_index(
-	struct dc *dc, uint32_t link_index)
-{
-	return dc->links[link_index]->irq_source_hpd;
-}
-
-const struct audio **dc_get_audios(struct dc *dc)
-{
-	return (const struct audio **)dc->res_pool->audios;
 }
 
 enum dc_irq_source dc_interrupt_to_irq_source(
@@ -1600,7 +1470,7 @@ void dc_set_power_state(
 	struct dc *dc,
 	enum dc_acpi_cm_power_state power_state)
 {
-	atomic_t ref_count;
+	struct kref refcount;
 
 	switch (power_state) {
 	case DC_ACPI_CM_POWER_STATE_D0:
@@ -1618,12 +1488,12 @@ void dc_set_power_state(
 		 */
 
 		/* Preserve refcount */
-		ref_count = dc->current_state->ref_count;
+		refcount = dc->current_state->refcount;
 		dc_resource_state_destruct(dc->current_state);
 		memset(dc->current_state, 0,
 				sizeof(*dc->current_state));
 
-		dc->current_state->ref_count = ref_count;
+		dc->current_state->refcount = refcount;
 
 		break;
 	}
@@ -1637,107 +1507,6 @@ void dc_resume(struct dc *dc)
 
 	for (i = 0; i < dc->link_count; i++)
 		core_link_resume(dc->links[i]);
-}
-
-bool dc_read_aux_dpcd(
-		struct dc *dc,
-		uint32_t link_index,
-		uint32_t address,
-		uint8_t *data,
-		uint32_t size)
-{
-
-	struct dc_link *link = dc->links[link_index];
-	enum ddc_result r = dal_ddc_service_read_dpcd_data(
-			link->ddc,
-			false,
-			I2C_MOT_UNDEF,
-			address,
-			data,
-			size);
-	return r == DDC_RESULT_SUCESSFULL;
-}
-
-bool dc_write_aux_dpcd(
-		struct dc *dc,
-		uint32_t link_index,
-		uint32_t address,
-		const uint8_t *data,
-		uint32_t size)
-{
-	struct dc_link *link = dc->links[link_index];
-
-	enum ddc_result r = dal_ddc_service_write_dpcd_data(
-			link->ddc,
-			false,
-			I2C_MOT_UNDEF,
-			address,
-			data,
-			size);
-	return r == DDC_RESULT_SUCESSFULL;
-}
-
-bool dc_read_aux_i2c(
-		struct dc *dc,
-		uint32_t link_index,
-		enum i2c_mot_mode mot,
-		uint32_t address,
-		uint8_t *data,
-		uint32_t size)
-{
-
-		struct dc_link *link = dc->links[link_index];
-		enum ddc_result r = dal_ddc_service_read_dpcd_data(
-			link->ddc,
-			true,
-			mot,
-			address,
-			data,
-			size);
-		return r == DDC_RESULT_SUCESSFULL;
-}
-
-bool dc_write_aux_i2c(
-		struct dc *dc,
-		uint32_t link_index,
-		enum i2c_mot_mode mot,
-		uint32_t address,
-		const uint8_t *data,
-		uint32_t size)
-{
-	struct dc_link *link = dc->links[link_index];
-
-	enum ddc_result r = dal_ddc_service_write_dpcd_data(
-			link->ddc,
-			true,
-			mot,
-			address,
-			data,
-			size);
-	return r == DDC_RESULT_SUCESSFULL;
-}
-
-bool dc_query_ddc_data(
-		struct dc *dc,
-		uint32_t link_index,
-		uint32_t address,
-		uint8_t *write_buf,
-		uint32_t write_size,
-		uint8_t *read_buf,
-		uint32_t read_size) {
-
-
-	struct dc_link *link = dc->links[link_index];
-
-	bool result = dal_ddc_service_query_ddc_data(
-			link->ddc,
-			address,
-			write_buf,
-			write_size,
-			read_buf,
-			read_size);
-
-	return result;
 }
 
 bool dc_submit_i2c(
@@ -1823,17 +1592,6 @@ fail_add_sink:
 	return NULL;
 }
 
-void dc_link_set_sink(struct dc_link *link, struct dc_sink *sink)
-{
-	link->local_sink = sink;
-
-	if (sink == NULL) {
-		link->type = dc_connection_none;
-	} else {
-		link->type = dc_connection_single;
-	}
-}
-
 void dc_link_remove_remote_sink(struct dc_link *link, struct dc_sink *sink)
 {
 	int i;
@@ -1859,37 +1617,3 @@ void dc_link_remove_remote_sink(struct dc_link *link, struct dc_sink *sink)
 		}
 	}
 }
-
-bool dc_init_dchub(struct dc *dc, struct dchub_init_data *dh_data)
-{
-	int i;
-	struct mem_input *mi = NULL;
-
-	for (i = 0; i < dc->res_pool->pipe_count; i++) {
-		if (dc->res_pool->mis[i] != NULL) {
-			mi = dc->res_pool->mis[i];
-			break;
-		}
-	}
-	if (mi == NULL) {
-		dm_error("no mem_input!\n");
-		return false;
-	}
-
-	if (dc->hwss.update_dchub)
-		dc->hwss.update_dchub(dc->hwseq, dh_data);
-	else
-		ASSERT(dc->hwss.update_dchub);
-
-
-	return true;
-
-}
-
-void dc_log_hw_state(struct dc *dc)
-{
-
-	if (dc->hwss.log_hw_state)
-		dc->hwss.log_hw_state(dc);
-}
-
