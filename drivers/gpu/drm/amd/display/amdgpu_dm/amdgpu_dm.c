@@ -1771,8 +1771,7 @@ static int get_fb_info(const struct amdgpu_framebuffer *amdgpu_fb,
 
 static int fill_plane_attributes_from_fb(struct amdgpu_device *adev,
 					 struct dc_plane_state *plane_state,
-					 const struct amdgpu_framebuffer *amdgpu_fb,
-					 bool addReq)
+					 const struct amdgpu_framebuffer *amdgpu_fb)
 {
 	uint64_t tiling_flags;
 	uint64_t fb_location = 0;
@@ -1785,7 +1784,7 @@ static int fill_plane_attributes_from_fb(struct amdgpu_device *adev,
 	ret = get_fb_info(
 		amdgpu_fb,
 		&tiling_flags,
-		addReq == true ? &fb_location:NULL);
+		&fb_location);
 
 	if (ret)
 		return ret;
@@ -1970,8 +1969,7 @@ static int fill_plane_attributes(struct amdgpu_device *adev,
 	ret = fill_plane_attributes_from_fb(
 		crtc->dev->dev_private,
 		dc_plane_state,
-		amdgpu_fb,
-		addrReq);
+		amdgpu_fb);
 
 	if (ret)
 		return ret;
