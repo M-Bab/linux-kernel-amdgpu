@@ -647,7 +647,7 @@ int amdgpu_bo_pin_restricted(struct amdgpu_bo *bo, u32 domain,
 	if (bo->pin_count) {
 		uint32_t mem_type = bo->tbo.mem.mem_type;
 
-		if (domain != amdgpu_mem_type_to_domain(mem_type))
+		if (!(domain & amdgpu_mem_type_to_domain(mem_type)))
 			return -EINVAL;
 
 		bo->pin_count++;
@@ -688,15 +688,17 @@ int amdgpu_bo_pin_restricted(struct amdgpu_bo *bo, u32 domain,
 		goto error;
 	}
 
-	bo->pin_count = 1;
-	if (gpu_addr != NULL) {
-		r = amdgpu_ttm_bind(&bo->tbo, &bo->tbo.mem);
-		if (unlikely(r)) {
-			dev_err(adev->dev, "%p bind failed\n", bo);
-			goto error;
-		}
-		*gpu_addr = amdgpu_bo_gpu_offset(bo);
+	r = amdgpu_ttm_bind(&bo->tbo);
+	if (unlikely(r)) {
+		dev_err(adev->dev, "%p bind failed\n", bo);
+		goto error;
 	}
+
+	bo->pin_count = 1;
+	if (gpu_addr != NULL)
+		*gpu_addr = amdgpu_bo_gpu_offset(bo);
+
+	domain = amdgpu_mem_type_to_domain(bo->tbo.mem.mem_type);
 	if (domain == AMDGPU_GEM_DOMAIN_VRAM) {
 		adev->vram_pin_size += amdgpu_bo_size(bo);
 		if (bo->flags & AMDGPU_GEM_CREATE_NO_CPU_ACCESS)
@@ -779,8 +781,8 @@ int amdgpu_bo_init(struct amdgpu_device *adev)
 	adev->mc.vram_mtrr = arch_phys_wc_add(adev->mc.aper_base,
 					      adev->mc.aper_size);
 	DRM_INFO("Detected VRAM RAM=%lluM, BAR=%lluM\n",
-		adev->mc.mc_vram_size >> 20,
-		(unsigned long long)adev->mc.aper_size >> 20);
+		 adev->mc.mc_vram_size >> 20,
+		 (unsigned long long)adev->mc.aper_size >> 20);
 	DRM_INFO("RAM width %dbits %s\n",
 		 adev->mc.vram_width, amdgpu_vram_names[adev->mc.vram_type]);
 	return amdgpu_ttm_init(adev);

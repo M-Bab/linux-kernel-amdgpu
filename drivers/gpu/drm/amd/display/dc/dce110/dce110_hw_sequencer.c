@@ -1369,23 +1369,6 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 	}
 
 	pipe_ctx->plane_res.scl_data.lb_params.alpha_en = pipe_ctx->bottom_pipe != 0;
-	/* program_scaler and allocate_mem_input are not new asic */
-	if ((!pipe_ctx_old ||
-	     memcmp(&pipe_ctx_old->plane_res.scl_data, &pipe_ctx->plane_res.scl_data,
-		    sizeof(struct scaler_data)) != 0) &&
-	     pipe_ctx->plane_state) {
-		program_scaler(dc, pipe_ctx);
-	}
-
-	/* mst support - use total stream count */
-	if (pipe_ctx->plane_res.mi != NULL) {
-		pipe_ctx->plane_res.mi->funcs->allocate_mem_input(
-				pipe_ctx->plane_res.mi,
-				stream->timing.h_total,
-				stream->timing.v_total,
-				stream->timing.pix_clk_khz,
-				context->stream_count);
-	}
 
 	pipe_ctx->stream->sink->link->psr_enabled = false;
 
@@ -1399,6 +1382,15 @@ static void power_down_encoders(struct dc *dc)
 	int i;
 	enum connector_id connector_id;
 	enum signal_type signal = SIGNAL_TYPE_NONE;
+
+	/* do not know BIOS back-front mapping, simply blank all. It will not
+	 * hurt for non-DP
+	 */
+	for (i = 0; i < dc->res_pool->stream_enc_count; i++) {
+		dc->res_pool->stream_enc[i]->funcs->dp_blank(
+					dc->res_pool->stream_enc[i]);
+	}
+
 	for (i = 0; i < dc->link_count; i++) {
 		connector_id = dal_graphics_object_id_get_connector_id(dc->links[i]->link_id);
 		if ((connector_id == CONNECTOR_ID_DISPLAY_PORT) ||
@@ -1876,8 +1868,10 @@ static void dce110_reset_hw_ctx_wrap(
 				pipe_need_reprogram(pipe_ctx_old, pipe_ctx)) {
 			struct clock_source *old_clk = pipe_ctx_old->clock_source;
 
-			/* disable already, no need to disable again */
-			if (pipe_ctx->stream && !pipe_ctx->stream->dpms_off)
+			/* Disable if new stream is null. O/w, if stream is
+			 * disabled already, no need to disable again.
+			 */
+			if (!pipe_ctx->stream || !pipe_ctx->stream->dpms_off)
 				core_link_disable_stream(pipe_ctx_old, FREE_ACQUIRED_RESOURCE);
 
 			pipe_ctx_old->stream_res.tg->funcs->set_blank(pipe_ctx_old->stream_res.tg, true);
@@ -2877,8 +2871,14 @@ static void dce110_apply_ctx_for_surface(
 
 	be_idx = -1;
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+		struct pipe_ctx *old_pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[i];
+
 		if (stream == context->res_ctx.pipe_ctx[i].stream) {
 			be_idx = context->res_ctx.pipe_ctx[i].stream_res.tg->inst;
+			if (!pipe_ctx->top_pipe &&
+				(pipe_ctx->plane_state || old_pipe_ctx->plane_state))
+				dc->hwss.pipe_control_lock(dc, pipe_ctx, true);
 			break;
 		}
 	}
@@ -2889,9 +2889,28 @@ static void dce110_apply_ctx_for_surface(
 		if (pipe_ctx->stream != stream)
 			continue;
 
+		/* Need to allocate mem before program front end for Fiji */
+		if (pipe_ctx->plane_res.mi != NULL)
+			pipe_ctx->plane_res.mi->funcs->allocate_mem_input(
+					pipe_ctx->plane_res.mi,
+					pipe_ctx->stream->timing.h_total,
+					pipe_ctx->stream->timing.v_total,
+					pipe_ctx->stream->timing.pix_clk_khz,
+					context->stream_count);
+
 		dce110_program_front_end_for_pipe(dc, pipe_ctx);
 		program_surface_visibility(dc, pipe_ctx);
 
+	}
+
+	for (i = 0; i < dc->res_pool->pipe_count; i++) {
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+		struct pipe_ctx *old_pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[i];
+
+		if ((stream == pipe_ctx->stream) &&
+			(!pipe_ctx->top_pipe) &&
+			(pipe_ctx->plane_state || old_pipe_ctx->plane_state))
+			dc->hwss.pipe_control_lock(dc, pipe_ctx, false);
 	}
 }
 

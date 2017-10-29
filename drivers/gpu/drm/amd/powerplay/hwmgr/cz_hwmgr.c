@@ -961,18 +961,13 @@ static void cz_clear_voting_clients(struct pp_hwmgr *hwmgr)
 
 static int cz_start_dpm(struct pp_hwmgr *hwmgr)
 {
-	int ret = 0;
 	struct cz_hwmgr *cz_hwmgr = (struct cz_hwmgr *)(hwmgr->backend);
-	unsigned long dpm_features = 0;
 
 	cz_hwmgr->dpm_flags |= DPMFlags_SCLK_Enabled;
-	dpm_features |= SCLK_DPM_MASK;
 
-	ret = smum_send_msg_to_smc_with_parameter(hwmgr,
+	return smum_send_msg_to_smc_with_parameter(hwmgr,
 				PPSMC_MSG_EnableAllSmuFeatures,
-				dpm_features);
-
-	return ret;
+				SCLK_DPM_MASK);
 }
 
 static int cz_stop_dpm(struct pp_hwmgr *hwmgr)
@@ -1279,27 +1274,18 @@ static int cz_dpm_force_dpm_level(struct pp_hwmgr *hwmgr,
 
 int cz_dpm_powerdown_uvd(struct pp_hwmgr *hwmgr)
 {
-	if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
-					 PHM_PlatformCaps_UVDPowerGating))
-		return smum_send_msg_to_smc(hwmgr,
-						     PPSMC_MSG_UVDPowerOFF);
+	if (PP_CAP(PHM_PlatformCaps_UVDPowerGating))
+		return smum_send_msg_to_smc(hwmgr, PPSMC_MSG_UVDPowerOFF);
 	return 0;
 }
 
 int cz_dpm_powerup_uvd(struct pp_hwmgr *hwmgr)
 {
-	if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
-					 PHM_PlatformCaps_UVDPowerGating)) {
-		if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
-				  PHM_PlatformCaps_UVDDynamicPowerGating)) {
-			return smum_send_msg_to_smc_with_parameter(
-								hwmgr,
-						   PPSMC_MSG_UVDPowerON, 1);
-		} else {
-			return smum_send_msg_to_smc_with_parameter(
-								hwmgr,
-						   PPSMC_MSG_UVDPowerON, 0);
-		}
+	if (PP_CAP(PHM_PlatformCaps_UVDPowerGating)) {
+		return smum_send_msg_to_smc_with_parameter(
+			hwmgr,
+			PPSMC_MSG_UVDPowerON,
+			PP_CAP(PHM_PlatformCaps_UVDDynamicPowerGating) ? 1 : 0);
 	}
 
 	return 0;
@@ -1313,17 +1299,16 @@ int cz_dpm_update_uvd_dpm(struct pp_hwmgr *hwmgr, bool bgate)
 
 	if (!bgate) {
 		/* Stable Pstate is enabled and we need to set the UVD DPM to highest level */
-		if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
-					 PHM_PlatformCaps_StablePState)
-			|| hwmgr->en_umd_pstate) {
+		if (PP_CAP(PHM_PlatformCaps_StablePState) ||
+		    hwmgr->en_umd_pstate) {
 			cz_hwmgr->uvd_dpm.hard_min_clk =
 				   ptable->entries[ptable->count - 1].vclk;
 
 			smum_send_msg_to_smc_with_parameter(hwmgr,
-						     PPSMC_MSG_SetUvdHardMin,
-						      cz_get_uvd_level(hwmgr,
-					     cz_hwmgr->uvd_dpm.hard_min_clk,
-						   PPSMC_MSG_SetUvdHardMin));
+				PPSMC_MSG_SetUvdHardMin,
+				cz_get_uvd_level(hwmgr,
+					cz_hwmgr->uvd_dpm.hard_min_clk,
+					PPSMC_MSG_SetUvdHardMin));
 
 			cz_enable_disable_uvd_dpm(hwmgr, true);
 		} else {
@@ -1343,17 +1328,16 @@ int  cz_dpm_update_vce_dpm(struct pp_hwmgr *hwmgr)
 		hwmgr->dyn_state.vce_clock_voltage_dependency_table;
 
 	/* Stable Pstate is enabled and we need to set the VCE DPM to highest level */
-	if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
-					PHM_PlatformCaps_StablePState)
-					|| hwmgr->en_umd_pstate) {
+	if (PP_CAP(PHM_PlatformCaps_StablePState) ||
+	    hwmgr->en_umd_pstate) {
 		cz_hwmgr->vce_dpm.hard_min_clk =
 				  ptable->entries[ptable->count - 1].ecclk;
 
 		smum_send_msg_to_smc_with_parameter(hwmgr,
-					PPSMC_MSG_SetEclkHardMin,
-					cz_get_eclk_level(hwmgr,
-					     cz_hwmgr->vce_dpm.hard_min_clk,
-						PPSMC_MSG_SetEclkHardMin));
+			PPSMC_MSG_SetEclkHardMin,
+			cz_get_eclk_level(hwmgr,
+				cz_hwmgr->vce_dpm.hard_min_clk,
+				PPSMC_MSG_SetEclkHardMin));
 	} else {
 		/*Program HardMin based on the vce_arbiter.ecclk */
 		if (hwmgr->vce_arbiter.ecclk == 0) {
@@ -1366,10 +1350,10 @@ int  cz_dpm_update_vce_dpm(struct pp_hwmgr *hwmgr)
 		} else {
 			cz_hwmgr->vce_dpm.hard_min_clk = hwmgr->vce_arbiter.ecclk;
 			smum_send_msg_to_smc_with_parameter(hwmgr,
-						PPSMC_MSG_SetEclkHardMin,
-						cz_get_eclk_level(hwmgr,
-						cz_hwmgr->vce_dpm.hard_min_clk,
-						PPSMC_MSG_SetEclkHardMin));
+				PPSMC_MSG_SetEclkHardMin,
+				cz_get_eclk_level(hwmgr,
+					cz_hwmgr->vce_dpm.hard_min_clk,
+					PPSMC_MSG_SetEclkHardMin));
 		}
 	}
 	return 0;
@@ -1377,8 +1361,7 @@ int  cz_dpm_update_vce_dpm(struct pp_hwmgr *hwmgr)
 
 int cz_dpm_powerdown_vce(struct pp_hwmgr *hwmgr)
 {
-	if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
-					 PHM_PlatformCaps_VCEPowerGating))
+	if (PP_CAP(PHM_PlatformCaps_VCEPowerGating))
 		return smum_send_msg_to_smc(hwmgr,
 						     PPSMC_MSG_VCEPowerOFF);
 	return 0;
@@ -1386,8 +1369,7 @@ int cz_dpm_powerdown_vce(struct pp_hwmgr *hwmgr)
 
 int cz_dpm_powerup_vce(struct pp_hwmgr *hwmgr)
 {
-	if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
-					 PHM_PlatformCaps_VCEPowerGating))
+	if (PP_CAP(PHM_PlatformCaps_VCEPowerGating))
 		return smum_send_msg_to_smc(hwmgr,
 						     PPSMC_MSG_VCEPowerON);
 	return 0;

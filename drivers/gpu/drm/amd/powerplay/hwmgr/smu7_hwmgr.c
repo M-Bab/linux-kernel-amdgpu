@@ -815,7 +815,7 @@ uint32_t smu7_get_xclk(struct pp_hwmgr *hwmgr)
 {
 	uint32_t reference_clock, tmp;
 	struct cgs_display_info info = {0};
-	struct cgs_mode_info mode_info;
+	struct cgs_mode_info mode_info = {0};
 
 	info.mode_info = &mode_info;
 
@@ -3948,10 +3948,9 @@ static int smu7_program_display_gap(struct pp_hwmgr *hwmgr)
 	uint32_t ref_clock;
 	uint32_t refresh_rate = 0;
 	struct cgs_display_info info = {0};
-	struct cgs_mode_info mode_info;
+	struct cgs_mode_info mode_info = {0};
 
 	info.mode_info = &mode_info;
-
 	cgs_get_active_displays_info(hwmgr->device, &info);
 	num_active_displays = info.display_count;
 
@@ -3967,6 +3966,7 @@ static int smu7_program_display_gap(struct pp_hwmgr *hwmgr)
 	frame_time_in_us = 1000000 / refresh_rate;
 
 	pre_vbi_time_in_us = frame_time_in_us - 200 - mode_info.vblank_time_us;
+
 	data->frame_time_x2 = frame_time_in_us * 2 / 100;
 
 	display_gap2 = pre_vbi_time_in_us * (ref_clock / 100);
@@ -4339,9 +4339,9 @@ static int smu7_print_clock_levels(struct pp_hwmgr *hwmgr,
 
 		for (i = 0; i < pcie_table->count; i++)
 			size += sprintf(buf + size, "%d: %s %s\n", i,
-					(pcie_table->dpm_levels[i].value == 0) ? "2.5GB, x8" :
-					(pcie_table->dpm_levels[i].value == 1) ? "5.0GB, x16" :
-					(pcie_table->dpm_levels[i].value == 2) ? "8.0GB, x16" : "",
+					(pcie_table->dpm_levels[i].value == 0) ? "2.5GT/s, x8" :
+					(pcie_table->dpm_levels[i].value == 1) ? "5.0GT/s, x16" :
+					(pcie_table->dpm_levels[i].value == 2) ? "8.0GT/s, x16" : "",
 					(i == now) ? "*" : "");
 		break;
 	default:

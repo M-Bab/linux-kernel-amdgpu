@@ -31,6 +31,7 @@
 #include "dce110/dce110_hw_sequencer.h"
 #include "dce/dce_hwseq.h"
 #include "abm.h"
+#include "dmcu.h"
 #include "dcn10/dcn10_timing_generator.h"
 #include "dcn10/dcn10_dpp.h"
 #include "dcn10/dcn10_mpc.h"
@@ -481,27 +482,26 @@ static void program_watermarks(
 		"HW register value = 0x%x\n",
 		watermarks->a.pte_meta_urgent_ns, prog_wm_value);
 
+	if (REG(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_A)) {
+		prog_wm_value = convert_and_clamp(
+				watermarks->a.cstate_pstate.cstate_enter_plus_exit_ns,
+				refclk_mhz, 0x1fffff);
+		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_A, prog_wm_value);
+		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
+			"SR_ENTER_EXIT_WATERMARK_A calculated =%d\n"
+			"HW register value = 0x%x\n",
+			watermarks->a.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
 
-	prog_wm_value = convert_and_clamp(
-			watermarks->a.cstate_pstate.cstate_enter_plus_exit_ns,
-			refclk_mhz, 0x1fffff);
 
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_A, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"SR_ENTER_EXIT_WATERMARK_A calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->a.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
-
-
-	prog_wm_value = convert_and_clamp(
-			watermarks->a.cstate_pstate.cstate_exit_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_A, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"SR_EXIT_WATERMARK_A calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->a.cstate_pstate.cstate_exit_ns, prog_wm_value);
-
+		prog_wm_value = convert_and_clamp(
+				watermarks->a.cstate_pstate.cstate_exit_ns,
+				refclk_mhz, 0x1fffff);
+		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_A, prog_wm_value);
+		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
+			"SR_EXIT_WATERMARK_A calculated =%d\n"
+			"HW register value = 0x%x\n",
+			watermarks->a.cstate_pstate.cstate_exit_ns, prog_wm_value);
+	}
 
 	prog_wm_value = convert_and_clamp(
 			watermarks->a.cstate_pstate.pstate_change_ns,
@@ -533,24 +533,26 @@ static void program_watermarks(
 		watermarks->b.pte_meta_urgent_ns, prog_wm_value);
 
 
-	prog_wm_value = convert_and_clamp(
-			watermarks->b.cstate_pstate.cstate_enter_plus_exit_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_B, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"SR_ENTER_WATERMARK_B calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->b.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
+	if (REG(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_B)) {
+		prog_wm_value = convert_and_clamp(
+				watermarks->b.cstate_pstate.cstate_enter_plus_exit_ns,
+				refclk_mhz, 0x1fffff);
+		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_B, prog_wm_value);
+		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
+			"SR_ENTER_WATERMARK_B calculated =%d\n"
+			"HW register value = 0x%x\n",
+			watermarks->b.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
 
 
-	prog_wm_value = convert_and_clamp(
-			watermarks->b.cstate_pstate.cstate_exit_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_B, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"SR_EXIT_WATERMARK_B calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->b.cstate_pstate.cstate_exit_ns, prog_wm_value);
+		prog_wm_value = convert_and_clamp(
+				watermarks->b.cstate_pstate.cstate_exit_ns,
+				refclk_mhz, 0x1fffff);
+		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_B, prog_wm_value);
+		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
+			"SR_EXIT_WATERMARK_B calculated =%d\n"
+			"HW register value = 0x%x\n",
+			watermarks->b.cstate_pstate.cstate_exit_ns, prog_wm_value);
+	}
 
 	prog_wm_value = convert_and_clamp(
 			watermarks->b.cstate_pstate.pstate_change_ns,
@@ -581,25 +583,26 @@ static void program_watermarks(
 		watermarks->c.pte_meta_urgent_ns, prog_wm_value);
 
 
-	prog_wm_value = convert_and_clamp(
-			watermarks->c.cstate_pstate.cstate_enter_plus_exit_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_C, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"SR_ENTER_WATERMARK_C calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->c.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
+	if (REG(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_C)) {
+		prog_wm_value = convert_and_clamp(
+				watermarks->c.cstate_pstate.cstate_enter_plus_exit_ns,
+				refclk_mhz, 0x1fffff);
+		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_C, prog_wm_value);
+		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
+			"SR_ENTER_WATERMARK_C calculated =%d\n"
+			"HW register value = 0x%x\n",
+			watermarks->c.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
 
 
-	prog_wm_value = convert_and_clamp(
-			watermarks->c.cstate_pstate.cstate_exit_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_C, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"SR_EXIT_WATERMARK_C calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->c.cstate_pstate.cstate_exit_ns, prog_wm_value);
-
+		prog_wm_value = convert_and_clamp(
+				watermarks->c.cstate_pstate.cstate_exit_ns,
+				refclk_mhz, 0x1fffff);
+		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_C, prog_wm_value);
+		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
+			"SR_EXIT_WATERMARK_C calculated =%d\n"
+			"HW register value = 0x%x\n",
+			watermarks->c.cstate_pstate.cstate_exit_ns, prog_wm_value);
+	}
 
 	prog_wm_value = convert_and_clamp(
 			watermarks->c.cstate_pstate.pstate_change_ns,
@@ -629,24 +632,26 @@ static void program_watermarks(
 		watermarks->d.pte_meta_urgent_ns, prog_wm_value);
 
 
-	prog_wm_value = convert_and_clamp(
-			watermarks->d.cstate_pstate.cstate_enter_plus_exit_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_D, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"SR_ENTER_WATERMARK_D calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->d.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
+	if (REG(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_D)) {
+		prog_wm_value = convert_and_clamp(
+				watermarks->d.cstate_pstate.cstate_enter_plus_exit_ns,
+				refclk_mhz, 0x1fffff);
+		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_D, prog_wm_value);
+		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
+			"SR_ENTER_WATERMARK_D calculated =%d\n"
+			"HW register value = 0x%x\n",
+			watermarks->d.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
 
 
-	prog_wm_value = convert_and_clamp(
-			watermarks->d.cstate_pstate.cstate_exit_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_D, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"SR_EXIT_WATERMARK_D calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->d.cstate_pstate.cstate_exit_ns, prog_wm_value);
+		prog_wm_value = convert_and_clamp(
+				watermarks->d.cstate_pstate.cstate_exit_ns,
+				refclk_mhz, 0x1fffff);
+		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_D, prog_wm_value);
+		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
+			"SR_EXIT_WATERMARK_D calculated =%d\n"
+			"HW register value = 0x%x\n",
+			watermarks->d.cstate_pstate.cstate_exit_ns, prog_wm_value);
+	}
 
 
 	prog_wm_value = convert_and_clamp(
@@ -859,6 +864,7 @@ static void dcn10_init_hw(struct dc *dc)
 {
 	int i;
 	struct abm *abm = dc->res_pool->abm;
+	struct dmcu *dmcu = dc->res_pool->dmcu;
 	struct dce_hwseq *hws = dc->hwseq;
 
 	if (IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment)) {
@@ -920,6 +926,9 @@ static void dcn10_init_hw(struct dc *dc)
 		abm->funcs->init_backlight(abm);
 		abm->funcs->abm_init(abm);
 	}
+
+	if (dmcu != NULL)
+		dmcu->funcs->dmcu_init(dmcu);
 
 	/* power AFMT HDMI memory TODO: may move to dis/en output save power*/
 	REG_WRITE(DIO_MEM_PWR_CTRL, 0);
@@ -2011,10 +2020,11 @@ static void dcn10_power_on_fe(
 				plane_state->dst_rect.height);
 
 		dm_logger_write(dc->ctx->logger, LOG_DC,
-				"Pipe %d: width, height, x, y\n"
+				"Pipe %d: width, height, x, y         format:%d\n"
 				"viewport:%d, %d, %d, %d\n"
 				"recout:  %d, %d, %d, %d\n",
 				pipe_ctx->pipe_idx,
+				plane_state->format,
 				pipe_ctx->plane_res.scl_data.viewport.width,
 				pipe_ctx->plane_res.scl_data.viewport.height,
 				pipe_ctx->plane_res.scl_data.viewport.x,
@@ -2409,7 +2419,6 @@ static void program_all_pipe_in_tree(
 	}
 
 	if (pipe_ctx->plane_state != NULL) {
-		struct dc_cursor_position position = { 0 };
 		struct pipe_ctx *cur_pipe_ctx =
 				&dc->current_state->res_ctx.pipe_ctx[pipe_ctx->pipe_idx];
 
@@ -2429,10 +2438,13 @@ static void program_all_pipe_in_tree(
 		update_dchubp_dpp(dc, pipe_ctx, context);
 
 		/* TODO: this is a hack w/a for switching from mpo to pipe split */
-		dc_stream_set_cursor_position(pipe_ctx->stream, &position);
+		if (pipe_ctx->stream->cursor_attributes.address.quad_part != 0) {
+			struct dc_cursor_position position = { 0 };
 
-		dc_stream_set_cursor_attributes(pipe_ctx->stream,
+			dc_stream_set_cursor_position(pipe_ctx->stream, &position);
+			dc_stream_set_cursor_attributes(pipe_ctx->stream,
 				&pipe_ctx->stream->cursor_attributes);
+		}
 
 		if (cur_pipe_ctx->plane_state != pipe_ctx->plane_state) {
 			dc->hwss.set_input_transfer_func(
@@ -2545,6 +2557,11 @@ static void dcn10_apply_ctx_for_surface(
 		if (!pipe_ctx->plane_state && !old_pipe_ctx->plane_state)
 			continue;
 
+		if (pipe_ctx->stream_res.tg &&
+			pipe_ctx->stream_res.tg->inst == be_idx &&
+			!pipe_ctx->top_pipe)
+			pipe_ctx->stream_res.tg->funcs->lock(pipe_ctx->stream_res.tg);
+
 		/*
 		 * Powergate reused pipes that are not powergated
 		 * fairly hacky right now, using opp_id as indicator
@@ -2600,13 +2617,19 @@ static void dcn10_apply_ctx_for_surface(
 
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+		struct pipe_ctx *old_pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[i];
 
 		if (pipe_ctx->stream != stream)
 			continue;
 
 		/* looking for top pipe to program */
-		if (!pipe_ctx->top_pipe)
+		if (!pipe_ctx->top_pipe) {
 			program_all_pipe_in_tree(dc, pipe_ctx, context);
+			if (pipe_ctx->stream_res.tg &&
+				pipe_ctx->stream_res.tg->inst == be_idx &&
+				(pipe_ctx->plane_state || old_pipe_ctx->plane_state))
+				pipe_ctx->stream_res.tg->funcs->unlock(pipe_ctx->stream_res.tg);
+		}
 	}
 
 	dm_logger_write(dc->ctx->logger, LOG_BANDWIDTH_CALCS,

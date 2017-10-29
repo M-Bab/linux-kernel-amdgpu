@@ -20,6 +20,7 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  */
+#include <linux/kernel.h>
 #include <linux/firmware.h>
 #include <drm/drmP.h>
 #include "amdgpu.h"
@@ -803,7 +804,7 @@ static int gfx_v8_0_ring_test_ring(struct amdgpu_ring *ring)
 		DRM_UDELAY(1);
 	}
 	if (i < adev->usec_timeout) {
-		DRM_INFO("ring test on %d succeeded in %d usecs\n",
+		DRM_DEBUG("ring test on %d succeeded in %d usecs\n",
 			 ring->idx, i);
 	} else {
 		DRM_ERROR("amdgpu: ring %d test failed (scratch(0x%04X)=0x%08X)\n",
@@ -855,7 +856,7 @@ static int gfx_v8_0_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 	}
 	tmp = RREG32(scratch);
 	if (tmp == 0xDEADBEEF) {
-		DRM_INFO("ib test on ring %d succeeded\n", ring->idx);
+		DRM_DEBUG("ib test on ring %d succeeded\n", ring->idx);
 		r = 0;
 	} else {
 		DRM_ERROR("amdgpu: ib test failed (scratch(0x%04X)=0x%08X)\n",
@@ -3841,6 +3842,14 @@ static void gfx_v8_0_wait_for_rlc_serdes(struct amdgpu_device *adev)
 					break;
 				udelay(1);
 			}
+			if (k == adev->usec_timeout) {
+				gfx_v8_0_select_se_sh(adev, 0xffffffff,
+						      0xffffffff, 0xffffffff);
+				mutex_unlock(&adev->grbm_idx_mutex);
+				DRM_INFO("Timeout wait for RLC serdes %u,%u\n",
+					 i, j);
+				return;
+			}
 		}
 	}
 	gfx_v8_0_select_se_sh(adev, 0xffffffff, 0xffffffff, 0xffffffff);
@@ -3952,10 +3961,10 @@ static int gfx_v8_0_init_save_restore_list(struct amdgpu_device *adev)
 				adev->gfx.rlc.reg_list_format_size_bytes >> 2,
 				unique_indices,
 				&indices_count,
-				sizeof(unique_indices) / sizeof(int),
+				ARRAY_SIZE(unique_indices),
 				indirect_start_offsets,
 				&offset_count,
-				sizeof(indirect_start_offsets)/sizeof(int));
+				ARRAY_SIZE(indirect_start_offsets));
 
 	/* save and restore list */
 	WREG32_FIELD(RLC_SRM_CNTL, AUTO_INCR_ADDR, 1);
@@ -3977,14 +3986,14 @@ static int gfx_v8_0_init_save_restore_list(struct amdgpu_device *adev)
 	/* starting offsets starts */
 	WREG32(mmRLC_GPM_SCRATCH_ADDR,
 		adev->gfx.rlc.starting_offsets_start);
-	for (i = 0; i < sizeof(indirect_start_offsets)/sizeof(int); i++)
+	for (i = 0; i < ARRAY_SIZE(indirect_start_offsets); i++)
 		WREG32(mmRLC_GPM_SCRATCH_DATA,
 				indirect_start_offsets[i]);
 
 	/* unique indices */
 	temp = mmRLC_SRM_INDEX_CNTL_ADDR_0;
 	data = mmRLC_SRM_INDEX_CNTL_DATA_0;
-	for (i = 0; i < sizeof(unique_indices) / sizeof(int); i++) {
+	for (i = 0; i < ARRAY_SIZE(unique_indices); i++) {
 		if (unique_indices[i] != 0) {
 			WREG32(temp + i, unique_indices[i] & 0x3FFFF);
 			WREG32(data + i, unique_indices[i] >> 20);

@@ -736,6 +736,7 @@ struct amdgpu_ctx {
 	struct amdgpu_device    *adev;
 	struct amdgpu_queue_mgr queue_mgr;
 	unsigned		reset_counter;
+	unsigned        reset_counter_query;
 	uint32_t		vram_lost_counter;
 	spinlock_t		ring_lock;
 	struct dma_fence	**fences;
@@ -744,6 +745,7 @@ struct amdgpu_ctx {
 	enum amd_sched_priority init_priority;
 	enum amd_sched_priority override_priority;
 	struct mutex            lock;
+	atomic_t	guilty;
 };
 
 struct amdgpu_ctx_mgr {
@@ -883,7 +885,7 @@ struct amdgpu_mec {
 struct amdgpu_kiq {
 	u64			eop_gpu_addr;
 	struct amdgpu_bo	*eop_obj;
-	struct mutex		ring_mutex;
+	spinlock_t              ring_lock;
 	struct amdgpu_ring	ring;
 	struct amdgpu_irq_src	irq;
 };
@@ -1155,7 +1157,7 @@ static inline void amdgpu_set_ib_value(struct amdgpu_cs_parser *p,
 /*
  * Writeback
  */
-#define AMDGPU_MAX_WB 1024	/* Reserve at most 1024 WB slots for amdgpu-owned rings. */
+#define AMDGPU_MAX_WB 512	/* Reserve at most 512 WB slots for amdgpu-owned rings. */
 
 struct amdgpu_wb {
 	struct amdgpu_bo	*wb_obj;

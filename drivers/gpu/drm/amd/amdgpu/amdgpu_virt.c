@@ -22,7 +22,15 @@
  */
 
 #include "amdgpu.h"
-#define MAX_KIQ_REG_WAIT	100000
+#define MAX_KIQ_REG_WAIT	100000000 /* in usecs */
+
+bool amdgpu_virt_mmio_blocked(struct amdgpu_device *adev)
+{
+	/* By now all MMIO pages except mailbox are blocked */
+	/* if blocking is enabled in hypervisor. Choose the */
+	/* SCRATCH_REG0 to test. */
+	return RREG32_NO_KIQ(0xc040) == 0xffffffff;
+}
 
 int amdgpu_allocate_static_csa(struct amdgpu_device *adev)
 {
@@ -114,27 +122,24 @@ void amdgpu_virt_init_setting(struct amdgpu_device *adev)
 uint32_t amdgpu_virt_kiq_rreg(struct amdgpu_device *adev, uint32_t reg)
 {
 	signed long r;
-	uint32_t val;
-	struct dma_fence *f;
+	uint32_t val, seq;
 	struct amdgpu_kiq *kiq = &adev->gfx.kiq;
 	struct amdgpu_ring *ring = &kiq->ring;
 
 	BUG_ON(!ring->funcs->emit_rreg);
 
-	mutex_lock(&kiq->ring_mutex);
+	spin_lock(&kiq->ring_lock);
 	amdgpu_ring_alloc(ring, 32);
 	amdgpu_ring_emit_rreg(ring, reg);
-	amdgpu_fence_emit(ring, &f);
+	amdgpu_fence_emit_polling(ring, &seq);
 	amdgpu_ring_commit(ring);
-	mutex_unlock(&kiq->ring_mutex);
+	spin_unlock(&kiq->ring_lock);
 
-	r = dma_fence_wait_timeout(f, false, msecs_to_jiffies(MAX_KIQ_REG_WAIT));
-	dma_fence_put(f);
+	r = amdgpu_fence_wait_polling(ring, seq, MAX_KIQ_REG_WAIT);
 	if (r < 1) {
-		DRM_ERROR("wait for kiq fence error: %ld.\n", r);
+		DRM_ERROR("wait for kiq fence error: %ld\n", r);
 		return ~0;
 	}
-
 	val = adev->wb.wb[adev->virt.reg_val_offs];
 
 	return val;
@@ -143,23 +148,22 @@ uint32_t amdgpu_virt_kiq_rreg(struct amdgpu_device *adev, uint32_t reg)
 void amdgpu_virt_kiq_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v)
 {
 	signed long r;
-	struct dma_fence *f;
+	uint32_t seq;
 	struct amdgpu_kiq *kiq = &adev->gfx.kiq;
 	struct amdgpu_ring *ring = &kiq->ring;
 
 	BUG_ON(!ring->funcs->emit_wreg);
 
-	mutex_lock(&kiq->ring_mutex);
+	spin_lock(&kiq->ring_lock);
 	amdgpu_ring_alloc(ring, 32);
 	amdgpu_ring_emit_wreg(ring, reg, v);
-	amdgpu_fence_emit(ring, &f);
+	amdgpu_fence_emit_polling(ring, &seq);
 	amdgpu_ring_commit(ring);
-	mutex_unlock(&kiq->ring_mutex);
+	spin_unlock(&kiq->ring_lock);
 
-	r = dma_fence_wait_timeout(f, false, msecs_to_jiffies(MAX_KIQ_REG_WAIT));
+	r = amdgpu_fence_wait_polling(ring, seq, MAX_KIQ_REG_WAIT);
 	if (r < 1)
-		DRM_ERROR("wait for kiq fence error: %ld.\n", r);
-	dma_fence_put(f);
+		DRM_ERROR("wait for kiq fence error: %ld\n", r);
 }
 
 /**
@@ -227,6 +231,22 @@ int amdgpu_virt_reset_gpu(struct amdgpu_device *adev)
 	}
 
 	return 0;
+}
+
+/**
+ * amdgpu_virt_wait_reset() - wait for reset gpu completed
+ * @amdgpu:	amdgpu device.
+ * Wait for GPU reset completed.
+ * Return: Zero if reset success, otherwise will return error.
+ */
+int amdgpu_virt_wait_reset(struct amdgpu_device *adev)
+{
+	struct amdgpu_virt *virt = &adev->virt;
+
+	if (!virt->ops || !virt->ops->wait_reset)
+		return -EINVAL;
+
+	return virt->ops->wait_reset(adev);
 }
 
 /**

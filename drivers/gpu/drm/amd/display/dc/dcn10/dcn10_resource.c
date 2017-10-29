@@ -367,25 +367,25 @@ static const struct bios_registers bios_regs = {
 		NBIO_SR(BIOS_SCRATCH_6)
 };
 
-#define mi_regs(id)\
+#define hubp_regs(id)\
 [id] = {\
-	MI_REG_LIST_DCN10(id)\
+	HUBP_REG_LIST_DCN10(id)\
 }
 
 
-static const struct dcn_mi_registers mi_regs[] = {
-	mi_regs(0),
-	mi_regs(1),
-	mi_regs(2),
-	mi_regs(3),
+static const struct dcn_mi_registers hubp_regs[] = {
+	hubp_regs(0),
+	hubp_regs(1),
+	hubp_regs(2),
+	hubp_regs(3),
 };
 
-static const struct dcn_mi_shift mi_shift = {
-		MI_MASK_SH_LIST_DCN10(__SHIFT)
+static const struct dcn_mi_shift hubp_shift = {
+		HUBP_MASK_SH_LIST_DCN10(__SHIFT)
 };
 
-static const struct dcn_mi_mask mi_mask = {
-		MI_MASK_SH_LIST_DCN10(_MASK)
+static const struct dcn_mi_mask hubp_mask = {
+		HUBP_MASK_SH_LIST_DCN10(_MASK)
 };
 
 #define clk_src_regs(index, pllid)\
@@ -430,6 +430,7 @@ static const struct dc_debug debug_defaults_drv = {
 		.disable_pplib_wm_range = false,
 		.pplib_wm_report_mode = WM_REPORT_DEFAULT,
 		.pipe_split_policy = MPC_SPLIT_AVOID_MULT_DISP,
+		.force_single_disp_pipe_split = true,
 		.disable_dcc = DCC_ENABLE,
 		.voltage_align_fclk = true,
 		.disable_stereo_support = true,
@@ -769,7 +770,7 @@ static struct hubp *dcn10_hubp_create(
 		return NULL;
 
 	dcn10_hubp_construct(hubp1, ctx, inst,
-			     &mi_regs[inst], &mi_shift, &mi_mask);
+			     &hubp_regs[inst], &hubp_shift, &hubp_mask);
 	return &hubp1->base;
 }
 
@@ -1234,6 +1235,7 @@ static bool construct(
 	dc->caps.max_cursor_size = 256;
 
 	dc->caps.max_slave_planes = 1;
+	dc->caps.is_apu = true;
 
 	if (dc->ctx->dce_environment == DCE_ENV_PRODUCTION_DRV)
 		dc->debug = debug_defaults_drv;
@@ -1273,7 +1275,7 @@ static bool construct(
 		if (pool->base.clock_sources[i] == NULL) {
 			dm_error("DC: failed to create clock sources!\n");
 			BREAK_TO_DEBUGGER();
-			goto clock_source_create_fail;
+			goto fail;
 		}
 	}
 
@@ -1282,7 +1284,7 @@ static bool construct(
 		if (pool->base.display_clock == NULL) {
 			dm_error("DC: failed to create display clock!\n");
 			BREAK_TO_DEBUGGER();
-			goto disp_clk_create_fail;
+			goto fail;
 		}
 	}
 
@@ -1293,7 +1295,7 @@ static bool construct(
 	if (pool->base.dmcu == NULL) {
 		dm_error("DC: failed to create dmcu!\n");
 		BREAK_TO_DEBUGGER();
-		goto res_create_fail;
+		goto fail;
 	}
 
 	pool->base.abm = dce_abm_create(ctx,
@@ -1303,7 +1305,7 @@ static bool construct(
 	if (pool->base.abm == NULL) {
 		dm_error("DC: failed to create abm!\n");
 		BREAK_TO_DEBUGGER();
-		goto res_create_fail;
+		goto fail;
 	}
 
 	dml_init_instance(&dc->dml, DML_PROJECT_RAVEN1);
@@ -1343,13 +1345,11 @@ static bool construct(
 	}
 
 	{
-	#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 		struct irq_service_init_data init_data;
 		init_data.ctx = dc->ctx;
 		pool->base.irqs = dal_irq_service_dcn10_create(&init_data);
 		if (!pool->base.irqs)
-			goto irqs_create_fail;
-	#endif
+			goto fail;
 	}
 
 	/* index to valid pipe resource  */
@@ -1367,7 +1367,7 @@ static bool construct(
 			BREAK_TO_DEBUGGER();
 			dm_error(
 				"DC: failed to create memory input!\n");
-			goto mi_create_fail;
+			goto fail;
 		}
 
 		pool->base.ipps[j] = dcn10_ipp_create(ctx, i);
@@ -1375,7 +1375,7 @@ static bool construct(
 			BREAK_TO_DEBUGGER();
 			dm_error(
 				"DC: failed to create input pixel processor!\n");
-			goto ipp_create_fail;
+			goto fail;
 		}
 
 		pool->base.dpps[j] = dcn10_dpp_create(ctx, i);
@@ -1383,7 +1383,7 @@ static bool construct(
 			BREAK_TO_DEBUGGER();
 			dm_error(
 				"DC: failed to create dpp!\n");
-			goto dpp_create_fail;
+			goto fail;
 		}
 
 		pool->base.opps[j] = dcn10_opp_create(ctx, i);
@@ -1391,7 +1391,7 @@ static bool construct(
 			BREAK_TO_DEBUGGER();
 			dm_error(
 				"DC: failed to create output pixel processor!\n");
-			goto opp_create_fail;
+			goto fail;
 		}
 
 		pool->base.timing_generators[j] = dcn10_timing_generator_create(
@@ -1399,7 +1399,7 @@ static bool construct(
 		if (pool->base.timing_generators[j] == NULL) {
 			BREAK_TO_DEBUGGER();
 			dm_error("DC: failed to create tg!\n");
-			goto otg_create_fail;
+			goto fail;
 		}
 		/* check next valid pipe */
 		j++;
@@ -1418,13 +1418,13 @@ static bool construct(
 	if (pool->base.mpc == NULL) {
 		BREAK_TO_DEBUGGER();
 		dm_error("DC: failed to create mpc!\n");
-		goto mpc_create_fail;
+		goto fail;
 	}
 
 	if (!resource_construct(num_virtual_links, dc, &pool->base,
 			(!IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment) ?
 			&res_create_funcs : &res_create_maximus_funcs)))
-			goto res_create_fail;
+			goto fail;
 
 	dcn10_hw_sequencer_construct(dc);
 	dc->caps.max_planes =  pool->base.pipe_count;
@@ -1433,16 +1433,7 @@ static bool construct(
 
 	return true;
 
-disp_clk_create_fail:
-mpc_create_fail:
-otg_create_fail:
-opp_create_fail:
-dpp_create_fail:
-ipp_create_fail:
-mi_create_fail:
-irqs_create_fail:
-res_create_fail:
-clock_source_create_fail:
+fail:
 
 	destruct(pool);
 

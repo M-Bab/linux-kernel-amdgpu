@@ -551,6 +551,7 @@ static bool construct(struct dc *dc,
 
 	dc_version = resource_parse_asic_id(init_params->asic_id);
 	dc->ctx->dce_version = dc_version;
+
 #if defined(CONFIG_DRM_AMD_DC_FBC)
 	dc->ctx->fbc_gpu_addr = init_params->fbc_gpu_addr;
 #endif
@@ -793,12 +794,12 @@ bool dc_enable_stereo(
  * Applies given context to HW and copy it into current context.
  * It's up to the user to release the src context afterwards.
  */
-static bool dc_commit_state_no_check(struct dc *dc, struct dc_state *context)
+static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *context)
 {
 	struct dc_bios *dcb = dc->ctx->dc_bios;
 	enum dc_status result = DC_ERROR_UNEXPECTED;
 	struct pipe_ctx *pipe;
-	int i, j, k, l;
+	int i, k, l;
 	struct dc_stream_state *dc_streams[MAX_STREAMS] = {0};
 
 	for (i = 0; i < context->stream_count; i++)
@@ -852,15 +853,6 @@ static bool dc_commit_state_no_check(struct dc *dc, struct dc_state *context)
 
 	dc_enable_stereo(dc, context, dc_streams, context->stream_count);
 
-	for (i = 0; i < context->stream_count; i++) {
-		for (j = 0; j < MAX_PIPES; j++) {
-			pipe = &context->res_ctx.pipe_ctx[j];
-
-			if (!pipe->top_pipe && pipe->stream == context->streams[i])
-				dc->hwss.pipe_control_lock(dc, pipe, false);
-		}
-	}
-
 	dc_release_state(dc->current_state);
 
 	dc->current_state = context;
@@ -869,7 +861,7 @@ static bool dc_commit_state_no_check(struct dc *dc, struct dc_state *context)
 
 	dc->hwss.optimize_shared_resources(dc);
 
-	return (result == DC_OK);
+	return result;
 }
 
 bool dc_commit_state(struct dc *dc, struct dc_state *context)
@@ -918,6 +910,12 @@ bool dc_post_update_surfaces_to_stream(struct dc *dc)
 	return true;
 }
 
+/*
+ * TODO this whole function needs to go
+ *
+ * dc_surface_update is needlessly complex. See if we can just replace this
+ * with a dc_plane_state and follow the atomic model a bit more closely here.
+ */
 bool dc_commit_planes_to_stream(
 		struct dc *dc,
 		struct dc_plane_state **plane_states,
@@ -925,10 +923,11 @@ bool dc_commit_planes_to_stream(
 		struct dc_stream_state *dc_stream,
 		struct dc_state *state)
 {
+	/* no need to dynamically allocate this. it's pretty small */
 	struct dc_surface_update updates[MAX_SURFACES];
-	struct dc_flip_addrs flip_addr[MAX_SURFACES];
-	struct dc_plane_info plane_info[MAX_SURFACES];
-	struct dc_scaling_info scaling_info[MAX_SURFACES];
+	struct dc_flip_addrs *flip_addr;
+	struct dc_plane_info *plane_info;
+	struct dc_scaling_info *scaling_info;
 	int i;
 	struct dc_stream_update *stream_update =
 			kzalloc(sizeof(struct dc_stream_update), GFP_KERNEL);
@@ -938,10 +937,14 @@ bool dc_commit_planes_to_stream(
 		return false;
 	}
 
+	flip_addr = kcalloc(MAX_SURFACES, sizeof(struct dc_flip_addrs),
+			    GFP_KERNEL);
+	plane_info = kcalloc(MAX_SURFACES, sizeof(struct dc_plane_info),
+			     GFP_KERNEL);
+	scaling_info = kcalloc(MAX_SURFACES, sizeof(struct dc_scaling_info),
+			       GFP_KERNEL);
+
 	memset(updates, 0, sizeof(updates));
-	memset(flip_addr, 0, sizeof(flip_addr));
-	memset(plane_info, 0, sizeof(plane_info));
-	memset(scaling_info, 0, sizeof(scaling_info));
 
 	stream_update->src = dc_stream->src;
 	stream_update->dst = dc_stream->dst;
@@ -980,6 +983,9 @@ bool dc_commit_planes_to_stream(
 			new_plane_count,
 			dc_stream, stream_update, plane_states, state);
 
+	kfree(flip_addr);
+	kfree(plane_info);
+	kfree(scaling_info);
 	kfree(stream_update);
 	return true;
 }
@@ -1250,27 +1256,6 @@ static void commit_planes_for_stream(struct dc *dc,
 		return;
 	}
 
-	/* Lock pipes for provided surfaces, or all active if full update*/
-	for (i = 0; i < surface_count; i++) {
-		struct dc_plane_state *plane_state = srf_updates[i].surface;
-
-		for (j = 0; j < dc->res_pool->pipe_count; j++) {
-			struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
-
-			if (update_type != UPDATE_TYPE_FULL && pipe_ctx->plane_state != plane_state)
-				continue;
-			if (!pipe_ctx->plane_state || pipe_ctx->top_pipe)
-				continue;
-
-			dc->hwss.pipe_control_lock(
-					dc,
-					pipe_ctx,
-					true);
-		}
-		if (update_type == UPDATE_TYPE_FULL)
-			break;
-	}
-
 	/* Full fe update*/
 	for (j = 0; j < dc->res_pool->pipe_count; j++) {
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
@@ -1325,26 +1310,6 @@ static void commit_planes_for_stream(struct dc *dc,
 				resource_build_info_frame(pipe_ctx);
 				dc->hwss.update_info_frame(pipe_ctx);
 			}
-		}
-	}
-
-	/* Unlock pipes */
-	for (i = dc->res_pool->pipe_count - 1; i >= 0; i--) {
-		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
-
-		for (j = 0; j < surface_count; j++) {
-			if (update_type != UPDATE_TYPE_FULL &&
-			    srf_updates[j].surface != pipe_ctx->plane_state)
-				continue;
-			if (!pipe_ctx->plane_state || pipe_ctx->top_pipe)
-				continue;
-
-			dc->hwss.pipe_control_lock(
-					dc,
-					pipe_ctx,
-					false);
-
-			break;
 		}
 	}
 }
