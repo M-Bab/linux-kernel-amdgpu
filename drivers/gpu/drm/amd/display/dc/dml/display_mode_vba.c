@@ -1,5 +1,32 @@
+/*
+ * Copyright 2017 Advanced Micro Devices, Inc.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * Authors: AMD
+ *
+ */
+
 #include "display_mode_lib.h"
 #include "display_mode_vba.h"
+
+#include "dml_inline_defs.h"
 
 static const unsigned int NumberOfStates = DC__VOLTAGE_STATES;
 
@@ -251,19 +278,14 @@ unsigned int dml_get_voltage_level(
 		const display_e2e_pipe_params_st *pipes,
 		unsigned int num_pipes)
 {
-	bool need_recalculate = memcmp(
-			&mode_lib->soc,
-			&mode_lib->vba.soc,
-			sizeof(mode_lib->vba.soc)) != 0
+	bool need_recalculate = memcmp(&mode_lib->soc, &mode_lib->vba.soc, sizeof(mode_lib->vba.soc)) != 0
 			|| memcmp(&mode_lib->ip, &mode_lib->vba.ip, sizeof(mode_lib->vba.ip)) != 0
-			|| memcmp(&mode_lib->me, &mode_lib->vba.me, sizeof(mode_lib->vba.me)) != 0
 			|| num_pipes != mode_lib->vba.cache_num_pipes
 			|| memcmp(pipes, mode_lib->vba.cache_pipes,
 					sizeof(display_e2e_pipe_params_st) * num_pipes) != 0;
 
 	mode_lib->vba.soc = mode_lib->soc;
 	mode_lib->vba.ip = mode_lib->ip;
-	mode_lib->vba.me = mode_lib->me;
 	memcpy(mode_lib->vba.cache_pipes, pipes, sizeof(*pipes) * num_pipes);
 	mode_lib->vba.cache_num_pipes = num_pipes;
 
@@ -772,7 +794,6 @@ static void recalculate_params(
 	// This is only safe to use memcmp because there are non-POD types in struct display_mode_lib
 	if (memcmp(&mode_lib->soc, &mode_lib->vba.soc, sizeof(mode_lib->vba.soc)) != 0
 			|| memcmp(&mode_lib->ip, &mode_lib->vba.ip, sizeof(mode_lib->vba.ip)) != 0
-			|| memcmp(&mode_lib->me, &mode_lib->vba.me, sizeof(mode_lib->vba.me)) != 0
 			|| num_pipes != mode_lib->vba.cache_num_pipes
 			|| memcmp(
 					pipes,
@@ -780,7 +801,6 @@ static void recalculate_params(
 					sizeof(display_e2e_pipe_params_st) * num_pipes) != 0) {
 		mode_lib->vba.soc = mode_lib->soc;
 		mode_lib->vba.ip = mode_lib->ip;
-		mode_lib->vba.me = mode_lib->me;
 		memcpy(mode_lib->vba.cache_pipes, pipes, sizeof(*pipes) * num_pipes);
 		mode_lib->vba.cache_num_pipes = num_pipes;
 		recalculate(mode_lib);
@@ -1158,7 +1178,7 @@ static bool CalculatePrefetchSchedule(
 		else if (PageTableLevels == 3)
 			*Tno_bw = UrgentExtraLatency;
 		else
-			Tno_bw = 0;
+			*Tno_bw = 0;
 	} else if (DCCEnable)
 		*Tno_bw = LineTime;
 	else
@@ -3463,7 +3483,7 @@ bool Calculate256BBlockSizes(
 		unsigned int *BlockWidth256BytesC)
 {
 	if ((SourcePixelFormat == dm_444_64 || SourcePixelFormat == dm_444_32
-			|| SourcePixelFormat == dm_444_16 || SourcePixelFormat == dm_444_16
+			|| SourcePixelFormat == dm_444_16
 			|| SourcePixelFormat == dm_444_8)) {
 		if (SurfaceTiling == dm_sw_linear) {
 			*BlockHeight256BytesY = 1;
@@ -4721,14 +4741,14 @@ static void ModeSupportAndSystemConfigurationFull(struct display_mode_lib *mode_
 					&& mode_lib->vba.SwathWidthYSingleDPP[k]
 							<= mode_lib->vba.MaximumSwathWidth[k]
 					&& mode_lib->vba.ODMCombineEnablePerState[i][k] == false) {
-				mode_lib->vba.NoOfDPP[i][k] = 1.0;
+				mode_lib->vba.NoOfDPP[i][k] = 1;
 				mode_lib->vba.RequiredDPPCLK[i][k] =
 						mode_lib->vba.MinDPPCLKUsingSingleDPP[k]
 								* (1.0
 										+ mode_lib->vba.DISPCLKDPPCLKDSCCLKDownSpreading
 												/ 100.0);
 			} else {
-				mode_lib->vba.NoOfDPP[i][k] = 2.0;
+				mode_lib->vba.NoOfDPP[i][k] = 2;
 				mode_lib->vba.RequiredDPPCLK[i][k] =
 						mode_lib->vba.MinDPPCLKUsingSingleDPP[k]
 								* (1.0
@@ -4790,14 +4810,14 @@ static void ModeSupportAndSystemConfigurationFull(struct display_mode_lib *mode_
 								<= mode_lib->vba.MaximumSwathWidth[k]
 						&& mode_lib->vba.ODMCombineEnablePerState[i][k]
 								== false) {
-					mode_lib->vba.NoOfDPP[i][k] = 1.0;
+					mode_lib->vba.NoOfDPP[i][k] = 1;
 					mode_lib->vba.RequiredDPPCLK[i][k] =
 							mode_lib->vba.MinDPPCLKUsingSingleDPP[k]
 									* (1.0
 											+ mode_lib->vba.DISPCLKDPPCLKDSCCLKDownSpreading
 													/ 100.0);
 				} else {
-					mode_lib->vba.NoOfDPP[i][k] = 2.0;
+					mode_lib->vba.NoOfDPP[i][k] = 2;
 					mode_lib->vba.RequiredDPPCLK[i][k] =
 							mode_lib->vba.MinDPPCLKUsingSingleDPP[k]
 									* (1.0
@@ -4833,14 +4853,14 @@ static void ModeSupportAndSystemConfigurationFull(struct display_mode_lib *mode_
 				mode_lib->vba.ODMCombineEnablePerState[i][k] = false;
 				if (mode_lib->vba.SwathWidthYSingleDPP[k]
 						<= mode_lib->vba.MaximumSwathWidth[k]) {
-					mode_lib->vba.NoOfDPP[i][k] = 1.0;
+					mode_lib->vba.NoOfDPP[i][k] = 1;
 					mode_lib->vba.RequiredDPPCLK[i][k] =
 							mode_lib->vba.MinDPPCLKUsingSingleDPP[k]
 									* (1.0
 											+ mode_lib->vba.DISPCLKDPPCLKDSCCLKDownSpreading
 													/ 100.0);
 				} else {
-					mode_lib->vba.NoOfDPP[i][k] = 2.0;
+					mode_lib->vba.NoOfDPP[i][k] = 2;
 					mode_lib->vba.RequiredDPPCLK[i][k] =
 							mode_lib->vba.MinDPPCLKUsingSingleDPP[k]
 									* (1.0

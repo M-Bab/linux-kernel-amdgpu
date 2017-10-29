@@ -176,7 +176,7 @@ int amdgpu_vce_sw_init(struct amdgpu_device *adev, unsigned long size)
 	ring = &adev->vce.ring[0];
 	rq = &ring->sched.sched_rq[AMD_SCHED_PRIORITY_NORMAL];
 	r = amd_sched_entity_init(&ring->sched, &adev->vce.entity,
-				  rq, amdgpu_sched_jobs);
+				  rq, amdgpu_sched_jobs, NULL);
 	if (r != 0) {
 		DRM_ERROR("Failed setting up VCE run queue.\n");
 		return r;
@@ -954,7 +954,7 @@ int amdgpu_vce_ring_test_ring(struct amdgpu_ring *ring)
 	}
 
 	if (i < timeout) {
-		DRM_INFO("ring test on %d succeeded in %d usecs\n",
+		DRM_DEBUG("ring test on %d succeeded in %d usecs\n",
 			 ring->idx, i);
 	} else {
 		DRM_ERROR("amdgpu: ring %d test failed\n",
@@ -999,7 +999,7 @@ int amdgpu_vce_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 	} else if (r < 0) {
 		DRM_ERROR("amdgpu: fence wait failed (%ld).\n", r);
 	} else {
-		DRM_INFO("ib test on ring %d succeeded\n", ring->idx);
+		DRM_DEBUG("ib test on ring %d succeeded\n", ring->idx);
 		r = 0;
 	}
 error:

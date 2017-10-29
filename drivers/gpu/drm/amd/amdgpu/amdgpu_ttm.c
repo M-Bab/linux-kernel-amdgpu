@@ -110,7 +110,7 @@ static int amdgpu_ttm_global_init(struct amdgpu_device *adev)
 	ring = adev->mman.buffer_funcs_ring;
 	rq = &ring->sched.sched_rq[AMD_SCHED_PRIORITY_KERNEL];
 	r = amd_sched_entity_init(&ring->sched, &adev->mman.entity,
-				  rq, amdgpu_sched_jobs);
+				  rq, amdgpu_sched_jobs, NULL);
 	if (r) {
 		DRM_ERROR("Failed setting up TTM BO move run queue.\n");
 		goto error_entity;
@@ -889,7 +889,7 @@ bool amdgpu_ttm_is_bound(struct ttm_tt *ttm)
 	return gtt && !list_empty(&gtt->list);
 }
 
-int amdgpu_ttm_bind(struct ttm_buffer_object *bo, struct ttm_mem_reg *bo_mem)
+int amdgpu_ttm_bind(struct ttm_buffer_object *bo)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->bdev);
 	struct ttm_tt *ttm = bo->ttm;
@@ -910,9 +910,10 @@ int amdgpu_ttm_bind(struct ttm_buffer_object *bo, struct ttm_mem_reg *bo_mem)
 	placement.busy_placement = &placements;
 	placements.fpfn = 0;
 	placements.lpfn = adev->mc.gart_size >> PAGE_SHIFT;
-	placements.flags = bo->mem.placement | TTM_PL_FLAG_TT;
+	placements.flags = (bo->mem.placement & ~TTM_PL_MASK_MEM) |
+		TTM_PL_FLAG_TT;
 
-	r = ttm_bo_mem_space(bo, &placement, &tmp, true, false);
+	r = ttm_bo_mem_space(bo, &placement, &tmp, false, false);
 	if (unlikely(r))
 		return r;
 
@@ -1631,7 +1632,7 @@ int amdgpu_fill_buffer(struct amdgpu_bo *bo,
 	}
 
 	if (bo->tbo.mem.mem_type == TTM_PL_TT) {
-		r = amdgpu_ttm_bind(&bo->tbo, &bo->tbo.mem);
+		r = amdgpu_ttm_bind(&bo->tbo);
 		if (r)
 			return r;
 	}

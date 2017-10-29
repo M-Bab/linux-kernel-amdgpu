@@ -29,7 +29,6 @@
 #include "dml_common_defs.h"
 #include "soc_bounding_box.h"
 #include "display_mode_vba.h"
-#include "display_pipe_clocks.h"
 #include "display_rq_dlg_calc.h"
 #include "dml1_display_rq_dlg_calc.h"
 
@@ -41,7 +40,6 @@ enum dml_project {
 struct display_mode_lib {
 	struct _vcs_dpi_ip_params_st ip;
 	struct _vcs_dpi_soc_bounding_box_st soc;
-	struct _vcs_dpi_mode_evaluation_st me;
 	enum dml_project project;
 	struct vba_vars_st vba;
 	struct dal_logger *logger;

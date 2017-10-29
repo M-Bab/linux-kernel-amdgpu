@@ -90,6 +90,12 @@ static int amdgpu_cs_parser_init(struct amdgpu_cs_parser *p, void *data)
 		goto free_chunk;
 	}
 
+	/* skip guilty context job */
+	if (atomic_read(&p->ctx->guilty) == 1) {
+		ret = -ECANCELED;
+		goto free_chunk;
+	}
+
 	mutex_lock(&p->ctx->lock);
 
 	/* get chunks */
@@ -172,7 +178,6 @@ static int amdgpu_cs_parser_init(struct amdgpu_cs_parser *p, void *data)
 	if (ret)
 		goto free_all_kdata;
 
-	p->job->vram_lost_counter = atomic_read(&p->adev->vram_lost_counter);
 	if (p->ctx->vram_lost_counter != p->job->vram_lost_counter) {
 		ret = -ECANCELED;
 		goto free_all_kdata;
@@ -676,7 +681,7 @@ static int amdgpu_cs_parser_bos(struct amdgpu_cs_parser *p,
 	if (!r && p->uf_entry.robj) {
 		struct amdgpu_bo *uf = p->uf_entry.robj;
 
-		r = amdgpu_ttm_bind(&uf->tbo, &uf->tbo.mem);
+		r = amdgpu_ttm_bind(&uf->tbo);
 		p->job->uf_addr += amdgpu_bo_gpu_offset(uf);
 	}
 
@@ -853,36 +858,37 @@ static int amdgpu_cs_ib_vm_chunk(struct amdgpu_device *adev,
 	struct amdgpu_fpriv *fpriv = p->filp->driver_priv;
 	struct amdgpu_vm *vm = &fpriv->vm;
 	struct amdgpu_ring *ring = p->job->ring;
-	int i, j, r;
+	int r;
 
-	for (i = 0, j = 0; i < p->nchunks && j < p->job->num_ibs; i++) {
+	/* Only for UVD/VCE VM emulation */
+	if (p->job->ring->funcs->parse_cs) {
+		unsigned i, j;
 
-		struct amdgpu_cs_chunk *chunk;
-		struct amdgpu_ib *ib;
-		struct drm_amdgpu_cs_chunk_ib *chunk_ib;
-
-		chunk = &p->chunks[i];
-		ib = &p->job->ibs[j];
-		chunk_ib = (struct drm_amdgpu_cs_chunk_ib *)chunk->kdata;
-
-		if (chunk->chunk_id != AMDGPU_CHUNK_ID_IB)
-			continue;
-
-		if (p->job->ring->funcs->parse_cs) {
+		for (i = 0, j = 0; i < p->nchunks && j < p->job->num_ibs; i++) {
+			struct drm_amdgpu_cs_chunk_ib *chunk_ib;
 			struct amdgpu_bo_va_mapping *m;
 			struct amdgpu_bo *aobj = NULL;
+			struct amdgpu_cs_chunk *chunk;
+			struct amdgpu_ib *ib;
 			uint64_t offset;
 			uint8_t *kptr;
 
+			chunk = &p->chunks[i];
+			ib = &p->job->ibs[j];
+			chunk_ib = chunk->kdata;
+
+			if (chunk->chunk_id != AMDGPU_CHUNK_ID_IB)
+				continue;
+
 			r = amdgpu_cs_find_mapping(p, chunk_ib->va_start,
-					&aobj, &m);
+						   &aobj, &m);
 			if (r) {
 				DRM_ERROR("IB va_start is invalid\n");
 				return r;
 			}
 
 			if ((chunk_ib->va_start + chunk_ib->ib_bytes) >
-				(m->last + 1) * AMDGPU_GPU_PAGE_SIZE) {
+			    (m->last + 1) * AMDGPU_GPU_PAGE_SIZE) {
 				DRM_ERROR("IB va_start+ib_bytes is invalid\n");
 				return -EINVAL;
 			}
@@ -899,12 +905,12 @@ static int amdgpu_cs_ib_vm_chunk(struct amdgpu_device *adev,
 			memcpy(ib->ptr, kptr, chunk_ib->ib_bytes);
 			amdgpu_bo_kunmap(aobj);
 
-			/* Only for UVD/VCE VM emulation */
 			r = amdgpu_ring_parse_cs(ring, p, j);
 			if (r)
 				return r;
+
+			j++;
 		}
-		j++;
 	}
 
 	if (p->job->vm) {
@@ -1192,11 +1198,10 @@ static int amdgpu_cs_submit(struct amdgpu_cs_parser *p,
 	job->uf_sequence = seq;
 
 	amdgpu_job_free_resources(job);
-	amdgpu_ring_priority_get(job->ring,
-				 amd_sched_get_job_priority(&job->base));
+	amdgpu_ring_priority_get(job->ring, job->base.s_priority);
 
 	trace_amdgpu_cs_ioctl(job);
-	amd_sched_entity_push_job(&job->base);
+	amd_sched_entity_push_job(&job->base, entity);
 
 	ttm_eu_fence_buffer_objects(&p->ticket, &p->validated, p->fence);
 	amdgpu_mn_unlock(p->mn);
@@ -1582,14 +1587,14 @@ int amdgpu_cs_find_mapping(struct amdgpu_cs_parser *parser,
 	if (READ_ONCE((*bo)->tbo.resv->lock.ctx) != &parser->ticket)
 		return -EINVAL;
 
-	r = amdgpu_ttm_bind(&(*bo)->tbo, &(*bo)->tbo.mem);
-	if (unlikely(r))
-		return r;
+	if (!((*bo)->flags & AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS)) {
+		(*bo)->flags |= AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS;
+		amdgpu_ttm_placement_from_domain(*bo, (*bo)->allowed_domains);
+		r = ttm_bo_validate(&(*bo)->tbo, &(*bo)->placement, false,
+				    false);
+		if (r)
+			return r;
+	}
 
-	if ((*bo)->flags & AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS)
-		return 0;
-
-	(*bo)->flags |= AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS;
-	amdgpu_ttm_placement_from_domain(*bo, (*bo)->allowed_domains);
-	return ttm_bo_validate(&(*bo)->tbo, &(*bo)->placement, false, false);
+	return amdgpu_ttm_bind(&(*bo)->tbo);
 }

@@ -850,22 +850,12 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 	 */
 	pipe_ctx->plane_res.scl_data.lb_params.depth = LB_PIXEL_DEPTH_30BPP;
 
-	/**
-	 * KMD sends us h and v_addressable without the borders, which causes us sometimes to draw
-	 * the blank region on-screen. Correct for this by adding the borders back to their
-	 * respective addressable values, and by shifting recout.
-	 */
-	timing->h_addressable += timing->h_border_left + timing->h_border_right;
-	timing->v_addressable += timing->v_border_top + timing->v_border_bottom;
-	pipe_ctx->plane_res.scl_data.recout.y += timing->v_border_top;
 	pipe_ctx->plane_res.scl_data.recout.x += timing->h_border_left;
-	timing->v_border_top = 0;
-	timing->v_border_bottom = 0;
-	timing->h_border_left = 0;
-	timing->h_border_right = 0;
+	pipe_ctx->plane_res.scl_data.recout.y += timing->v_border_top;
 
-	pipe_ctx->plane_res.scl_data.h_active = timing->h_addressable;
-	pipe_ctx->plane_res.scl_data.v_active = timing->v_addressable;
+	pipe_ctx->plane_res.scl_data.h_active = timing->h_addressable + timing->h_border_left + timing->h_border_right;
+	pipe_ctx->plane_res.scl_data.v_active = timing->v_addressable + timing->v_border_top + timing->v_border_bottom;
+
 
 	/* Taps calculations */
 	if (pipe_ctx->plane_res.xfm != NULL)
@@ -875,16 +865,21 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 	if (pipe_ctx->plane_res.dpp != NULL)
 		res = pipe_ctx->plane_res.dpp->funcs->dpp_get_optimal_number_of_taps(
 				pipe_ctx->plane_res.dpp, &pipe_ctx->plane_res.scl_data, &plane_state->scaling_quality);
-
 	if (!res) {
 		/* Try 24 bpp linebuffer */
 		pipe_ctx->plane_res.scl_data.lb_params.depth = LB_PIXEL_DEPTH_24BPP;
 
-		res = pipe_ctx->plane_res.xfm->funcs->transform_get_optimal_number_of_taps(
-			pipe_ctx->plane_res.xfm, &pipe_ctx->plane_res.scl_data, &plane_state->scaling_quality);
+		if (pipe_ctx->plane_res.xfm != NULL)
+			res = pipe_ctx->plane_res.xfm->funcs->transform_get_optimal_number_of_taps(
+					pipe_ctx->plane_res.xfm,
+					&pipe_ctx->plane_res.scl_data,
+					&plane_state->scaling_quality);
 
-		res = pipe_ctx->plane_res.dpp->funcs->dpp_get_optimal_number_of_taps(
-			pipe_ctx->plane_res.dpp, &pipe_ctx->plane_res.scl_data, &plane_state->scaling_quality);
+		if (pipe_ctx->plane_res.dpp != NULL)
+			res = pipe_ctx->plane_res.dpp->funcs->dpp_get_optimal_number_of_taps(
+					pipe_ctx->plane_res.dpp,
+					&pipe_ctx->plane_res.scl_data,
+					&plane_state->scaling_quality);
 	}
 
 	if (res)
@@ -1514,7 +1509,7 @@ enum dc_status dc_add_stream_to_ctx(
 	return res;
 }
 
-bool dc_remove_stream_from_ctx(
+enum dc_status dc_remove_stream_from_ctx(
 			struct dc *dc,
 			struct dc_state *new_ctx,
 			struct dc_stream_state *stream)
@@ -1684,8 +1679,10 @@ enum dc_status resource_map_pool_resources(
 	/* acquire new resources */
 	pipe_idx = acquire_first_free_pipe(&context->res_ctx, pool, stream);
 
+#ifdef CONFIG_DRM_AMD_DC_DCN1_0
 	if (pipe_idx < 0)
 		pipe_idx = acquire_first_split_pipe(&context->res_ctx, pool, stream);
+#endif
 
 	if (pipe_idx < 0)
 		return DC_NO_CONTROLLER_RESOURCE;
@@ -2765,7 +2762,7 @@ void resource_build_bit_depth_reduction_params(struct dc_stream_state *stream,
 	fmt_bit_depth->pixel_encoding = pixel_encoding;
 }
 
-bool dc_validate_stream(struct dc *dc, struct dc_stream_state *stream)
+enum dc_status dc_validate_stream(struct dc *dc, struct dc_stream_state *stream)
 {
 	struct dc  *core_dc = dc;
 	struct dc_link *link = stream->sink->link;
@@ -2789,14 +2786,16 @@ bool dc_validate_stream(struct dc *dc, struct dc_stream_state *stream)
 		      link,
 		      &stream->timing);
 
-	return res == DC_OK;
+	return res;
 }
 
-bool dc_validate_plane(struct dc *dc, const struct dc_plane_state *plane_state)
+enum dc_status dc_validate_plane(struct dc *dc, const struct dc_plane_state *plane_state)
 {
+	enum dc_status res = DC_OK;
+
 	/* TODO For now validates pixel format only */
 	if (dc->res_pool->funcs->validate_plane)
-		return dc->res_pool->funcs->validate_plane(plane_state, &dc->caps) == DC_OK;
+		return dc->res_pool->funcs->validate_plane(plane_state, &dc->caps);
 
-	return true;
+	return res;
 }

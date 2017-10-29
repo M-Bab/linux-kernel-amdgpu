@@ -79,8 +79,7 @@ struct amdgpu_fence_driver {
 
 int amdgpu_fence_driver_init(struct amdgpu_device *adev);
 void amdgpu_fence_driver_fini(struct amdgpu_device *adev);
-void amdgpu_fence_driver_force_completion(struct amdgpu_device *adev);
-void amdgpu_fence_driver_force_completion_ring(struct amdgpu_ring *ring);
+void amdgpu_fence_driver_force_completion(struct amdgpu_ring *ring);
 
 int amdgpu_fence_driver_init_ring(struct amdgpu_ring *ring,
 				  unsigned num_hw_submission);
@@ -90,8 +89,12 @@ int amdgpu_fence_driver_start_ring(struct amdgpu_ring *ring,
 void amdgpu_fence_driver_suspend(struct amdgpu_device *adev);
 void amdgpu_fence_driver_resume(struct amdgpu_device *adev);
 int amdgpu_fence_emit(struct amdgpu_ring *ring, struct dma_fence **fence);
+int amdgpu_fence_emit_polling(struct amdgpu_ring *ring, uint32_t *s);
 void amdgpu_fence_process(struct amdgpu_ring *ring);
 int amdgpu_fence_wait_empty(struct amdgpu_ring *ring);
+signed long amdgpu_fence_wait_polling(struct amdgpu_ring *ring,
+				      uint32_t wait_seq,
+				      signed long timeout);
 unsigned amdgpu_fence_count_emitted(struct amdgpu_ring *ring);
 
 /*

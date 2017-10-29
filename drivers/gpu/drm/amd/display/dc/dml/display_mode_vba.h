@@ -1,8 +1,26 @@
 /*
- * display_mode_vba.h
+ * Copyright 2017 Advanced Micro Devices, Inc.
  *
- *  Created on: Aug 18, 2017
- *      Author: dlaktyus
+ * Permission is hereby granted, free of charge, to any person obtaining a
+ * copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation
+ * the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the
+ * Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL
+ * THE COPYRIGHT HOLDER(S) OR AUTHOR(S) BE LIABLE FOR ANY CLAIM, DAMAGES OR
+ * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
+ * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+ * OTHER DEALINGS IN THE SOFTWARE.
+ *
+ * Authors: AMD
+ *
  */
 
 #ifndef __DML2_DISPLAY_MODE_VBA_H__
@@ -98,7 +116,6 @@ bool Calculate256BBlockSizes(
 struct vba_vars_st {
 	ip_params_st	ip;
 	soc_bounding_box_st	soc;
-	mode_evaluation_st me;
 
 	unsigned int MaximumMaxVStartupLines;
 	double cursor_bw[DC__NUM_DPP__MAX];
@@ -489,7 +506,7 @@ struct vba_vars_st {
 	double CursorBufferSize;
 	double CursorChunkSize;
 	unsigned int Mode;
-	double NoOfDPP[DC__VOLTAGE_STATES + 1][DC__NUM_DPP__MAX];
+	unsigned int NoOfDPP[DC__VOLTAGE_STATES + 1][DC__NUM_DPP__MAX];
 	double OutputLinkDPLanes[DC__NUM_DPP__MAX];
 	double SwathWidthYPerState[DC__VOLTAGE_STATES + 1][DC__NUM_DPP__MAX];
 	double SwathHeightYPerState[DC__VOLTAGE_STATES + 1][DC__NUM_DPP__MAX];

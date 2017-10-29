@@ -110,10 +110,8 @@ uint32_t amdgpu_mm_rreg(struct amdgpu_device *adev, uint32_t reg,
 {
 	uint32_t ret;
 
-	if (!(acc_flags & AMDGPU_REGS_NO_KIQ) && amdgpu_sriov_runtime(adev)) {
-		BUG_ON(in_interrupt());
+	if (!(acc_flags & AMDGPU_REGS_NO_KIQ) && amdgpu_sriov_runtime(adev))
 		return amdgpu_virt_kiq_rreg(adev, reg);
-	}
 
 	if ((reg * 4) < adev->rmmio_size && !(acc_flags & AMDGPU_REGS_IDX))
 		ret = readl(((void __iomem *)adev->rmmio) + (reg * 4));
@@ -138,10 +136,8 @@ void amdgpu_mm_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v,
 		adev->last_mm_index = v;
 	}
 
-	if (!(acc_flags & AMDGPU_REGS_NO_KIQ) && amdgpu_sriov_runtime(adev)) {
-		BUG_ON(in_interrupt());
+	if (!(acc_flags & AMDGPU_REGS_NO_KIQ) && amdgpu_sriov_runtime(adev))
 		return amdgpu_virt_kiq_wreg(adev, reg, v);
-	}
 
 	if ((reg * 4) < adev->rmmio_size && !(acc_flags & AMDGPU_REGS_IDX))
 		writel(v, ((void __iomem *)adev->rmmio) + (reg * 4));
@@ -551,7 +547,7 @@ int amdgpu_wb_get(struct amdgpu_device *adev, u32 *wb)
 
 	if (offset < adev->wb.num_wb) {
 		__set_bit(offset, adev->wb.used);
-		*wb = offset * 8; /* convert to dw offset */
+		*wb = offset << 3; /* convert to dw offset */
 		return 0;
 	} else {
 		return -EINVAL;
@@ -569,7 +565,7 @@ int amdgpu_wb_get(struct amdgpu_device *adev, u32 *wb)
 void amdgpu_wb_free(struct amdgpu_device *adev, u32 wb)
 {
 	if (wb < adev->wb.num_wb)
-		__clear_bit(wb, adev->wb.used);
+		__clear_bit(wb >> 3, adev->wb.used);
 }
 
 /**
@@ -749,27 +745,6 @@ bool amdgpu_need_post(struct amdgpu_device *adev)
 {
 	uint32_t reg;
 
-	if (adev->has_hw_reset) {
-		adev->has_hw_reset = false;
-		return true;
-	}
-
-	/* bios scratch used on CIK+ */
-	if (adev->asic_type >= CHIP_BONAIRE)
-		return amdgpu_atombios_scratch_need_asic_init(adev);
-
-	/* check MEM_SIZE for older asics */
-	reg = amdgpu_asic_get_config_memsize(adev);
-
-	if ((reg != 0) && (reg != 0xffffffff))
-		return false;
-
-	return true;
-
-}
-
-static bool amdgpu_vpost_needed(struct amdgpu_device *adev)
-{
 	if (amdgpu_sriov_vf(adev))
 		return false;
 
@@ -792,7 +767,23 @@ static bool amdgpu_vpost_needed(struct amdgpu_device *adev)
 				return true;
 		}
 	}
-	return amdgpu_need_post(adev);
+
+	if (adev->has_hw_reset) {
+		adev->has_hw_reset = false;
+		return true;
+	}
+
+	/* bios scratch used on CIK+ */
+	if (adev->asic_type >= CHIP_BONAIRE)
+		return amdgpu_atombios_scratch_need_asic_init(adev);
+
+	/* check MEM_SIZE for older asics */
+	reg = amdgpu_asic_get_config_memsize(adev);
+
+	if ((reg != 0) && (reg != 0xffffffff))
+		return false;
+
+	return true;
 }
 
 /**
@@ -1038,7 +1029,7 @@ static int amdgpu_atombios_init(struct amdgpu_device *adev)
 		atom_card_info->ioreg_read = cail_ioreg_read;
 		atom_card_info->ioreg_write = cail_ioreg_write;
 	} else {
-		DRM_INFO("PCI I/O BAR is not found. Using MMIO to access ATOM BIOS\n");
+		DRM_DEBUG("PCI I/O BAR is not found. Using MMIO to access ATOM BIOS\n");
 		atom_card_info->ioreg_read = cail_reg_read;
 		atom_card_info->ioreg_write = cail_reg_write;
 	}
@@ -1680,7 +1671,6 @@ static int amdgpu_init(struct amdgpu_device *adev)
 			return r;
 		}
 		adev->ip_blocks[i].status.sw = true;
-
 		/* need to do gmc hw init early so we can allocate gpu mem */
 		if (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_GMC) {
 			r = amdgpu_vram_scratch_init(adev);
@@ -1710,11 +1700,6 @@ static int amdgpu_init(struct amdgpu_device *adev)
 			}
 		}
 	}
-
-	mutex_lock(&adev->firmware.mutex);
-	if (adev->firmware.load_type != AMDGPU_FW_LOAD_DIRECT)
-		amdgpu_ucode_init_bo(adev);
-	mutex_unlock(&adev->firmware.mutex);
 
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if (!adev->ip_blocks[i].status.sw)
@@ -1851,8 +1836,6 @@ static int amdgpu_fini(struct amdgpu_device *adev)
 
 		adev->ip_blocks[i].status.hw = false;
 	}
-	if (adev->firmware.load_type != AMDGPU_FW_LOAD_DIRECT)
-		amdgpu_ucode_fini_bo(adev);
 
 	for (i = adev->num_ip_blocks - 1; i >= 0; i--) {
 		if (!adev->ip_blocks[i].status.sw)
@@ -1964,6 +1947,7 @@ static int amdgpu_sriov_reinit_late(struct amdgpu_device *adev)
 
 	static enum amd_ip_block_type ip_order[] = {
 		AMD_IP_BLOCK_TYPE_SMC,
+		AMD_IP_BLOCK_TYPE_PSP,
 		AMD_IP_BLOCK_TYPE_DCE,
 		AMD_IP_BLOCK_TYPE_GFX,
 		AMD_IP_BLOCK_TYPE_SDMA,
@@ -2049,12 +2033,17 @@ static int amdgpu_resume(struct amdgpu_device *adev)
 
 static void amdgpu_device_detect_sriov_bios(struct amdgpu_device *adev)
 {
-	if (adev->is_atom_fw) {
-		if (amdgpu_atomfirmware_gpu_supports_virtualization(adev))
-			adev->virt.caps |= AMDGPU_SRIOV_CAPS_SRIOV_VBIOS;
-	} else {
-		if (amdgpu_atombios_has_gpu_virtualization_table(adev))
-			adev->virt.caps |= AMDGPU_SRIOV_CAPS_SRIOV_VBIOS;
+	if (amdgpu_sriov_vf(adev)) {
+		if (adev->is_atom_fw) {
+			if (amdgpu_atomfirmware_gpu_supports_virtualization(adev))
+				adev->virt.caps |= AMDGPU_SRIOV_CAPS_SRIOV_VBIOS;
+		} else {
+			if (amdgpu_atombios_has_gpu_virtualization_table(adev))
+				adev->virt.caps |= AMDGPU_SRIOV_CAPS_SRIOV_VBIOS;
+		}
+
+		if (!(adev->virt.caps & AMDGPU_SRIOV_CAPS_SRIOV_VBIOS))
+			amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_NO_VBIOS, 0, 0);
 	}
 }
 
@@ -2264,10 +2253,9 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	amdgpu_device_detect_sriov_bios(adev);
 
 	/* Post card if necessary */
-	if (amdgpu_vpost_needed(adev)) {
+	if (amdgpu_need_post(adev)) {
 		if (!adev->bios) {
 			dev_err(adev->dev, "no vBIOS found\n");
-			amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_NO_VBIOS, 0, 0);
 			r = -EINVAL;
 			goto failed;
 		}
@@ -2275,11 +2263,8 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 		r = amdgpu_atom_asic_init(adev->mode_info.atom_context);
 		if (r) {
 			dev_err(adev->dev, "gpu post error!\n");
-			amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_GPU_POST_ERROR, 0, 0);
 			goto failed;
 		}
-	} else {
-		DRM_INFO("GPU post is not needed\n");
 	}
 
 	if (adev->is_atom_fw) {
@@ -2316,6 +2301,15 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 
 	r = amdgpu_init(adev);
 	if (r) {
+		/* failed in exclusive mode due to timeout */
+		if (amdgpu_sriov_vf(adev) &&
+		    !amdgpu_sriov_runtime(adev) &&
+		    amdgpu_virt_mmio_blocked(adev) &&
+		    !amdgpu_virt_wait_reset(adev)) {
+			dev_err(adev->dev, "VF exclusive mode timeout\n");
+			r = -EAGAIN;
+			goto failed;
+		}
 		dev_err(adev->dev, "amdgpu_init failed\n");
 		amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_AMDGPU_INIT_FAIL, 0, 0);
 		amdgpu_fini(adev);
@@ -2403,6 +2397,7 @@ failed:
 	amdgpu_vf_error_trans_all(adev);
 	if (runtime)
 		vga_switcheroo_fini_domain_pm_ops(adev->dev);
+
 	return r;
 }
 
@@ -2697,6 +2692,9 @@ static bool amdgpu_check_soft_reset(struct amdgpu_device *adev)
 	int i;
 	bool asic_hang = false;
 
+	if (amdgpu_sriov_vf(adev))
+		return true;
+
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if (!adev->ip_blocks[i].status.valid)
 			continue;
@@ -2878,10 +2876,10 @@ int amdgpu_sriov_gpu_reset(struct amdgpu_device *adev, struct amdgpu_job *job)
 			amd_sched_job_kickout(&job->base);
 
 		/* only do job_reset on the hang ring if @job not NULL */
-		amd_sched_hw_job_reset(&ring->sched);
+		amd_sched_hw_job_reset(&ring->sched, NULL);
 
 		/* after all hw jobs are reset, hw fence is meaningless, so force_completion */
-		amdgpu_fence_driver_force_completion_ring(ring);
+		amdgpu_fence_driver_force_completion(ring);
 	}
 
 	/* request to take full control of GPU before re-initialization  */
@@ -2999,10 +2997,10 @@ int amdgpu_gpu_reset(struct amdgpu_device *adev)
 		if (!ring || !ring->sched.thread)
 			continue;
 		kthread_park(ring->sched.thread);
-		amd_sched_hw_job_reset(&ring->sched);
+		amd_sched_hw_job_reset(&ring->sched, NULL);
+		/* after all hw jobs are reset, hw fence is meaningless, so force_completion */
+		amdgpu_fence_driver_force_completion(ring);
 	}
-	/* after all hw jobs are reset, hw fence is meaningless, so force_completion */
-	amdgpu_fence_driver_force_completion(adev);
 
 	need_full_reset = amdgpu_need_full_reset(adev);
 
@@ -3100,7 +3098,6 @@ out:
 		}
 	} else {
 		dev_err(adev->dev, "asic resume failed (%d).\n", r);
-		amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_ASIC_RESUME_FAIL, 0, r);
 		for (i = 0; i < AMDGPU_MAX_RINGS; ++i) {
 			if (adev->rings[i] && adev->rings[i]->sched.thread) {
 				kthread_unpark(adev->rings[i]->sched.thread);
@@ -3118,7 +3115,6 @@ out:
 	if (r) {
 		/* bad news, how to tell it to userspace ? */
 		dev_info(adev->dev, "GPU reset failed\n");
-		amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_GPU_RESET_FAIL, 0, r);
 	}
 	else {
 		dev_info(adev->dev, "GPU reset successed!\n");

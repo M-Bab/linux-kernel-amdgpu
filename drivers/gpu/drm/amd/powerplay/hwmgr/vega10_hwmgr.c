@@ -1161,6 +1161,8 @@ static void vega10_setup_default_single_dpm_table(struct pp_hwmgr *hwmgr,
 {
 	int i;
 
+	dpm_table->count = 0;
+
 	for (i = 0; i < dep_table->count; i++) {
 		if (i == 0 || dpm_table->dpm_levels[dpm_table->count - 1].value <=
 				dep_table->entries[i].clk) {
@@ -1269,10 +1271,6 @@ static int vega10_setup_default_dpm_tables(struct pp_hwmgr *hwmgr)
 			return -EINVAL);
 
 	/* Initialize Sclk DPM table based on allow Sclk values */
-	data->dpm_table.soc_table.count = 0;
-	data->dpm_table.gfx_table.count = 0;
-	data->dpm_table.dcef_table.count = 0;
-
 	dpm_table = &(data->dpm_table.soc_table);
 	vega10_setup_default_single_dpm_table(hwmgr,
 			dpm_table,
@@ -2880,6 +2878,15 @@ static int vega10_enable_dpm_tasks(struct pp_hwmgr *hwmgr)
 	PP_ASSERT_WITH_CODE(!tmp_result,
 			"DPM is already running right , skipping re-enablement!",
 			return 0);
+
+	if ((data->smu_version == 0x001c2c00) ||
+			(data->smu_version == 0x001c2d00)) {
+		tmp_result = smum_send_msg_to_smc_with_parameter(hwmgr,
+				PPSMC_MSG_UpdatePkgPwrPidAlpha, 1);
+		PP_ASSERT_WITH_CODE(!tmp_result,
+				"Failed to set package power PID!",
+				return tmp_result);
+	}
 
 	tmp_result = vega10_construct_voltage_tables(hwmgr);
 	PP_ASSERT_WITH_CODE(!tmp_result,
@@ -4640,9 +4647,9 @@ static int vega10_print_clock_levels(struct pp_hwmgr *hwmgr,
 
 		for (i = 0; i < pcie_table->count; i++)
 			size += sprintf(buf + size, "%d: %s %s\n", i,
-					(pcie_table->pcie_gen[i] == 0) ? "2.5GB, x1" :
-					(pcie_table->pcie_gen[i] == 1) ? "5.0GB, x16" :
-					(pcie_table->pcie_gen[i] == 2) ? "8.0GB, x16" : "",
+					(pcie_table->pcie_gen[i] == 0) ? "2.5GT/s, x1" :
+					(pcie_table->pcie_gen[i] == 1) ? "5.0GT/s, x16" :
+					(pcie_table->pcie_gen[i] == 2) ? "8.0GT/s, x16" : "",
 					(i == now) ? "*" : "");
 		break;
 	default:
@@ -5108,6 +5115,7 @@ static const struct pp_hwmgr_func vega10_hwmgr_funcs = {
 	.avfs_control = vega10_avfs_enable,
 	.notify_cac_buffer_info = vega10_notify_cac_buffer_info,
 	.register_internal_thermal_interrupt = vega10_register_thermal_interrupt,
+	.start_thermal_controller = vega10_start_thermal_controller,
 };
 
 int vega10_hwmgr_init(struct pp_hwmgr *hwmgr)
