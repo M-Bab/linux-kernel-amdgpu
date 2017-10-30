@@ -255,13 +255,13 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 	SOC_ENUM("PCM Soft Ramp", pcm_sft_ramp),
 };
 
-static const struct otp_map_element_t *find_otp_map(u32 otp_id)
+static const struct cs35l41_otp_map_element_t *cs35l41_find_otp_map(u32 otp_id)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(otp_map_map); i++) {
-		if (otp_map_map[i].id == otp_id)
-			return &otp_map_map[i];
+	for (i = 0; i < ARRAY_SIZE(cs35l41_otp_map_map); i++) {
+		if (cs35l41_otp_map_map[i].id == otp_id)
+			return &cs35l41_otp_map_map[i];
 	}
 
 	return NULL;
@@ -272,29 +272,20 @@ static int cs35l41_otp_unpack(void *data)
 	struct cs35l41_private *cs35l41 = data;
 	u32 otp_mem[32];
 	int i;
-	/* unpack area starts at byte 10 (0-indexed) */
-	int bit_offset = 16, array_offset = 2;
+	int bit_offset, word_offset;
 	unsigned int bit_sum = 8;
-	u32 otp_val, otp_id_reg, otp_id_hdr;
-	const struct otp_map_element_t *otp_map_match;
-	const struct otp_packed_element_t *otp_map;
+	u32 otp_val, otp_id_reg;
+	const struct cs35l41_otp_map_element_t *otp_map_match;
+	const struct cs35l41_otp_packed_element_t *otp_map;
+	int ret;
 
-
-	/* Read from OTP_MEM_IF */
-	regmap_bulk_read(cs35l41->regmap, CS35L41_OTP_MEM0, otp_mem,
-				CS35L41_OTP_SIZE_WORDS);
-	regmap_read(cs35l41->regmap, CS35L41_OTPID, &otp_id_reg);
-
-	otp_id_hdr = ((otp_mem[31] & CS35L41_OTP_HDR_ID_MASK) >>
-			CS35L41_OTP_HDR_ID_SHIFT);
-
-	if (otp_id_reg != otp_id_hdr) {
-		dev_err(cs35l41->dev, "OTP ID mismatch, REG = %d, HDR = %d\n",
-					otp_id_reg, otp_id_hdr);
+	ret = regmap_read(cs35l41->regmap, CS35L41_OTPID, &otp_id_reg);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "Read OTP ID failed\n");
 		return -EINVAL;
 	}
 
-	otp_map_match = find_otp_map(otp_id_reg);
+	otp_map_match = cs35l41_find_otp_map(otp_id_reg);
 
 	if (otp_map_match == NULL) {
 		dev_err(cs35l41->dev, "OTP Map matching ID %d not found\n",
@@ -302,23 +293,44 @@ static int cs35l41_otp_unpack(void *data)
 		return -EINVAL;
 	}
 
+	ret = regmap_bulk_read(cs35l41->regmap, CS35L41_OTP_MEM0, otp_mem,
+						CS35L41_OTP_SIZE_WORDS);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "Read OTP Mem failed\n");
+		return -EINVAL;
+	}
+
 	otp_map = otp_map_match->map;
 
+	bit_offset = otp_map_match->bit_offset;
+	word_offset = otp_map_match->word_offset;
+
+	ret = regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x00000055);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "Write Unlock key failed 1/2\n");
+		return -EINVAL;
+	}
+	ret = regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x000000AA);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "Write Unlock key failed 2/2\n");
+		return -EINVAL;
+	}
+
 	for (i = 0; i < otp_map_match->num_elements; i++) {
-		dev_dbg(cs35l41->dev, "bitoffset= %d, array_offset=%d, bit_sum mod 32=%d\n",
-					bit_offset, array_offset, bit_sum % 32);
+		dev_dbg(cs35l41->dev, "bitoffset= %d, word_offset=%d, bit_sum mod 32=%d\n",
+					bit_offset, word_offset, bit_sum % 32);
 		if (bit_offset + otp_map[i].size - 1 >= 32) {
-			otp_val = (otp_mem[array_offset] &
+			otp_val = (otp_mem[word_offset] &
 					GENMASK(31, bit_offset)) >>
 					bit_offset;
-			otp_val |= (otp_mem[++array_offset] &
+			otp_val |= (otp_mem[++word_offset] &
 					GENMASK(bit_offset +
 						otp_map[i].size - 33, 0)) <<
 					(32 - bit_offset);
 			bit_offset += otp_map[i].size - 32;
 		} else {
 
-			otp_val = (otp_mem[array_offset] &
+			otp_val = (otp_mem[word_offset] &
 				GENMASK(bit_offset + otp_map[i].size - 1,
 					bit_offset)) >>	bit_offset;
 			bit_offset += otp_map[i].size;
@@ -327,16 +339,34 @@ static int cs35l41_otp_unpack(void *data)
 
 		if (bit_offset == 32) {
 			bit_offset = 0;
-			array_offset++;
+			word_offset++;
 		}
 
-		if (otp_map[i].reg != 0)
-			regmap_update_bits(cs35l41->regmap, otp_map[i].reg,
-					GENMASK(otp_map[i].shift +
+		if (otp_map[i].reg != 0) {
+			ret = regmap_update_bits(cs35l41->regmap,
+						otp_map[i].reg,
+						GENMASK(otp_map[i].shift +
 							otp_map[i].size - 1,
 						otp_map[i].shift),
-					otp_val << otp_map[i].shift);
+						otp_val << otp_map[i].shift);
+			if (ret < 0) {
+				dev_err(cs35l41->dev, "Write OTP val failed\n");
+				return -EINVAL;
+			}
+		}
 	}
+
+	ret = regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x000000CC);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "Write Lock key failed 1/2\n");
+		return -EINVAL;
+	}
+	ret = regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x00000033);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "Write Lock key failed 2/2\n");
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
@@ -1376,8 +1406,6 @@ static int cs35l41_probe(struct cs35l41_private *cs35l41,
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1,
 			CS35L41_INT1_MASK_DEFAULT);
 
-	cs35l41_dsp_init(cs35l41);
-
 	switch (reg_revid) {
 	case CS35L41_REVID_A0:
 		ret = regmap_register_patch(cs35l41->regmap,
@@ -1394,6 +1422,7 @@ static int cs35l41_probe(struct cs35l41_private *cs35l41,
 		if (timeout == 0) {
 			dev_err(cs35l41->dev,
 				"Timeout waiting for OTP_BOOT_DONE\n");
+			ret = -EBUSY;
 			goto err;
 		}
 		usleep_range(1000, 1100);
@@ -1401,7 +1430,20 @@ static int cs35l41_probe(struct cs35l41_private *cs35l41,
 		timeout--;
 	} while (!(int_status & CS35L41_OTP_BOOT_DONE));
 
-	cs35l41_otp_unpack(cs35l41);
+	regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS3, &int_status);
+	if (int_status & CS35L41_OTP_BOOT_ERR) {
+		dev_err(cs35l41->dev, "OTP Boot error\n");
+		ret = -EINVAL;
+		goto err;
+	}
+
+	ret = cs35l41_otp_unpack(cs35l41);
+	if (ret < 0) {
+		dev_err(cs35l41->dev, "OTP Unpack failed\n");
+		goto err;
+	}
+
+	cs35l41_dsp_init(cs35l41);
 
 	ret =  snd_soc_register_component(cs35l41->dev, &soc_component_dev_cs35l41,
 					cs35l41_dai, ARRAY_SIZE(cs35l41_dai));

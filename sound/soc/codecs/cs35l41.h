@@ -648,6 +648,7 @@
 #define CS35L41_BST_DCM_UVP_ERR		0x80
 #define CS35L41_OTP_BOOT_DONE		0x02
 #define CS35L41_PLL_UNLOCK		0x10
+#define CS35L41_OTP_BOOT_ERR		0x80000000
 
 #define CS35L41_AMP_SHORT_ERR_RLS	0x02
 #define CS35L41_BST_SHORT_ERR_RLS	0x04
@@ -675,9 +676,6 @@
 #define CS35L41_MTLREVID_MASK		0x0F
 #define CS35L41_REVID_A0		0xA0
 
-#define CS35L41_OTP_HDR_ID_SHIFT	16
-#define CS35L41_OTP_HDR_ID_MASK		0x000F0000
-
 #define CS35L41_DSP_N_RX_RATES		8
 #define CS35L41_DSP_N_TX_RATES		8
 #define CS35L41_HALO_CORE_RESET		0x00000200
@@ -689,20 +687,23 @@
 bool cs35l41_readable_reg(struct device *dev, unsigned int reg);
 bool cs35l41_volatile_reg(struct device *dev, unsigned int reg);
 
-struct otp_packed_element_t {
+struct cs35l41_otp_packed_element_t {
 	u32 reg;
 	u8 shift;
 	u8 size;
 };
 
-struct otp_map_element_t {
+struct cs35l41_otp_map_element_t {
 	u32 id;
 	u32 num_elements;
-	const struct otp_packed_element_t *map;
+	const struct cs35l41_otp_packed_element_t *map;
+	u32 bit_offset;
+	u32 word_offset;
 };
 
 extern const struct reg_default cs35l41_reg[CS35L41_MAX_CACHE_REG];
-extern const struct otp_map_element_t otp_map_map[CS35L41_NUM_OTP_MAPS];
+extern const struct cs35l41_otp_map_element_t
+				cs35l41_otp_map_map[CS35L41_NUM_OTP_MAPS];
 
 #define CS35L41_CSPL_CMD_NONE			0
 #define CS35L41_CSPL_CMD_MUTE			1

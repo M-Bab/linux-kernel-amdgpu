@@ -136,6 +136,8 @@ bool cs35l41_readable_reg(struct device *dev, unsigned int reg)
 	case CS35L41_FABID:
 	case CS35L41_RELID:
 	case CS35L41_OTPID:
+	case CS35L41_TEST_KEY_CTL:
+	case CS35L41_USER_KEY_CTL:
 	case CS35L41_OTP_CTRL0:
 	case CS35L41_OTP_CTRL3:
 	case CS35L41_OTP_CTRL4:
@@ -663,20 +665,21 @@ bool cs35l41_volatile_reg(struct device *dev, unsigned int reg)
 	case CS35L41_DSP1_YMEM_UNPACK24_0 ... CS35L41_DSP1_YMEM_UNPACK24_2045:
 	case CS35L41_DSP1_PMEM_0 ... CS35L41_DSP1_PMEM_5114:
 	case CS35L41_DSP1_CCM_CORE_CTRL ... CS35L41_DSP1_WDT_STATUS:
+	case CS35L41_OTP_MEM0 ... CS35L41_OTP_MEM31:
 		return true;
 	default:
 		return false;
 	}
 }
 
-static const struct otp_packed_element_t otp_map_1[CS35L41_NUM_OTP_ELEM] = {
+static const struct cs35l41_otp_packed_element_t
+					otp_map_1[CS35L41_NUM_OTP_ELEM] = {
 	/* addr         shift   size */
 	{0x00002030,	0,	4}, /*TRIM_OSC_FREQ_TRIM*/
 	{0x00002030,	7,	1}, /*TRIM_OSC_TRIM_DONE*/
 	{0x0000208c,	24,	6}, /*TST_DIGREG_VREF_TRIM*/
 	{0x00002090,	14,	4}, /*TST_REF_TRIM*/
 	{0x00002090,	10,	4}, /*TST_REF_TEMPCO_TRIM*/
-	{0x00003010,	2,	6}, /*PLL_DCO_CAL_TRIM*/
 	{0x0000300C,	11,	4}, /*PLL_LDOA_TST_VREF_TRIM*/
 	{0x0000394C,	23,	2}, /*BST_ATEST_CM_VOFF*/
 	{0x00003950,	0,	7}, /*BST_ATRIM_IADC_OFFSET*/
@@ -773,14 +776,14 @@ static const struct otp_packed_element_t otp_map_1[CS35L41_NUM_OTP_ELEM] = {
 	{0x00017044,	0,	24}, /*LOT_NUMBER*/
 };
 
-static const struct otp_packed_element_t otp_map_2[CS35L41_NUM_OTP_ELEM] = {
+static const struct cs35l41_otp_packed_element_t
+					otp_map_2[CS35L41_NUM_OTP_ELEM] = {
 	/* addr         shift   size */
 	{0x00002030,	0,	4}, /*TRIM_OSC_FREQ_TRIM*/
 	{0x00002030,	7,	1}, /*TRIM_OSC_TRIM_DONE*/
 	{0x0000208c,	24,	6}, /*TST_DIGREG_VREF_TRIM*/
 	{0x00002090,	14,	4}, /*TST_REF_TRIM*/
 	{0x00002090,	10,	4}, /*TST_REF_TEMPCO_TRIM*/
-	{0x00003010,	2,	6}, /*PLL_DCO_CAL_TRIM*/
 	{0x0000300C,	11,	4}, /*PLL_LDOA_TST_VREF_TRIM*/
 	{0x0000394C,	23,	2}, /*BST_ATEST_CM_VOFF*/
 	{0x00003950,	0,	7}, /*BST_ATRIM_IADC_OFFSET*/
@@ -877,25 +880,34 @@ static const struct otp_packed_element_t otp_map_2[CS35L41_NUM_OTP_ELEM] = {
 	{0x00017044,	0,	24}, /*LOT_NUMBER*/
 };
 
-const struct otp_map_element_t otp_map_map[CS35L41_NUM_OTP_MAPS] = {
+const struct cs35l41_otp_map_element_t
+				cs35l41_otp_map_map[CS35L41_NUM_OTP_MAPS] = {
 	{
 		.id = 0x01,
 		.map = otp_map_1,
 		.num_elements = CS35L41_NUM_OTP_ELEM,
+		.bit_offset = 16,
+		.word_offset = 2,
 	},
 	{
 		.id = 0x02,
 		.map = otp_map_2,
 		.num_elements = CS35L41_NUM_OTP_ELEM,
+		.bit_offset = 16,
+		.word_offset = 2,
 	},
 	{
 		.id = 0x03,
 		.map = otp_map_2,
 		.num_elements = CS35L41_NUM_OTP_ELEM,
+		.bit_offset = 16,
+		.word_offset = 2,
 	},
 	{
 		.id = 0x06,
 		.map = otp_map_2,
 		.num_elements = CS35L41_NUM_OTP_ELEM,
+		.bit_offset = 16,
+		.word_offset = 2,
 	},
 };
