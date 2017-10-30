@@ -417,8 +417,6 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 
 	init_data.dce_environment = DCE_ENV_PRODUCTION_DRV;
 
-	init_data.flags.gpu_vm_support = true;
-
 	if (amdgpu_dc_log)
 		init_data.log_mask = DC_DEFAULT_LOG_MASK;
 	else
