@@ -1038,7 +1038,7 @@ static int cs35l41_handle_of_data(struct device *dev,
 	struct device_node *np = dev->of_node;
 	unsigned int val;
 	int ret;
-	struct device_node *classh, *irq_gpio1, *irq_gpio2;
+	struct device_node *sub_node;
 	struct classh_cfg *classh_config = &pdata->classh_config;
 	struct irq_cfg *irq_gpio1_config = &pdata->irq_config1;
 	struct irq_cfg *irq_gpio2_config = &pdata->irq_config2;
@@ -1078,14 +1078,15 @@ static int cs35l41_handle_of_data(struct device *dev,
 		pdata->bst_ipk = ((val - 1600) / 50) + 0x10;
 	}
 
-	classh = of_get_child_by_name(np, "cirrus,classh-internal-algo");
-	classh_config->classh_algo_enable = classh ? true : false;
+	sub_node = of_get_child_by_name(np, "cirrus,classh-internal-algo");
+	classh_config->classh_algo_enable = sub_node ? true : false;
 
 	if (classh_config->classh_algo_enable) {
 		classh_config->classh_bst_override =
-			of_property_read_bool(np, "cirrus,classh-bst-overide");
+			of_property_read_bool(sub_node,
+				"cirrus,classh-bst-overide");
 
-		ret = of_property_read_u32(classh,
+		ret = of_property_read_u32(sub_node,
 					   "cirrus,classh-bst-max-limit",
 					   &val);
 		if (ret >= 0) {
@@ -1093,72 +1094,72 @@ static int cs35l41_handle_of_data(struct device *dev,
 			classh_config->classh_bst_max_limit = val;
 		}
 
-		ret = of_property_read_u32(classh, "cirrus,classh-mem-depth",
+		ret = of_property_read_u32(sub_node, "cirrus,classh-mem-depth",
 					   &val);
 		if (ret >= 0) {
 			val |= CS35L41_VALID_PDATA;
 			classh_config->classh_mem_depth = val;
 		}
 
-		ret = of_property_read_u32(classh, "cirrus,classh-release-rate",
-					   &val);
+		ret = of_property_read_u32(sub_node,
+					"cirrus,classh-release-rate", &val);
 		if (ret >= 0)
 			classh_config->classh_release_rate = val;
 
-		ret = of_property_read_u32(classh, "cirrus,classh-headroom",
+		ret = of_property_read_u32(sub_node, "cirrus,classh-headroom",
 					   &val);
 		if (ret >= 0) {
 			val |= CS35L41_VALID_PDATA;
 			classh_config->classh_headroom = val;
 		}
 
-		ret = of_property_read_u32(classh, "cirrus,classh-wk-fet-delay",
-					   &val);
+		ret = of_property_read_u32(sub_node,
+					"cirrus,classh-wk-fet-delay", &val);
 		if (ret >= 0) {
 			val |= CS35L41_VALID_PDATA;
 			classh_config->classh_wk_fet_delay = val;
 		}
 
-		ret = of_property_read_u32(classh, "cirrus,classh-wk-fet-thld",
-					   &val);
+		ret = of_property_read_u32(sub_node,
+					"cirrus,classh-wk-fet-thld", &val);
 		if (ret >= 0)
 			classh_config->classh_wk_fet_thld = val;
 	}
-	of_node_put(classh);
+	of_node_put(sub_node);
 
 	/* GPIO1 Pin Config */
-	irq_gpio1 = of_get_child_by_name(np, "cirrus,gpio-config1");
-	irq_gpio1_config->is_present = irq_gpio1 ? true : false;
+	sub_node = of_get_child_by_name(np, "cirrus,gpio-config1");
+	irq_gpio1_config->is_present = sub_node ? true : false;
 	if (irq_gpio1_config->is_present) {
-		irq_gpio1_config->irq_pol_inv = of_property_read_bool(irq_gpio1,
+		irq_gpio1_config->irq_pol_inv = of_property_read_bool(sub_node,
 						"cirrus,gpio-polarity-invert");
-		irq_gpio1_config->irq_out_en = of_property_read_bool(irq_gpio1,
+		irq_gpio1_config->irq_out_en = of_property_read_bool(sub_node,
 						"cirrus,gpio-output-enable");
-		ret = of_property_read_u32(irq_gpio1, "cirrus,gpio-src-select",
+		ret = of_property_read_u32(sub_node, "cirrus,gpio-src-select",
 					&val);
 		if (ret >= 0) {
 			val |= CS35L41_VALID_PDATA;
 			irq_gpio1_config->irq_src_sel = val;
 		}
 	}
-	of_node_put(irq_gpio1);
+	of_node_put(sub_node);
 
 	/* GPIO2 Pin Config */
-	irq_gpio2 = of_get_child_by_name(np, "cirrus,gpio-config2");
-	irq_gpio2_config->is_present = irq_gpio2 ? true : false;
+	sub_node = of_get_child_by_name(np, "cirrus,gpio-config2");
+	irq_gpio2_config->is_present = sub_node ? true : false;
 	if (irq_gpio2_config->is_present) {
-		irq_gpio2_config->irq_pol_inv = of_property_read_bool(irq_gpio2,
+		irq_gpio2_config->irq_pol_inv = of_property_read_bool(sub_node,
 						"cirrus,gpio-polarity-invert");
-		irq_gpio2_config->irq_out_en = of_property_read_bool(irq_gpio2,
+		irq_gpio2_config->irq_out_en = of_property_read_bool(sub_node,
 						"cirrus,gpio-output-enable");
-		ret = of_property_read_u32(irq_gpio2, "cirrus,gpio-src-select",
+		ret = of_property_read_u32(sub_node, "cirrus,gpio-src-select",
 					&val);
 		if (ret >= 0) {
 			val |= CS35L41_VALID_PDATA;
 			irq_gpio2_config->irq_src_sel = val;
 		}
 	}
-	of_node_put(irq_gpio2);
+	of_node_put(sub_node);
 
 	return 0;
 }
