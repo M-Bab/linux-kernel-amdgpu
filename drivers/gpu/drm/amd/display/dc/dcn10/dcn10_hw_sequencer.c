@@ -42,6 +42,7 @@
 #include "reg_helper.h"
 #include "custom_float.h"
 #include "dcn10_hubp.h"
+#include "dcn10_hubbub.h"
 
 #define CTX \
 	hws->ctx
@@ -51,6 +52,21 @@
 #undef FN
 #define FN(reg_name, field_name) \
 	hws->shifts->field_name, hws->masks->field_name
+
+#define DTN_INFO_MICRO_SEC(ref_cycle) \
+	print_microsec(dc_ctx, ref_cycle)
+
+void print_microsec(struct dc_context *dc_ctx, uint32_t ref_cycle)
+{
+	static const uint32_t ref_clk_mhz = 48;
+	static const unsigned int frac = 10;
+	uint32_t us_x10 = (ref_cycle * frac) / ref_clk_mhz;
+
+	DTN_INFO("%d.%d \t ",
+			us_x10 / frac,
+			us_x10 % frac);
+}
+
 
 static void log_mpc_crc(struct dc *dc)
 {
@@ -65,78 +81,13 @@ static void log_mpc_crc(struct dc *dc)
 		REG_READ(DPP_TOP0_DPP_CRC_VAL_B_A), REG_READ(DPP_TOP0_DPP_CRC_VAL_R_G));
 }
 
-void print_microsec(struct dc_context *dc_ctx, uint32_t ref_cycle)
-{
-	static const uint32_t ref_clk_mhz = 48;
-	static const unsigned int frac = 10;
-	uint32_t us_x10 = (ref_cycle * frac) / ref_clk_mhz;
-
-	DTN_INFO("%d.%d \t ",
-			us_x10 / frac,
-			us_x10 % frac);
-}
-
-#define DTN_INFO_MICRO_SEC(ref_cycle) \
-	print_microsec(dc_ctx, ref_cycle)
-
-struct dcn_hubbub_wm_set {
-	uint32_t wm_set;
-	uint32_t data_urgent;
-	uint32_t pte_meta_urgent;
-	uint32_t sr_enter;
-	uint32_t sr_exit;
-	uint32_t dram_clk_chanage;
-};
-
-struct dcn_hubbub_wm {
-	struct dcn_hubbub_wm_set sets[4];
-};
-
-static void dcn10_hubbub_wm_read_state(struct dce_hwseq *hws,
-		struct dcn_hubbub_wm *wm)
-{
-	struct dcn_hubbub_wm_set *s;
-
-	s = &wm->sets[0];
-	s->wm_set = 0;
-	s->data_urgent = REG_READ(DCHUBBUB_ARB_DATA_URGENCY_WATERMARK_A);
-	s->pte_meta_urgent = REG_READ(DCHUBBUB_ARB_PTE_META_URGENCY_WATERMARK_A);
-	s->sr_enter = REG_READ(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_A);
-	s->sr_exit = REG_READ(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_A);
-	s->dram_clk_chanage = REG_READ(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_A);
-
-	s = &wm->sets[1];
-	s->wm_set = 1;
-	s->data_urgent = REG_READ(DCHUBBUB_ARB_DATA_URGENCY_WATERMARK_B);
-	s->pte_meta_urgent = REG_READ(DCHUBBUB_ARB_PTE_META_URGENCY_WATERMARK_B);
-	s->sr_enter = REG_READ(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_B);
-	s->sr_exit = REG_READ(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_B);
-	s->dram_clk_chanage = REG_READ(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_B);
-
-	s = &wm->sets[2];
-	s->wm_set = 2;
-	s->data_urgent = REG_READ(DCHUBBUB_ARB_DATA_URGENCY_WATERMARK_C);
-	s->pte_meta_urgent = REG_READ(DCHUBBUB_ARB_PTE_META_URGENCY_WATERMARK_C);
-	s->sr_enter = REG_READ(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_C);
-	s->sr_exit = REG_READ(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_C);
-	s->dram_clk_chanage = REG_READ(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_C);
-
-	s = &wm->sets[3];
-	s->wm_set = 3;
-	s->data_urgent = REG_READ(DCHUBBUB_ARB_DATA_URGENCY_WATERMARK_D);
-	s->pte_meta_urgent = REG_READ(DCHUBBUB_ARB_PTE_META_URGENCY_WATERMARK_D);
-	s->sr_enter = REG_READ(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_D);
-	s->sr_exit = REG_READ(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_D);
-	s->dram_clk_chanage = REG_READ(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_D);
-}
-
-static void dcn10_log_hubbub_state(struct dc *dc)
+void dcn10_log_hubbub_state(struct dc *dc)
 {
 	struct dc_context *dc_ctx = dc->ctx;
 	struct dcn_hubbub_wm wm;
 	int i;
 
-	dcn10_hubbub_wm_read_state(dc->hwseq, &wm);
+	hubbub1_wm_read_state(dc->res_pool->hubbub, &wm);
 
 	DTN_INFO("HUBBUB WM: \t data_urgent \t pte_meta_urgent \t "
 			"sr_enter \t sr_exit \t dram_clk_change \n");
@@ -157,7 +108,7 @@ static void dcn10_log_hubbub_state(struct dc *dc)
 	DTN_INFO("\n");
 }
 
-static void dcn10_log_hw_state(struct dc *dc)
+void dcn10_log_hw_state(struct dc *dc)
 {
 	struct dc_context *dc_ctx = dc->ctx;
 	struct resource_pool *pool = dc->res_pool;
@@ -239,97 +190,6 @@ static void dcn10_log_hw_state(struct dc *dc)
 	log_mpc_crc(dc);
 
 	DTN_INFO_END();
-}
-
-static void verify_allow_pstate_change_high(
-	struct dce_hwseq *hws)
-{
-	/* pstate latency is ~20us so if we wait over 40us and pstate allow
-	 * still not asserted, we are probably stuck and going to hang
-	 *
-	 * TODO: Figure out why it takes ~100us on linux
-	 * pstate takes around ~100us on linux. Unknown currently as to
-	 * why it takes that long on linux
-	 */
-	static unsigned int pstate_wait_timeout_us = 200;
-	static unsigned int pstate_wait_expected_timeout_us = 40;
-	static unsigned int max_sampled_pstate_wait_us; /* data collection */
-	static bool forced_pstate_allow; /* help with revert wa */
-	static bool should_log_hw_state; /* prevent hw state log by default */
-
-	unsigned int debug_index = 0x7;
-	unsigned int debug_data;
-	unsigned int i;
-
-	if (forced_pstate_allow) {
-		/* we hacked to force pstate allow to prevent hang last time
-		 * we verify_allow_pstate_change_high.  so disable force
-		 * here so we can check status
-		 */
-		REG_UPDATE_2(DCHUBBUB_ARB_DRAM_STATE_CNTL,
-			     DCHUBBUB_ARB_ALLOW_PSTATE_CHANGE_FORCE_VALUE, 0,
-			     DCHUBBUB_ARB_ALLOW_PSTATE_CHANGE_FORCE_ENABLE, 0);
-		forced_pstate_allow = false;
-	}
-
-	/* description "3-0:   Pipe0 cursor0 QOS
-	 * 7-4:   Pipe1 cursor0 QOS
-	 * 11-8:  Pipe2 cursor0 QOS
-	 * 15-12: Pipe3 cursor0 QOS
-	 * 16:    Pipe0 Plane0 Allow Pstate Change
-	 * 17:    Pipe1 Plane0 Allow Pstate Change
-	 * 18:    Pipe2 Plane0 Allow Pstate Change
-	 * 19:    Pipe3 Plane0 Allow Pstate Change
-	 * 20:    Pipe0 Plane1 Allow Pstate Change
-	 * 21:    Pipe1 Plane1 Allow Pstate Change
-	 * 22:    Pipe2 Plane1 Allow Pstate Change
-	 * 23:    Pipe3 Plane1 Allow Pstate Change
-	 * 24:    Pipe0 cursor0 Allow Pstate Change
-	 * 25:    Pipe1 cursor0 Allow Pstate Change
-	 * 26:    Pipe2 cursor0 Allow Pstate Change
-	 * 27:    Pipe3 cursor0 Allow Pstate Change
-	 * 28:    WB0 Allow Pstate Change
-	 * 29:    WB1 Allow Pstate Change
-	 * 30:    Arbiter's allow_pstate_change
-	 * 31:    SOC pstate change request
-	 */
-
-	REG_WRITE(DCHUBBUB_TEST_DEBUG_INDEX, debug_index);
-
-	for (i = 0; i < pstate_wait_timeout_us; i++) {
-		debug_data = REG_READ(DCHUBBUB_TEST_DEBUG_DATA);
-
-		if (debug_data & (1 << 30)) {
-
-			if (i > pstate_wait_expected_timeout_us)
-				dm_logger_write(hws->ctx->logger, LOG_WARNING,
-						"pstate took longer than expected ~%dus\n",
-						i);
-
-			return;
-		}
-		if (max_sampled_pstate_wait_us < i)
-			max_sampled_pstate_wait_us = i;
-
-		udelay(1);
-	}
-
-	/* force pstate allow to prevent system hang
-	 * and break to debugger to investigate
-	 */
-	REG_UPDATE_2(DCHUBBUB_ARB_DRAM_STATE_CNTL,
-		     DCHUBBUB_ARB_ALLOW_PSTATE_CHANGE_FORCE_VALUE, 1,
-		     DCHUBBUB_ARB_ALLOW_PSTATE_CHANGE_FORCE_ENABLE, 1);
-	forced_pstate_allow = true;
-
-	if (should_log_hw_state) {
-		dcn10_log_hw_state(hws->ctx->dc);
-	}
-
-	dm_logger_write(hws->ctx->logger, LOG_WARNING,
-			"pstate TEST_DEBUG_DATA: 0x%X\n",
-			debug_data);
-	BREAK_TO_DEBUGGER();
 }
 
 static void enable_dppclk(
@@ -431,312 +291,6 @@ static void dpp_pg_control(
 		BREAK_TO_DEBUGGER();
 		break;
 	}
-}
-
-static uint32_t convert_and_clamp(
-	uint32_t wm_ns,
-	uint32_t refclk_mhz,
-	uint32_t clamp_value)
-{
-	uint32_t ret_val = 0;
-	ret_val = wm_ns * refclk_mhz;
-	ret_val /= 1000;
-
-	if (ret_val > clamp_value)
-		ret_val = clamp_value;
-
-	return ret_val;
-}
-
-static void program_watermarks(
-		struct dce_hwseq *hws,
-		struct dcn_watermark_set *watermarks,
-		unsigned int refclk_mhz)
-{
-	uint32_t force_en = hws->ctx->dc->debug.disable_stutter ? 1 : 0;
-	/*
-	 * Need to clamp to max of the register values (i.e. no wrap)
-	 * for dcn1, all wm registers are 21-bit wide
-	 */
-	uint32_t prog_wm_value;
-
-	REG_UPDATE(DCHUBBUB_ARB_WATERMARK_CHANGE_CNTL,
-			DCHUBBUB_ARB_WATERMARK_CHANGE_REQUEST, 0);
-
-	/* Repeat for water mark set A, B, C and D. */
-	/* clock state A */
-	prog_wm_value = convert_and_clamp(watermarks->a.urgent_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_DATA_URGENCY_WATERMARK_A, prog_wm_value);
-
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"URGENCY_WATERMARK_A calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->a.urgent_ns, prog_wm_value);
-
-	prog_wm_value = convert_and_clamp(watermarks->a.pte_meta_urgent_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_PTE_META_URGENCY_WATERMARK_A, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"PTE_META_URGENCY_WATERMARK_A calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->a.pte_meta_urgent_ns, prog_wm_value);
-
-	if (REG(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_A)) {
-		prog_wm_value = convert_and_clamp(
-				watermarks->a.cstate_pstate.cstate_enter_plus_exit_ns,
-				refclk_mhz, 0x1fffff);
-		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_A, prog_wm_value);
-		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-			"SR_ENTER_EXIT_WATERMARK_A calculated =%d\n"
-			"HW register value = 0x%x\n",
-			watermarks->a.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
-
-
-		prog_wm_value = convert_and_clamp(
-				watermarks->a.cstate_pstate.cstate_exit_ns,
-				refclk_mhz, 0x1fffff);
-		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_A, prog_wm_value);
-		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-			"SR_EXIT_WATERMARK_A calculated =%d\n"
-			"HW register value = 0x%x\n",
-			watermarks->a.cstate_pstate.cstate_exit_ns, prog_wm_value);
-	}
-
-	prog_wm_value = convert_and_clamp(
-			watermarks->a.cstate_pstate.pstate_change_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_A, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"DRAM_CLK_CHANGE_WATERMARK_A calculated =%d\n"
-		"HW register value = 0x%x\n\n",
-		watermarks->a.cstate_pstate.pstate_change_ns, prog_wm_value);
-
-
-	/* clock state B */
-	prog_wm_value = convert_and_clamp(
-			watermarks->b.urgent_ns, refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_DATA_URGENCY_WATERMARK_B, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"URGENCY_WATERMARK_B calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->b.urgent_ns, prog_wm_value);
-
-
-	prog_wm_value = convert_and_clamp(
-			watermarks->b.pte_meta_urgent_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_PTE_META_URGENCY_WATERMARK_B, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"PTE_META_URGENCY_WATERMARK_B calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->b.pte_meta_urgent_ns, prog_wm_value);
-
-
-	if (REG(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_B)) {
-		prog_wm_value = convert_and_clamp(
-				watermarks->b.cstate_pstate.cstate_enter_plus_exit_ns,
-				refclk_mhz, 0x1fffff);
-		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_B, prog_wm_value);
-		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-			"SR_ENTER_WATERMARK_B calculated =%d\n"
-			"HW register value = 0x%x\n",
-			watermarks->b.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
-
-
-		prog_wm_value = convert_and_clamp(
-				watermarks->b.cstate_pstate.cstate_exit_ns,
-				refclk_mhz, 0x1fffff);
-		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_B, prog_wm_value);
-		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-			"SR_EXIT_WATERMARK_B calculated =%d\n"
-			"HW register value = 0x%x\n",
-			watermarks->b.cstate_pstate.cstate_exit_ns, prog_wm_value);
-	}
-
-	prog_wm_value = convert_and_clamp(
-			watermarks->b.cstate_pstate.pstate_change_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_B, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"DRAM_CLK_CHANGE_WATERMARK_B calculated =%d\n\n"
-		"HW register value = 0x%x\n",
-		watermarks->b.cstate_pstate.pstate_change_ns, prog_wm_value);
-
-	/* clock state C */
-	prog_wm_value = convert_and_clamp(
-			watermarks->c.urgent_ns, refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_DATA_URGENCY_WATERMARK_C, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"URGENCY_WATERMARK_C calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->c.urgent_ns, prog_wm_value);
-
-
-	prog_wm_value = convert_and_clamp(
-			watermarks->c.pte_meta_urgent_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_PTE_META_URGENCY_WATERMARK_C, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"PTE_META_URGENCY_WATERMARK_C calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->c.pte_meta_urgent_ns, prog_wm_value);
-
-
-	if (REG(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_C)) {
-		prog_wm_value = convert_and_clamp(
-				watermarks->c.cstate_pstate.cstate_enter_plus_exit_ns,
-				refclk_mhz, 0x1fffff);
-		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_C, prog_wm_value);
-		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-			"SR_ENTER_WATERMARK_C calculated =%d\n"
-			"HW register value = 0x%x\n",
-			watermarks->c.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
-
-
-		prog_wm_value = convert_and_clamp(
-				watermarks->c.cstate_pstate.cstate_exit_ns,
-				refclk_mhz, 0x1fffff);
-		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_C, prog_wm_value);
-		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-			"SR_EXIT_WATERMARK_C calculated =%d\n"
-			"HW register value = 0x%x\n",
-			watermarks->c.cstate_pstate.cstate_exit_ns, prog_wm_value);
-	}
-
-	prog_wm_value = convert_and_clamp(
-			watermarks->c.cstate_pstate.pstate_change_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_C, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"DRAM_CLK_CHANGE_WATERMARK_C calculated =%d\n\n"
-		"HW register value = 0x%x\n",
-		watermarks->c.cstate_pstate.pstate_change_ns, prog_wm_value);
-
-	/* clock state D */
-	prog_wm_value = convert_and_clamp(
-			watermarks->d.urgent_ns, refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_DATA_URGENCY_WATERMARK_D, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"URGENCY_WATERMARK_D calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->d.urgent_ns, prog_wm_value);
-
-	prog_wm_value = convert_and_clamp(
-			watermarks->d.pte_meta_urgent_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_PTE_META_URGENCY_WATERMARK_D, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"PTE_META_URGENCY_WATERMARK_D calculated =%d\n"
-		"HW register value = 0x%x\n",
-		watermarks->d.pte_meta_urgent_ns, prog_wm_value);
-
-
-	if (REG(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_D)) {
-		prog_wm_value = convert_and_clamp(
-				watermarks->d.cstate_pstate.cstate_enter_plus_exit_ns,
-				refclk_mhz, 0x1fffff);
-		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_ENTER_WATERMARK_D, prog_wm_value);
-		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-			"SR_ENTER_WATERMARK_D calculated =%d\n"
-			"HW register value = 0x%x\n",
-			watermarks->d.cstate_pstate.cstate_enter_plus_exit_ns, prog_wm_value);
-
-
-		prog_wm_value = convert_and_clamp(
-				watermarks->d.cstate_pstate.cstate_exit_ns,
-				refclk_mhz, 0x1fffff);
-		REG_WRITE(DCHUBBUB_ARB_ALLOW_SR_EXIT_WATERMARK_D, prog_wm_value);
-		dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-			"SR_EXIT_WATERMARK_D calculated =%d\n"
-			"HW register value = 0x%x\n",
-			watermarks->d.cstate_pstate.cstate_exit_ns, prog_wm_value);
-	}
-
-
-	prog_wm_value = convert_and_clamp(
-			watermarks->d.cstate_pstate.pstate_change_ns,
-			refclk_mhz, 0x1fffff);
-	REG_WRITE(DCHUBBUB_ARB_ALLOW_DRAM_CLK_CHANGE_WATERMARK_D, prog_wm_value);
-	dm_logger_write(hws->ctx->logger, LOG_BANDWIDTH_CALCS,
-		"DRAM_CLK_CHANGE_WATERMARK_D calculated =%d\n"
-		"HW register value = 0x%x\n\n",
-		watermarks->d.cstate_pstate.pstate_change_ns, prog_wm_value);
-
-	REG_UPDATE(DCHUBBUB_ARB_WATERMARK_CHANGE_CNTL,
-			DCHUBBUB_ARB_WATERMARK_CHANGE_REQUEST, 1);
-
-	REG_UPDATE(DCHUBBUB_ARB_SAT_LEVEL,
-			DCHUBBUB_ARB_SAT_LEVEL, 60 * refclk_mhz);
-	REG_UPDATE(DCHUBBUB_ARB_DF_REQ_OUTSTAND,
-			DCHUBBUB_ARB_MIN_REQ_OUTSTAND, 68);
-
-	REG_UPDATE_2(DCHUBBUB_ARB_DRAM_STATE_CNTL,
-			DCHUBBUB_ARB_ALLOW_SELF_REFRESH_FORCE_VALUE, 0,
-			DCHUBBUB_ARB_ALLOW_SELF_REFRESH_FORCE_ENABLE, force_en);
-
-#if 0
-	REG_UPDATE_2(DCHUBBUB_ARB_WATERMARK_CHANGE_CNTL,
-			DCHUBBUB_ARB_WATERMARK_CHANGE_DONE_INTERRUPT_DISABLE, 1,
-			DCHUBBUB_ARB_WATERMARK_CHANGE_REQUEST, 1);
-#endif
-}
-
-
-static void dcn10_update_dchub(
-	struct dce_hwseq *hws,
-	struct dchub_init_data *dh_data)
-{
-	/* TODO: port code from dal2 */
-	switch (dh_data->fb_mode) {
-	case FRAME_BUFFER_MODE_ZFB_ONLY:
-		/*For ZFB case need to put DCHUB FB BASE and TOP upside down to indicate ZFB mode*/
-		REG_UPDATE(DCHUBBUB_SDPIF_FB_TOP,
-				SDPIF_FB_TOP, 0);
-
-		REG_UPDATE(DCHUBBUB_SDPIF_FB_BASE,
-				SDPIF_FB_BASE, 0x0FFFF);
-
-		REG_UPDATE(DCHUBBUB_SDPIF_AGP_BASE,
-				SDPIF_AGP_BASE, dh_data->zfb_phys_addr_base >> 22);
-
-		REG_UPDATE(DCHUBBUB_SDPIF_AGP_BOT,
-				SDPIF_AGP_BOT, dh_data->zfb_mc_base_addr >> 22);
-
-		REG_UPDATE(DCHUBBUB_SDPIF_AGP_TOP,
-				SDPIF_AGP_TOP, (dh_data->zfb_mc_base_addr +
-						dh_data->zfb_size_in_byte - 1) >> 22);
-		break;
-	case FRAME_BUFFER_MODE_MIXED_ZFB_AND_LOCAL:
-		/*Should not touch FB LOCATION (done by VBIOS on AsicInit table)*/
-
-		REG_UPDATE(DCHUBBUB_SDPIF_AGP_BASE,
-				SDPIF_AGP_BASE, dh_data->zfb_phys_addr_base >> 22);
-
-		REG_UPDATE(DCHUBBUB_SDPIF_AGP_BOT,
-				SDPIF_AGP_BOT, dh_data->zfb_mc_base_addr >> 22);
-
-		REG_UPDATE(DCHUBBUB_SDPIF_AGP_TOP,
-				SDPIF_AGP_TOP, (dh_data->zfb_mc_base_addr +
-						dh_data->zfb_size_in_byte - 1) >> 22);
-		break;
-	case FRAME_BUFFER_MODE_LOCAL_ONLY:
-		/*Should not touch FB LOCATION (done by VBIOS on AsicInit table)*/
-		REG_UPDATE(DCHUBBUB_SDPIF_AGP_BASE,
-				SDPIF_AGP_BASE, 0);
-
-		REG_UPDATE(DCHUBBUB_SDPIF_AGP_BOT,
-				SDPIF_AGP_BOT, 0X03FFFF);
-
-		REG_UPDATE(DCHUBBUB_SDPIF_AGP_TOP,
-				SDPIF_AGP_TOP, 0);
-		break;
-	default:
-		break;
-	}
-
-	dh_data->dchub_initialzied = true;
-	dh_data->dchub_info_valid = false;
 }
 
 static void hubp_pg_control(
@@ -858,91 +412,6 @@ static void bios_golden_init(struct dc *dc)
 		bp->funcs->enable_disp_power_gating(bp,
 				CONTROLLER_ID_D0 + i, ASIC_PIPE_DISABLE);
 	}
-}
-
-static void dcn10_init_hw(struct dc *dc)
-{
-	int i;
-	struct abm *abm = dc->res_pool->abm;
-	struct dmcu *dmcu = dc->res_pool->dmcu;
-	struct dce_hwseq *hws = dc->hwseq;
-
-	if (IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment)) {
-		REG_WRITE(REFCLK_CNTL, 0);
-		REG_UPDATE(DCHUBBUB_GLOBAL_TIMER_CNTL, DCHUBBUB_GLOBAL_TIMER_ENABLE, 1);
-		REG_WRITE(DIO_MEM_PWR_CTRL, 0);
-
-		if (!dc->debug.disable_clock_gate) {
-			/* enable all DCN clock gating */
-			REG_WRITE(DCCG_GATE_DISABLE_CNTL, 0);
-
-			REG_WRITE(DCCG_GATE_DISABLE_CNTL2, 0);
-
-			REG_UPDATE(DCFCLK_CNTL, DCFCLK_GATE_DIS, 0);
-		}
-
-		enable_power_gating_plane(dc->hwseq, true);
-		return;
-	}
-	/* end of FPGA. Below if real ASIC */
-
-	bios_golden_init(dc);
-
-	disable_vga(dc->hwseq);
-
-	for (i = 0; i < dc->link_count; i++) {
-		/* Power up AND update implementation according to the
-		 * required signal (which may be different from the
-		 * default signal on connector).
-		 */
-		struct dc_link *link = dc->links[i];
-
-		link->link_enc->funcs->hw_init(link->link_enc);
-	}
-
-	for (i = 0; i < dc->res_pool->pipe_count; i++) {
-		struct dpp *dpp = dc->res_pool->dpps[i];
-		struct timing_generator *tg = dc->res_pool->timing_generators[i];
-
-		dpp->funcs->dpp_reset(dpp);
-		dc->res_pool->mpc->funcs->remove(
-				dc->res_pool->mpc, &(dc->res_pool->opps[i]->mpc_tree),
-				dc->res_pool->opps[i]->inst, i);
-
-		/* Blank controller using driver code instead of
-		 * command table.
-		 */
-		tg->funcs->set_blank(tg, true);
-		hwss_wait_for_blank_complete(tg);
-	}
-
-	for (i = 0; i < dc->res_pool->audio_count; i++) {
-		struct audio *audio = dc->res_pool->audios[i];
-
-		audio->funcs->hw_init(audio);
-	}
-
-	if (abm != NULL) {
-		abm->funcs->init_backlight(abm);
-		abm->funcs->abm_init(abm);
-	}
-
-	if (dmcu != NULL)
-		dmcu->funcs->dmcu_init(dmcu);
-
-	/* power AFMT HDMI memory TODO: may move to dis/en output save power*/
-	REG_WRITE(DIO_MEM_PWR_CTRL, 0);
-
-	if (!dc->debug.disable_clock_gate) {
-		/* enable all DCN clock gating */
-		REG_WRITE(DCCG_GATE_DISABLE_CNTL, 0);
-
-		REG_WRITE(DCCG_GATE_DISABLE_CNTL2, 0);
-
-		REG_UPDATE(DCFCLK_CNTL, DCFCLK_GATE_DIS, 0);
-	}
-
-	enable_power_gating_plane(dc->hwseq, true);
 }
 
 static enum dc_status dcn10_prog_pixclk_crtc_otg(
@@ -1102,10 +571,10 @@ static void plane_atomic_disconnect(struct dc *dc,
 		return;
 
 	if (dc->debug.sanity_checks)
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 	hubp->funcs->dcc_control(hubp, false, false);
 	if (dc->debug.sanity_checks)
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 
 	mpc->funcs->remove(mpc, &(dc->res_pool->opps[opp_id]->mpc_tree),
 			dc->res_pool->opps[opp_id]->inst, fe_idx);
@@ -1133,7 +602,7 @@ static void plane_atomic_disable(struct dc *dc,
 	hubp->funcs->set_blank(hubp, true);
 
 	if (dc->debug.sanity_checks)
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 
 	REG_UPDATE(HUBP_CLK_CNTL[fe_idx],
 			HUBP_CLOCK_ENABLE, 0);
@@ -1145,34 +614,8 @@ static void plane_atomic_disable(struct dc *dc,
 				OPP_PIPE_CLOCK_EN, 0);
 
 	if (dc->debug.sanity_checks)
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 }
-
-/*
- * kill power to plane hw
- * note: cannot power down until plane is disable
- */
-static void plane_atomic_power_down(struct dc *dc, int fe_idx)
-{
-	struct dce_hwseq *hws = dc->hwseq;
-	struct dpp *dpp = dc->res_pool->dpps[fe_idx];
-
-	if (REG(DC_IP_REQUEST_CNTL)) {
-		REG_SET(DC_IP_REQUEST_CNTL, 0,
-				IP_REQUEST_EN, 1);
-		dpp_pg_control(hws, fe_idx, false);
-		hubp_pg_control(hws, fe_idx, false);
-		dpp->funcs->dpp_reset(dpp);
-		REG_SET(DC_IP_REQUEST_CNTL, 0,
-				IP_REQUEST_EN, 0);
-		dm_logger_write(dc->ctx->logger, LOG_DEBUG,
-				"Power gated front end %d\n", fe_idx);
-
-		if (dc->debug.sanity_checks)
-			verify_allow_pstate_change_high(dc->hwseq);
-	}
-}
-
 
 static void reset_front_end(
 		struct dc *dc,
@@ -1195,7 +638,7 @@ static void reset_front_end(
 	tg->funcs->unlock(tg);
 
 	if (dc->debug.sanity_checks)
-		verify_allow_pstate_change_high(hws);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 
 	if (tg->ctx->dce_environment != DCE_ENV_FPGA_MAXIMUS)
 		REG_WAIT(OTG_GLOBAL_SYNC_STATUS[tg->inst],
@@ -1227,7 +670,94 @@ static void dcn10_power_down_fe(struct dc *dc, int fe_idx)
 			"Power gated front end %d\n", fe_idx);
 
 	if (dc->debug.sanity_checks)
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
+}
+
+static void dcn10_init_hw(struct dc *dc)
+{
+	int i;
+	struct abm *abm = dc->res_pool->abm;
+	struct dmcu *dmcu = dc->res_pool->dmcu;
+	struct dce_hwseq *hws = dc->hwseq;
+
+	if (IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment)) {
+		REG_WRITE(REFCLK_CNTL, 0);
+		REG_UPDATE(DCHUBBUB_GLOBAL_TIMER_CNTL, DCHUBBUB_GLOBAL_TIMER_ENABLE, 1);
+		REG_WRITE(DIO_MEM_PWR_CTRL, 0);
+
+		if (!dc->debug.disable_clock_gate) {
+			/* enable all DCN clock gating */
+			REG_WRITE(DCCG_GATE_DISABLE_CNTL, 0);
+
+			REG_WRITE(DCCG_GATE_DISABLE_CNTL2, 0);
+
+			REG_UPDATE(DCFCLK_CNTL, DCFCLK_GATE_DIS, 0);
+		}
+
+		enable_power_gating_plane(dc->hwseq, true);
+		return;
+	}
+	/* end of FPGA. Below if real ASIC */
+
+	bios_golden_init(dc);
+
+	disable_vga(dc->hwseq);
+
+	for (i = 0; i < dc->link_count; i++) {
+		/* Power up AND update implementation according to the
+		 * required signal (which may be different from the
+		 * default signal on connector).
+		 */
+		struct dc_link *link = dc->links[i];
+
+		link->link_enc->funcs->hw_init(link->link_enc);
+	}
+
+	for (i = 0; i < dc->res_pool->pipe_count; i++) {
+		struct dpp *dpp = dc->res_pool->dpps[i];
+		struct timing_generator *tg = dc->res_pool->timing_generators[i];
+
+		dpp->funcs->dpp_reset(dpp);
+		dc->res_pool->mpc->funcs->remove(
+				dc->res_pool->mpc, &(dc->res_pool->opps[i]->mpc_tree),
+				dc->res_pool->opps[i]->inst, i);
+
+		/* Blank controller using driver code instead of
+		 * command table.
+		 */
+		tg->funcs->set_blank(tg, true);
+		hwss_wait_for_blank_complete(tg);
+
+		dcn10_power_down_fe(dc, i);
+	}
+
+	for (i = 0; i < dc->res_pool->audio_count; i++) {
+		struct audio *audio = dc->res_pool->audios[i];
+
+		audio->funcs->hw_init(audio);
+	}
+
+	if (abm != NULL) {
+		abm->funcs->init_backlight(abm);
+		abm->funcs->abm_init(abm);
+	}
+
+	if (dmcu != NULL)
+		dmcu->funcs->dmcu_init(dmcu);
+
+	/* power AFMT HDMI memory TODO: may move to dis/en output save power*/
+	REG_WRITE(DIO_MEM_PWR_CTRL, 0);
+
+	if (!dc->debug.disable_clock_gate) {
+		/* enable all DCN clock gating */
+		REG_WRITE(DCCG_GATE_DISABLE_CNTL, 0);
+
+		REG_WRITE(DCCG_GATE_DISABLE_CNTL2, 0);
+
+		REG_UPDATE(DCFCLK_CNTL, DCFCLK_GATE_DIS, 0);
+	}
+
+	enable_power_gating_plane(dc->hwseq, true);
 }
 
 static void reset_hw_ctx_wrap(
@@ -1235,56 +765,6 @@ static void reset_hw_ctx_wrap(
 		struct dc_state *context)
 {
 	int i;
-
-	/* Reset Front End*/
-	/* Lock*/
-	for (i = 0; i < dc->res_pool->pipe_count; i++) {
-		struct pipe_ctx *cur_pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[i];
-		struct timing_generator *tg = cur_pipe_ctx->stream_res.tg;
-
-		if (cur_pipe_ctx->stream)
-			tg->funcs->lock(tg);
-	}
-	/* Disconnect*/
-	for (i = dc->res_pool->pipe_count - 1; i >= 0 ; i--) {
-		struct pipe_ctx *pipe_ctx_old =
-			&dc->current_state->res_ctx.pipe_ctx[i];
-		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
-
-		if (!pipe_ctx->stream ||
-				!pipe_ctx->plane_state ||
-				pipe_need_reprogram(pipe_ctx_old, pipe_ctx)) {
-
-			plane_atomic_disconnect(dc, i);
-		}
-	}
-	/* Unlock*/
-	for (i = dc->res_pool->pipe_count - 1; i >= 0; i--) {
-		struct pipe_ctx *cur_pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[i];
-		struct timing_generator *tg = cur_pipe_ctx->stream_res.tg;
-
-		if (cur_pipe_ctx->stream)
-			tg->funcs->unlock(tg);
-	}
-
-	/* Disable and Powerdown*/
-	for (i = dc->res_pool->pipe_count - 1; i >= 0 ; i--) {
-		struct pipe_ctx *pipe_ctx_old =
-			&dc->current_state->res_ctx.pipe_ctx[i];
-		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
-
-		/*if (!pipe_ctx_old->stream)
-			continue;*/
-
-		if (pipe_ctx->stream && pipe_ctx->plane_state
-				&& !pipe_need_reprogram(pipe_ctx_old, pipe_ctx))
-			continue;
-
-		plane_atomic_disable(dc, i);
-
-		if (!pipe_ctx->stream || !pipe_ctx->plane_state)
-			plane_atomic_power_down(dc, i);
-	}
 
 	/* Reset Back End*/
 	for (i = dc->res_pool->pipe_count - 1; i >= 0 ; i--) {
@@ -1337,21 +817,7 @@ static bool patch_address_for_sbs_tb_stereo(
 	return false;
 }
 
-static void toggle_watermark_change_req(struct dce_hwseq *hws)
-{
-	uint32_t watermark_change_req;
 
-	REG_GET(DCHUBBUB_ARB_WATERMARK_CHANGE_CNTL,
-			DCHUBBUB_ARB_WATERMARK_CHANGE_REQUEST, &watermark_change_req);
-
-	if (watermark_change_req)
-		watermark_change_req = 0;
-	else
-		watermark_change_req = 1;
-
-	REG_UPDATE(DCHUBBUB_ARB_WATERMARK_CHANGE_CNTL,
-			DCHUBBUB_ARB_WATERMARK_CHANGE_REQUEST, watermark_change_req);
-}
 
 static void dcn10_update_plane_addr(const struct dc *dc, struct pipe_ctx *pipe_ctx)
 {
@@ -1777,7 +1243,7 @@ static void dcn10_pipe_control_lock(
 		return;
 
 	if (dc->debug.sanity_checks)
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 
 	if (lock)
 		pipe->stream_res.tg->funcs->lock(pipe->stream_res.tg);
@@ -1785,7 +1251,7 @@ static void dcn10_pipe_control_lock(
 		pipe->stream_res.tg->funcs->unlock(pipe->stream_res.tg);
 
 	if (dc->debug.sanity_checks)
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 }
 
 static bool wait_for_reset_trigger_to_occur(
@@ -1985,7 +1451,7 @@ static void dcn10_power_on_fe(
 	struct dce_hwseq *hws = dc->hwseq;
 
 	if (dc->debug.sanity_checks) {
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 	}
 
 	power_on_plane(dc->hwseq,
@@ -2037,7 +1503,7 @@ static void dcn10_power_on_fe(
 	}
 
 	if (dc->debug.sanity_checks) {
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 	}
 }
 
@@ -2090,8 +1556,7 @@ static void program_csc_matrix(struct pipe_ctx *pipe_ctx,
 	int i;
 	struct out_csc_color_matrix tbl_entry;
 
-	if (pipe_ctx->stream->csc_color_matrix.enable_adjustment
-				== true) {
+	if (pipe_ctx->stream->csc_color_matrix.enable_adjustment == true) {
 			enum dc_color_space color_space =
 				pipe_ctx->stream->output_color_space;
 
@@ -2104,6 +1569,7 @@ static void program_csc_matrix(struct pipe_ctx *pipe_ctx,
 			pipe_ctx->plane_res.dpp->funcs->opp_set_csc_adjustment(pipe_ctx->plane_res.dpp, &tbl_entry);
 	}
 }
+
 static bool is_lower_pipe_tree_visible(struct pipe_ctx *pipe_ctx)
 {
 	if (pipe_ctx->plane_state->visible)
@@ -2188,6 +1654,69 @@ static void dcn10_get_surface_visual_confirm_color(
 		break;
 	default:
 		break;
+	}
+}
+
+static uint16_t fixed_point_to_int_frac(
+	struct fixed31_32 arg,
+	uint8_t integer_bits,
+	uint8_t fractional_bits)
+{
+	int32_t numerator;
+	int32_t divisor = 1 << fractional_bits;
+
+	uint16_t result;
+
+	uint16_t d = (uint16_t)dal_fixed31_32_floor(
+		dal_fixed31_32_abs(
+			arg));
+
+	if (d <= (uint16_t)(1 << integer_bits) - (1 / (uint16_t)divisor))
+		numerator = (uint16_t)dal_fixed31_32_floor(
+			dal_fixed31_32_mul_int(
+				arg,
+				divisor));
+	else {
+		numerator = dal_fixed31_32_floor(
+			dal_fixed31_32_sub(
+				dal_fixed31_32_from_int(
+					1LL << integer_bits),
+				dal_fixed31_32_recip(
+					dal_fixed31_32_from_int(
+						divisor))));
+	}
+
+	if (numerator >= 0)
+		result = (uint16_t)numerator;
+	else
+		result = (uint16_t)(
+		(1 << (integer_bits + fractional_bits + 1)) + numerator);
+
+	if ((result != 0) && dal_fixed31_32_lt(
+		arg, dal_fixed31_32_zero))
+		result |= 1 << (integer_bits + fractional_bits);
+
+	return result;
+}
+
+void build_prescale_params(struct  dc_bias_and_scale *bias_and_scale,
+		const struct dc_plane_state *plane_state)
+{
+	if (plane_state->format >= SURFACE_PIXEL_FORMAT_VIDEO_BEGIN
+			&& plane_state->format != SURFACE_PIXEL_FORMAT_INVALID
+			&& plane_state->input_csc_color_matrix.enable_adjustment
+			&& plane_state->coeff_reduction_factor.value != 0) {
+		bias_and_scale->scale_blue = fixed_point_to_int_frac(
+			dal_fixed31_32_mul(plane_state->coeff_reduction_factor,
+					dal_fixed31_32_from_fraction(256, 255)),
+				2,
+				13);
+		bias_and_scale->scale_red = bias_and_scale->scale_blue;
+		bias_and_scale->scale_green = bias_and_scale->scale_blue;
+	} else {
+		bias_and_scale->scale_blue = 0x2000;
+		bias_and_scale->scale_red = 0x2000;
+		bias_and_scale->scale_green = 0x2000;
 	}
 }
 
@@ -2291,6 +1820,7 @@ static void update_dchubp_dpp(
 	struct mpcc_cfg mpcc_cfg = {0};
 	struct pipe_ctx *top_pipe;
 	bool per_pixel_alpha = plane_state->per_pixel_alpha && pipe_ctx->bottom_pipe;
+	struct dc_bias_and_scale bns_params = {0};
 
 	/* TODO: proper fix once fpga works */
 	/* depends on DML calculation, DPP clock value may change dynamically */
@@ -2327,9 +1857,16 @@ static void update_dchubp_dpp(
 				hws
 				);
 
+	// program the input csc
 	dpp->funcs->ipp_setup(dpp,
 			plane_state->format,
-			EXPANSION_MODE_ZERO);
+			EXPANSION_MODE_ZERO,
+			plane_state->input_csc_color_matrix,
+			COLOR_SPACE_YCBCR601_LIMITED);
+
+	//set scale and bias registers
+	build_prescale_params(&bns_params, plane_state);
+	dpp->funcs->ipp_program_bias_and_scale(dpp, &bns_params);
 
 	mpcc_cfg.dpp_id = hubp->inst;
 	mpcc_cfg.opp_id = pipe_ctx->stream_res.opp->inst;
@@ -2369,6 +1906,7 @@ static void update_dchubp_dpp(
 			pipe_ctx->stream->output_color_space,
 			pipe_ctx->stream->csc_color_matrix.matrix);
 
+
 	hubp->funcs->hubp_program_surface_config(
 		hubp,
 		plane_state->format,
@@ -2398,11 +1936,11 @@ static void program_all_pipe_in_tree(
 		 * this OTG. this is done only one time.
 		 */
 		/* watermark is for all pipes */
-		program_watermarks(dc->hwseq, &context->bw.dcn.watermarks, ref_clk_mhz);
+		program_watermarks(dc->res_pool->hubbub, &context->bw.dcn.watermarks, ref_clk_mhz);
 
 		if (dc->debug.sanity_checks) {
 			/* pstate stuck check after watermark update */
-			verify_allow_pstate_change_high(dc->hwseq);
+			verify_allow_pstate_change_high(dc->res_pool->hubbub);
 		}
 
 		pipe_ctx->stream_res.tg->funcs->lock(pipe_ctx->stream_res.tg);
@@ -2433,7 +1971,7 @@ static void program_all_pipe_in_tree(
 		 * DCHUBBUB_ARB_WATERMARK_CHANGE_REQUEST is owned by SMU we should have
 		 * both driver and fw accessing same register
 		 */
-		toggle_watermark_change_req(dc->hwseq);
+		toggle_watermark_change_req(dc->res_pool->hubbub);
 
 		update_dchubp_dpp(dc, pipe_ctx, context);
 
@@ -2456,7 +1994,7 @@ static void program_all_pipe_in_tree(
 
 	if (dc->debug.sanity_checks) {
 		/* pstate stuck check after each pipe is programmed */
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 	}
 
 	if (pipe_ctx->bottom_pipe != NULL && pipe_ctx->bottom_pipe != pipe_ctx)
@@ -2523,7 +2061,7 @@ static void dcn10_apply_ctx_for_surface(
 	int i, be_idx;
 
 	if (dc->debug.sanity_checks)
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 
 	be_idx = -1;
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
@@ -2553,6 +2091,7 @@ static void dcn10_apply_ctx_for_surface(
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 		struct pipe_ctx *old_pipe_ctx =
 				&dc->current_state->res_ctx.pipe_ctx[i];
+		struct hubp *hubp = dc->res_pool->hubps[i];
 
 		if (!pipe_ctx->plane_state && !old_pipe_ctx->plane_state)
 			continue;
@@ -2601,8 +2140,11 @@ static void dcn10_apply_ctx_for_surface(
 					"[debug_mpo: apply_ctx disconnect pending on mpcc %d]\n",
 					old_pipe_ctx->mpcc->inst);*/
 
+			if (hubp->funcs->hubp_disconnect)
+				hubp->funcs->hubp_disconnect(hubp);
+
 			if (dc->debug.sanity_checks)
-				verify_allow_pstate_change_high(dc->hwseq);
+				verify_allow_pstate_change_high(dc->res_pool->hubbub);
 
 			old_pipe_ctx->top_pipe = NULL;
 			old_pipe_ctx->bottom_pipe = NULL;
@@ -2680,7 +2222,7 @@ static void dcn10_apply_ctx_for_surface(
 			);
 
 	if (dc->debug.sanity_checks)
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 }
 
 static void dcn10_set_bandwidth(
@@ -2694,7 +2236,7 @@ static void dcn10_set_bandwidth(
 	struct pp_smu_funcs_rv *pp_smu = dc->res_pool->pp_smu;
 
 	if (dc->debug.sanity_checks) {
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 	}
 
 	if (IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment))
@@ -2750,7 +2292,7 @@ static void dcn10_set_bandwidth(
 	dcn10_pplib_apply_display_requirements(dc, context);
 
 	if (dc->debug.sanity_checks) {
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 	}
 
 	/* need to fix this function.  not doing the right thing here */
@@ -2875,7 +2417,7 @@ static void dcn10_wait_for_mpcc_disconnect(
 	int i;
 
 	if (dc->debug.sanity_checks) {
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 	}
 
 	if (!pipe_ctx->stream_res.opp)
@@ -2893,7 +2435,7 @@ static void dcn10_wait_for_mpcc_disconnect(
 	}
 
 	if (dc->debug.sanity_checks) {
-		verify_allow_pstate_change_high(dc->hwseq);
+		verify_allow_pstate_change_high(dc->res_pool->hubbub);
 	}
 
 }
@@ -2937,7 +2479,6 @@ static const struct hw_sequencer_funcs dcn10_funcs = {
 	.apply_ctx_for_surface = dcn10_apply_ctx_for_surface,
 	.set_plane_config = set_plane_config,
 	.update_plane_addr = dcn10_update_plane_addr,
-	.update_dchub = dcn10_update_dchub,
 	.update_pending_status = dcn10_update_pending_status,
 	.set_input_transfer_func = dcn10_set_input_transfer_func,
 	.set_output_transfer_func = dcn10_set_output_transfer_func,

@@ -128,6 +128,7 @@ static bool create_links(
 		link->link_id.id = CONNECTOR_ID_VIRTUAL;
 		link->link_id.enum_id = ENUM_ID_1;
 		link->link_enc = kzalloc(sizeof(*link->link_enc), GFP_KERNEL);
+		link->link_status.dpcd_caps = &link->dpcd_caps;
 
 		enc_init.ctx = dc->ctx;
 		enc_init.channel = CHANNEL_ID_UNKNOWN;
@@ -808,6 +809,8 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 	if (!dcb->funcs->is_accelerated_mode(dcb))
 		dc->hwss.enable_accelerated_mode(dc);
 
+
+
 	for (i = 0; i < context->stream_count; i++) {
 		const struct dc_sink *sink = context->streams[i]->sink;
 
@@ -888,7 +891,6 @@ bool dc_commit_state(struct dc *dc, struct dc_state *context)
 	return (result == DC_OK);
 }
 
-
 bool dc_post_update_surfaces_to_stream(struct dc *dc)
 {
 	int i;
@@ -958,6 +960,7 @@ bool dc_commit_planes_to_stream(
 		flip_addr[i].address = plane_states[i]->address;
 		flip_addr[i].flip_immediate = plane_states[i]->flip_immediate;
 		plane_info[i].color_space = plane_states[i]->color_space;
+		plane_info[i].input_tf = plane_states[i]->input_tf;
 		plane_info[i].format = plane_states[i]->format;
 		plane_info[i].plane_size = plane_states[i]->plane_size;
 		plane_info[i].rotation = plane_states[i]->rotation;
@@ -1083,6 +1086,7 @@ static enum surface_update_type get_plane_info_update_type(
 
 	/* Full update parameters */
 	temp_plane_info.color_space = u->surface->color_space;
+	temp_plane_info.input_tf = u->surface->input_tf;
 	temp_plane_info.dcc = u->surface->dcc;
 	temp_plane_info.horizontal_mirror = u->surface->horizontal_mirror;
 	temp_plane_info.plane_size = u->surface->plane_size;
@@ -1168,7 +1172,7 @@ static enum surface_update_type det_surface_update(
 		overall_type = type;
 
 	if (u->in_transfer_func ||
-		u->hdr_static_metadata) {
+		u->input_csc_color_matrix) {
 		if (overall_type < UPDATE_TYPE_MED)
 			overall_type = UPDATE_TYPE_MED;
 	}
@@ -1299,14 +1303,25 @@ static void commit_planes_for_stream(struct dc *dc,
 					pipe_ctx->top_pipe->plane_state == pipe_ctx->plane_state))
 				dc->hwss.set_input_transfer_func(
 						pipe_ctx, pipe_ctx->plane_state);
+		}
+	}
+
+	if (update_type > UPDATE_TYPE_FAST) {
+		for (j = 0; j < dc->res_pool->pipe_count; j++) {
+			struct pipe_ctx *pipe_ctx =
+					&context->res_ctx.pipe_ctx[j];
+
+			if (!pipe_ctx->stream)
+				continue;
 
 			if (stream_update != NULL &&
-					stream_update->out_transfer_func != NULL) {
+				stream_update->out_transfer_func != NULL) {
 				dc->hwss.set_output_transfer_func(
 						pipe_ctx, pipe_ctx->stream);
 			}
 
-			if (srf_updates[i].hdr_static_metadata) {
+			if (stream_update != NULL &&
+				stream_update->hdr_static_metadata) {
 				resource_build_info_frame(pipe_ctx);
 				dc->hwss.update_info_frame(pipe_ctx);
 			}

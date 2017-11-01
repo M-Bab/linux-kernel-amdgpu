@@ -446,8 +446,10 @@ static int xgpu_vi_send_access_requests(struct amdgpu_device *adev,
 		request == IDH_REQ_GPU_FINI_ACCESS ||
 		request == IDH_REQ_GPU_RESET_ACCESS) {
 		r = xgpu_vi_poll_msg(adev, IDH_READY_TO_ACCESS_GPU);
-		if (r)
-			pr_err("Doesn't get ack from pf, continue\n");
+		if (r) {
+			pr_err("Doesn't get ack from pf, give up\n");
+			return r;
+		}
 	}
 
 	return 0;
@@ -519,7 +521,7 @@ static void xgpu_vi_mailbox_flr_work(struct work_struct *work)
 	}
 
 	/* Trigger recovery due to world switch failure */
-	amdgpu_sriov_gpu_reset(adev, NULL);
+	amdgpu_gpu_recover(adev, NULL);
 }
 
 static int xgpu_vi_set_mailbox_rcv_irq(struct amdgpu_device *adev,
