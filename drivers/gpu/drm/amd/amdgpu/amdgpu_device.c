@@ -796,6 +796,8 @@ int amdgpu_device_resize_fb_bar(struct amdgpu_device *adev)
 		return -ENODEV;
 
 	pci_write_config_word(adev->pdev, PCI_COMMAND, cmd);
+
+	return 0;
 }
 
 /*
