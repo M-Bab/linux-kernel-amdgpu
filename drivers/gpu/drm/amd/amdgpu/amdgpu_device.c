@@ -410,6 +410,9 @@ static int amdgpu_doorbell_init(struct amdgpu_device *adev)
 		return 0;
 	}
 
+	if (pci_resource_flags(adev->pdev, 2) & IORESOURCE_UNSET)
+		return -EINVAL;
+
 	/* doorbell bar mapping */
 	adev->doorbell.base = pci_resource_start(adev->pdev, 2);
 	adev->doorbell.size = pci_resource_len(adev->pdev, 2);
@@ -680,8 +683,12 @@ void amdgpu_fw_reserve_vram_fini(struct amdgpu_device *adev)
 int amdgpu_fw_reserve_vram_init(struct amdgpu_device *adev)
 {
 	int r = 0;
+	int i;
 	u64 gpu_addr;
 	u64 vram_size = adev->mc.visible_vram_size;
+	u64 offset = adev->fw_vram_usage.start_offset;
+	u64 size = adev->fw_vram_usage.size;
+	struct amdgpu_bo *bo;
 
 	adev->fw_vram_usage.va = NULL;
 	adev->fw_vram_usage.reserved_bo = NULL;
@@ -690,7 +697,7 @@ int amdgpu_fw_reserve_vram_init(struct amdgpu_device *adev)
 		adev->fw_vram_usage.size <= vram_size) {
 
 		r = amdgpu_bo_create(adev, adev->fw_vram_usage.size,
-			PAGE_SIZE, true, 0,
+			PAGE_SIZE, true, AMDGPU_GEM_DOMAIN_VRAM,
 			AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED |
 			AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS, NULL, NULL, 0,
 			&adev->fw_vram_usage.reserved_bo);
@@ -700,6 +707,23 @@ int amdgpu_fw_reserve_vram_init(struct amdgpu_device *adev)
 		r = amdgpu_bo_reserve(adev->fw_vram_usage.reserved_bo, false);
 		if (r)
 			goto error_reserve;
+
+		/* remove the original mem node and create a new one at the
+		 * request position
+		 */
+		bo = adev->fw_vram_usage.reserved_bo;
+		offset = ALIGN(offset, PAGE_SIZE);
+		for (i = 0; i < bo->placement.num_placement; ++i) {
+			bo->placements[i].fpfn = offset >> PAGE_SHIFT;
+			bo->placements[i].lpfn = (offset + size) >> PAGE_SHIFT;
+		}
+
+		ttm_bo_mem_put(&bo->tbo, &bo->tbo.mem);
+		r = ttm_bo_mem_space(&bo->tbo, &bo->placement, &bo->tbo.mem,
+				     false, false);
+		if (r)
+			goto error_pin;
+
 		r = amdgpu_bo_pin_restricted(adev->fw_vram_usage.reserved_bo,
 			AMDGPU_GEM_DOMAIN_VRAM,
 			adev->fw_vram_usage.start_offset,
@@ -728,6 +752,53 @@ error_create:
 	return r;
 }
 
+/**
+ * amdgpu_device_resize_fb_bar - try to resize FB BAR
+ *
+ * @adev: amdgpu_device pointer
+ *
+ * Try to resize FB BAR to make all VRAM CPU accessible. We try very hard not
+ * to fail, but if any of the BARs is not accessible after the size we abort
+ * driver loading by returning -ENODEV.
+ */
+int amdgpu_device_resize_fb_bar(struct amdgpu_device *adev)
+{
+	u64 space_needed = roundup_pow_of_two(adev->mc.real_vram_size);
+	u32 rbar_size = order_base_2(((space_needed >> 20) | 1)) - 1;
+	u16 cmd;
+	int r;
+
+	/* Disable memory decoding while we change the BAR addresses and size */
+	pci_read_config_word(adev->pdev, PCI_COMMAND, &cmd);
+	pci_write_config_word(adev->pdev, PCI_COMMAND,
+			      cmd & ~PCI_COMMAND_MEMORY);
+
+	/* Free the VRAM and doorbell BAR, we most likely need to move both. */
+	amdgpu_doorbell_fini(adev);
+	if (adev->asic_type >= CHIP_BONAIRE)
+		pci_release_resource(adev->pdev, 2);
+
+	pci_release_resource(adev->pdev, 0);
+
+	r = pci_resize_resource(adev->pdev, 0, rbar_size);
+	if (r == -ENOSPC)
+		DRM_INFO("Not enough PCI address space for a large BAR.");
+	else if (r && r != -ENOTSUPP)
+		DRM_ERROR("Problem resizing BAR0 (%d).", r);
+
+	pci_assign_unassigned_bus_resources(adev->pdev->bus);
+
+	/* When the doorbell or fb BAR isn't available we have no chance of
+	 * using the device.
+	 */
+	r = amdgpu_doorbell_init(adev);
+	if (r || (pci_resource_flags(adev->pdev, 0) & IORESOURCE_UNSET))
+		return -ENODEV;
+
+	pci_write_config_word(adev->pdev, PCI_COMMAND, cmd);
+
+	return 0;
+}
 
 /*
  * GPU helpers function.
