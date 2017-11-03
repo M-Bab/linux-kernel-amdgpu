@@ -178,6 +178,10 @@ extern int amdgpu_cik_support;
 #define CIK_CURSOR_WIDTH 128
 #define CIK_CURSOR_HEIGHT 128
 
+/* GPU RESET flags */
+#define AMDGPU_RESET_INFO_VRAM_LOST  (1 << 0)
+#define AMDGPU_RESET_INFO_FULLRESET  (1 << 1)
+
 struct amdgpu_device;
 struct amdgpu_ib;
 struct amdgpu_cs_parser;
@@ -1633,9 +1637,6 @@ struct amdgpu_device {
 	/* link all shadow bo */
 	struct list_head                shadow_list;
 	struct mutex                    shadow_list_lock;
-	/* link all gtt */
-	spinlock_t			gtt_list_lock;
-	struct list_head                gtt_list;
 	/* keep an lru list of rings by HW IP */
 	struct list_head		ring_lru_list;
 	spinlock_t			ring_lru_list_lock;
@@ -1646,7 +1647,8 @@ struct amdgpu_device {
 
 	/* record last mm index being written through WREG32*/
 	unsigned long last_mm_index;
-	bool                            in_sriov_reset;
+	bool                            in_gpu_reset;
+	struct mutex  lock_reset;
 };
 
 static inline struct amdgpu_device *amdgpu_ttm_adev(struct ttm_bo_device *bdev)
@@ -1840,7 +1842,7 @@ amdgpu_get_sdma_instance(struct amdgpu_ring *ring)
 #define amdgpu_psp_check_fw_loading_status(adev, i) (adev)->firmware.funcs->check_fw_loading_status((adev), (i))
 
 /* Common functions */
-int amdgpu_gpu_reset(struct amdgpu_device *adev);
+int amdgpu_gpu_recover(struct amdgpu_device *adev, struct amdgpu_job* job);
 bool amdgpu_need_backup(struct amdgpu_device *adev);
 void amdgpu_pci_config_reset(struct amdgpu_device *adev);
 bool amdgpu_need_post(struct amdgpu_device *adev);
@@ -1852,6 +1854,7 @@ void amdgpu_ttm_placement_from_domain(struct amdgpu_bo *abo, u32 domain);
 bool amdgpu_ttm_bo_is_amdgpu_bo(struct ttm_buffer_object *bo);
 void amdgpu_vram_location(struct amdgpu_device *adev, struct amdgpu_mc *mc, u64 base);
 void amdgpu_gart_location(struct amdgpu_device *adev, struct amdgpu_mc *mc);
+int amdgpu_device_resize_fb_bar(struct amdgpu_device *adev);
 void amdgpu_ttm_set_active_vram_size(struct amdgpu_device *adev, u64 size);
 int amdgpu_ttm_init(struct amdgpu_device *adev);
 void amdgpu_ttm_fini(struct amdgpu_device *adev);

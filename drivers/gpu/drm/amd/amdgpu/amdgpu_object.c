@@ -369,6 +369,9 @@ static int amdgpu_bo_do_create(struct amdgpu_device *adev,
 	r = ttm_bo_init_reserved(&adev->mman.bdev, &bo->tbo, size, type,
 				 &bo->placement, page_align, !kernel, NULL,
 				 acc_size, sg, resv, &amdgpu_ttm_bo_destroy);
+	if (unlikely(r != 0))
+		return r;
+
 	bytes_moved = atomic64_read(&adev->num_bytes_moved) -
 		      initial_bytes_moved;
 	if (adev->mc.visible_vram_size < adev->mc.real_vram_size &&
@@ -377,9 +380,6 @@ static int amdgpu_bo_do_create(struct amdgpu_device *adev,
 		amdgpu_cs_report_moved_bytes(adev, bytes_moved, bytes_moved);
 	else
 		amdgpu_cs_report_moved_bytes(adev, bytes_moved, 0);
-
-	if (unlikely(r != 0))
-		return r;
 
 	if (kernel)
 		bo->tbo.priority = 1;
@@ -982,7 +982,7 @@ u64 amdgpu_bo_gpu_offset(struct amdgpu_bo *bo)
 {
 	WARN_ON_ONCE(bo->tbo.mem.mem_type == TTM_PL_SYSTEM);
 	WARN_ON_ONCE(bo->tbo.mem.mem_type == TTM_PL_TT &&
-		     !amdgpu_ttm_is_bound(bo->tbo.ttm));
+		     !amdgpu_gtt_mgr_has_gart_addr(&bo->tbo.mem));
 	WARN_ON_ONCE(!ww_mutex_is_locked(&bo->tbo.resv->lock) &&
 		     !bo->pin_count);
 	WARN_ON_ONCE(bo->tbo.mem.start == AMDGPU_BO_INVALID_OFFSET);
