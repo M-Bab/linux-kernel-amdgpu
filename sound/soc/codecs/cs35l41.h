@@ -536,6 +536,7 @@
 #define CS35L41_MAX_CACHE_REG		0x0000006F
 #define CS35L41_OTP_SIZE_WORDS		32
 #define CS35L41_NUM_OTP_ELEM		100
+#define CS35L41_NUM_OTP_MAPS		4
 
 #define CS35L41_VALID_PDATA		0x80000000
 
@@ -687,7 +688,7 @@ struct otp_map_element_t {
 };
 
 extern const struct reg_default cs35l41_reg[CS35L41_MAX_CACHE_REG];
-extern const struct otp_map_element_t otp_map_map[2];
+extern const struct otp_map_element_t otp_map_map[CS35L41_NUM_OTP_MAPS];
 
 #define CS35L41_CSPL_CMD_NONE			0
 #define CS35L41_CSPL_CMD_MUTE			1

@@ -877,7 +877,7 @@ static const struct otp_packed_element_t otp_map_2[CS35L41_NUM_OTP_ELEM] = {
 	{0x00017044,	0,	24}, /*LOT_NUMBER*/
 };
 
-const struct otp_map_element_t otp_map_map[2] = {
+const struct otp_map_element_t otp_map_map[CS35L41_NUM_OTP_MAPS] = {
 	{
 		.id = 0x01,
 		.map = otp_map_1,
@@ -885,6 +885,16 @@ const struct otp_map_element_t otp_map_map[2] = {
 	},
 	{
 		.id = 0x02,
+		.map = otp_map_2,
+		.num_elements = CS35L41_NUM_OTP_ELEM,
+	},
+	{
+		.id = 0x03,
+		.map = otp_map_2,
+		.num_elements = CS35L41_NUM_OTP_ELEM,
+	},
+	{
+		.id = 0x06,
 		.map = otp_map_2,
 		.num_elements = CS35L41_NUM_OTP_ELEM,
 	},
