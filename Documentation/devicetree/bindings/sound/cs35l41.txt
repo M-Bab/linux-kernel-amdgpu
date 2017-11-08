@@ -3,6 +3,7 @@ CS35L41 Speaker Amplifier
 Required properties:
 
   - compatible : "cirrus,cs35l41"
+                 "cirrus,cs35l40"
 
   - reg : the SPI chip select line for the device
 

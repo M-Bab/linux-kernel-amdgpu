@@ -1164,12 +1164,14 @@ static int cs35l41_handle_of_data(struct device *dev,
 }
 
 static const struct of_device_id cs35l41_of_match[] = {
+	{.compatible = "cirrus,cs35l40"},
 	{.compatible = "cirrus,cs35l41"},
 	{},
 };
 MODULE_DEVICE_TABLE(of, cs35l41_of_match);
 
 static const struct spi_device_id cs35l41_id_spi[] = {
+	{"cs35l40", 0},
 	{"cs35l41", 0},
 	{}
 };
@@ -1177,6 +1179,7 @@ static const struct spi_device_id cs35l41_id_spi[] = {
 MODULE_DEVICE_TABLE(spi, cs35l41_id_spi);
 
 static const struct i2c_device_id cs35l41_id_i2c[] = {
+	{"cs35l40", 0},
 	{"cs35l41", 0},
 	{}
 };
