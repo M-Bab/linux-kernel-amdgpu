@@ -1186,6 +1186,20 @@ static const struct i2c_device_id cs35l41_id_i2c[] = {
 
 MODULE_DEVICE_TABLE(i2c, cs35l41_id_i2c);
 
+static const struct reg_sequence cs35l41_reva0_errata_patch[] = {
+	{0x00000040,			0x00005555},
+	{0x00000040,			0x0000AAAA},
+	{0x00003854,			0x05180240},
+	{CS35L41_OTP_TRIM_30,		0x9091A1C8},
+	{0x00003014,			0x0200EE0E},
+	{CS35L41_BSTCVRT_DCM_CTRL,	0x00000051},
+	{0x00000054,			0x00000004},
+	{CS35L41_IRQ1_DB3,		0x00000000},
+	{CS35L41_IRQ2_DB3,		0x00000000},
+	{0x00000040,			0x0000CCCC},
+	{0x00000040,			0x00003333},
+};
+
 static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 {
 	struct wm_adsp *dsp;
@@ -1305,8 +1319,17 @@ static int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	cs35l41_dsp_init(cs35l41);
 
-	if (ret != 0)
-		goto err;
+	switch (reg_revid) {
+	case CS35L41_REVID_A0:
+		ret = regmap_register_patch(cs35l41->regmap,
+				cs35l41_reva0_errata_patch,
+				ARRAY_SIZE(cs35l41_reva0_errata_patch));
+		if (ret < 0) {
+			dev_err(cs35l41->dev,
+				"Failed to apply A0 errata patch %d\n", ret);
+			goto err;
+		}
+	}
 
 	do {
 		if (timeout == 0) {
@@ -1329,7 +1352,7 @@ static int cs35l41_probe(struct cs35l41_private *cs35l41,
 	}
 
 	dev_info(cs35l41->dev, "Cirrus Logic CS35L41 (%x), Revision: %02X\n",
-			regid, reg_revid >> 8);
+			regid, reg_revid);
 
 err:
 	regulator_bulk_disable(cs35l41->num_supplies, cs35l41->supplies);
