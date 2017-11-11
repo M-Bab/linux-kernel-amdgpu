@@ -253,6 +253,8 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 	SOC_SINGLE_TLV("AMP PCM Gain", CS35L41_AMP_GAIN_CTRL, 5, 0x14, 0,
 			amp_gain_tlv),
 	SOC_ENUM("PCM Soft Ramp", pcm_sft_ramp),
+	WM_ADSP2_PRELOAD_SWITCH("DSP1", 1),
+	WM_ADSP_FW_CONTROL("DSP1", 0),
 };
 
 static const struct cs35l41_otp_map_element_t *cs35l41_find_otp_map(u32 otp_id)
