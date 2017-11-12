@@ -39,6 +39,7 @@
 #include <linux/of_irq.h>
 #include <linux/completion.h>
 #include <linux/spi/spi.h>
+#include <linux/err.h>
 
 #include "cs35l41.h"
 #include "wm_adsp.h"
@@ -1358,6 +1359,29 @@ static int cs35l41_probe(struct cs35l41_private *cs35l41,
 		return ret;
 	}
 
+	/* returning NULL can be an option if in stereo mode */
+	cs35l41->reset_gpio = devm_gpiod_get_optional(cs35l41->dev, "reset",
+							GPIOD_OUT_LOW);
+	if (IS_ERR(cs35l41->reset_gpio)) {
+		ret = PTR_ERR(cs35l41->reset_gpio);
+		cs35l41->reset_gpio = NULL;
+		if (ret == -EBUSY) {
+			dev_info(cs35l41->dev,
+				 "Reset line busy, assuming shared reset\n");
+		} else {
+			dev_err(cs35l41->dev,
+				"Failed to get reset GPIO: %d\n", ret);
+			goto err;
+		}
+	}
+	if (cs35l41->reset_gpio) {
+		/* satisfy minimum reset pulse width spec */
+		usleep_range(2000, 2100);
+		gpiod_set_value_cansleep(cs35l41->reset_gpio, 1);
+	}
+
+	usleep_range(2000, 2100);
+
 	ret = regmap_read(cs35l41->regmap, CS35L41_DEVID, &regid);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "Get Device ID failed\n");
@@ -1382,14 +1406,6 @@ static int cs35l41_probe(struct cs35l41_private *cs35l41,
 		ret = -ENODEV;
 		goto err;
 	}
-
-	cs35l41->reset_gpio = devm_gpiod_get_optional(cs35l41->dev,
-					"reset", GPIOD_OUT_LOW);
-	if (IS_ERR(cs35l41->reset_gpio))
-		return PTR_ERR(cs35l41->reset_gpio);
-
-	if (cs35l41->reset_gpio)
-		gpiod_set_value_cansleep(cs35l41->reset_gpio, 1);
 
 	init_completion(&cs35l41->global_pdn_done);
 	init_completion(&cs35l41->global_pup_done);
