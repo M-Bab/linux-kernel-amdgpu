@@ -49,6 +49,9 @@ extern unsigned int debug_smp_processor_id(void); /* from linux/smp.h */
 #define get_lppaca()	(get_paca()->lppaca_ptr)
 #define get_slb_shadow()	(get_paca()->slb_shadow_ptr)
 
+/* Maximum number of threads per core. */
+#define	MAX_SMT		8
+
 struct task_struct;
 
 /*
@@ -210,6 +213,7 @@ struct paca_struct {
 	 */
 	u16 in_mce;
 	u8 hmi_event_available;		/* HMI event is available */
+	u8 hmi_p9_special_emu;		/* HMI P9 special emulation */
 #endif
 
 	/* Stuff for accurate time accounting */

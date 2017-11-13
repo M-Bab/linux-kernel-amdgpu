@@ -18,6 +18,15 @@ config SECURITY_DMESG_RESTRICT
 
 	  If you are unsure how to answer this question, answer N.
 
+config SECURITY_PERF_EVENTS_RESTRICT
+	bool "Restrict unprivileged use of performance events"
+	depends on PERF_EVENTS
+	help
+	  If you say Y here, the kernel.perf_event_paranoid sysctl
+	  will be set to 3 by default, and no unprivileged use of the
+	  perf_event_open syscall will be permitted unless it is
+	  changed.
+
 config SECURITY
 	bool "Enable different security models"
 	depends on SYSFS
@@ -35,6 +44,39 @@ config SECURITY_WRITABLE_HOOKS
 	depends on SECURITY
 	bool
 	default n
+
+config SECURITY_STACKING
+	bool "Security module stacking"
+	depends on SECURITY
+	help
+	  Allows multiple major security modules to be stacked.
+	  Modules are invoked in the order registered with a
+	  "bail on fail" policy, in which the infrastructure
+	  will stop processing once a denial is detected. Not
+	  all modules can be stacked. SELinux and Smack are
+	  known to be incompatible. User space components may
+	  have trouble identifying the security module providing
+	  data in some cases.
+
+	  If you select this option you will have to select which
+	  of the stackable modules you wish to be active. The
+	  "Default security module" will be ignored. The boot line
+	  "security=" option can be used to specify that one of
+	  the modules identifed for stacking should be used instead
+	  of the entire stack.
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_LSM_DEBUG
+	bool "Enable debugging of the LSM infrastructure"
+	depends on SECURITY
+	help
+	  This allows you to choose debug messages related to
+	  security modules configured into your kernel. These
+	  messages may be helpful in determining how a security
+	  module is using security blobs.
+
+	  If you are unsure how to answer this question, answer N.
 
 config SECURITYFS
 	bool "Enable the securityfs filesystem"
@@ -205,6 +247,21 @@ config STATIC_USERMODEHELPER_PATH
 	  If you wish for all usermode helper programs to be disabled,
 	  specify an empty string here (i.e. "").
 
+config LOCK_DOWN_KERNEL
+	bool "Allow the kernel to be 'locked down'"
+	help
+	  Allow the kernel to be locked down under certain circumstances, for
+	  instance if UEFI secure boot is enabled.  Locking down the kernel
+	  turns off various features that might otherwise allow access to the
+	  kernel image (eg. setting MSR registers).
+
+config ALLOW_LOCKDOWN_LIFT
+	bool
+	help
+	  Allow the lockdown on a kernel to be lifted, thereby restoring the
+	  ability of userspace to access the kernel image (eg. by SysRq+x under
+	  x86).
+
 source security/selinux/Kconfig
 source security/smack/Kconfig
 source security/tomoyo/Kconfig
@@ -213,6 +270,9 @@ source security/loadpin/Kconfig
 source security/yama/Kconfig
 
 source security/integrity/Kconfig
+
+menu "Security Module Selection"
+	visible if !SECURITY_STACKING
 
 choice
 	prompt "Default security module"
@@ -253,3 +313,108 @@ config DEFAULT_SECURITY
 
 endmenu
 
+menu "Security Module Stack"
+	visible if SECURITY_STACKING
+
+choice
+	prompt "mutually exclusive LSMs"
+	default SECURITY_NO_EXCLUSIVE_LSM
+
+	config SECURITY_NO_EXCLUSIVE_LSM
+		bool "none"
+		help
+		  Do no add an LSM to is mutually exclusive to the stack."
+	config SECURITY_SELINUX_STACKED
+		bool "SELinux" if SECURITY_SELINUX=y
+		help
+		  Add the SELinux security module to the stack.
+		  Please be sure your user space code is accomodating of
+		  this security module.
+		  Ensure that your network configuration is compatible
+		  with your combination of security modules.
+
+		  Incompatible with Smack being stacked.
+
+		  If you are unsure how to answer this question, answer N.
+
+	config SECURITY_SMACK_STACKED
+		bool "Simplified Mandatory Access Control" if SECURITY_SMACK=y
+		help
+		  Add the Smack security module to the stack.
+		  Please be sure your user space code is accomodating of
+		  this security module.
+		  Ensure that your network configuration is compatible
+		  with your combination of security modules.
+
+		  Incompatible with SeLinux being stacked.
+
+		  If you are unsure how to answer this question, answer N.
+endchoice
+
+config SECURITY_TOMOYO_STACKED
+	bool "TOMOYO support is enabled by default"
+	depends on SECURITY_TOMOYO && SECURITY_STACKING
+	default n
+	help
+	  This option instructs the system to use the TOMOYO checks.
+	  If not selected the module will not be invoked.
+	  Stacked security modules may interact in unexpected ways.
+	  Please be sure your user space code is accomodating of
+	  multiple security modules.
+
+	  If you are unsure how to answer this question, answer N.
+
+config SECURITY_APPARMOR_STACKED
+	bool "AppArmor support is enabled by default"
+	depends on SECURITY_APPARMOR && SECURITY_STACKING
+	default n
+	help
+	  This option instructs the system to use the AppArmor checks.
+	  If not selected the module will not be invoked.
+	  Stacked security modules may interact in unexpected ways.
+	  Please be sure your user space code is accomodating of
+	  multiple security modules.
+
+	  If you are unsure how to answer this question, answer N.
+
+choice
+	prompt "Default LSM for legacy interfaces"
+	default SECURITY_DEFAULT_DISPLAY_SELINUX if SECURITY_SELINUX_STACKED
+	default SECURITY_DEFAULT_DISPLAY_SMACK if SECURITY_SMACK_STACKED
+	default SECURITY_DEFAULT_DISPLAY_TOMOYO if SECURITY_TOMOYO_STACKED
+	default SECURITY_DEFAULT_DISPALY_APPARMOR if SECURITY_APPARMOR_STACKED
+	default SECURITY_DEFAULT_DISPLAY_FIRST
+
+	help
+	  Select the security module context that will be displayed by
+          default on legacy interfaces if the kernel parameter
+          security.display= is not specified.
+
+	config SECURITY_DEFAULT_DISPLAY_SELINUX
+		bool "SELinux" if SECURITY_SELINUX=y
+
+	config SECURITY_DEFAULT_DISPLAY_SMACK
+		bool "Simplified Mandatory Access Control" if SECURITY_SMACK=y
+
+	config SECURITY_DEFAULT_DISPLAY_TOMOYO
+		bool "TOMOYO" if SECURITY_TOMOYO=y
+
+	config SECURITY_DEFAULT_DISPLAY_APPARMOR
+		bool "AppArmor" if SECURITY_APPARMOR=y
+
+	config SECURITY_DEFAULT_DISPLAY_FIRST
+		bool "First security module to register"
+
+endchoice
+
+config SECURITY_DEFAULT_DISPLAY_NAME
+	string
+	default "selinux" if SECURITY_DEFAULT_DISPLAY_SELINUX
+	default "smack" if SECURITY_DEFAULT_DISPLAY_SMACK
+	default "tomoyo" if SECURITY_DEFAULT_DISPLAY_TOMOYO
+	default "apparmor" if SECURITY_DEFAULT_DISPLAY_APPARMOR
+	default "" if SECURITY_DEFAULT_DISPLAY_FIRST
+
+endmenu
+
+endmenu
