@@ -955,6 +955,41 @@ static int cs35l41_component_probe(struct snd_soc_component *component)
 				CS35L41_TEMP_THLD_MASK,
 				cs35l41->pdata.temp_warn_thld);
 
+	if (cs35l41->pdata.ng_enable) {
+		regmap_update_bits(cs35l41->regmap,
+				CS35L41_MIXER_NGATE_CH1_CFG,
+				CS35L41_NG_ENABLE_MASK,
+				CS35L41_NG_ENABLE_MASK);
+		regmap_update_bits(cs35l41->regmap,
+				CS35L41_MIXER_NGATE_CH2_CFG,
+				CS35L41_NG_ENABLE_MASK,
+				CS35L41_NG_ENABLE_MASK);
+
+		if (cs35l41->pdata.ng_pcm_thld) {
+			regmap_update_bits(cs35l41->regmap,
+				CS35L41_MIXER_NGATE_CH1_CFG,
+				CS35L41_NG_THLD_MASK,
+				cs35l41->pdata.ng_pcm_thld);
+			regmap_update_bits(cs35l41->regmap,
+				CS35L41_MIXER_NGATE_CH2_CFG,
+				CS35L41_NG_THLD_MASK,
+				cs35l41->pdata.ng_pcm_thld);
+		}
+
+		if (cs35l41->pdata.ng_delay) {
+			regmap_update_bits(cs35l41->regmap,
+				CS35L41_MIXER_NGATE_CH1_CFG,
+				CS35L41_NG_DELAY_MASK,
+				cs35l41->pdata.ng_delay <<
+				CS35L41_NG_DELAY_SHIFT);
+			regmap_update_bits(cs35l41->regmap,
+				CS35L41_MIXER_NGATE_CH2_CFG,
+				CS35L41_NG_DELAY_MASK,
+				cs35l41->pdata.ng_delay <<
+				CS35L41_NG_DELAY_SHIFT);
+		}
+	}
+
 	if (classh->classh_algo_enable) {
 		if (classh->classh_bst_override)
 			regmap_update_bits(cs35l41->regmap,
@@ -1168,6 +1203,13 @@ static int cs35l41_handle_of_data(struct device *dev,
 		}
 		pdata->bst_ipk = ((val - 1600) / 50) + 0x10;
 	}
+
+	pdata->ng_enable = of_property_read_bool(np,
+					"cirrus,noise-gate-enable");
+	if (of_property_read_u32(np, "cirrus,noise-gate-threshold", &val) >= 0)
+		pdata->ng_pcm_thld = val | CS35L41_VALID_PDATA;
+	if (of_property_read_u32(np, "cirrus,noise-gate-delay", &val) >= 0)
+		pdata->ng_delay = val | CS35L41_VALID_PDATA;
 
 	sub_node = of_get_child_by_name(np, "cirrus,classh-internal-algo");
 	classh_config->classh_algo_enable = sub_node ? true : false;

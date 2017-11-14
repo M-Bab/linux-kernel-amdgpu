@@ -34,11 +34,13 @@ struct cs35l41_platform_data {
 	bool lrclk_frc;
 	bool right_channel;
 	bool amp_gain_zc;
+	bool ng_enable;
 	int bst_ind;
 	int bst_vctrl;
 	int bst_ipk;
 	int temp_warn_thld;
 	int ng_pcm_thld;
+	int ng_delay;
 	struct irq_cfg irq_config1;
 	struct irq_cfg irq_config2;
 	struct classh_cfg classh_config;
