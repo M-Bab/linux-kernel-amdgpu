@@ -160,6 +160,10 @@ static int cs35l41_dsp_power_ev(struct snd_soc_dapm_widget *w,
 
 		return 0;
 	case SND_SOC_DAPM_PRE_PMD:
+		if (cs35l41->halo_booted == false) {
+			wm_adsp_early_event(w, kcontrol, event);
+			wm_adsp_event(w, kcontrol, event);
+		}
 	default:
 		return 0;
 	}
@@ -173,9 +177,6 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
-
-		regmap_write(cs35l41->regmap, CS35L41_CSPL_CAL_STRUCT_ADDR + 4,
-				(unsigned int)CS35L41_AMB_TEMP_DEFAULT);
 		if (cs35l41->halo_booted == false) {
 			wm_adsp_event(w, kcontrol, event);
 			cs35l41->halo_booted = true;
@@ -191,6 +192,28 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 	default:
 		return 0;
 	}
+}
+
+static int cs35l41_halo_booted_get(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = cs35l41->halo_booted;
+
+	return 0;
+}
+
+static int cs35l41_halo_booted_put(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 = snd_soc_component_get_drvdata(component);
+
+	cs35l41->halo_booted = ucontrol->value.integer.value[0];
+
+	return 0;
 }
 
 static DECLARE_TLV_DB_SCALE(dig_vol_tlv, -10200, 25, 0);
@@ -254,6 +277,8 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 	SOC_SINGLE_TLV("AMP PCM Gain", CS35L41_AMP_GAIN_CTRL, 5, 0x14, 0,
 			amp_gain_tlv),
 	SOC_ENUM("PCM Soft Ramp", pcm_sft_ramp),
+	SOC_SINGLE_EXT("DSP Booted", SND_SOC_NOPM, 0, 1, 0,
+			cs35l41_halo_booted_get, cs35l41_halo_booted_put),
 	WM_ADSP2_PRELOAD_SWITCH("DSP1", 1),
 	WM_ADSP_FW_CONTROL("DSP1", 0),
 };
