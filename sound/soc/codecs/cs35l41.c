@@ -1384,6 +1384,16 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 	mutex_init(&cs35l41->rate_lock);
 	ret = wm_halo_init(dsp, &cs35l41->rate_lock);
 	cs35l41->halo_booted = false;
+
+	regmap_write(cs35l41->regmap, CS35L41_DSP1_RX5_SRC,
+					CS35L41_INPUT_SRC_VPMON);
+	regmap_write(cs35l41->regmap, CS35L41_DSP1_RX6_SRC,
+					CS35L41_INPUT_SRC_CLASSH);
+	regmap_write(cs35l41->regmap, CS35L41_DSP1_RX7_SRC,
+					CS35L41_INPUT_SRC_TEMPMON);
+	regmap_write(cs35l41->regmap, CS35L41_DSP1_RX8_SRC,
+					CS35L41_INPUT_SRC_RSVD);
+
 	return ret;
 }
 
