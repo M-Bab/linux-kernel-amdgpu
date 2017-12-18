@@ -29,6 +29,7 @@
 #include "hw_shared.h"
 #include "dc_hw_types.h"
 #include "transform.h"
+#include "mpc.h"
 
 struct fixed31_32;
 
@@ -204,7 +205,7 @@ struct output_pixel_processor {
 	struct dc_context *ctx;
 	uint32_t inst;
 	struct pwl_params regamma_params;
-	struct mpc_tree_cfg mpc_tree;
+	struct mpc_tree mpc_tree_params;
 	bool mpcc_disconnect_pending[MAX_PIPES];
 	const struct opp_funcs *funcs;
 };
@@ -283,7 +284,10 @@ struct opp_funcs {
 
 	void (*opp_set_test_pattern)(
 			struct output_pixel_processor *opp,
-			bool enable);
+			enum controller_dp_test_pattern test_pattern,
+			enum dc_color_depth color_depth,
+			int width,
+			int height);
 
 	void (*opp_dpg_blank_enable)(
 			struct output_pixel_processor *opp,
@@ -296,6 +300,7 @@ struct opp_funcs {
 		struct output_pixel_processor *opp,
 		bool enable,
 		bool polarity);
+
 };
 
 #endif

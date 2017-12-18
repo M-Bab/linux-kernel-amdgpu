@@ -431,9 +431,9 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	adev->dm.dc = dc_create(&init_data);
 
 	if (adev->dm.dc) {
-		DRM_INFO("Display Core initialized!\n");
+		DRM_INFO("Display Core initialized with v%s!\n", DC_VER);
 	} else {
-		DRM_INFO("Display Core failed to initialize!\n");
+		DRM_INFO("Display Core failed to initialize with v%s!\n", DC_VER);
 		goto error;
 	}
 
@@ -2756,8 +2756,7 @@ static void create_eml_sink(struct amdgpu_dm_connector *aconnector)
 	};
 	struct edid *edid;
 
-	if (!aconnector->base.edid_blob_ptr ||
-		!aconnector->base.edid_blob_ptr->data) {
+	if (!aconnector->base.edid_blob_ptr) {
 		DRM_ERROR("No EDID firmware found on connector: %s ,forcing to OFF!\n",
 				aconnector->base.name);
 
@@ -5003,10 +5002,6 @@ void amdgpu_dm_add_sink_to_freesync_module(struct drm_connector *connector,
 			dm_con_state->freesync_capable = true;
 		}
 	}
-
-	dm_con_state->user_enable.enable_for_gaming = dm_con_state->freesync_capable;
-	dm_con_state->user_enable.enable_for_static = dm_con_state->freesync_capable;
-	dm_con_state->user_enable.enable_for_video = dm_con_state->freesync_capable;
 }
 
 void amdgpu_dm_remove_sink_from_freesync_module(struct drm_connector *connector)

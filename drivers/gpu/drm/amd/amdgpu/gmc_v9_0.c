@@ -38,8 +38,6 @@
 #include "soc15_common.h"
 #include "umc/umc_6_0_sh_mask.h"
 
-#include "nbio_v6_1.h"
-#include "nbio_v7_0.h"
 #include "gfxhub_v1_0.h"
 #include "mmhub_v1_0.h"
 
@@ -332,10 +330,7 @@ static void gmc_v9_0_gart_flush_gpu_tlb(struct amdgpu_device *adev,
 	unsigned i, j;
 
 	/* flush hdp cache */
-	if (adev->flags & AMD_IS_APU)
-		nbio_v7_0_hdp_flush(adev);
-	else
-		nbio_v6_1_hdp_flush(adev);
+	adev->nbio_funcs->hdp_flush(adev);
 
 	spin_lock(&adev->mc.invalidate_lock);
 
@@ -474,11 +469,28 @@ static uint64_t gmc_v9_0_get_vm_pte_flags(struct amdgpu_device *adev,
 	return pte_flag;
 }
 
-static u64 gmc_v9_0_get_vm_pde(struct amdgpu_device *adev, u64 addr)
+static void gmc_v9_0_get_vm_pde(struct amdgpu_device *adev, int level,
+				uint64_t *addr, uint64_t *flags)
 {
-	addr = adev->vm_manager.vram_base_offset + addr - adev->mc.vram_start;
-	BUG_ON(addr & 0xFFFF00000000003FULL);
-	return addr;
+	if (!(*flags & AMDGPU_PDE_PTE))
+		*addr = adev->vm_manager.vram_base_offset + *addr -
+			adev->mc.vram_start;
+	BUG_ON(*addr & 0xFFFF00000000003FULL);
+
+	if (!adev->mc.translate_further)
+		return;
+
+	if (level == AMDGPU_VM_PDB1) {
+		/* Set the block fragment size */
+		if (!(*flags & AMDGPU_PDE_PTE))
+			*flags |= AMDGPU_PDE_BFS(0x9);
+
+	} else if (level == AMDGPU_VM_PDB0) {
+		if (*flags & AMDGPU_PDE_PTE)
+			*flags &= ~AMDGPU_PDE_PTE;
+		else
+			*flags |= AMDGPU_PTE_TF;
+	}
 }
 
 static const struct amdgpu_gart_funcs gmc_v9_0_gart_funcs = {
@@ -501,6 +513,14 @@ static int gmc_v9_0_early_init(void *handle)
 
 	gmc_v9_0_set_gart_funcs(adev);
 	gmc_v9_0_set_irq_funcs(adev);
+
+	adev->mc.shared_aperture_start = 0x2000000000000000ULL;
+	adev->mc.shared_aperture_end =
+		adev->mc.shared_aperture_start + (4ULL << 30) - 1;
+	adev->mc.private_aperture_start =
+		adev->mc.shared_aperture_end + 1;
+	adev->mc.private_aperture_end =
+		adev->mc.private_aperture_start + (4ULL << 30) - 1;
 
 	return 0;
 }
@@ -633,8 +653,8 @@ static void gmc_v9_0_vram_gtt_location(struct amdgpu_device *adev,
 	u64 base = 0;
 	if (!amdgpu_sriov_vf(adev))
 		base = mmhub_v1_0_get_fb_location(adev);
-	amdgpu_vram_location(adev, &adev->mc, base);
-	amdgpu_gart_location(adev, mc);
+	amdgpu_device_vram_location(adev, &adev->mc, base);
+	amdgpu_device_gart_location(adev, mc);
 	/* base offset of vram pages */
 	if (adev->flags & AMD_IS_APU)
 		adev->vm_manager.vram_base_offset = gfxhub_v1_0_get_mc_fb_offset(adev);
@@ -700,8 +720,7 @@ static int gmc_v9_0_mc_init(struct amdgpu_device *adev)
 
 	/* size in MB on si */
 	adev->mc.mc_vram_size =
-		((adev->flags & AMD_IS_APU) ? nbio_v7_0_get_memsize(adev) :
-		 nbio_v6_1_get_memsize(adev)) * 1024ULL * 1024ULL;
+		adev->nbio_funcs->get_memsize(adev) * 1024ULL * 1024ULL;
 	adev->mc.real_vram_size = adev->mc.mc_vram_size;
 
 	if (!(adev->flags & AMD_IS_APU)) {
@@ -769,11 +788,14 @@ static int gmc_v9_0_sw_init(void *handle)
 	switch (adev->asic_type) {
 	case CHIP_RAVEN:
 		adev->mc.vram_type = AMDGPU_VRAM_TYPE_UNKNOWN;
-		if (adev->rev_id == 0x0 || adev->rev_id == 0x1)
+		if (adev->rev_id == 0x0 || adev->rev_id == 0x1) {
 			amdgpu_vm_adjust_size(adev, 256 * 1024, 9, 3, 48);
-		else
-			/* vm_size is 64GB for legacy 2-level page support */
-			amdgpu_vm_adjust_size(adev, 64, 9, 1, 48);
+		} else {
+			/* vm_size is 128TB + 512GB for legacy 3-level page support */
+			amdgpu_vm_adjust_size(adev, 128 * 1024 + 512, 9, 2, 48);
+			adev->mc.translate_further =
+				adev->vm_manager.num_level > 1;
+		}
 		break;
 	case CHIP_VEGA10:
 		/* XXX Don't know how to get VRAM type yet. */
@@ -914,9 +936,9 @@ static int gmc_v9_0_gart_enable(struct amdgpu_device *adev)
 	bool value;
 	u32 tmp;
 
-	amdgpu_program_register_sequence(adev,
-		golden_settings_vega10_hdp,
-		ARRAY_SIZE(golden_settings_vega10_hdp));
+	amdgpu_device_program_register_sequence(adev,
+						golden_settings_vega10_hdp,
+						ARRAY_SIZE(golden_settings_vega10_hdp));
 
 	if (adev->gart.robj == NULL) {
 		dev_err(adev->dev, "No VRAM object for PCIE GART.\n");
@@ -949,10 +971,7 @@ static int gmc_v9_0_gart_enable(struct amdgpu_device *adev)
 	WREG32_SOC15(HDP, 0, mmHDP_HOST_PATH_CNTL, tmp);
 
 	/* After HDP is initialized, flush HDP.*/
-	if (adev->flags & AMD_IS_APU)
-		nbio_v7_0_hdp_flush(adev);
-	else
-		nbio_v6_1_hdp_flush(adev);
+	adev->nbio_funcs->hdp_flush(adev);
 
 	if (amdgpu_vm_fault_stop == AMDGPU_VM_FAULT_STOP_ALWAYS)
 		value = false;

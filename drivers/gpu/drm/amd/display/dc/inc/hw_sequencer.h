@@ -40,6 +40,7 @@ enum pipe_gating_control {
 struct dce_hwseq_wa {
 	bool blnd_crtc_trigger;
 	bool DEGVIDCN10_253;
+	bool false_optc_underflow;
 };
 
 struct hwseq_wa_state {
@@ -198,6 +199,7 @@ struct hw_sequencer_funcs {
 	void (*edp_backlight_control)(
 			struct dc_link *link,
 			bool enable);
+	void (*edp_wait_for_hpd_ready)(struct dc_link *link, bool power_up);
 
 };
 

@@ -359,12 +359,7 @@ static void sdma_v4_0_ring_emit_hdp_flush(struct amdgpu_ring *ring)
 {
 	struct amdgpu_device *adev = ring->adev;
 	u32 ref_and_mask = 0;
-	const struct nbio_hdp_flush_reg *nbio_hf_reg;
-
-	if (ring->adev->flags & AMD_IS_APU)
-		nbio_hf_reg = &nbio_v7_0_hdp_flush_reg;
-	else
-		nbio_hf_reg = &nbio_v6_1_hdp_flush_reg;
+	const struct nbio_hdp_flush_reg *nbio_hf_reg = adev->nbio_funcs->hdp_flush_reg;
 
 	if (ring == &ring->adev->sdma.instance[0].ring)
 		ref_and_mask = nbio_hf_reg->ref_and_mask_sdma0;
@@ -629,10 +624,8 @@ static int sdma_v4_0_gfx_resume(struct amdgpu_device *adev)
 		}
 		WREG32(sdma_v4_0_get_reg_offset(adev, i, mmSDMA0_GFX_DOORBELL), doorbell);
 		WREG32(sdma_v4_0_get_reg_offset(adev, i, mmSDMA0_GFX_DOORBELL_OFFSET), doorbell_offset);
-		if (adev->flags & AMD_IS_APU)
-			nbio_v7_0_sdma_doorbell_range(adev, i, ring->use_doorbell, ring->doorbell_index);
-		else
-			nbio_v6_1_sdma_doorbell_range(adev, i, ring->use_doorbell, ring->doorbell_index);
+		adev->nbio_funcs->sdma_doorbell_range(adev, i, ring->use_doorbell,
+						      ring->doorbell_index);
 
 		if (amdgpu_sriov_vf(adev))
 			sdma_v4_0_ring_set_wptr(ring);
@@ -876,7 +869,7 @@ static int sdma_v4_0_ring_test_ring(struct amdgpu_ring *ring)
 	u32 tmp;
 	u64 gpu_addr;
 
-	r = amdgpu_wb_get(adev, &index);
+	r = amdgpu_device_wb_get(adev, &index);
 	if (r) {
 		dev_err(adev->dev, "(%d) failed to allocate wb slot\n", r);
 		return r;
@@ -889,7 +882,7 @@ static int sdma_v4_0_ring_test_ring(struct amdgpu_ring *ring)
 	r = amdgpu_ring_alloc(ring, 5);
 	if (r) {
 		DRM_ERROR("amdgpu: dma failed to lock ring %d (%d).\n", ring->idx, r);
-		amdgpu_wb_free(adev, index);
+		amdgpu_device_wb_free(adev, index);
 		return r;
 	}
 
@@ -915,7 +908,7 @@ static int sdma_v4_0_ring_test_ring(struct amdgpu_ring *ring)
 			  ring->idx, tmp);
 		r = -EINVAL;
 	}
-	amdgpu_wb_free(adev, index);
+	amdgpu_device_wb_free(adev, index);
 
 	return r;
 }
@@ -938,7 +931,7 @@ static int sdma_v4_0_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 	u32 tmp = 0;
 	u64 gpu_addr;
 
-	r = amdgpu_wb_get(adev, &index);
+	r = amdgpu_device_wb_get(adev, &index);
 	if (r) {
 		dev_err(adev->dev, "(%ld) failed to allocate wb slot\n", r);
 		return r;
@@ -990,7 +983,7 @@ err1:
 	amdgpu_ib_free(adev, &ib, NULL);
 	dma_fence_put(f);
 err0:
-	amdgpu_wb_free(adev, index);
+	amdgpu_device_wb_free(adev, index);
 	return r;
 }
 
@@ -1146,10 +1139,11 @@ static void sdma_v4_0_ring_emit_vm_flush(struct amdgpu_ring *ring,
 {
 	struct amdgpu_vmhub *hub = &ring->adev->vmhub[ring->funcs->vmhub];
 	uint32_t req = ring->adev->gart.gart_funcs->get_invalidate_req(vm_id);
+	uint64_t flags = AMDGPU_PTE_VALID;
 	unsigned eng = ring->vm_inv_eng;
 
-	pd_addr = amdgpu_gart_get_vm_pde(ring->adev, pd_addr);
-	pd_addr |= AMDGPU_PTE_VALID;
+	amdgpu_gart_get_vm_pde(ring->adev, -1, &pd_addr, &flags);
+	pd_addr |= flags;
 
 	amdgpu_ring_write(ring, SDMA_PKT_HEADER_OP(SDMA_OP_SRBM_WRITE) |
 			  SDMA_PKT_SRBM_WRITE_HEADER_BYTE_EN(0xf));

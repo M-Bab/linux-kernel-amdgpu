@@ -1529,11 +1529,18 @@ static void gfx_v9_0_gpu_init(struct amdgpu_device *adev)
 	for (i = 0; i < 16; i++) {
 		soc15_grbm_select(adev, 0, 0, 0, i);
 		/* CP and shaders */
-		tmp = 0;
-		tmp = REG_SET_FIELD(tmp, SH_MEM_CONFIG, ALIGNMENT_MODE,
-				    SH_MEM_ALIGNMENT_MODE_UNALIGNED);
-		WREG32_SOC15(GC, 0, mmSH_MEM_CONFIG, tmp);
-		WREG32_SOC15(GC, 0, mmSH_MEM_BASES, 0);
+		if (i == 0) {
+			tmp = REG_SET_FIELD(0, SH_MEM_CONFIG, ALIGNMENT_MODE,
+					    SH_MEM_ALIGNMENT_MODE_UNALIGNED);
+			WREG32_SOC15(GC, 0, mmSH_MEM_CONFIG, tmp);
+			WREG32_SOC15(GC, 0, mmSH_MEM_BASES, 0);
+		} else {
+			tmp = REG_SET_FIELD(0, SH_MEM_CONFIG, ALIGNMENT_MODE,
+					    SH_MEM_ALIGNMENT_MODE_UNALIGNED);
+			WREG32_SOC15(GC, 0, mmSH_MEM_CONFIG, tmp);
+			tmp = adev->mc.shared_aperture_start >> 48;
+			WREG32_SOC15(GC, 0, mmSH_MEM_BASES, tmp);
+		}
 	}
 	soc15_grbm_select(adev, 0, 0, 0, 0);
 
@@ -2405,7 +2412,7 @@ static int gfx_v9_0_kiq_kcq_enable(struct amdgpu_device *adev)
 				  PACKET3_MAP_QUEUES_PIPE(ring->pipe) |
 				  PACKET3_MAP_QUEUES_ME((ring->me == 1 ? 0 : 1)) |
 				  PACKET3_MAP_QUEUES_QUEUE_TYPE(0) | /*queue_type: normal compute queue */
-				  PACKET3_MAP_QUEUES_ALLOC_FORMAT(1) | /* alloc format: all_on_one_pipe */
+				  PACKET3_MAP_QUEUES_ALLOC_FORMAT(0) | /* alloc format: all_on_one_pipe */
 				  PACKET3_MAP_QUEUES_ENGINE_SEL(0) | /* engine_sel: compute */
 				  PACKET3_MAP_QUEUES_NUM_QUEUES(1)); /* num_queues: must be 1 */
 		amdgpu_ring_write(kiq_ring, PACKET3_MAP_QUEUES_DOORBELL_OFFSET(ring->doorbell_index));
@@ -3552,12 +3559,7 @@ static void gfx_v9_0_ring_emit_hdp_flush(struct amdgpu_ring *ring)
 {
 	struct amdgpu_device *adev = ring->adev;
 	u32 ref_and_mask, reg_mem_engine;
-	const struct nbio_hdp_flush_reg *nbio_hf_reg;
-
-	if (ring->adev->flags & AMD_IS_APU)
-		nbio_hf_reg = &nbio_v7_0_hdp_flush_reg;
-	else
-		nbio_hf_reg = &nbio_v6_1_hdp_flush_reg;
+	const struct nbio_hdp_flush_reg *nbio_hf_reg = adev->nbio_funcs->hdp_flush_reg;
 
 	if (ring->funcs->type == AMDGPU_RING_TYPE_COMPUTE) {
 		switch (ring->me) {
@@ -3686,10 +3688,11 @@ static void gfx_v9_0_ring_emit_vm_flush(struct amdgpu_ring *ring,
 	struct amdgpu_vmhub *hub = &ring->adev->vmhub[ring->funcs->vmhub];
 	int usepfp = (ring->funcs->type == AMDGPU_RING_TYPE_GFX);
 	uint32_t req = ring->adev->gart.gart_funcs->get_invalidate_req(vm_id);
+	uint64_t flags = AMDGPU_PTE_VALID;
 	unsigned eng = ring->vm_inv_eng;
 
-	pd_addr = amdgpu_gart_get_vm_pde(ring->adev, pd_addr);
-	pd_addr |= AMDGPU_PTE_VALID;
+	amdgpu_gart_get_vm_pde(ring->adev, -1, &pd_addr, &flags);
+	pd_addr |= flags;
 
 	gfx_v9_0_write_data_to_reg(ring, usepfp, true,
 				   hub->ctx0_ptb_addr_lo32 + (2 * vm_id),

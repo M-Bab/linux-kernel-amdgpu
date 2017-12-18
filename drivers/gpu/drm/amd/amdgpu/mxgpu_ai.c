@@ -253,7 +253,7 @@ static void xgpu_ai_mailbox_flr_work(struct work_struct *work)
 	}
 
 	/* Trigger recovery due to world switch failure */
-	amdgpu_gpu_recover(adev, NULL);
+	amdgpu_device_gpu_recover(adev, NULL, false);
 }
 
 static int xgpu_ai_set_mailbox_rcv_irq(struct amdgpu_device *adev,
@@ -277,7 +277,7 @@ static int xgpu_ai_mailbox_rcv_irq(struct amdgpu_device *adev,
 	int r;
 
 	/* trigger gpu-reset by hypervisor only if TDR disbaled */
-	if (amdgpu_lockup_timeout == 0) {
+	if (!amdgpu_gpu_recovery) {
 		/* see what event we get */
 		r = xgpu_ai_mailbox_rcv_msg(adev, IDH_FLR_NOTIFICATION);
 

@@ -330,6 +330,7 @@ void dcn10_opp_construct(struct dcn10_opp *oppn10,
 	const struct dcn10_opp_shift *opp_shift,
 	const struct dcn10_opp_mask *opp_mask)
 {
+
 	oppn10->base.ctx = ctx;
 	oppn10->base.inst = inst;
 	oppn10->base.funcs = &dcn10_opp_funcs;
@@ -338,4 +339,3 @@ void dcn10_opp_construct(struct dcn10_opp *oppn10,
 	oppn10->opp_shift = opp_shift;
 	oppn10->opp_mask = opp_mask;
 }
-

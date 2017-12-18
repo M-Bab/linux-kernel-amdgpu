@@ -244,7 +244,7 @@ int amdgpu_uvd_sw_init(struct amdgpu_device *adev)
 	}
 
 	/* from uvd v5.0 HW addressing capacity increased to 64 bits */
-	if (!amdgpu_ip_block_version_cmp(adev, AMD_IP_BLOCK_TYPE_UVD, 5, 0))
+	if (!amdgpu_device_ip_block_version_cmp(adev, AMD_IP_BLOCK_TYPE_UVD, 5, 0))
 		adev->uvd.address_64_bit = true;
 
 	switch (adev->asic_type) {
@@ -297,14 +297,14 @@ int amdgpu_uvd_suspend(struct amdgpu_device *adev)
 	if (adev->uvd.vcpu_bo == NULL)
 		return 0;
 
+	cancel_delayed_work_sync(&adev->uvd.idle_work);
+
 	for (i = 0; i < adev->uvd.max_handles; ++i)
 		if (atomic_read(&adev->uvd.handles[i]))
 			break;
 
 	if (i == AMDGPU_MAX_UVD_HANDLES)
 		return 0;
-
-	cancel_delayed_work_sync(&adev->uvd.idle_work);
 
 	size = amdgpu_bo_size(adev->uvd.vcpu_bo);
 	ptr = adev->uvd.cpu_addr;
@@ -346,6 +346,8 @@ int amdgpu_uvd_resume(struct amdgpu_device *adev)
 			ptr += le32_to_cpu(hdr->ucode_size_bytes);
 		}
 		memset_io(ptr, 0, size);
+		/* to restore uvd fence seq */
+		amdgpu_fence_driver_force_completion(&adev->uvd.ring);
 	}
 
 	return 0;
@@ -1153,10 +1155,10 @@ static void amdgpu_uvd_idle_work_handler(struct work_struct *work)
 		} else {
 			amdgpu_asic_set_uvd_clocks(adev, 0, 0);
 			/* shutdown the UVD block */
-			amdgpu_set_powergating_state(adev, AMD_IP_BLOCK_TYPE_UVD,
-							    AMD_PG_STATE_GATE);
-			amdgpu_set_clockgating_state(adev, AMD_IP_BLOCK_TYPE_UVD,
-							    AMD_CG_STATE_GATE);
+			amdgpu_device_ip_set_powergating_state(adev, AMD_IP_BLOCK_TYPE_UVD,
+							       AMD_PG_STATE_GATE);
+			amdgpu_device_ip_set_clockgating_state(adev, AMD_IP_BLOCK_TYPE_UVD,
+							       AMD_CG_STATE_GATE);
 		}
 	} else {
 		schedule_delayed_work(&adev->uvd.idle_work, UVD_IDLE_TIMEOUT);
@@ -1176,10 +1178,10 @@ void amdgpu_uvd_ring_begin_use(struct amdgpu_ring *ring)
 			amdgpu_dpm_enable_uvd(adev, true);
 		} else {
 			amdgpu_asic_set_uvd_clocks(adev, 53300, 40000);
-			amdgpu_set_clockgating_state(adev, AMD_IP_BLOCK_TYPE_UVD,
-							    AMD_CG_STATE_UNGATE);
-			amdgpu_set_powergating_state(adev, AMD_IP_BLOCK_TYPE_UVD,
-							    AMD_PG_STATE_UNGATE);
+			amdgpu_device_ip_set_clockgating_state(adev, AMD_IP_BLOCK_TYPE_UVD,
+							       AMD_CG_STATE_UNGATE);
+			amdgpu_device_ip_set_powergating_state(adev, AMD_IP_BLOCK_TYPE_UVD,
+							       AMD_PG_STATE_UNGATE);
 		}
 	}
 }

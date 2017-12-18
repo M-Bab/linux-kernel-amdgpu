@@ -48,9 +48,20 @@ void hubp1_set_blank(struct hubp *hubp, bool blank)
 			HUBP_TTU_DISABLE, blank_en);
 
 	if (blank) {
-		REG_WAIT(DCHUBP_CNTL,
-				HUBP_NO_OUTSTANDING_REQ, 1,
-				1, 200);
+		uint32_t reg_val = REG_READ(DCHUBP_CNTL);
+
+		if (reg_val) {
+			/* init sequence workaround: in case HUBP is
+			 * power gated, this wait would timeout.
+			 *
+			 * we just wrote reg_val to non-0, if it stay 0
+			 * it means HUBP is gated
+			 */
+			REG_WAIT(DCHUBP_CNTL,
+					HUBP_NO_OUTSTANDING_REQ, 1,
+					1, 200);
+		}
+
 		hubp->mpcc_id = 0xf;
 		hubp->opp_id = 0xf;
 	}

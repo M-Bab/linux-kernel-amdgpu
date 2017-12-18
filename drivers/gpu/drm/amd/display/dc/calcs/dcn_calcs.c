@@ -33,6 +33,15 @@
 #include "dcn10/dcn10_resource.h"
 #include "dcn_calc_math.h"
 
+/*
+ * NOTE:
+ *   This file is gcc-parseable HW gospel, coming straight from HW engineers.
+ *
+ * It doesn't adhere to Linux kernel style and sometimes will do things in odd
+ * ways. Unless there is something clearly wrong with it the code should
+ * remain as-is as it provides us with a guarantee from HW that it is correct.
+ */
+
 /* Defaults from spreadsheet rev#247 */
 const struct dcn_soc_bounding_box dcn10_soc_defaults = {
 		/* latencies */
@@ -878,6 +887,17 @@ bool dcn_validate_bandwidth(
 						+ pipe->bottom_pipe->plane_res.scl_data.recout.width;
 			}
 
+			if (pipe->plane_state->rotation % 2 == 0) {
+				ASSERT(pipe->plane_res.scl_data.ratios.horz.value != dal_fixed31_32_one.value
+					|| v->scaler_rec_out_width[input_idx] == v->viewport_width[input_idx]);
+				ASSERT(pipe->plane_res.scl_data.ratios.vert.value != dal_fixed31_32_one.value
+					|| v->scaler_recout_height[input_idx] == v->viewport_height[input_idx]);
+			} else {
+				ASSERT(pipe->plane_res.scl_data.ratios.horz.value != dal_fixed31_32_one.value
+					|| v->scaler_recout_height[input_idx] == v->viewport_width[input_idx]);
+				ASSERT(pipe->plane_res.scl_data.ratios.vert.value != dal_fixed31_32_one.value
+					|| v->scaler_rec_out_width[input_idx] == v->viewport_height[input_idx]);
+			}
 			v->dcc_enable[input_idx] = pipe->plane_state->dcc.enable ? dcn_bw_yes : dcn_bw_no;
 			v->source_pixel_format[input_idx] = tl_pixel_format_to_bw_defs(
 					pipe->plane_state->format);
@@ -888,6 +908,15 @@ bool dcn_validate_bandwidth(
 			v->override_vta_ps[input_idx] = pipe->plane_res.scl_data.taps.v_taps;
 			v->override_hta_pschroma[input_idx] = pipe->plane_res.scl_data.taps.h_taps_c;
 			v->override_vta_pschroma[input_idx] = pipe->plane_res.scl_data.taps.v_taps_c;
+			/*
+			 * Spreadsheet doesn't handle taps_c is one properly,
+			 * need to force Chroma to always be scaled to pass
+			 * bandwidth validation.
+			 */
+			if (v->override_hta_pschroma[input_idx] == 1)
+				v->override_hta_pschroma[input_idx] = 2;
+			if (v->override_vta_pschroma[input_idx] == 1)
+				v->override_vta_pschroma[input_idx] = 2;
 			v->source_scan[input_idx] = (pipe->plane_state->rotation % 2) ? dcn_bw_vert : dcn_bw_hor;
 		}
 		if (v->is_line_buffer_bpp_fixed == dcn_bw_yes)
