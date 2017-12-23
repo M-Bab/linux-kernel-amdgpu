@@ -32,7 +32,7 @@
 #include "dce/dce_hwseq.h"
 #include "abm.h"
 #include "dmcu.h"
-#include "dcn10/dcn10_timing_generator.h"
+#include "dcn10_optc.h"
 #include "dcn10/dcn10_dpp.h"
 #include "dcn10/dcn10_mpc.h"
 #include "timing_generator.h"
@@ -462,9 +462,6 @@ static enum dc_status dcn10_prog_pixclk_crtc_otg(
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	enum dc_color_space color_space;
 	struct tg_color black_color = {0};
-	bool enableStereo    = stream->timing.timing_3d_format == TIMING_3D_FORMAT_NONE ?
-			false:true;
-	bool rightEyePolarity = stream->timing.flags.RIGHT_EYE_3D_POLARITY;
 
 	/* by upper caller loop, pipe0 is parent pipe and be called first.
 	 * back end is set up by for pipe0. Other children pipe share back end
@@ -499,11 +496,6 @@ static enum dc_status dcn10_prog_pixclk_crtc_otg(
 			&stream->timing,
 			true);
 
-	pipe_ctx->stream_res.opp->funcs->opp_set_stereo_polarity(
-				pipe_ctx->stream_res.opp,
-				enableStereo,
-				rightEyePolarity);
-
 #if 0 /* move to after enable_crtc */
 	/* TODO: OPP FMT, ABM. etc. should be done here. */
 	/* or FPGA now. instance 0 only. TODO: move to opp.c */
@@ -518,11 +510,14 @@ static enum dc_status dcn10_prog_pixclk_crtc_otg(
 	/* program otg blank color */
 	color_space = stream->output_color_space;
 	color_space_to_black_color(dc, color_space, &black_color);
-	pipe_ctx->stream_res.tg->funcs->set_blank_color(
-			pipe_ctx->stream_res.tg,
-			&black_color);
 
-	if (!pipe_ctx->stream_res.tg->funcs->is_blanked(pipe_ctx->stream_res.tg)) {
+	if (pipe_ctx->stream_res.tg->funcs->set_blank_color)
+		pipe_ctx->stream_res.tg->funcs->set_blank_color(
+				pipe_ctx->stream_res.tg,
+				&black_color);
+
+	if (pipe_ctx->stream_res.tg->funcs->is_blanked &&
+			!pipe_ctx->stream_res.tg->funcs->is_blanked(pipe_ctx->stream_res.tg)) {
 		pipe_ctx->stream_res.tg->funcs->set_blank(pipe_ctx->stream_res.tg, true);
 		hwss_wait_for_blank_complete(pipe_ctx->stream_res.tg);
 		false_optc_underflow_wa(dc, pipe_ctx->stream, pipe_ctx->stream_res.tg);
@@ -1429,22 +1424,9 @@ static void program_csc_matrix(struct pipe_ctx *pipe_ctx,
 		enum dc_color_space colorspace,
 		uint16_t *matrix)
 {
-	int i;
-	struct out_csc_color_matrix tbl_entry;
-
 	if (pipe_ctx->stream->csc_color_matrix.enable_adjustment == true) {
-			enum dc_color_space color_space =
-				pipe_ctx->stream->output_color_space;
-
-			//uint16_t matrix[12];
-			for (i = 0; i < 12; i++)
-				tbl_entry.regval[i] = pipe_ctx->stream->csc_color_matrix.matrix[i];
-
-			tbl_entry.color_space = color_space;
-			//tbl_entry.regval = matrix;
-
 			if (pipe_ctx->plane_res.dpp->funcs->dpp_set_csc_adjustment != NULL)
-				pipe_ctx->plane_res.dpp->funcs->dpp_set_csc_adjustment(pipe_ctx->plane_res.dpp, &tbl_entry);
+				pipe_ctx->plane_res.dpp->funcs->dpp_set_csc_adjustment(pipe_ctx->plane_res.dpp, matrix);
 	} else {
 		if (pipe_ctx->plane_res.dpp->funcs->dpp_set_csc_default != NULL)
 			pipe_ctx->plane_res.dpp->funcs->dpp_set_csc_default(pipe_ctx->plane_res.dpp, colorspace);
@@ -1795,7 +1777,8 @@ static void update_dchubp_dpp(
 		plane_state->update_flags.bits.rotation_change ||
 		plane_state->update_flags.bits.swizzle_change ||
 		plane_state->update_flags.bits.dcc_change ||
-		plane_state->update_flags.bits.bpp_change) {
+		plane_state->update_flags.bits.bpp_change ||
+		plane_state->update_flags.bits.scaling_change) {
 		hubp->funcs->hubp_program_surface_config(
 			hubp,
 			plane_state->format,
@@ -1820,6 +1803,7 @@ static void program_all_pipe_in_tree(
 		struct pipe_ctx *pipe_ctx,
 		struct dc_state *context)
 {
+
 	if (pipe_ctx->top_pipe == NULL) {
 
 		pipe_ctx->stream_res.tg->dlg_otg_param.vready_offset = pipe_ctx->pipe_dlg_param.vready_offset;
@@ -1830,7 +1814,11 @@ static void program_all_pipe_in_tree(
 
 		pipe_ctx->stream_res.tg->funcs->program_global_sync(
 				pipe_ctx->stream_res.tg);
-		pipe_ctx->stream_res.tg->funcs->set_blank(pipe_ctx->stream_res.tg, !is_pipe_tree_visible(pipe_ctx));
+
+		if (pipe_ctx->stream_res.tg->funcs->set_blank)
+			pipe_ctx->stream_res.tg->funcs->set_blank(
+					pipe_ctx->stream_res.tg,
+					!is_pipe_tree_visible(pipe_ctx));
 	}
 
 	if (pipe_ctx->plane_state != NULL) {
@@ -1937,6 +1925,7 @@ static void dcn10_apply_ctx_for_surface(
 {
 	int i;
 	struct timing_generator *tg;
+	struct output_pixel_processor *opp;
 	bool removed_pipe[4] = { false };
 	unsigned int ref_clk_mhz = dc->res_pool->ref_clock_inKhz/1000;
 	bool program_water_mark = false;
@@ -1947,6 +1936,8 @@ static void dcn10_apply_ctx_for_surface(
 	if (!top_pipe_to_program)
 		return;
 
+	opp = top_pipe_to_program->stream_res.opp;
+
 	tg = top_pipe_to_program->stream_res.tg;
 
 	tg->funcs->lock(tg);
@@ -1954,7 +1945,8 @@ static void dcn10_apply_ctx_for_surface(
 	if (num_planes == 0) {
 
 		/* OTG blank before remove all front end */
-		tg->funcs->set_blank(tg, true);
+		if (tg->funcs->set_blank)
+			tg->funcs->set_blank(tg, true);
 	}
 
 	/* Disconnect unused mpcc */
@@ -2251,10 +2243,10 @@ static void dcn10_setup_stereo(struct pipe_ctx *pipe_ctx, struct dc *dc)
 
 	dcn10_config_stereo_parameters(stream, &flags);
 
-	pipe_ctx->stream_res.opp->funcs->opp_set_stereo_polarity(
+	pipe_ctx->stream_res.opp->funcs->opp_program_stereo(
 		pipe_ctx->stream_res.opp,
 		flags.PROGRAM_STEREO == 1 ? true:false,
-		stream->timing.flags.RIGHT_EYE_3D_POLARITY == 1 ? true:false);
+		&stream->timing);
 
 	pipe_ctx->stream_res.tg->funcs->program_stereo(
 		pipe_ctx->stream_res.tg,

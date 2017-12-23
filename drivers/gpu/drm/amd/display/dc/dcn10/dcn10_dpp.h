@@ -730,6 +730,7 @@
 	type CM_BLNDGAM_RAMA_EXP_REGION33_NUM_SEGMENTS; \
 	type CM_BLNDGAM_LUT_WRITE_EN_MASK; \
 	type CM_BLNDGAM_LUT_WRITE_SEL; \
+	type CM_BLNDGAM_CONFIG_STATUS; \
 	type CM_BLNDGAM_LUT_INDEX; \
 	type BLNDGAM_MEM_PWR_FORCE; \
 	type CM_3DLUT_MODE; \
@@ -905,6 +906,7 @@
 	type CM_SHAPER_RAMA_EXP_REGION33_LUT_OFFSET; \
 	type CM_SHAPER_RAMA_EXP_REGION33_NUM_SEGMENTS; \
 	type CM_SHAPER_LUT_WRITE_EN_MASK; \
+	type CM_SHAPER_CONFIG_STATUS; \
 	type CM_SHAPER_LUT_WRITE_SEL; \
 	type CM_SHAPER_LUT_INDEX; \
 	type CM_SHAPER_LUT_DATA; \
@@ -1281,6 +1283,10 @@ enum dcn10_input_csc_select {
 	INPUT_CSC_SELECT_COMA
 };
 
+void dpp1_set_cursor_attributes(
+		struct dpp *dpp_base,
+		enum dc_cursor_color_format color_format);
+
 bool dpp1_dscl_is_lb_conf_valid(
 		int ceil_vratio,
 		int num_partitions,
@@ -1368,7 +1374,7 @@ void dpp1_cm_program_regamma_lutb_settings(
 		const struct pwl_params *params);
 void dpp1_cm_set_output_csc_adjustment(
 		struct dpp *dpp_base,
-		const struct out_csc_color_matrix *tbl_entry);
+		const uint16_t *regval);
 
 void dpp1_cm_set_output_csc_default(
 		struct dpp *dpp_base,

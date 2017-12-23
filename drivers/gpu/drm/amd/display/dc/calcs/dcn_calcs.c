@@ -1014,9 +1014,9 @@ bool dcn_validate_bandwidth(
 			if (pipe->top_pipe && pipe->top_pipe->plane_state == pipe->plane_state)
 				continue;
 
-			pipe->pipe_dlg_param.vupdate_width = v->v_update_width[input_idx];
-			pipe->pipe_dlg_param.vupdate_offset = v->v_update_offset[input_idx];
-			pipe->pipe_dlg_param.vready_offset = v->v_ready_offset[input_idx];
+			pipe->pipe_dlg_param.vupdate_width = v->v_update_width[input_idx][v->dpp_per_plane[input_idx] == 2 ? 1 : 0];
+			pipe->pipe_dlg_param.vupdate_offset = v->v_update_offset[input_idx][v->dpp_per_plane[input_idx] == 2 ? 1 : 0];
+			pipe->pipe_dlg_param.vready_offset = v->v_ready_offset[input_idx][v->dpp_per_plane[input_idx] == 2 ? 1 : 0];
 			pipe->pipe_dlg_param.vstartup_start = v->v_startup[input_idx];
 
 			pipe->pipe_dlg_param.htotal = pipe->stream->timing.h_total;
@@ -1055,9 +1055,9 @@ bool dcn_validate_bandwidth(
 					 TIMING_3D_FORMAT_SIDE_BY_SIDE))) {
 					if (hsplit_pipe && hsplit_pipe->plane_state == pipe->plane_state) {
 						/* update previously split pipe */
-						hsplit_pipe->pipe_dlg_param.vupdate_width = v->v_update_width[input_idx];
-						hsplit_pipe->pipe_dlg_param.vupdate_offset = v->v_update_offset[input_idx];
-						hsplit_pipe->pipe_dlg_param.vready_offset = v->v_ready_offset[input_idx];
+						hsplit_pipe->pipe_dlg_param.vupdate_width = v->v_update_width[input_idx][v->dpp_per_plane[input_idx] == 2 ? 1 : 0];
+						hsplit_pipe->pipe_dlg_param.vupdate_offset = v->v_update_offset[input_idx][v->dpp_per_plane[input_idx] == 2 ? 1 : 0];
+						hsplit_pipe->pipe_dlg_param.vready_offset = v->v_ready_offset[input_idx][v->dpp_per_plane[input_idx] == 2 ? 1 : 0];
 						hsplit_pipe->pipe_dlg_param.vstartup_start = v->v_startup[input_idx];
 
 						hsplit_pipe->pipe_dlg_param.htotal = pipe->stream->timing.h_total;
@@ -1585,35 +1585,6 @@ void dcn_bw_sync_calcs_and_dml(struct dc *dc)
 			dc->dcn_ip->can_vstartup_lines_exceed_vsync_plus_back_porch_lines_minus_one,
 			dc->dcn_ip->bug_forcing_luma_and_chroma_request_to_same_size_fixed,
 			dc->dcn_ip->dcfclk_cstate_latency);
-	dc->dml.soc.vmin.socclk_mhz = dc->dcn_soc->socclk;
-	dc->dml.soc.vmid.socclk_mhz = dc->dcn_soc->socclk;
-	dc->dml.soc.vnom.socclk_mhz = dc->dcn_soc->socclk;
-	dc->dml.soc.vmax.socclk_mhz = dc->dcn_soc->socclk;
-
-	dc->dml.soc.vmin.dcfclk_mhz = dc->dcn_soc->dcfclkv_min0p65;
-	dc->dml.soc.vmid.dcfclk_mhz = dc->dcn_soc->dcfclkv_mid0p72;
-	dc->dml.soc.vnom.dcfclk_mhz = dc->dcn_soc->dcfclkv_nom0p8;
-	dc->dml.soc.vmax.dcfclk_mhz = dc->dcn_soc->dcfclkv_max0p9;
-
-	dc->dml.soc.vmin.dispclk_mhz = dc->dcn_soc->max_dispclk_vmin0p65;
-	dc->dml.soc.vmid.dispclk_mhz = dc->dcn_soc->max_dispclk_vmid0p72;
-	dc->dml.soc.vnom.dispclk_mhz = dc->dcn_soc->max_dispclk_vnom0p8;
-	dc->dml.soc.vmax.dispclk_mhz = dc->dcn_soc->max_dispclk_vmax0p9;
-
-	dc->dml.soc.vmin.dppclk_mhz = dc->dcn_soc->max_dppclk_vmin0p65;
-	dc->dml.soc.vmid.dppclk_mhz = dc->dcn_soc->max_dppclk_vmid0p72;
-	dc->dml.soc.vnom.dppclk_mhz = dc->dcn_soc->max_dppclk_vnom0p8;
-	dc->dml.soc.vmax.dppclk_mhz = dc->dcn_soc->max_dppclk_vmax0p9;
-
-	dc->dml.soc.vmin.phyclk_mhz = dc->dcn_soc->phyclkv_min0p65;
-	dc->dml.soc.vmid.phyclk_mhz = dc->dcn_soc->phyclkv_mid0p72;
-	dc->dml.soc.vnom.phyclk_mhz = dc->dcn_soc->phyclkv_nom0p8;
-	dc->dml.soc.vmax.phyclk_mhz = dc->dcn_soc->phyclkv_max0p9;
-
-	dc->dml.soc.vmin.dram_bw_per_chan_gbps = dc->dcn_soc->fabric_and_dram_bandwidth_vmin0p65;
-	dc->dml.soc.vmid.dram_bw_per_chan_gbps = dc->dcn_soc->fabric_and_dram_bandwidth_vmid0p72;
-	dc->dml.soc.vnom.dram_bw_per_chan_gbps = dc->dcn_soc->fabric_and_dram_bandwidth_vnom0p8;
-	dc->dml.soc.vmax.dram_bw_per_chan_gbps = dc->dcn_soc->fabric_and_dram_bandwidth_vmax0p9;
 
 	dc->dml.soc.sr_exit_time_us = dc->dcn_soc->sr_exit_time;
 	dc->dml.soc.sr_enter_plus_exit_time_us = dc->dcn_soc->sr_enter_plus_exit_time;
