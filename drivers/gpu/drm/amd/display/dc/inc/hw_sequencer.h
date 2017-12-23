@@ -28,6 +28,7 @@
 #include "dc_types.h"
 #include "clock_source.h"
 #include "inc/hw/timing_generator.h"
+#include "inc/hw/opp.h"
 #include "inc/hw/link_encoder.h"
 #include "core_status.h"
 
@@ -138,10 +139,6 @@ struct hw_sequencer_funcs {
 
 	void (*disable_plane)(struct dc *dc, struct pipe_ctx *pipe_ctx);
 
-	void (*enable_plane)(struct dc *dc,
-			struct pipe_ctx *pipe,
-			struct dc_state *context);
-
 	void (*update_info_frame)(struct pipe_ctx *pipe_ctx);
 
 	void (*enable_stream)(struct pipe_ctx *pipe_ctx);
@@ -210,5 +207,9 @@ void color_space_to_black_color(
 
 bool hwss_wait_for_blank_complete(
 		struct timing_generator *tg);
+
+const uint16_t *find_color_matrix(
+		enum dc_color_space color_space,
+		uint32_t *array_size);
 
 #endif /* __DC_HW_SEQUENCER_H__ */
