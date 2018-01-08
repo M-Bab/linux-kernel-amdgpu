@@ -145,6 +145,23 @@ static const struct cs35l41_pll_sysclk_config cs35l41_pll_sysclk[] = {
 	{ 27000000,	0x3F },
 };
 
+static const unsigned char cs35l41_bst_k1_table[4][5] = {
+	{0x24, 0x32, 0x32, 0x4F, 0x57},
+	{0x24, 0x32, 0x32, 0x4F, 0x57},
+	{0x40, 0x32, 0x32, 0x4F, 0x57},
+	{0x40, 0x32, 0x32, 0x4F, 0x57}
+};
+
+static const unsigned char cs35l41_bst_k2_table[4][5] = {
+	{0x24, 0x49, 0x66, 0xA3, 0xEA},
+	{0x24, 0x49, 0x66, 0xA3, 0xEA},
+	{0x48, 0x49, 0x66, 0xA3, 0xEA},
+	{0x48, 0x49, 0x66, 0xA3, 0xEA}
+};
+
+static const unsigned char cs35l41_bst_slope_table[4] = {
+					0x75, 0x6B, 0x3B, 0x28};
+
 static int cs35l41_dsp_power_ev(struct snd_soc_dapm_widget *w,
 		       struct snd_kcontrol *kcontrol, int event)
 {
@@ -939,6 +956,103 @@ static int cs35l41_dai_set_sysclk(struct snd_soc_dai *dai,
 	return 0;
 }
 
+static int cs35l41_boost_config(struct cs35l41_private *cs35l41,
+		int boost_ind, int boost_cap, int boost_ipk)
+{
+	int ret;
+	unsigned char bst_lbst_val, bst_cbst_range, bst_ipk_scaled;
+	struct regmap *regmap = cs35l41->regmap;
+	struct device *dev = cs35l41->dev;
+
+	switch (boost_ind) {
+	case 1000:	/* 1.0 uH */
+		bst_lbst_val = 0;
+		break;
+	case 1200:	/* 1.2 uH */
+		bst_lbst_val = 1;
+		break;
+	case 1500:	/* 1.5 uH */
+		bst_lbst_val = 2;
+		break;
+	case 2200:	/* 2.2 uH */
+		bst_lbst_val = 3;
+		break;
+	default:
+		dev_err(dev, "Invalid boost inductor value: %d nH\n",
+				boost_ind);
+		return -EINVAL;
+	}
+
+	switch (boost_cap) {
+	case 0 ... 19:
+		bst_cbst_range = 0;
+		break;
+	case 20 ... 50:
+		bst_cbst_range = 1;
+		break;
+	case 51 ... 100:
+		bst_cbst_range = 2;
+		break;
+	case 101 ... 200:
+		bst_cbst_range = 3;
+		break;
+	default:	/* 201 uF and greater */
+		bst_cbst_range = 4;
+	}
+
+	ret = regmap_update_bits(regmap, CS35L41_BSTCVRT_COEFF,
+			CS35L41_BST_K1_MASK,
+			cs35l41_bst_k1_table[bst_lbst_val][bst_cbst_range]
+				<< CS35L41_BST_K1_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to write boost K1 coefficient\n");
+		return ret;
+	}
+
+	ret = regmap_update_bits(regmap, CS35L41_BSTCVRT_COEFF,
+			CS35L41_BST_K2_MASK,
+			cs35l41_bst_k2_table[bst_lbst_val][bst_cbst_range]
+				<< CS35L41_BST_K2_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to write boost K2 coefficient\n");
+		return ret;
+	}
+
+	ret = regmap_update_bits(regmap, CS35L41_BSTCVRT_SLOPE_LBST,
+			CS35L41_BST_SLOPE_MASK,
+			cs35l41_bst_slope_table[bst_lbst_val]
+				<< CS35L41_BST_SLOPE_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to write boost slope coefficient\n");
+		return ret;
+	}
+
+	ret = regmap_update_bits(regmap, CS35L41_BSTCVRT_SLOPE_LBST,
+			CS35L41_BST_LBST_VAL_MASK,
+			bst_lbst_val << CS35L41_BST_LBST_VAL_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to write boost inductor value\n");
+		return ret;
+	}
+
+	if ((boost_ipk < 1600) || (boost_ipk > 4500)) {
+		dev_err(dev, "Invalid boost inductor peak current: %d mA\n",
+				boost_ipk);
+		return -EINVAL;
+	}
+	bst_ipk_scaled = ((boost_ipk - 1600) / 50) + 0x10;
+
+	ret = regmap_update_bits(regmap, CS35L41_BSTCVRT_PEAK_CUR,
+			CS35L41_BST_IPK_MASK,
+			bst_ipk_scaled << CS35L41_BST_IPK_SHIFT);
+	if (ret) {
+		dev_err(dev, "Failed to write boost inductor peak current\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 static int cs35l41_component_probe(struct snd_soc_component *component)
 {
 	struct cs35l41_private *cs35l41 = snd_soc_component_get_drvdata(component);
@@ -971,9 +1085,16 @@ static int cs35l41_component_probe(struct snd_soc_component *component)
 		regmap_update_bits(cs35l41->regmap, CS35L41_BSTCVRT_VCTRL1,
 				CS35L41_BST_CTL_MASK, cs35l41->pdata.bst_vctrl);
 
-	if (cs35l41->pdata.bst_ipk)
-		regmap_update_bits(cs35l41->regmap, CS35L41_BSTCVRT_PEAK_CUR,
-				CS35L41_BST_IPK_MASK, cs35l41->pdata.bst_ipk);
+	if (cs35l41->pdata.bst_ipk &&
+			cs35l41->pdata.bst_ind && cs35l41->pdata.bst_cap) {
+		cs35l41_boost_config(cs35l41, cs35l41->pdata.bst_ind,
+					cs35l41->pdata.bst_cap,
+					cs35l41->pdata.bst_ipk);
+	} else if (cs35l41->pdata.bst_ipk ||
+			cs35l41->pdata.bst_ind ||
+			cs35l41->pdata.bst_cap) {
+		dev_err(cs35l41->dev, "Incomplete Boost DT config\n");
+	}
 
 	if (cs35l41->pdata.temp_warn_thld)
 		regmap_update_bits(cs35l41->regmap, CS35L41_DTEMP_WARN_THLD,
@@ -1220,14 +1341,16 @@ static int cs35l41_handle_of_data(struct device *dev,
 	}
 
 	ret = of_property_read_u32(np, "cirrus,boost-peak-milliamp", &val);
-	if (ret >= 0) {
-		if (val < 1600 || val > 4500) {
-			dev_err(dev,
-				"Invalid Boost Peak Current %u mA\n", val);
-			return -EINVAL;
-		}
-		pdata->bst_ipk = ((val - 1600) / 50) + 0x10;
-	}
+	if (ret >= 0)
+		pdata->bst_ipk = val;
+
+	ret = of_property_read_u32(np, "cirrus,boost-ind-nanohenry", &val);
+	if (ret >= 0)
+		pdata->bst_ind = val;
+
+	ret = of_property_read_u32(np, "cirrus,boost-cap-microfarad", &val);
+	if (ret >= 0)
+		pdata->bst_cap = val;
 
 	pdata->ng_enable = of_property_read_bool(np,
 					"cirrus,noise-gate-enable");

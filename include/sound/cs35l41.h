@@ -38,6 +38,7 @@ struct cs35l41_platform_data {
 	int bst_ind;
 	int bst_vctrl;
 	int bst_ipk;
+	int bst_cap;
 	int temp_warn_thld;
 	int ng_pcm_thld;
 	int ng_delay;
