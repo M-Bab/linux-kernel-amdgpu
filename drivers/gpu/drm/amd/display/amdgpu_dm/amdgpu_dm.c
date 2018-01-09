@@ -319,6 +319,7 @@ static void dm_crtc_high_irq(void *interrupt_params)
 		crtc_index = acrtc->crtc_id;
 
 	drm_handle_vblank(adev->ddev, crtc_index);
+	amdgpu_dm_crtc_handle_crc_irq(&acrtc->base);
 }
 
 static int dm_set_clockgating_state(void *handle,
@@ -345,25 +346,53 @@ static void hotplug_notify_work_func(struct work_struct *work)
 }
 
 #if defined(CONFIG_DRM_AMD_DC_FBC)
-#include "dal_asic_id.h"
 /* Allocate memory for FBC compressed data  */
-/* TODO: Dynamic allocation */
-#define AMDGPU_FBC_SIZE    (3840 * 2160 * 4)
-
-static void amdgpu_dm_initialize_fbc(struct amdgpu_device *adev)
+static void amdgpu_dm_fbc_init(struct amdgpu_device *adev)
 {
-	int r;
 	struct dm_comressor_info *compressor = &adev->dm.compressor;
+	struct drm_connector *conn;
+	struct drm_device *dev = adev->ddev;
+	unsigned long max_size = 0;
 
-	if (!compressor->bo_ptr) {
-		r = amdgpu_bo_create_kernel(adev, AMDGPU_FBC_SIZE, PAGE_SIZE,
-				AMDGPU_GEM_DOMAIN_VRAM, &compressor->bo_ptr,
-				&compressor->gpu_addr, &compressor->cpu_addr);
+	if (adev->dm.dc->fbc_compressor == NULL)
+		return;
 
-		if (r)
-			DRM_ERROR("DM: Failed to initialize fbc\n");
+	if (compressor->bo_ptr)
+		return;
+
+	drm_modeset_lock(&dev->mode_config.connection_mutex, NULL);
+
+	/* For eDP connector find a mode requiring max size */
+	list_for_each_entry(conn,
+		    &dev->mode_config.connector_list, head) {
+		struct amdgpu_dm_connector *aconn;
+
+		aconn = to_amdgpu_dm_connector(conn);
+		if (aconn->dc_link->connector_signal == SIGNAL_TYPE_EDP) {
+			struct drm_display_mode *mode;
+
+			list_for_each_entry(mode, &conn->modes, head) {
+				if (max_size < mode->hdisplay * mode->vdisplay)
+					max_size = mode->htotal * mode->vtotal;
+			}
+		}
 	}
 
+	if (max_size) {
+		int r = amdgpu_bo_create_kernel(adev, max_size * 4, PAGE_SIZE,
+			    AMDGPU_GEM_DOMAIN_VRAM, &compressor->bo_ptr,
+			    &compressor->gpu_addr, &compressor->cpu_addr);
+
+		if (r)
+			DRM_ERROR("DM: Failed to initialize FBC\n");
+		else {
+			adev->dm.dc->ctx->fbc_gpu_addr = compressor->gpu_addr;
+			DRM_INFO("DM: FBC alloc %lu\n", max_size*4);
+		}
+
+	}
+
+	drm_modeset_unlock(&dev->mode_config.connection_mutex);
 }
 #endif
 
@@ -422,11 +451,6 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	else
 		init_data.log_mask = DC_MIN_LOG_MASK;
 
-#if defined(CONFIG_DRM_AMD_DC_FBC)
-	if (adev->family == FAMILY_CZ)
-		amdgpu_dm_initialize_fbc(adev);
-	init_data.fbc_gpu_addr = adev->dm.compressor.gpu_addr;
-#endif
 	/* Display Core create. */
 	adev->dm.dc = dc_create(&init_data);
 
@@ -540,9 +564,12 @@ static int detect_mst_link_for_all_connectors(struct drm_device *dev)
 
 static int dm_late_init(void *handle)
 {
-	struct drm_device *dev = ((struct amdgpu_device *)handle)->ddev;
+	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-	return detect_mst_link_for_all_connectors(dev);
+#if defined(CONFIG_DRM_AMD_DC_FBC)
+	amdgpu_dm_fbc_init(adev);
+#endif
+	return detect_mst_link_for_all_connectors(adev->ddev);
 }
 
 static void s3_handle_mst(struct drm_device *dev, bool suspend)
@@ -2015,30 +2042,32 @@ static void update_stream_scaling_settings(const struct drm_display_mode *mode,
 	dst.width = stream->timing.h_addressable;
 	dst.height = stream->timing.v_addressable;
 
-	rmx_type = dm_state->scaling;
-	if (rmx_type == RMX_ASPECT || rmx_type == RMX_OFF) {
-		if (src.width * dst.height <
-				src.height * dst.width) {
-			/* height needs less upscaling/more downscaling */
-			dst.width = src.width *
-					dst.height / src.height;
-		} else {
-			/* width needs less upscaling/more downscaling */
-			dst.height = src.height *
-					dst.width / src.width;
+	if (dm_state) {
+		rmx_type = dm_state->scaling;
+		if (rmx_type == RMX_ASPECT || rmx_type == RMX_OFF) {
+			if (src.width * dst.height <
+					src.height * dst.width) {
+				/* height needs less upscaling/more downscaling */
+				dst.width = src.width *
+						dst.height / src.height;
+			} else {
+				/* width needs less upscaling/more downscaling */
+				dst.height = src.height *
+						dst.width / src.width;
+			}
+		} else if (rmx_type == RMX_CENTER) {
+			dst = src;
 		}
-	} else if (rmx_type == RMX_CENTER) {
-		dst = src;
-	}
 
-	dst.x = (stream->timing.h_addressable - dst.width) / 2;
-	dst.y = (stream->timing.v_addressable - dst.height) / 2;
+		dst.x = (stream->timing.h_addressable - dst.width) / 2;
+		dst.y = (stream->timing.v_addressable - dst.height) / 2;
 
-	if (dm_state->underscan_enable) {
-		dst.x += dm_state->underscan_hborder / 2;
-		dst.y += dm_state->underscan_vborder / 2;
-		dst.width -= dm_state->underscan_hborder;
-		dst.height -= dm_state->underscan_vborder;
+		if (dm_state->underscan_enable) {
+			dst.x += dm_state->underscan_hborder / 2;
+			dst.y += dm_state->underscan_vborder / 2;
+			dst.width -= dm_state->underscan_hborder;
+			dst.height -= dm_state->underscan_vborder;
+		}
 	}
 
 	stream->src = src;
@@ -2327,7 +2356,7 @@ static void set_master_stream(struct dc_stream_state *stream_set[],
 		}
 	}
 	for (j = 0;  j < stream_count; j++) {
-		if (stream_set[j] && j != master_stream)
+		if (stream_set[j])
 			stream_set[j]->triggered_crtc_reset.event_source = stream_set[master_stream];
 	}
 }
@@ -2363,12 +2392,7 @@ create_stream_for_sink(struct amdgpu_dm_connector *aconnector,
 
 	if (aconnector == NULL) {
 		DRM_ERROR("aconnector is NULL!\n");
-		goto drm_connector_null;
-	}
-
-	if (dm_state == NULL) {
-		DRM_ERROR("dm_state is NULL!\n");
-		goto dm_state_null;
+		return stream;
 	}
 
 	drm_connector = &aconnector->base;
@@ -2380,18 +2404,18 @@ create_stream_for_sink(struct amdgpu_dm_connector *aconnector,
 		 */
 		if (aconnector->mst_port) {
 			dm_dp_mst_dc_sink_create(drm_connector);
-			goto mst_dc_sink_create_done;
+			return stream;
 		}
 
 		if (create_fake_sink(aconnector))
-			goto stream_create_fail;
+			return stream;
 	}
 
 	stream = dc_create_stream_for_sink(aconnector->dc_sink);
 
 	if (stream == NULL) {
 		DRM_ERROR("Failed to create stream for sink!\n");
-		goto stream_create_fail;
+		return stream;
 	}
 
 	list_for_each_entry(preferred_mode, &aconnector->base.modes, head) {
@@ -2417,7 +2441,7 @@ create_stream_for_sink(struct amdgpu_dm_connector *aconnector,
 	} else {
 		decide_crtc_timing_for_drm_display_mode(
 				&mode, preferred_mode,
-				dm_state->scaling != RMX_OFF);
+				dm_state ? (dm_state->scaling != RMX_OFF) : false);
 	}
 
 	fill_stream_properties_from_drm_display_mode(stream,
@@ -2429,10 +2453,6 @@ create_stream_for_sink(struct amdgpu_dm_connector *aconnector,
 		drm_connector,
 		aconnector->dc_sink);
 
-stream_create_fail:
-dm_state_null:
-drm_connector_null:
-mst_dc_sink_create_done:
 	return stream;
 }
 
@@ -2509,6 +2529,7 @@ static const struct drm_crtc_funcs amdgpu_dm_crtc_funcs = {
 	.page_flip = drm_atomic_helper_page_flip,
 	.atomic_duplicate_state = dm_crtc_duplicate_state,
 	.atomic_destroy_state = dm_crtc_destroy_state,
+	.set_crc_source = amdgpu_dm_crtc_set_crc_source,
 };
 
 static enum drm_connector_status
@@ -2810,6 +2831,7 @@ int amdgpu_dm_connector_mode_valid(struct drm_connector *connector,
 	/* TODO: Unhardcode stream count */
 	struct dc_stream_state *stream;
 	struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
+	enum dc_status dc_result = DC_OK;
 
 	if ((mode->flags & DRM_MODE_FLAG_INTERLACE) ||
 			(mode->flags & DRM_MODE_FLAG_DBLSCAN))
@@ -2829,7 +2851,7 @@ int amdgpu_dm_connector_mode_valid(struct drm_connector *connector,
 		goto fail;
 	}
 
-	stream = dc_create_stream_for_sink(dc_sink);
+	stream = create_stream_for_sink(aconnector, mode, NULL);
 	if (stream == NULL) {
 		DRM_ERROR("Failed to create stream for sink!\n");
 		goto fail;
@@ -2842,8 +2864,16 @@ int amdgpu_dm_connector_mode_valid(struct drm_connector *connector,
 	stream->src.height = mode->vdisplay;
 	stream->dst = stream->src;
 
-	if (dc_validate_stream(adev->dm.dc, stream) == DC_OK)
+	dc_result = dc_validate_stream(adev->dm.dc, stream);
+
+	if (dc_result == DC_OK)
 		result = MODE_OK;
+	else
+		DRM_DEBUG_KMS("Mode %dx%d (clk %d) failed DC validation with error %d\n",
+			      mode->vdisplay,
+			      mode->hdisplay,
+			      mode->clock,
+			      dc_result);
 
 	dc_stream_release(stream);
 

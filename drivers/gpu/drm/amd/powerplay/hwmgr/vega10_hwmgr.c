@@ -49,6 +49,7 @@
 #include "cgs_linux.h"
 #include "ppinterrupt.h"
 #include "pp_overdriver.h"
+#include "pp_thermal.h"
 
 #define VOLTAGE_SCALE  4
 #define VOLTAGE_VID_OFFSET_SCALE1   625
@@ -1383,11 +1384,9 @@ static int vega10_setup_default_dpm_tables(struct pp_hwmgr *hwmgr)
 		data->odn_dpm_table.odn_core_clock_dpm_levels.
 		number_of_performance_levels = data->dpm_table.gfx_table.count;
 		for (i = 0; i < data->dpm_table.gfx_table.count; i++) {
-			data->odn_dpm_table.odn_core_clock_dpm_levels.
-			performance_level_entries[i].clock =
+			data->odn_dpm_table.odn_core_clock_dpm_levels.entries[i].clock =
 					data->dpm_table.gfx_table.dpm_levels[i].value;
-			data->odn_dpm_table.odn_core_clock_dpm_levels.
-			performance_level_entries[i].enabled = true;
+			data->odn_dpm_table.odn_core_clock_dpm_levels.entries[i].enabled = true;
 		}
 
 		data->odn_dpm_table.vdd_dependency_on_sclk.count =
@@ -1406,11 +1405,9 @@ static int vega10_setup_default_dpm_tables(struct pp_hwmgr *hwmgr)
 		data->odn_dpm_table.odn_memory_clock_dpm_levels.
 		number_of_performance_levels = data->dpm_table.mem_table.count;
 		for (i = 0; i < data->dpm_table.mem_table.count; i++) {
-			data->odn_dpm_table.odn_memory_clock_dpm_levels.
-			performance_level_entries[i].clock =
+			data->odn_dpm_table.odn_memory_clock_dpm_levels.entries[i].clock =
 					data->dpm_table.mem_table.dpm_levels[i].value;
-			data->odn_dpm_table.odn_memory_clock_dpm_levels.
-			performance_level_entries[i].enabled = true;
+			data->odn_dpm_table.odn_memory_clock_dpm_levels.entries[i].enabled = true;
 		}
 
 		data->odn_dpm_table.vdd_dependency_on_mclk.count = dep_mclk_table->count;
@@ -3348,11 +3345,9 @@ static int vega10_populate_and_upload_sclk_mclk_dpm_levels(
 					dpm_count < dpm_table->gfx_table.count;
 					dpm_count++) {
 				dpm_table->gfx_table.dpm_levels[dpm_count].enabled =
-						data->odn_dpm_table.odn_core_clock_dpm_levels.
-						performance_level_entries[dpm_count].enabled;
+					data->odn_dpm_table.odn_core_clock_dpm_levels.entries[dpm_count].enabled;
 				dpm_table->gfx_table.dpm_levels[dpm_count].value =
-						data->odn_dpm_table.odn_core_clock_dpm_levels.
-						performance_level_entries[dpm_count].clock;
+					data->odn_dpm_table.odn_core_clock_dpm_levels.entries[dpm_count].clock;
 			}
 		}
 
@@ -3362,11 +3357,9 @@ static int vega10_populate_and_upload_sclk_mclk_dpm_levels(
 					dpm_count < dpm_table->mem_table.count;
 					dpm_count++) {
 				dpm_table->mem_table.dpm_levels[dpm_count].enabled =
-						data->odn_dpm_table.odn_memory_clock_dpm_levels.
-						performance_level_entries[dpm_count].enabled;
+					data->odn_dpm_table.odn_memory_clock_dpm_levels.entries[dpm_count].enabled;
 				dpm_table->mem_table.dpm_levels[dpm_count].value =
-						data->odn_dpm_table.odn_memory_clock_dpm_levels.
-						performance_level_entries[dpm_count].clock;
+					data->odn_dpm_table.odn_memory_clock_dpm_levels.entries[dpm_count].clock;
 			}
 		}
 
@@ -4488,7 +4481,6 @@ static int vega10_force_clock_level(struct pp_hwmgr *hwmgr,
 		enum pp_clock_type type, uint32_t mask)
 {
 	struct vega10_hwmgr *data = (struct vega10_hwmgr *)(hwmgr->backend);
-	int i;
 
 	if (hwmgr->request_dpm_level & (AMD_DPM_FORCED_LEVEL_AUTO |
 				AMD_DPM_FORCED_LEVEL_LOW |
@@ -4497,17 +4489,8 @@ static int vega10_force_clock_level(struct pp_hwmgr *hwmgr,
 
 	switch (type) {
 	case PP_SCLK:
-		for (i = 0; i < 32; i++) {
-			if (mask & (1 << i))
-				break;
-		}
-		data->smc_state_table.gfx_boot_level = i;
-
-		for (i = 31; i >= 0; i--) {
-			if (mask & (1 << i))
-				break;
-		}
-		data->smc_state_table.gfx_max_level = i;
+		data->smc_state_table.gfx_boot_level = mask ? (ffs(mask) - 1) : 0;
+		data->smc_state_table.gfx_max_level = mask ? (fls(mask) - 1) : 0;
 
 		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_bootup_level(hwmgr),
 			"Failed to upload boot level to lowest!",
@@ -4519,17 +4502,8 @@ static int vega10_force_clock_level(struct pp_hwmgr *hwmgr,
 		break;
 
 	case PP_MCLK:
-		for (i = 0; i < 32; i++) {
-			if (mask & (1 << i))
-				break;
-		}
-		data->smc_state_table.mem_boot_level = i;
-
-		for (i = 31; i >= 0; i--) {
-			if (mask & (1 << i))
-				break;
-		}
-		data->smc_state_table.mem_max_level = i;
+		data->smc_state_table.mem_boot_level = mask ? (ffs(mask) - 1) : 0;
+		data->smc_state_table.mem_max_level = mask ? (fls(mask) - 1) : 0;
 
 		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_bootup_level(hwmgr),
 			"Failed to upload boot level to lowest!",
@@ -4988,6 +4962,20 @@ static int vega10_notify_cac_buffer_info(struct pp_hwmgr *hwmgr,
 	return 0;
 }
 
+static int vega10_get_thermal_temperature_range(struct pp_hwmgr *hwmgr,
+		struct PP_TemperatureRange *thermal_data)
+{
+	struct phm_ppt_v2_information *table_info =
+			(struct phm_ppt_v2_information *)hwmgr->pptable;
+
+	memcpy(thermal_data, &SMU7ThermalWithDelayPolicy[0], sizeof(struct PP_TemperatureRange));
+
+	thermal_data->max = table_info->tdp_table->usSoftwareShutdownTemp *
+		PP_TEMPERATURE_UNITS_PER_CENTIGRADES;
+
+	return 0;
+}
+
 static int vega10_register_thermal_interrupt(struct pp_hwmgr *hwmgr,
 		const void *info)
 {
@@ -5074,6 +5062,7 @@ static const struct pp_hwmgr_func vega10_hwmgr_funcs = {
 	.set_mclk_od = vega10_set_mclk_od,
 	.avfs_control = vega10_avfs_enable,
 	.notify_cac_buffer_info = vega10_notify_cac_buffer_info,
+	.get_thermal_temperature_range = vega10_get_thermal_temperature_range,
 	.register_internal_thermal_interrupt = vega10_register_thermal_interrupt,
 	.start_thermal_controller = vega10_start_thermal_controller,
 };

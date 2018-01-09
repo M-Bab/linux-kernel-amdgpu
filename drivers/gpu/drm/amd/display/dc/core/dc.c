@@ -29,6 +29,7 @@
 #include "core_status.h"
 #include "core_types.h"
 #include "hw_sequencer.h"
+#include "dce/dce_hwseq.h"
 
 #include "resource.h"
 
@@ -214,6 +215,91 @@ bool dc_stream_get_crtc_position(struct dc *dc,
 	return ret;
 }
 
+/**
+ * dc_stream_configure_crc: Configure CRC capture for the given stream.
+ * @dc: DC Object
+ * @stream: The stream to configure CRC on.
+ * @enable: Enable CRC if true, disable otherwise.
+ * @continuous: Capture CRC on every frame if true. Otherwise, only capture
+ *              once.
+ *
+ * By default, only CRC0 is configured, and the entire frame is used to
+ * calculate the crc.
+ */
+bool dc_stream_configure_crc(struct dc *dc, struct dc_stream_state *stream,
+			     bool enable, bool continuous)
+{
+	int i;
+	struct pipe_ctx *pipe;
+	struct crc_params param;
+	struct timing_generator *tg;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		pipe = &dc->current_state->res_ctx.pipe_ctx[i];
+		if (pipe->stream == stream)
+			break;
+	}
+	/* Stream not found */
+	if (i == MAX_PIPES)
+		return false;
+
+	/* Always capture the full frame */
+	param.windowa_x_start = 0;
+	param.windowa_y_start = 0;
+	param.windowa_x_end = pipe->stream->timing.h_addressable;
+	param.windowa_y_end = pipe->stream->timing.v_addressable;
+	param.windowb_x_start = 0;
+	param.windowb_y_start = 0;
+	param.windowb_x_end = pipe->stream->timing.h_addressable;
+	param.windowb_y_end = pipe->stream->timing.v_addressable;
+
+	/* Default to the union of both windows */
+	param.selection = UNION_WINDOW_A_B;
+	param.continuous_mode = continuous;
+	param.enable = enable;
+
+	tg = pipe->stream_res.tg;
+
+	/* Only call if supported */
+	if (tg->funcs->configure_crc)
+		return tg->funcs->configure_crc(tg, &param);
+	dm_logger_write(dc->ctx->logger, LOG_WARNING, "CRC capture not supported.");
+	return false;
+}
+
+/**
+ * dc_stream_get_crc: Get CRC values for the given stream.
+ * @dc: DC object
+ * @stream: The DC stream state of the stream to get CRCs from.
+ * @r_cr, g_y, b_cb: CRC values for the three channels are stored here.
+ *
+ * dc_stream_configure_crc needs to be called beforehand to enable CRCs.
+ * Return false if stream is not found, or if CRCs are not enabled.
+ */
+bool dc_stream_get_crc(struct dc *dc, struct dc_stream_state *stream,
+		       uint32_t *r_cr, uint32_t *g_y, uint32_t *b_cb)
+{
+	int i;
+	struct pipe_ctx *pipe;
+	struct timing_generator *tg;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		pipe = &dc->current_state->res_ctx.pipe_ctx[i];
+		if (pipe->stream == stream)
+			break;
+	}
+	/* Stream not found */
+	if (i == MAX_PIPES)
+		return false;
+
+	tg = pipe->stream_res.tg;
+
+	if (tg->funcs->get_crc)
+		return tg->funcs->get_crc(tg, r_cr, g_y, b_cb);
+	dm_logger_write(dc->ctx->logger, LOG_WARNING, "CRC capture not supported.");
+	return false;
+}
+
 void dc_stream_set_static_screen_events(struct dc *dc,
 		struct dc_stream_state **streams,
 		int num_streams,
@@ -359,9 +445,6 @@ static bool construct(struct dc *dc,
 	dc_version = resource_parse_asic_id(init_params->asic_id);
 	dc_ctx->dce_version = dc_version;
 
-#if defined(CONFIG_DRM_AMD_DC_FBC)
-	dc->ctx->fbc_gpu_addr = init_params->fbc_gpu_addr;
-#endif
 	/* Resource should construct all asic specific resources.
 	 * This should be the only place where we need to parse the asic id
 	 */
@@ -524,11 +607,13 @@ static void enable_timing_multisync(
 		if (!ctx->res_ctx.pipe_ctx[i].stream ||
 				!ctx->res_ctx.pipe_ctx[i].stream->triggered_crtc_reset.enabled)
 			continue;
+		if (ctx->res_ctx.pipe_ctx[i].stream == ctx->res_ctx.pipe_ctx[i].stream->triggered_crtc_reset.event_source)
+			continue;
 		multisync_pipes[multisync_count] = &ctx->res_ctx.pipe_ctx[i];
 		multisync_count++;
 	}
 
-	if (multisync_count > 1) {
+	if (multisync_count > 0) {
 		dc->hwss.enable_per_frame_crtc_position_reset(
 			dc, multisync_count, multisync_pipes);
 	}
@@ -650,7 +735,6 @@ bool dc_enable_stereo(
 	return ret;
 }
 
-
 /*
  * Applies given context to HW and copy it into current context.
  * It's up to the user to release the src context afterwards.
@@ -669,7 +753,7 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 		dc_streams[i] =  context->streams[i];
 
 	if (!dcb->funcs->is_accelerated_mode(dcb))
-		dc->hwss.enable_accelerated_mode(dc);
+		dc->hwss.enable_accelerated_mode(dc, context);
 
 	/* re-program planes for existing stream, in case we need to
 	 * free up plane resource for later use
@@ -973,6 +1057,9 @@ static enum surface_update_type get_plane_info_update_type(const struct dc_surfa
 	if (u->plane_info->input_tf != u->surface->input_tf)
 		update_flags->bits.input_tf_change = 1;
 
+	if (u->plane_info->sdr_white_level != u->surface->sdr_white_level)
+		update_flags->bits.output_tf_change = 1;
+
 	if (u->plane_info->horizontal_mirror != u->surface->horizontal_mirror)
 		update_flags->bits.horizontal_mirror_change = 1;
 
@@ -997,6 +1084,9 @@ static enum surface_update_type get_plane_info_update_type(const struct dc_surfa
 		 */
 		update_flags->bits.bpp_change = 1;
 
+	if (u->gamma && dce_use_lut(u->plane_info->format))
+		update_flags->bits.gamma_change = 1;
+
 	if (memcmp(&u->plane_info->tiling_info, &u->surface->tiling_info,
 			sizeof(union dc_tiling_info)) != 0) {
 		update_flags->bits.swizzle_change = 1;
@@ -1012,8 +1102,10 @@ static enum surface_update_type get_plane_info_update_type(const struct dc_surfa
 
 	if (update_flags->bits.rotation_change
 			|| update_flags->bits.stereo_format_change
+			|| update_flags->bits.gamma_change
 			|| update_flags->bits.bpp_change
-			|| update_flags->bits.bandwidth_change)
+			|| update_flags->bits.bandwidth_change
+			|| update_flags->bits.output_tf_change)
 		return UPDATE_TYPE_FULL;
 
 	return UPDATE_TYPE_MED;
@@ -1092,12 +1184,12 @@ static enum surface_update_type det_surface_update(const struct dc *dc,
 	elevate_update_type(&overall_type, type);
 
 	if (u->in_transfer_func)
-		update_flags->bits.in_transfer_func = 1;
+		update_flags->bits.in_transfer_func_change = 1;
 
 	if (u->input_csc_color_matrix)
 		update_flags->bits.input_csc_change = 1;
 
-	if (update_flags->bits.in_transfer_func
+	if (update_flags->bits.in_transfer_func_change
 			|| update_flags->bits.input_csc_change) {
 		type = UPDATE_TYPE_MED;
 		elevate_update_type(&overall_type, type);

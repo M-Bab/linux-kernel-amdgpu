@@ -48,6 +48,7 @@
 #include "smu7_thermal.h"
 #include "smu7_clockpowergating.h"
 #include "processpptables.h"
+#include "pp_thermal.h"
 
 #define MC_CG_ARB_FREQ_F0           0x0a
 #define MC_CG_ARB_FREQ_F1           0x0b
@@ -2266,14 +2267,18 @@ static int smu7_set_private_data_based_on_pptable_v0(struct pp_hwmgr *hwmgr)
 	struct phm_clock_voltage_dependency_table *allowed_mclk_vddci_table = hwmgr->dyn_state.vddci_dependency_on_mclk;
 
 	PP_ASSERT_WITH_CODE(allowed_sclk_vddc_table != NULL,
-		"VDDC dependency on SCLK table is missing. This table is mandatory\n", return -EINVAL);
+		"VDDC dependency on SCLK table is missing. This table is mandatory",
+		return -EINVAL);
 	PP_ASSERT_WITH_CODE(allowed_sclk_vddc_table->count >= 1,
-		"VDDC dependency on SCLK table has to have is missing. This table is mandatory\n", return -EINVAL);
+		"VDDC dependency on SCLK table has to have is missing. This table is mandatory",
+		return -EINVAL);
 
 	PP_ASSERT_WITH_CODE(allowed_mclk_vddc_table != NULL,
-		"VDDC dependency on MCLK table is missing. This table is mandatory\n", return -EINVAL);
+		"VDDC dependency on MCLK table is missing. This table is mandatory",
+		return -EINVAL);
 	PP_ASSERT_WITH_CODE(allowed_mclk_vddc_table->count >= 1,
-		"VDD dependency on MCLK table has to have is missing. This table is mandatory\n", return -EINVAL);
+		"VDD dependency on MCLK table has to have is missing. This table is mandatory",
+		return -EINVAL);
 
 	data->min_vddc_in_pptable = (uint16_t)allowed_sclk_vddc_table->entries[0].v;
 	data->max_vddc_in_pptable = (uint16_t)allowed_sclk_vddc_table->entries[allowed_sclk_vddc_table->count - 1].v;
@@ -4651,6 +4656,44 @@ static int smu7_notify_cac_buffer_info(struct pp_hwmgr *hwmgr,
 	return 0;
 }
 
+static int smu7_get_max_high_clocks(struct pp_hwmgr *hwmgr,
+					struct amd_pp_simple_clock_info *clocks)
+{
+	struct smu7_hwmgr *data = (struct smu7_hwmgr *)(hwmgr->backend);
+	struct smu7_single_dpm_table *sclk_table = &(data->dpm_table.sclk_table);
+	struct smu7_single_dpm_table *mclk_table = &(data->dpm_table.mclk_table);
+
+	if (clocks == NULL)
+		return -EINVAL;
+
+	clocks->memory_max_clock = mclk_table->count > 1 ?
+				mclk_table->dpm_levels[mclk_table->count-1].value :
+				mclk_table->dpm_levels[0].value;
+	clocks->engine_max_clock = sclk_table->count > 1 ?
+				sclk_table->dpm_levels[sclk_table->count-1].value :
+				sclk_table->dpm_levels[0].value;
+	return 0;
+}
+
+static int smu7_get_thermal_temperature_range(struct pp_hwmgr *hwmgr,
+		struct PP_TemperatureRange *thermal_data)
+{
+	struct smu7_hwmgr *data = (struct smu7_hwmgr *)(hwmgr->backend);
+	struct phm_ppt_v1_information *table_info =
+			(struct phm_ppt_v1_information *)hwmgr->pptable;
+
+	memcpy(thermal_data, &SMU7ThermalPolicy[0], sizeof(struct PP_TemperatureRange));
+
+	if (hwmgr->pp_table_version == PP_TABLE_V1)
+		thermal_data->max = table_info->cac_dtp_table->usSoftwareShutdownTemp *
+			PP_TEMPERATURE_UNITS_PER_CENTIGRADES;
+	else if (hwmgr->pp_table_version == PP_TABLE_V0)
+		thermal_data->max = data->thermal_temp_setting.temperature_shutdown *
+			PP_TEMPERATURE_UNITS_PER_CENTIGRADES;
+
+	return 0;
+}
+
 static const struct pp_hwmgr_func smu7_hwmgr_funcs = {
 	.backend_init = &smu7_hwmgr_backend_init,
 	.backend_fini = &smu7_hwmgr_backend_fini,
@@ -4703,6 +4746,8 @@ static const struct pp_hwmgr_func smu7_hwmgr_funcs = {
 	.disable_smc_firmware_ctf = smu7_thermal_disable_alert,
 	.start_thermal_controller = smu7_start_thermal_controller,
 	.notify_cac_buffer_info = smu7_notify_cac_buffer_info,
+	.get_max_high_clocks = smu7_get_max_high_clocks,
+	.get_thermal_temperature_range = smu7_get_thermal_temperature_range,
 };
 
 uint8_t smu7_get_sleep_divider_id_from_clock(uint32_t clock,

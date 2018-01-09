@@ -1054,6 +1054,7 @@ static int acquire_first_split_pipe(
 			pipe_ctx->plane_res.ipp = pool->ipps[i];
 			pipe_ctx->plane_res.dpp = pool->dpps[i];
 			pipe_ctx->stream_res.opp = pool->opps[i];
+			pipe_ctx->plane_res.mpcc_inst = pool->dpps[i]->inst;
 			pipe_ctx->pipe_idx = i;
 
 			pipe_ctx->stream = stream;
@@ -1360,9 +1361,6 @@ bool dc_is_stream_scaling_unchanged(
 	return true;
 }
 
-/* Maximum TMDS single link pixel clock 165MHz */
-#define TMDS_MAX_PIXEL_CLOCK_IN_KHZ 165000
-
 static void update_stream_engine_usage(
 		struct resource_context *res_ctx,
 		const struct resource_pool *pool,
@@ -1409,6 +1407,8 @@ static int acquire_first_free_pipe(
 			pipe_ctx->plane_res.xfm = pool->transforms[i];
 			pipe_ctx->plane_res.dpp = pool->dpps[i];
 			pipe_ctx->stream_res.opp = pool->opps[i];
+			if (pool->dpps[i])
+				pipe_ctx->plane_res.mpcc_inst = pool->dpps[i]->inst;
 			pipe_ctx->pipe_idx = i;
 
 
@@ -1554,6 +1554,9 @@ enum dc_status dc_remove_stream_from_ctx(
 			resource_unreference_clock_source(&new_ctx->res_ctx,
 							  dc->res_pool,
 							  del_pipe->clock_source);
+
+			if (dc->res_pool->funcs->remove_stream_from_ctx)
+				dc->res_pool->funcs->remove_stream_from_ctx(dc, new_ctx, stream);
 
 			memset(del_pipe, 0, sizeof(*del_pipe));
 
