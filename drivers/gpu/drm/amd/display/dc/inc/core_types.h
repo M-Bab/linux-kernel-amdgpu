@@ -119,6 +119,11 @@ struct resource_funcs {
 			struct dc *dc,
 			struct dc_state *new_ctx,
 			struct dc_stream_state *dc_stream);
+
+	enum dc_status (*remove_stream_from_ctx)(
+				struct dc *dc,
+				struct dc_state *new_ctx,
+				struct dc_stream_state *stream);
 };
 
 struct audio_support{
@@ -188,6 +193,7 @@ struct plane_resource {
 	struct input_pixel_processor *ipp;
 	struct transform *xfm;
 	struct dpp *dpp;
+	uint8_t mpcc_inst;
 };
 
 struct pipe_ctx {

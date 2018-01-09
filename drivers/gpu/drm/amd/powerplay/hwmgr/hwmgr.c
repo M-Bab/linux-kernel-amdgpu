@@ -60,6 +60,11 @@ uint8_t convert_to_vid(uint16_t vddc)
 	return (uint8_t) ((6200 - (vddc * VOLTAGE_SCALE)) / 25);
 }
 
+uint16_t convert_to_vddc(uint8_t vid)
+{
+	return (uint16_t) ((6200 - (vid * 25)) / VOLTAGE_SCALE);
+}
+
 static int phm_get_pci_bus_devfn(struct pp_hwmgr *hwmgr,
 		struct cgs_system_info *sys_info)
 {
@@ -261,7 +266,7 @@ int hwmgr_hw_init(struct pp_instance *handle)
 	ret = phm_enable_dynamic_state_management(hwmgr);
 	if (ret)
 		goto err2;
-	ret = phm_start_thermal_controller(hwmgr, NULL);
+	ret = phm_start_thermal_controller(hwmgr);
 	ret |= psm_set_performance_states(hwmgr);
 	if (ret)
 		goto err2;
@@ -341,7 +346,7 @@ int hwmgr_hw_resume(struct pp_instance *handle)
 	ret = phm_enable_dynamic_state_management(hwmgr);
 	if (ret)
 		return ret;
-	ret = phm_start_thermal_controller(hwmgr, NULL);
+	ret = phm_start_thermal_controller(hwmgr);
 	if (ret)
 		return ret;
 
@@ -369,7 +374,7 @@ static enum PP_StateUILabel power_state_convert(enum amd_pm_state_type  state)
 }
 
 int hwmgr_handle_task(struct pp_instance *handle, enum amd_pp_task task_id,
-		void *input, void *output)
+		enum amd_pm_state_type *user_state)
 {
 	int ret = 0;
 	struct pp_hwmgr *hwmgr;
@@ -391,17 +396,15 @@ int hwmgr_handle_task(struct pp_instance *handle, enum amd_pp_task task_id,
 		break;
 	case AMD_PP_TASK_ENABLE_USER_STATE:
 	{
-		enum amd_pm_state_type ps;
 		enum PP_StateUILabel requested_ui_label;
 		struct pp_power_state *requested_ps = NULL;
 
-		if (input == NULL) {
+		if (user_state == NULL) {
 			ret = -EINVAL;
 			break;
 		}
-		ps = *(unsigned long *)input;
 
-		requested_ui_label = power_state_convert(ps);
+		requested_ui_label = power_state_convert(*user_state);
 		ret = psm_set_user_performance_state(hwmgr, requested_ui_label, &requested_ps);
 		if (ret)
 			return ret;
