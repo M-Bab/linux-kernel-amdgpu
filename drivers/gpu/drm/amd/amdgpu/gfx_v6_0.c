@@ -2359,25 +2359,7 @@ static void gfx_v6_0_ring_emit_vm_flush(struct amdgpu_ring *ring,
 {
 	int usepfp = (ring->funcs->type == AMDGPU_RING_TYPE_GFX);
 
-	/* write new base address */
-	amdgpu_ring_write(ring, PACKET3(PACKET3_WRITE_DATA, 3));
-	amdgpu_ring_write(ring, (WRITE_DATA_ENGINE_SEL(1) |
-				 WRITE_DATA_DST_SEL(0)));
-	if (vmid < 8) {
-		amdgpu_ring_write(ring, (mmVM_CONTEXT0_PAGE_TABLE_BASE_ADDR + vmid ));
-	} else {
-		amdgpu_ring_write(ring, (mmVM_CONTEXT8_PAGE_TABLE_BASE_ADDR + (vmid - 8)));
-	}
-	amdgpu_ring_write(ring, 0);
-	amdgpu_ring_write(ring, pd_addr >> 12);
-
-	/* bits 0-15 are the VM contexts0-15 */
-	amdgpu_ring_write(ring, PACKET3(PACKET3_WRITE_DATA, 3));
-	amdgpu_ring_write(ring, (WRITE_DATA_ENGINE_SEL(1) |
-				 WRITE_DATA_DST_SEL(0)));
-	amdgpu_ring_write(ring, mmVM_INVALIDATE_REQUEST);
-	amdgpu_ring_write(ring, 0);
-	amdgpu_ring_write(ring, 1 << vmid);
+	amdgpu_gmc_emit_flush_gpu_tlb(ring, vmid, pasid, pd_addr);
 
 	/* wait for the invalidate to complete */
 	amdgpu_ring_write(ring, PACKET3(PACKET3_WAIT_REG_MEM, 5));
