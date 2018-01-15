@@ -451,6 +451,14 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	else
 		init_data.log_mask = DC_MIN_LOG_MASK;
 
+	/*
+	 * TODO debug why this doesn't work on Raven
+	 */
+	if (adev->flags & AMD_IS_APU &&
+	    adev->asic_type >= CHIP_CARRIZO &&
+	    adev->asic_type < CHIP_RAVEN)
+		init_data.flags.gpu_vm_support = true;
+
 	/* Display Core create. */
 	adev->dm.dc = dc_create(&init_data);
 
@@ -3015,11 +3023,13 @@ static int dm_plane_helper_prepare_fb(struct drm_plane *plane,
 {
 	struct amdgpu_framebuffer *afb;
 	struct drm_gem_object *obj;
+	struct amdgpu_device *adev;
 	struct amdgpu_bo *rbo;
 	uint64_t chroma_addr = 0;
-	int r;
 	struct dm_plane_state *dm_plane_state_new, *dm_plane_state_old;
 	unsigned int awidth;
+	uint32_t domain;
+	int r;
 
 	dm_plane_state_old = to_dm_plane_state(plane->state);
 	dm_plane_state_new = to_dm_plane_state(new_state);
@@ -3033,12 +3043,17 @@ static int dm_plane_helper_prepare_fb(struct drm_plane *plane,
 
 	obj = afb->obj;
 	rbo = gem_to_amdgpu_bo(obj);
+	adev = amdgpu_ttm_adev(rbo->tbo.bdev);
 	r = amdgpu_bo_reserve(rbo, false);
 	if (unlikely(r != 0))
 		return r;
 
-	r = amdgpu_bo_pin(rbo, AMDGPU_GEM_DOMAIN_VRAM, &afb->address);
+	if (plane->type != DRM_PLANE_TYPE_CURSOR)
+		domain = amdgpu_display_framebuffer_domains(adev);
+	else
+		domain = AMDGPU_GEM_DOMAIN_VRAM;
 
+	r = amdgpu_bo_pin(rbo, domain, &afb->address);
 
 	amdgpu_bo_unreserve(rbo);
 
