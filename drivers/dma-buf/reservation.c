@@ -374,9 +374,8 @@ EXPORT_SYMBOL(reservation_object_copy_fences);
  * @pshared: the array of shared fence ptrs returned (array is krealloc'd to
  * the required size, and must be freed by caller)
  *
- * Retrieve all fences from the reservation object. If the pointer for the
- * exclusive fence is not specified the fence is put into the array of the
- * shared fences as well. Returns either zero or -ENOMEM.
+ * RETURNS
+ * Zero or -errno
  */
 int reservation_object_get_fences_rcu(struct reservation_object *obj,
 				      struct dma_fence **pfence_excl,
@@ -390,8 +389,8 @@ int reservation_object_get_fences_rcu(struct reservation_object *obj,
 
 	do {
 		struct reservation_object_list *fobj;
-		unsigned int i, seq;
-		size_t sz = 0;
+		unsigned seq;
+		unsigned int i;
 
 		shared_count = i = 0;
 
@@ -403,14 +402,9 @@ int reservation_object_get_fences_rcu(struct reservation_object *obj,
 			goto unlock;
 
 		fobj = rcu_dereference(obj->fence);
-		if (fobj)
-			sz += sizeof(*shared) * fobj->shared_max;
-
-		if (!pfence_excl && fence_excl)
-			sz += sizeof(*shared);
-
-		if (sz) {
+		if (fobj) {
 			struct dma_fence **nshared;
+			size_t sz = sizeof(*shared) * fobj->shared_max;
 
 			nshared = krealloc(shared, sz,
 					   GFP_NOWAIT | __GFP_NOWARN);
@@ -426,18 +420,12 @@ int reservation_object_get_fences_rcu(struct reservation_object *obj,
 				break;
 			}
 			shared = nshared;
-			shared_count = fobj ? fobj->shared_count : 0;
+			shared_count = fobj->shared_count;
+
 			for (i = 0; i < shared_count; ++i) {
 				shared[i] = rcu_dereference(fobj->shared[i]);
 				if (!dma_fence_get_rcu(shared[i]))
 					break;
-			}
-
-			if (!pfence_excl && fence_excl) {
-				shared[i] = fence_excl;
-				fence_excl = NULL;
-				++i;
-				++shared_count;
 			}
 		}
 
@@ -460,8 +448,7 @@ unlock:
 
 	*pshared_count = shared_count;
 	*pshared = shared;
-	if (pfence_excl)
-		*pfence_excl = fence_excl;
+	*pfence_excl = fence_excl;
 
 	return ret;
 }
