@@ -1060,8 +1060,7 @@ static void uvd_v6_0_enc_ring_emit_ib(struct amdgpu_ring *ring,
 }
 
 static void uvd_v6_0_ring_emit_vm_flush(struct amdgpu_ring *ring,
-					unsigned vmid, unsigned pasid,
-					uint64_t pd_addr)
+					 unsigned vmid, uint64_t pd_addr)
 {
 	uint32_t reg;
 
@@ -1128,8 +1127,7 @@ static void uvd_v6_0_enc_ring_insert_end(struct amdgpu_ring *ring)
 }
 
 static void uvd_v6_0_enc_ring_emit_vm_flush(struct amdgpu_ring *ring,
-					    unsigned int vmid, unsigned pasid,
-					    uint64_t pd_addr)
+        unsigned int vmid, uint64_t pd_addr)
 {
 	amdgpu_ring_write(ring, HEVC_ENC_CMD_UPDATE_PTB);
 	amdgpu_ring_write(ring, vmid);

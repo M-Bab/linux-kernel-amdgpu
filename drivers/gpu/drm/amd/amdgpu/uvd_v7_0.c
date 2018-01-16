@@ -1291,8 +1291,7 @@ static void uvd_v7_0_vm_reg_wait(struct amdgpu_ring *ring,
 }
 
 static void uvd_v7_0_ring_emit_vm_flush(struct amdgpu_ring *ring,
-					unsigned vmid, unsigned pasid,
-					uint64_t pd_addr)
+					unsigned vmid, uint64_t pd_addr)
 {
 	struct amdgpu_vmhub *hub = &ring->adev->vmhub[ring->funcs->vmhub];
 	uint32_t req = ring->adev->gmc.gmc_funcs->get_invalidate_req(vmid);
@@ -1344,8 +1343,7 @@ static void uvd_v7_0_enc_ring_insert_end(struct amdgpu_ring *ring)
 }
 
 static void uvd_v7_0_enc_ring_emit_vm_flush(struct amdgpu_ring *ring,
-					    unsigned int vmid, unsigned pasid,
-					    uint64_t pd_addr)
+			 unsigned int vmid, uint64_t pd_addr)
 {
 	struct amdgpu_vmhub *hub = &ring->adev->vmhub[ring->funcs->vmhub];
 	uint32_t req = ring->adev->gmc.gmc_funcs->get_invalidate_req(vmid);
