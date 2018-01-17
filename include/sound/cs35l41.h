@@ -47,4 +47,31 @@ struct cs35l41_platform_data {
 	struct classh_cfg classh_config;
 };
 
+struct cs35l41_private {
+	struct wm_adsp dsp; /* needs to be first member */
+	struct snd_soc_codec *codec;
+	struct cs35l41_platform_data pdata;
+	struct device *dev;
+	struct regmap *regmap;
+	struct regulator_bulk_data supplies[2];
+	int num_supplies;
+	int irq;
+	int clksrc;
+	int extclk_freq;
+	int extclk_cfg;
+	int sclk;
+	bool tdm_mode;
+	bool i2s_mode;
+	bool swire_mode;
+	bool halo_booted;
+	/* GPIO for /RST */
+	struct gpio_desc *reset_gpio;
+	struct completion global_pup_done;
+	struct completion global_pdn_done;
+	struct mutex rate_lock;
+};
+
+int cs35l41_probe(struct cs35l41_private *cs35l41,
+				struct cs35l41_platform_data *pdata);
+
 #endif /* __CS35L41_H */
