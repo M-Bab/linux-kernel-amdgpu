@@ -1189,6 +1189,8 @@ static int cz_phm_unforce_dpm_levels(struct pp_hwmgr *hwmgr)
 
 	cz_hwmgr->sclk_dpm.soft_min_clk = table->entries[0].clk;
 	cz_hwmgr->sclk_dpm.hard_min_clk = table->entries[0].clk;
+	hwmgr->pstate_sclk = table->entries[0].clk;
+	hwmgr->pstate_mclk = 0;
 
 	level = cz_get_max_sclk_level(hwmgr) - 1;
 
@@ -1582,6 +1584,7 @@ static int cz_force_clock_level(struct pp_hwmgr *hwmgr,
 static int cz_print_clock_levels(struct pp_hwmgr *hwmgr,
 		enum pp_clock_type type, char *buf)
 {
+	struct cz_hwmgr *data = (struct cz_hwmgr *)(hwmgr->backend);
 	struct phm_clock_voltage_dependency_table *sclk_table =
 			hwmgr->dyn_state.vddc_dependency_on_sclk;
 	int i, now, size = 0;
@@ -1598,6 +1601,18 @@ static int cz_print_clock_levels(struct pp_hwmgr *hwmgr,
 			size += sprintf(buf + size, "%d: %uMhz %s\n",
 					i, sclk_table->entries[i].clk / 100,
 					(i == now) ? "*" : "");
+		break;
+	case PP_MCLK:
+		now = PHM_GET_FIELD(cgs_read_ind_register(hwmgr->device,
+				CGS_IND_REG__SMC,
+				ixTARGET_AND_CURRENT_PROFILE_INDEX),
+				TARGET_AND_CURRENT_PROFILE_INDEX,
+				CURR_MCLK_INDEX);
+
+		for (i = CZ_NUM_NBPMEMORYCLOCK; i > 0; i--)
+			size += sprintf(buf + size, "%d: %uMhz %s\n",
+					CZ_NUM_NBPMEMORYCLOCK-i, data->sys_info.nbp_memory_clock[i-1] / 100,
+					(CZ_NUM_NBPMEMORYCLOCK-i == now) ? "*" : "");
 		break;
 	default:
 		break;

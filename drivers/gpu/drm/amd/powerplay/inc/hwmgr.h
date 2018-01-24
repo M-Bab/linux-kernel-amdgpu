@@ -84,6 +84,7 @@ enum PP_FEATURE_MASK {
 	PP_OD_FUZZY_FAN_CONTROL_MASK = 0x800,
 	PP_SOCCLK_DPM_MASK = 0x1000,
 	PP_DCEFCLK_DPM_MASK = 0x2000,
+	PP_OVERDRIVE_MASK = 0x4000,
 };
 
 enum PHM_BackEnd_Magic {
@@ -342,6 +343,11 @@ struct pp_hwmgr_func {
 					uint32_t size);
 	int (*get_thermal_temperature_range)(struct pp_hwmgr *hwmgr,
 					struct PP_TemperatureRange *range);
+	int (*get_power_profile_mode)(struct pp_hwmgr *hwmgr, char *buf);
+	int (*set_power_profile_mode)(struct pp_hwmgr *hwmgr, long *input, uint32_t size);
+	int (*odn_edit_dpm_table)(struct pp_hwmgr *hwmgr,
+					enum PP_OD_DPM_TABLE_COMMAND type,
+					long *input, uint32_t size);
 };
 
 struct pp_table_func {
@@ -750,6 +756,10 @@ struct pp_hwmgr {
 	struct amd_pp_profile default_compute_power_profile;
 	enum amd_pp_profile_type current_power_profile;
 	bool en_umd_pstate;
+	uint32_t power_profile_mode;
+	uint32_t pstate_sclk;
+	uint32_t pstate_mclk;
+	bool od_enabled;
 };
 
 struct cgs_irq_src_funcs {

@@ -167,9 +167,11 @@ int hwmgr_early_init(struct pp_instance *handle)
 		hwmgr->feature_mask &= ~(PP_VBI_TIME_SUPPORT_MASK |
 					PP_ENABLE_GFX_CG_THRU_SMU);
 		hwmgr->pp_table_version = PP_TABLE_V0;
+		hwmgr->od_enabled = false;
 		smu7_init_function_pointers(hwmgr);
 		break;
 	case AMDGPU_FAMILY_CZ:
+		hwmgr->od_enabled = false;
 		hwmgr->smumgr_funcs = &cz_smu_funcs;
 		cz_init_function_pointers(hwmgr);
 		break;
@@ -181,6 +183,7 @@ int hwmgr_early_init(struct pp_instance *handle)
 			hwmgr->feature_mask &= ~ (PP_VBI_TIME_SUPPORT_MASK |
 						PP_ENABLE_GFX_CG_THRU_SMU);
 			hwmgr->pp_table_version = PP_TABLE_V0;
+			hwmgr->od_enabled = false;
 			break;
 		case CHIP_TONGA:
 			hwmgr->smumgr_funcs = &tonga_smu_funcs;
@@ -218,6 +221,7 @@ int hwmgr_early_init(struct pp_instance *handle)
 	case AMDGPU_FAMILY_RV:
 		switch (hwmgr->chip_id) {
 		case CHIP_RAVEN:
+			hwmgr->od_enabled = false;
 			hwmgr->smumgr_funcs = &rv_smu_funcs;
 			rv_init_function_pointers(hwmgr);
 			break;
@@ -934,6 +938,9 @@ int hwmgr_set_user_specify_caps(struct pp_hwmgr *hwmgr)
 		phm_cap_unset(hwmgr->platform_descriptor.platformCaps,
 			PHM_PlatformCaps_CAC);
 	}
+
+	if (hwmgr->feature_mask & PP_OVERDRIVE_MASK)
+		hwmgr->od_enabled = true;
 
 	return 0;
 }

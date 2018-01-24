@@ -374,8 +374,9 @@ EXPORT_SYMBOL(reservation_object_copy_fences);
  * @pshared: the array of shared fence ptrs returned (array is krealloc'd to
  * the required size, and must be freed by caller)
  *
- * RETURNS
- * Zero or -errno
+ * Retrieve all fences from the reservation object. If the pointer for the
+ * exclusive fence is not specified the fence is put into the array of the
+ * shared fences as well. Returns either zero or -ENOMEM.
  */
 int reservation_object_get_fences_rcu(struct reservation_object *obj,
 				      struct dma_fence **pfence_excl,
@@ -389,8 +390,8 @@ int reservation_object_get_fences_rcu(struct reservation_object *obj,
 
 	do {
 		struct reservation_object_list *fobj;
-		unsigned seq;
-		unsigned int i;
+		unsigned int i, seq;
+		size_t sz = 0;
 
 		shared_count = i = 0;
 
@@ -402,9 +403,14 @@ int reservation_object_get_fences_rcu(struct reservation_object *obj,
 			goto unlock;
 
 		fobj = rcu_dereference(obj->fence);
-		if (fobj) {
+		if (fobj)
+			sz += sizeof(*shared) * fobj->shared_max;
+
+		if (!pfence_excl && fence_excl)
+			sz += sizeof(*shared);
+
+		if (sz) {
 			struct dma_fence **nshared;
-			size_t sz = sizeof(*shared) * fobj->shared_max;
 
 			nshared = krealloc(shared, sz,
 					   GFP_NOWAIT | __GFP_NOWARN);
@@ -420,12 +426,18 @@ int reservation_object_get_fences_rcu(struct reservation_object *obj,
 				break;
 			}
 			shared = nshared;
-			shared_count = fobj->shared_count;
-
+			shared_count = fobj ? fobj->shared_count : 0;
 			for (i = 0; i < shared_count; ++i) {
 				shared[i] = rcu_dereference(fobj->shared[i]);
 				if (!dma_fence_get_rcu(shared[i]))
 					break;
+			}
+
+			if (!pfence_excl && fence_excl) {
+				shared[i] = fence_excl;
+				fence_excl = NULL;
+				++i;
+				++shared_count;
 			}
 		}
 
@@ -448,7 +460,8 @@ unlock:
 
 	*pshared_count = shared_count;
 	*pshared = shared;
-	*pfence_excl = fence_excl;
+	if (pfence_excl)
+		*pfence_excl = fence_excl;
 
 	return ret;
 }
@@ -471,11 +484,13 @@ long reservation_object_wait_timeout_rcu(struct reservation_object *obj,
 					 unsigned long timeout)
 {
 	struct dma_fence *fence;
-	unsigned seq, shared_count, i = 0;
+	unsigned seq, shared_count;
 	long ret = timeout ? timeout : 1;
+	int i;
 
 retry:
 	shared_count = 0;
+	i = -1;
 	seq = read_seqcount_begin(&obj->seq);
 	rcu_read_lock();
 
@@ -493,14 +508,14 @@ retry:
 		fence = NULL;
 	}
 
-	if (!fence && wait_all) {
+	if (wait_all) {
 		struct reservation_object_list *fobj =
 						rcu_dereference(obj->fence);
 
 		if (fobj)
 			shared_count = fobj->shared_count;
 
-		for (i = 0; i < shared_count; ++i) {
+		for (i = 0; !fence && i < shared_count; ++i) {
 			struct dma_fence *lfence = rcu_dereference(fobj->shared[i]);
 
 			if (test_bit(DMA_FENCE_FLAG_SIGNALED_BIT,

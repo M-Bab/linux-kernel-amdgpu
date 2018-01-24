@@ -992,22 +992,27 @@ static int pp_dpm_read_sensor(void *handle, int idx,
 	int ret = 0;
 
 	ret = pp_check(pp_handle);
-
 	if (ret)
 		return ret;
 
+	if (value == NULL)
+		return -EINVAL;
+
 	hwmgr = pp_handle->hwmgr;
 
-	if (hwmgr->hwmgr_func->read_sensor == NULL) {
-		pr_info("%s was not implemented.\n", __func__);
+	switch (idx) {
+	case AMDGPU_PP_SENSOR_STABLE_PSTATE_SCLK:
+		*((uint32_t *)value) = hwmgr->pstate_sclk;
 		return 0;
+	case AMDGPU_PP_SENSOR_STABLE_PSTATE_MCLK:
+		*((uint32_t *)value) = hwmgr->pstate_mclk;
+		return 0;
+	default:
+		mutex_lock(&pp_handle->pp_lock);
+		ret = hwmgr->hwmgr_func->read_sensor(hwmgr, idx, value, size);
+		mutex_unlock(&pp_handle->pp_lock);
+		return ret;
 	}
-
-	mutex_lock(&pp_handle->pp_lock);
-	ret = hwmgr->hwmgr_func->read_sensor(hwmgr, idx, value, size);
-	mutex_unlock(&pp_handle->pp_lock);
-
-	return ret;
 }
 
 static struct amd_vce_state*
@@ -1079,6 +1084,60 @@ static int pp_dpm_get_power_profile_state(void *handle,
 		return -EINVAL;
 
 	return 0;
+}
+
+static int pp_get_power_profile_mode(void *handle, char *buf)
+{
+	struct pp_hwmgr *hwmgr;
+	struct pp_instance *pp_handle = (struct pp_instance *)handle;
+
+	if (!buf || pp_check(pp_handle))
+		return -EINVAL;
+
+	hwmgr = pp_handle->hwmgr;
+
+	if (hwmgr->hwmgr_func->get_power_profile_mode == NULL) {
+		pr_info("%s was not implemented.\n", __func__);
+		return snprintf(buf, PAGE_SIZE, "\n");
+	}
+
+	return hwmgr->hwmgr_func->get_power_profile_mode(hwmgr, buf);
+}
+
+static int pp_set_power_profile_mode(void *handle, long *input, uint32_t size)
+{
+	struct pp_hwmgr *hwmgr;
+	struct pp_instance *pp_handle = (struct pp_instance *)handle;
+
+	if (pp_check(pp_handle))
+		return -EINVAL;
+
+	hwmgr = pp_handle->hwmgr;
+
+	if (hwmgr->hwmgr_func->set_power_profile_mode == NULL) {
+		pr_info("%s was not implemented.\n", __func__);
+		return -EINVAL;
+	}
+
+	return hwmgr->hwmgr_func->set_power_profile_mode(hwmgr, input, size);
+}
+
+static int pp_odn_edit_dpm_table(void *handle, uint32_t type, long *input, uint32_t size)
+{
+	struct pp_hwmgr *hwmgr;
+	struct pp_instance *pp_handle = (struct pp_instance *)handle;
+
+	if (pp_check(pp_handle))
+		return -EINVAL;
+
+	hwmgr = pp_handle->hwmgr;
+
+	if (hwmgr->hwmgr_func->odn_edit_dpm_table == NULL) {
+		pr_info("%s was not implemented.\n", __func__);
+		return -EINVAL;
+	}
+
+	return hwmgr->hwmgr_func->odn_edit_dpm_table(hwmgr, type, input, size);
 }
 
 static int pp_dpm_set_power_profile_state(void *handle,
@@ -1464,6 +1523,9 @@ const struct amd_pm_funcs pp_dpm_funcs = {
 	.switch_power_profile = pp_dpm_switch_power_profile,
 	.set_clockgating_by_smu = pp_set_clockgating_by_smu,
 	.notify_smu_memory_info = pp_dpm_notify_smu_memory_info,
+	.get_power_profile_mode = pp_get_power_profile_mode,
+	.set_power_profile_mode = pp_set_power_profile_mode,
+	.odn_edit_dpm_table = pp_odn_edit_dpm_table,
 /* export to DC */
 	.get_sclk = pp_dpm_get_sclk,
 	.get_mclk = pp_dpm_get_mclk,

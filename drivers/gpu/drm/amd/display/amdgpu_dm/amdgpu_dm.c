@@ -61,7 +61,8 @@
 
 #include "dcn/dcn_1_0_offset.h"
 #include "dcn/dcn_1_0_sh_mask.h"
-#include "soc15ip.h"
+#include "soc15_hw_ip.h"
+#include "vega10_ip_offset.h"
 
 #include "soc15_common.h"
 #endif
@@ -426,7 +427,7 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	init_data.asic_id.pci_revision_id = adev->rev_id;
 	init_data.asic_id.hw_internal_rev = adev->external_rev_id;
 
-	init_data.asic_id.vram_width = adev->mc.vram_width;
+	init_data.asic_id.vram_width = adev->gmc.vram_width;
 	/* TODO: initialize init_data.asic_id.vram_type here!!!! */
 	init_data.asic_id.atombios_base_address =
 		adev->mode_info.atom_context->bios;
@@ -826,7 +827,7 @@ dm_atomic_state_alloc_free(struct drm_atomic_state *state)
 }
 
 static const struct drm_mode_config_funcs amdgpu_dm_mode_funcs = {
-	.fb_create = amdgpu_user_framebuffer_create,
+	.fb_create = amdgpu_display_user_framebuffer_create,
 	.output_poll_changed = drm_fb_helper_output_poll_changed,
 	.atomic_check = amdgpu_dm_atomic_check,
 	.atomic_commit = amdgpu_dm_atomic_commit,
@@ -1314,9 +1315,9 @@ static int amdgpu_dm_mode_config_init(struct amdgpu_device *adev)
 	/* indicate support of immediate flip */
 	adev->ddev->mode_config.async_page_flip = true;
 
-	adev->ddev->mode_config.fb_base = adev->mc.aper_base;
+	adev->ddev->mode_config.fb_base = adev->gmc.aper_base;
 
-	r = amdgpu_modeset_create_props(adev);
+	r = amdgpu_display_modeset_create_props(adev);
 	if (r)
 		return r;
 
@@ -3725,7 +3726,7 @@ static void manage_dm_interrupts(struct amdgpu_device *adev,
 	 * constant is the same as PFLIP
 	 */
 	int irq_type =
-		amdgpu_crtc_idx_to_irq_type(
+		amdgpu_display_crtc_idx_to_irq_type(
 			adev,
 			acrtc->crtc_id);
 
@@ -3944,9 +3945,9 @@ static void amdgpu_dm_do_flip(struct drm_crtc *crtc,
 	 * targeted by the flip
 	 */
 	while ((acrtc->enabled &&
-		(amdgpu_get_crtc_scanoutpos(adev->ddev, acrtc->crtc_id, 0,
-					&vpos, &hpos, NULL, NULL,
-					&crtc->hwmode)
+		(amdgpu_display_get_crtc_scanoutpos(adev->ddev, acrtc->crtc_id,
+						    0, &vpos, &hpos, NULL,
+						    NULL, &crtc->hwmode)
 		 & (DRM_SCANOUTPOS_VALID | DRM_SCANOUTPOS_IN_VBLANK)) ==
 		(DRM_SCANOUTPOS_VALID | DRM_SCANOUTPOS_IN_VBLANK) &&
 		(int)(target_vblank -
