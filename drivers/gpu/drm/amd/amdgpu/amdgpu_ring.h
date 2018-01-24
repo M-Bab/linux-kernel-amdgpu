@@ -126,9 +126,8 @@ struct amdgpu_ring_funcs {
 			   uint64_t seq, unsigned flags);
 	void (*emit_pipeline_sync)(struct amdgpu_ring *ring);
 	void (*emit_vm_flush)(struct amdgpu_ring *ring, unsigned vmid,
-			      uint64_t pd_addr);
+			      unsigned pasid, uint64_t pd_addr);
 	void (*emit_hdp_flush)(struct amdgpu_ring *ring);
-	void (*emit_hdp_invalidate)(struct amdgpu_ring *ring);
 	void (*emit_gds_switch)(struct amdgpu_ring *ring, uint32_t vmid,
 				uint32_t gds_base, uint32_t gds_size,
 				uint32_t gws_base, uint32_t gws_size,

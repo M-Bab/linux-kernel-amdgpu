@@ -74,9 +74,10 @@
  * - 3.22.0 - Add DRM_AMDGPU_SCHED ioctl
  * - 3.23.0 - Add query for VRAM lost counter
  * - 3.24.0 - Add high priority compute support for gfx9
+ * - 3.25.0 - Add support for sensor query info (stable pstate sclk/mclk).
  */
 #define KMS_DRIVER_MAJOR	3
-#define KMS_DRIVER_MINOR	24
+#define KMS_DRIVER_MINOR	25
 #define KMS_DRIVER_PATCHLEVEL	0
 
 int amdgpu_vram_limit = 0;
@@ -120,7 +121,7 @@ uint amdgpu_pg_mask = 0xffffffff;
 uint amdgpu_sdma_phase_quantum = 32;
 char *amdgpu_disable_cu = NULL;
 char *amdgpu_virtual_display = NULL;
-uint amdgpu_pp_feature_mask = 0xffffffff;
+uint amdgpu_pp_feature_mask = 0x3fff;
 int amdgpu_ngg = 0;
 int amdgpu_prim_buf_per_se = 0;
 int amdgpu_pos_buf_per_se = 0;
@@ -836,8 +837,8 @@ amdgpu_get_crtc_scanout_position(struct drm_device *dev, unsigned int pipe,
 				 ktime_t *stime, ktime_t *etime,
 				 const struct drm_display_mode *mode)
 {
-	return amdgpu_get_crtc_scanoutpos(dev, pipe, 0, vpos, hpos,
-					  stime, etime, mode);
+	return amdgpu_display_get_crtc_scanoutpos(dev, pipe, 0, vpos, hpos,
+						  stime, etime, mode);
 }
 
 static struct drm_driver kms_driver = {
@@ -855,9 +856,6 @@ static struct drm_driver kms_driver = {
 	.disable_vblank = amdgpu_disable_vblank_kms,
 	.get_vblank_timestamp = drm_calc_vbltimestamp_from_scanoutpos,
 	.get_scanout_position = amdgpu_get_crtc_scanout_position,
-	.irq_preinstall = amdgpu_irq_preinstall,
-	.irq_postinstall = amdgpu_irq_postinstall,
-	.irq_uninstall = amdgpu_irq_uninstall,
 	.irq_handler = amdgpu_irq_handler,
 	.ioctls = amdgpu_ioctls_kms,
 	.gem_free_object_unlocked = amdgpu_gem_object_free,

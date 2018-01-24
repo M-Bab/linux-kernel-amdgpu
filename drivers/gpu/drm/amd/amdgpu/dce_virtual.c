@@ -130,9 +130,9 @@ static const struct drm_crtc_funcs dce_virtual_crtc_funcs = {
 	.cursor_set2 = NULL,
 	.cursor_move = NULL,
 	.gamma_set = dce_virtual_crtc_gamma_set,
-	.set_config = amdgpu_crtc_set_config,
+	.set_config = amdgpu_display_crtc_set_config,
 	.destroy = dce_virtual_crtc_destroy,
-	.page_flip_target = amdgpu_crtc_page_flip_target,
+	.page_flip_target = amdgpu_display_crtc_page_flip_target,
 };
 
 static void dce_virtual_crtc_dpms(struct drm_crtc *crtc, int mode)
@@ -149,7 +149,8 @@ static void dce_virtual_crtc_dpms(struct drm_crtc *crtc, int mode)
 	case DRM_MODE_DPMS_ON:
 		amdgpu_crtc->enabled = true;
 		/* Make sure VBLANK interrupts are still enabled */
-		type = amdgpu_crtc_idx_to_irq_type(adev, amdgpu_crtc->crtc_id);
+		type = amdgpu_display_crtc_idx_to_irq_type(adev,
+						amdgpu_crtc->crtc_id);
 		amdgpu_irq_update(adev, &adev->crtc_irq, type);
 		drm_crtc_vblank_on(crtc);
 		break;
@@ -406,9 +407,9 @@ static int dce_virtual_sw_init(void *handle)
 	adev->ddev->mode_config.preferred_depth = 24;
 	adev->ddev->mode_config.prefer_shadow = 1;
 
-	adev->ddev->mode_config.fb_base = adev->mc.aper_base;
+	adev->ddev->mode_config.fb_base = adev->gmc.aper_base;
 
-	r = amdgpu_modeset_create_props(adev);
+	r = amdgpu_display_modeset_create_props(adev);
 	if (r)
 		return r;
 

@@ -860,10 +860,13 @@ static int ci_populate_smc_vddc_table(struct pp_hwmgr *hwmgr,
 		PP_ASSERT_WITH_CODE(0 == result, "do not populate SMC VDDC voltage table", return -EINVAL);
 
 		/* GPIO voltage control */
-		if (SMU7_VOLTAGE_CONTROL_BY_GPIO == data->voltage_control)
-			table->VddcLevel[count].Smio |= data->vddc_voltage_table.entries[count].smio_low;
-		else
+		if (SMU7_VOLTAGE_CONTROL_BY_GPIO == data->voltage_control) {
+			table->VddcLevel[count].Smio = (uint8_t) count;
+			table->Smio[count] |= data->vddc_voltage_table.entries[count].smio_low;
+			table->SmioMaskVddcVid |= data->vddc_voltage_table.entries[count].smio_low;
+		} else {
 			table->VddcLevel[count].Smio = 0;
+		}
 	}
 
 	CONVERT_FROM_HOST_TO_SMC_UL(table->VddcLevelCount);
@@ -885,10 +888,13 @@ static int ci_populate_smc_vdd_ci_table(struct pp_hwmgr *hwmgr,
 				&(data->vddci_voltage_table.entries[count]),
 				&(table->VddciLevel[count]));
 		PP_ASSERT_WITH_CODE(result == 0, "do not populate SMC VDDCI voltage table", return -EINVAL);
-		if (SMU7_VOLTAGE_CONTROL_BY_GPIO == data->vddci_control)
-			table->VddciLevel[count].Smio |= data->vddci_voltage_table.entries[count].smio_low;
-		else
-			table->VddciLevel[count].Smio |= 0;
+		if (SMU7_VOLTAGE_CONTROL_BY_GPIO == data->vddci_control) {
+			table->VddciLevel[count].Smio = (uint8_t) count;
+			table->Smio[count] |= data->vddci_voltage_table.entries[count].smio_low;
+			table->SmioMaskVddciVid |= data->vddci_voltage_table.entries[count].smio_low;
+		} else {
+			table->VddciLevel[count].Smio = 0;
+		}
 	}
 
 	CONVERT_FROM_HOST_TO_SMC_UL(table->VddciLevelCount);
@@ -910,10 +916,13 @@ static int ci_populate_smc_mvdd_table(struct pp_hwmgr *hwmgr,
 				&(data->mvdd_voltage_table.entries[count]),
 				&table->MvddLevel[count]);
 		PP_ASSERT_WITH_CODE(result == 0, "do not populate SMC mvdd voltage table", return -EINVAL);
-		if (SMU7_VOLTAGE_CONTROL_BY_GPIO == data->mvdd_control)
-			table->MvddLevel[count].Smio |= data->mvdd_voltage_table.entries[count].smio_low;
-		else
-			table->MvddLevel[count].Smio |= 0;
+		if (SMU7_VOLTAGE_CONTROL_BY_GPIO == data->mvdd_control) {
+			table->MvddLevel[count].Smio = (uint8_t) count;
+			table->Smio[count] |= data->mvdd_voltage_table.entries[count].smio_low;
+			table->SmioMaskMvddVid |= data->mvdd_voltage_table.entries[count].smio_low;
+		} else {
+			table->MvddLevel[count].Smio = 0;
+		}
 	}
 
 	CONVERT_FROM_HOST_TO_SMC_UL(table->MvddLevelCount);
@@ -1941,6 +1950,37 @@ static int ci_start_smc(struct pp_hwmgr *hwmgr)
 	return 0;
 }
 
+static int ci_populate_vr_config(struct pp_hwmgr *hwmgr, SMU7_Discrete_DpmTable *table)
+{
+	struct smu7_hwmgr *data = (struct smu7_hwmgr *)(hwmgr->backend);
+	uint16_t config;
+
+	config = VR_SVI2_PLANE_1;
+	table->VRConfig |= (config<<VRCONF_VDDGFX_SHIFT);
+
+	if (SMU7_VOLTAGE_CONTROL_BY_SVID2 == data->voltage_control) {
+		config = VR_SVI2_PLANE_2;
+		table->VRConfig |= config;
+	} else {
+		pr_info("VDDCshould be on SVI2 controller!");
+	}
+
+	if (SMU7_VOLTAGE_CONTROL_BY_SVID2 == data->vddci_control) {
+		config = VR_SVI2_PLANE_2;
+		table->VRConfig |= (config<<VRCONF_VDDCI_SHIFT);
+	} else if (SMU7_VOLTAGE_CONTROL_BY_GPIO == data->vddci_control) {
+		config = VR_SMIO_PATTERN_1;
+		table->VRConfig |= (config<<VRCONF_VDDCI_SHIFT);
+	}
+
+	if (SMU7_VOLTAGE_CONTROL_BY_GPIO == data->mvdd_control) {
+		config = VR_SMIO_PATTERN_2;
+		table->VRConfig |= (config<<VRCONF_MVDD_SHIFT);
+	}
+
+	return 0;
+}
+
 static int ci_init_smc_table(struct pp_hwmgr *hwmgr)
 {
 	int result;
@@ -2064,6 +2104,11 @@ static int ci_init_smc_table(struct pp_hwmgr *hwmgr)
 	table->PCIeBootLinkLevel = (uint8_t)data->dpm_table.pcie_speed_table.count;
 	table->PCIeGenInterval = 1;
 
+	result = ci_populate_vr_config(hwmgr, table);
+	PP_ASSERT_WITH_CODE(0 == result,
+			"Failed to populate VRConfig setting!", return result);
+	data->vr_config = table->VRConfig;
+
 	ci_populate_smc_svi2_config(hwmgr, table);
 
 	for (i = 0; i < SMU7_MAX_ENTRIES_SMIO; i++)
@@ -2084,6 +2129,7 @@ static int ci_init_smc_table(struct pp_hwmgr *hwmgr)
 	table->AcDcGpio = SMU7_UNUSED_GPIO_PIN;
 
 	CONVERT_FROM_HOST_TO_SMC_UL(table->SystemFlags);
+	CONVERT_FROM_HOST_TO_SMC_UL(table->VRConfig);
 	CONVERT_FROM_HOST_TO_SMC_UL(table->SmioMaskVddcVid);
 	CONVERT_FROM_HOST_TO_SMC_UL(table->SmioMaskVddcPhase);
 	CONVERT_FROM_HOST_TO_SMC_UL(table->SmioMaskVddciVid);

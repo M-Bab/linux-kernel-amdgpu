@@ -19,16 +19,12 @@
  * @drm: DRM device
  * @pipe: Display pipe structure
  * @dirty_lock: Serializes framebuffer flushing
- * @fbdev_cma: CMA fbdev structure
- * @suspend_state: Atomic state when suspended
  * @fb_funcs: Framebuffer functions used when creating framebuffers
  */
 struct tinydrm_device {
 	struct drm_device *drm;
 	struct drm_simple_display_pipe pipe;
 	struct mutex dirty_lock;
-	struct drm_fbdev_cma *fbdev_cma;
-	struct drm_atomic_state *suspend_state;
 	const struct drm_framebuffer_funcs *fb_funcs;
 };
 
@@ -82,7 +78,6 @@ pipe_to_tinydrm(struct drm_simple_display_pipe *pipe)
 	.type = DRM_MODE_TYPE_DRIVER, \
 	.clock = 1 /* pass validation */
 
-void tinydrm_lastclose(struct drm_device *drm);
 void tinydrm_gem_cma_free_object(struct drm_gem_object *gem_obj);
 struct drm_gem_object *
 tinydrm_gem_cma_prime_import_sg_table(struct drm_device *drm,
@@ -93,8 +88,6 @@ int devm_tinydrm_init(struct device *parent, struct tinydrm_device *tdev,
 		      struct drm_driver *driver);
 int devm_tinydrm_register(struct tinydrm_device *tdev);
 void tinydrm_shutdown(struct tinydrm_device *tdev);
-int tinydrm_suspend(struct tinydrm_device *tdev);
-int tinydrm_resume(struct tinydrm_device *tdev);
 
 void tinydrm_display_pipe_update(struct drm_simple_display_pipe *pipe,
 				 struct drm_plane_state *old_state);
