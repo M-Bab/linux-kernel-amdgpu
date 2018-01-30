@@ -1236,6 +1236,10 @@ static void put_ctx(struct perf_event_context *ctx)
  *	      perf_event_context::lock
  *	    perf_event::mmap_mutex
  *	    mmap_sem
+ *
+ *    cpu_hotplug_lock
+ *      pmus_lock
+ *	  cpuctx->mutex / perf_event_context::mutex
  */
 static struct perf_event_context *
 perf_event_ctx_lock_nested(struct perf_event *event, int nesting)
@@ -4201,6 +4205,7 @@ int perf_event_release_kernel(struct perf_event *event)
 {
 	struct perf_event_context *ctx = event->ctx;
 	struct perf_event *child, *tmp;
+	LIST_HEAD(free_list);
 
 	/*
 	 * If we got here through err_file: fput(event_file); we will not have
@@ -4273,8 +4278,7 @@ again:
 					       struct perf_event, child_list);
 		if (tmp == child) {
 			perf_remove_from_context(child, DETACH_GROUP);
-			list_del(&child->child_list);
-			free_event(child);
+			list_move(&child->child_list, &free_list);
 			/*
 			 * This matches the refcount bump in inherit_event();
 			 * this can't be the last reference.
@@ -4288,6 +4292,11 @@ again:
 		goto again;
 	}
 	mutex_unlock(&event->child_mutex);
+
+	list_for_each_entry_safe(child, tmp, &free_list, child_list) {
+		list_del(&child->child_list);
+		free_event(child);
+	}
 
 no_ctx:
 	put_event(event); /* Must be the 'last' reference */
@@ -8521,6 +8530,29 @@ fail_clear_files:
 	return ret;
 }
 
+static int
+perf_tracepoint_set_filter(struct perf_event *event, char *filter_str)
+{
+	struct perf_event_context *ctx = event->ctx;
+	int ret;
+
+	/*
+	 * Beware, here be dragons!!
+	 *
+	 * the tracepoint muck will deadlock against ctx->mutex, but the tracepoint
+	 * stuff does not actually need it. So temporarily drop ctx->mutex. As per
+	 * perf_event_ctx_lock() we already have a reference on ctx.
+	 *
+	 * This can result in event getting moved to a different ctx, but that
+	 * does not affect the tracepoint state.
+	 */
+	mutex_unlock(&ctx->mutex);
+	ret = ftrace_profile_set_filter(event, event->attr.config, filter_str);
+	mutex_lock(&ctx->mutex);
+
+	return ret;
+}
+
 static int perf_event_set_filter(struct perf_event *event, void __user *arg)
 {
 	char *filter_str;
@@ -8537,8 +8569,7 @@ static int perf_event_set_filter(struct perf_event *event, void __user *arg)
 
 	if (IS_ENABLED(CONFIG_EVENT_TRACING) &&
 	    event->attr.type == PERF_TYPE_TRACEPOINT)
-		ret = ftrace_profile_set_filter(event, event->attr.config,
-						filter_str);
+		ret = perf_tracepoint_set_filter(event, filter_str);
 	else if (has_addr_filter(event))
 		ret = perf_event_set_addr_filter(event, filter_str);
 
@@ -9173,7 +9204,13 @@ static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 	if (!try_module_get(pmu->module))
 		return -ENODEV;
 
-	if (event->group_leader != event) {
+	/*
+	 * A number of pmu->event_init() methods iterate the sibling_list to,
+	 * for example, validate if the group fits on the PMU. Therefore,
+	 * if this is a sibling event, acquire the ctx->mutex to protect
+	 * the sibling_list.
+	 */
+	if (event->group_leader != event && pmu->task_ctx_nr != perf_sw_context) {
 		/*
 		 * This ctx->mutex can nest when we're called through
 		 * inheritance. See the perf_event_ctx_lock_nested() comment.
