@@ -451,6 +451,7 @@ static const struct dc_debug debug_defaults_drv = {
 		.disable_stereo_support = true,
 		.vsr_support = true,
 		.performance_trace = false,
+		.az_endpoint_mute_only = true,
 };
 
 static const struct dc_debug debug_defaults_diags = {
@@ -1445,6 +1446,7 @@ static bool construct(
 
 	/* valid pipe num */
 	pool->base.pipe_count = j;
+	pool->base.timing_generator_count = j;
 
 	/* within dml lib, it is hard code to 4. If ASIC pipe is fused,
 	 * the value may be changed

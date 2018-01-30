@@ -411,12 +411,6 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	/* Zero all the fields */
 	memset(&init_data, 0, sizeof(init_data));
 
-	/* initialize DAL's lock (for SYNC context use) */
-	spin_lock_init(&adev->dm.dal_lock);
-
-	/* initialize DAL's mutex */
-	mutex_init(&adev->dm.dal_mutex);
-
 	if(amdgpu_dm_irq_init(adev)) {
 		DRM_ERROR("amdgpu: failed to initialize DM IRQ support.\n");
 		goto error;
@@ -2453,6 +2447,7 @@ create_stream_for_sink(struct amdgpu_dm_connector *aconnector,
 				dm_state ? (dm_state->scaling != RMX_OFF) : false);
 	}
 
+	drm_mode_set_crtcinfo(&mode, 0);
 	fill_stream_properties_from_drm_display_mode(stream,
 			&mode, &aconnector->base);
 	update_stream_scaling_settings(&mode, dm_state, stream);
@@ -2461,6 +2456,8 @@ create_stream_for_sink(struct amdgpu_dm_connector *aconnector,
 		&stream->audio_info,
 		drm_connector,
 		aconnector->dc_sink);
+
+	update_stream_signal(stream);
 
 	return stream;
 }
@@ -2865,13 +2862,6 @@ int amdgpu_dm_connector_mode_valid(struct drm_connector *connector,
 		DRM_ERROR("Failed to create stream for sink!\n");
 		goto fail;
 	}
-
-	drm_mode_set_crtcinfo(mode, 0);
-	fill_stream_properties_from_drm_display_mode(stream, mode, connector);
-
-	stream->src.width = mode->hdisplay;
-	stream->src.height = mode->vdisplay;
-	stream->dst = stream->src;
 
 	dc_result = dc_validate_stream(adev->dm.dc, stream);
 

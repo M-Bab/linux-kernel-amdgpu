@@ -133,7 +133,7 @@ void dcn10_log_hw_state(struct dc *dc)
 		DTN_INFO("[%d]:\t %xh \t %xh \t %d \t %d \t "
 				"%xh \t %xh \t %xh \t "
 				"%d \t %d \t %d \t %xh \t",
-				i,
+				hubp->inst,
 				s.pixel_format,
 				s.inuse_addr_hi,
 				s.viewport_width,
@@ -155,7 +155,7 @@ void dcn10_log_hw_state(struct dc *dc)
 	DTN_INFO("OTG:\t v_bs \t v_be \t v_ss \t v_se \t vpol \t vmax \t vmin \t "
 			"h_bs \t h_be \t h_ss \t h_se \t hpol \t htot \t vtot \t underflow\n");
 
-	for (i = 0; i < pool->res_cap->num_timing_generator; i++) {
+	for (i = 0; i < pool->timing_generator_count; i++) {
 		struct timing_generator *tg = pool->timing_generators[i];
 		struct dcn_otg_state s = {0};
 
@@ -168,7 +168,7 @@ void dcn10_log_hw_state(struct dc *dc)
 		DTN_INFO("[%d]:\t %d \t %d \t %d \t %d \t "
 				"%d \t %d \t %d \t %d \t %d \t %d \t "
 				"%d \t %d \t %d \t %d \t %d \t ",
-				i,
+				tg->inst,
 				s.v_blank_start,
 				s.v_blank_end,
 				s.v_sync_a_start,
@@ -1725,6 +1725,7 @@ static void update_dchubp_dpp(
 	}
 
 	if (plane_state->update_flags.bits.full_update ||
+		plane_state->update_flags.bits.pixel_format_change ||
 		plane_state->update_flags.bits.horizontal_mirror_change ||
 		plane_state->update_flags.bits.rotation_change ||
 		plane_state->update_flags.bits.swizzle_change ||
@@ -2307,6 +2308,7 @@ static const struct hw_sequencer_funcs dcn10_funcs = {
 	.enable_stream = dce110_enable_stream,
 	.disable_stream = dce110_disable_stream,
 	.unblank_stream = dce110_unblank_stream,
+	.blank_stream = dce110_blank_stream,
 	.enable_display_power_gating = dcn10_dummy_display_power_gating,
 	.disable_plane = dcn10_disable_plane,
 	.pipe_control_lock = dcn10_pipe_control_lock,

@@ -368,7 +368,6 @@ static bool fiji_is_hw_avfs_present(struct pp_hwmgr *hwmgr)
 
 static int fiji_smu_init(struct pp_hwmgr *hwmgr)
 {
-	int i;
 	struct fiji_smumgr *fiji_priv = NULL;
 
 	fiji_priv = kzalloc(sizeof(struct fiji_smumgr), GFP_KERNEL);
@@ -380,9 +379,6 @@ static int fiji_smu_init(struct pp_hwmgr *hwmgr)
 
 	if (smu7_init(hwmgr))
 		return -EINVAL;
-
-	for (i = 0; i < SMU73_MAX_LEVELS_GRAPHICS; i++)
-		fiji_priv->activity_target[i] = 30;
 
 	return 0;
 }
@@ -972,8 +968,7 @@ static int fiji_calculate_sclk_params(struct pp_hwmgr *hwmgr,
 }
 
 static int fiji_populate_single_graphic_level(struct pp_hwmgr *hwmgr,
-		uint32_t clock, uint16_t sclk_al_threshold,
-		struct SMU73_Discrete_GraphicsLevel *level)
+		uint32_t clock, struct SMU73_Discrete_GraphicsLevel *level)
 {
 	int result;
 	/* PP_Clocks minClocks; */
@@ -1000,13 +995,13 @@ static int fiji_populate_single_graphic_level(struct pp_hwmgr *hwmgr,
 			return result);
 
 	level->SclkFrequency = clock;
-	level->ActivityLevel = sclk_al_threshold;
+	level->ActivityLevel = data->current_profile_setting.sclk_activity;
 	level->CcPwrDynRm = 0;
 	level->CcPwrDynRm1 = 0;
 	level->EnabledForActivity = 0;
 	level->EnabledForThrottle = 1;
-	level->UpHyst = 10;
-	level->DownHyst = 0;
+	level->UpHyst = data->current_profile_setting.sclk_up_hyst;
+	level->DownHyst = data->current_profile_setting.sclk_down_hyst;
 	level->VoltageDownHyst = 0;
 	level->PowerThrottle = 0;
 
@@ -1063,7 +1058,6 @@ static int fiji_populate_all_graphic_levels(struct pp_hwmgr *hwmgr)
 	for (i = 0; i < dpm_table->sclk_table.count; i++) {
 		result = fiji_populate_single_graphic_level(hwmgr,
 				dpm_table->sclk_table.dpm_levels[i].value,
-				(uint16_t)smu_data->activity_target[i],
 				&levels[i]);
 		if (result)
 			return result;
@@ -1226,10 +1220,10 @@ static int fiji_populate_single_memory_level(struct pp_hwmgr *hwmgr,
 
 	mem_level->EnabledForThrottle = 1;
 	mem_level->EnabledForActivity = 0;
-	mem_level->UpHyst = 0;
-	mem_level->DownHyst = 100;
+	mem_level->UpHyst = data->current_profile_setting.mclk_up_hyst;
+	mem_level->DownHyst = data->current_profile_setting.mclk_down_hyst;
 	mem_level->VoltageDownHyst = 0;
-	mem_level->ActivityLevel = (uint16_t)data->mclk_activity_target;
+	mem_level->ActivityLevel = data->current_profile_setting.mclk_activity;
 	mem_level->StutterEnable = false;
 
 	mem_level->DisplayWatermark = PPSMC_DISPLAY_WATERMARK_LOW;
@@ -1447,7 +1441,7 @@ static int fiji_populate_smc_acpi_level(struct pp_hwmgr *hwmgr,
 	table->MemoryACPILevel.DownHyst = 100;
 	table->MemoryACPILevel.VoltageDownHyst = 0;
 	table->MemoryACPILevel.ActivityLevel =
-			PP_HOST_TO_SMC_US((uint16_t)data->mclk_activity_target);
+			PP_HOST_TO_SMC_US(data->current_profile_setting.mclk_activity);
 
 	table->MemoryACPILevel.StutterEnable = false;
 	CONVERT_FROM_HOST_TO_SMC_UL(table->MemoryACPILevel.MclkFrequency);

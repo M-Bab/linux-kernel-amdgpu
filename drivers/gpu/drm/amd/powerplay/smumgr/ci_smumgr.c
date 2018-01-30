@@ -411,8 +411,7 @@ static uint8_t ci_get_sleep_divider_id_from_clock(uint32_t clock,
 }
 
 static int ci_populate_single_graphic_level(struct pp_hwmgr *hwmgr,
-		uint32_t clock, uint16_t sclk_al_threshold,
-		struct SMU7_Discrete_GraphicsLevel *level)
+		uint32_t clock, struct SMU7_Discrete_GraphicsLevel *level)
 {
 	int result;
 	struct smu7_hwmgr *data = (struct smu7_hwmgr *)(hwmgr->backend);
@@ -438,14 +437,14 @@ static int ci_populate_single_graphic_level(struct pp_hwmgr *hwmgr,
 				clock,
 				&level->MinVddcPhases);
 
-	level->ActivityLevel = sclk_al_threshold;
+	level->ActivityLevel = data->current_profile_setting.sclk_activity;
 	level->CcPwrDynRm = 0;
 	level->CcPwrDynRm1 = 0;
 	level->EnabledForActivity = 0;
 	/* this level can be used for throttling.*/
 	level->EnabledForThrottle = 1;
-	level->UpH = 0;
-	level->DownH = 0;
+	level->UpH = data->current_profile_setting.sclk_up_hyst;
+	level->DownH = data->current_profile_setting.sclk_down_hyst;
 	level->VoltageDownH = 0;
 	level->PowerThrottle = 0;
 
@@ -492,7 +491,6 @@ static int ci_populate_all_graphic_levels(struct pp_hwmgr *hwmgr)
 	for (i = 0; i < dpm_table->sclk_table.count; i++) {
 		result = ci_populate_single_graphic_level(hwmgr,
 				dpm_table->sclk_table.dpm_levels[i].value,
-				(uint16_t)smu_data->activity_target[i],
 				&levels[i]);
 		if (result)
 			return result;
@@ -1226,12 +1224,12 @@ static int ci_populate_single_memory_level(
 
 	memory_level->EnabledForThrottle = 1;
 	memory_level->EnabledForActivity = 1;
-	memory_level->UpH = 0;
-	memory_level->DownH = 100;
+	memory_level->UpH = data->current_profile_setting.mclk_up_hyst;
+	memory_level->DownH = data->current_profile_setting.mclk_down_hyst;
 	memory_level->VoltageDownH = 0;
 
 	/* Indicates maximum activity level for this performance level.*/
-	memory_level->ActivityLevel = (uint16_t)data->mclk_activity_target;
+	memory_level->ActivityLevel = data->current_profile_setting.mclk_activity;
 	memory_level->StutterEnable = 0;
 	memory_level->StrobeEnable = 0;
 	memory_level->EdcReadEnable = 0;
@@ -1515,7 +1513,7 @@ static int ci_populate_smc_acpi_level(struct pp_hwmgr *hwmgr,
 	table->MemoryACPILevel.DownH = 100;
 	table->MemoryACPILevel.VoltageDownH = 0;
 	/* Indicates maximum activity level for this performance level.*/
-	table->MemoryACPILevel.ActivityLevel = PP_HOST_TO_SMC_US((uint16_t)data->mclk_activity_target);
+	table->MemoryACPILevel.ActivityLevel = PP_HOST_TO_SMC_US(data->current_profile_setting.mclk_activity);
 
 	table->MemoryACPILevel.StutterEnable = 0;
 	table->MemoryACPILevel.StrobeEnable = 0;
@@ -2802,16 +2800,12 @@ static int ci_populate_requested_graphic_levels(struct pp_hwmgr *hwmgr,
 
 static int ci_smu_init(struct pp_hwmgr *hwmgr)
 {
-	int i;
 	struct ci_smumgr *ci_priv = NULL;
 
 	ci_priv = kzalloc(sizeof(struct ci_smumgr), GFP_KERNEL);
 
 	if (ci_priv == NULL)
 		return -ENOMEM;
-
-	for (i = 0; i < SMU7_MAX_LEVELS_GRAPHICS; i++)
-		ci_priv->activity_target[i] = 30;
 
 	hwmgr->smu_backend = ci_priv;
 

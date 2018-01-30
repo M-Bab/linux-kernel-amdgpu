@@ -1312,7 +1312,7 @@ static int amdgpu_ttm_fw_reserve_vram_init(struct amdgpu_device *adev)
 		r = amdgpu_bo_create(adev, adev->fw_vram_usage.size,
 			PAGE_SIZE, true, AMDGPU_GEM_DOMAIN_VRAM,
 			AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED |
-			AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS, NULL, NULL, 0,
+			AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS, NULL, NULL,
 			&adev->fw_vram_usage.reserved_bo);
 		if (r)
 			goto error_create;
@@ -1681,13 +1681,12 @@ error_free:
 }
 
 int amdgpu_fill_buffer(struct amdgpu_bo *bo,
-		       uint64_t src_data,
+		       uint32_t src_data,
 		       struct reservation_object *resv,
 		       struct dma_fence **fence)
 {
 	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
-	uint32_t max_bytes = 8 *
-			adev->vm_manager.vm_pte_funcs->set_max_nums_pte_pde;
+	uint32_t max_bytes = adev->mman.buffer_funcs->fill_max_bytes;
 	struct amdgpu_ring *ring = adev->mman.buffer_funcs_ring;
 
 	struct drm_mm_node *mm_node;
@@ -1718,9 +1717,7 @@ int amdgpu_fill_buffer(struct amdgpu_bo *bo,
 		num_pages -= mm_node->size;
 		++mm_node;
 	}
-
-	/* num of dwords for each SDMA_OP_PTEPDE cmd */
-	num_dw = num_loops * adev->vm_manager.vm_pte_funcs->set_pte_pde_num_dw;
+	num_dw = num_loops * adev->mman.buffer_funcs->fill_num_dw;
 
 	/* for IB padding */
 	num_dw += 64;
@@ -1745,16 +1742,12 @@ int amdgpu_fill_buffer(struct amdgpu_bo *bo,
 		uint32_t byte_count = mm_node->size << PAGE_SHIFT;
 		uint64_t dst_addr;
 
-		WARN_ONCE(byte_count & 0x7, "size should be a multiple of 8");
-
 		dst_addr = amdgpu_mm_node_addr(&bo->tbo, mm_node, &bo->tbo.mem);
 		while (byte_count) {
 			uint32_t cur_size_in_bytes = min(byte_count, max_bytes);
 
-			amdgpu_vm_set_pte_pde(adev, &job->ibs[0],
-					dst_addr, 0,
-					cur_size_in_bytes >> 3, 0,
-					src_data);
+			amdgpu_emit_fill_buffer(adev, &job->ibs[0], src_data,
+						dst_addr, cur_size_in_bytes);
 
 			dst_addr += cur_size_in_bytes;
 			byte_count -= cur_size_in_bytes;

@@ -1484,7 +1484,6 @@ static void smu7_init_dpm_defaults(struct pp_hwmgr *hwmgr)
 
 	data->dll_default_on = false;
 	data->mclk_dpm0_activity_target = 0xa;
-	data->mclk_activity_target = SMU7_MCLK_TARGETACTIVITY_DFLT;
 	data->vddc_vddgfx_delta = 300;
 	data->static_screen_threshold = SMU7_STATICSCREENTHRESHOLD_DFLT;
 	data->static_screen_threshold_unit = SMU7_STATICSCREENTHRESHOLDUNIT_DFLT;
@@ -1508,6 +1507,14 @@ static void smu7_init_dpm_defaults(struct pp_hwmgr *hwmgr)
 	data->enable_pkg_pwr_tracking_feature = true;
 	data->force_pcie_gen = PP_PCIEGenInvalid;
 	data->ulv_supported = hwmgr->feature_mask & PP_ULV_MASK ? true : false;
+	data->current_profile_setting.bupdate_sclk = 1;
+	data->current_profile_setting.sclk_up_hyst = 0;
+	data->current_profile_setting.sclk_down_hyst = 100;
+	data->current_profile_setting.sclk_activity = SMU7_SCLK_TARGETACTIVITY_DFLT;
+	data->current_profile_setting.bupdate_sclk = 1;
+	data->current_profile_setting.mclk_up_hyst = 0;
+	data->current_profile_setting.mclk_down_hyst = 100;
+	data->current_profile_setting.mclk_activity = SMU7_MCLK_TARGETACTIVITY_DFLT;
 
 	if (hwmgr->chip_id == CHIP_POLARIS12 || hwmgr->is_kicker) {
 		uint8_t tmp1, tmp2;
@@ -4951,7 +4958,6 @@ static const struct pp_hwmgr_func smu7_hwmgr_funcs = {
 	.display_config_changed = smu7_display_configuration_changed_task,
 	.set_max_fan_pwm_output = smu7_set_max_fan_pwm_output,
 	.set_max_fan_rpm_output = smu7_set_max_fan_rpm_output,
-	.get_temperature = smu7_thermal_get_temperature,
 	.stop_thermal_controller = smu7_thermal_stop_thermal_controller,
 	.get_fan_speed_info = smu7_fan_ctrl_get_fan_speed_info,
 	.get_fan_speed_percent = smu7_fan_ctrl_get_fan_speed_percent,

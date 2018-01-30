@@ -38,7 +38,7 @@
 #include "inc/compressor.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.1.28"
+#define DC_VER "3.1.29"
 
 #define MAX_SURFACES 3
 #define MAX_STREAMS 6
@@ -212,6 +212,9 @@ struct dc_debug {
 	bool disable_stereo_support;
 	bool vsr_support;
 	bool performance_trace;
+	bool az_endpoint_mute_only;
+	bool always_use_regamma;
+	bool p010_mpo_support;
 };
 struct dc_state;
 struct resource_pool;
@@ -400,6 +403,7 @@ union surface_update_flags {
 		uint32_t in_transfer_func_change:1;
 		uint32_t input_csc_change:1;
 		uint32_t output_tf_change:1;
+		uint32_t pixel_format_change:1;
 
 		/* Full updates */
 		uint32_t new_plane:1;
@@ -493,10 +497,8 @@ struct dc_surface_update {
 	/* following updates require alloc/sleep/spin that is not isr safe,
 	 * null means no updates
 	 */
-	/* gamma TO BE REMOVED */
 	struct dc_gamma *gamma;
 	enum color_transfer_func color_input_tf;
-	enum color_transfer_func color_output_tf;
 	struct dc_transfer_func *in_transfer_func;
 
 	struct csc_transform *input_csc_color_matrix;
