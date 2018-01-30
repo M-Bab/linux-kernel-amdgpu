@@ -65,6 +65,7 @@ struct dc_stream_state {
 	enum dc_dither_option dither_option;
 
 	enum view_3d_format view_format;
+	enum color_transfer_func output_tf;
 
 	bool ignore_msa_timing_param;
 	/* TODO: custom INFO packets */
@@ -103,6 +104,7 @@ struct dc_stream_update {
 	struct rect dst;
 	struct dc_transfer_func *out_transfer_func;
 	struct dc_hdr_static_metadata *hdr_static_metadata;
+	enum color_transfer_func color_output_tf;
 };
 
 bool dc_is_stream_unchanged(
@@ -236,6 +238,8 @@ enum surface_update_type dc_check_update_surfaces_for_stream(
  * Create a new default stream for the requested sink
  */
 struct dc_stream_state *dc_create_stream_for_sink(struct dc_sink *dc_sink);
+
+void update_stream_signal(struct dc_stream_state *stream);
 
 void dc_stream_retain(struct dc_stream_state *dc_stream);
 void dc_stream_release(struct dc_stream_state *dc_stream);

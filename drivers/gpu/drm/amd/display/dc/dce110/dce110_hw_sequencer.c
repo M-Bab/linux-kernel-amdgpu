@@ -914,6 +914,7 @@ void hwss_edp_backlight_control(
 	/*todo: unhardcode*/
 	cntl.lanes_number = LANE_COUNT_FOUR;
 	cntl.hpd_sel = link->link_enc->hpd_source;
+	cntl.signal = SIGNAL_TYPE_EDP;
 
 	/* For eDP, the following delays might need to be considered
 	 * after link training completed:
@@ -946,7 +947,11 @@ void dce110_disable_stream(struct pipe_ctx *pipe_ctx, int option)
 	pipe_ctx->stream_res.stream_enc->funcs->audio_mute_control(
 			pipe_ctx->stream_res.stream_enc, true);
 	if (pipe_ctx->stream_res.audio) {
-		pipe_ctx->stream_res.audio->funcs->az_disable(pipe_ctx->stream_res.audio);
+		if (option != KEEP_ACQUIRED_RESOURCE ||
+				!dc->debug.az_endpoint_mute_only) {
+			/*only disalbe az_endpoint if power down or free*/
+			pipe_ctx->stream_res.audio->funcs->az_disable(pipe_ctx->stream_res.audio);
+		}
 
 		if (dc_is_dp_signal(pipe_ctx->stream->signal))
 			pipe_ctx->stream_res.stream_enc->funcs->dp_audio_disable(
@@ -984,12 +989,30 @@ void dce110_unblank_stream(struct pipe_ctx *pipe_ctx,
 		struct dc_link_settings *link_settings)
 {
 	struct encoder_unblank_param params = { { 0 } };
+	struct dc_stream_state *stream = pipe_ctx->stream;
+	struct dc_link *link = stream->sink->link;
 
 	/* only 3 items below are used by unblank */
 	params.pixel_clk_khz =
 		pipe_ctx->stream->timing.pix_clk_khz;
 	params.link_settings.link_rate = link_settings->link_rate;
-	pipe_ctx->stream_res.stream_enc->funcs->dp_unblank(pipe_ctx->stream_res.stream_enc, &params);
+
+	if (dc_is_dp_signal(pipe_ctx->stream->signal))
+		pipe_ctx->stream_res.stream_enc->funcs->dp_unblank(pipe_ctx->stream_res.stream_enc, &params);
+
+	if (link->local_sink && link->local_sink->sink_signal == SIGNAL_TYPE_EDP)
+		link->dc->hwss.edp_backlight_control(link, true);
+}
+void dce110_blank_stream(struct pipe_ctx *pipe_ctx)
+{
+	struct dc_stream_state *stream = pipe_ctx->stream;
+	struct dc_link *link = stream->sink->link;
+
+	if (link->local_sink && link->local_sink->sink_signal == SIGNAL_TYPE_EDP)
+		link->dc->hwss.edp_backlight_control(link, false);
+
+	if (dc_is_dp_signal(pipe_ctx->stream->signal))
+		pipe_ctx->stream_res.stream_enc->funcs->dp_blank(pipe_ctx->stream_res.stream_enc);
 }
 
 
@@ -1407,7 +1430,24 @@ static void disable_vga_and_power_gate_all_controllers(
 	}
 }
 
-static struct dc_link *get_link_for_eDP_not_in_use(
+static struct dc_link *get_link_for_edp(
+		struct dc *dc)
+{
+	int i;
+	struct dc_link *link = NULL;
+
+	/* check if there is an eDP panel not in use */
+	for (i = 0; i < dc->link_count; i++) {
+		if (dc->links[i]->local_sink &&
+			dc->links[i]->local_sink->sink_signal == SIGNAL_TYPE_EDP) {
+			link = dc->links[i];
+			break;
+		}
+	}
+
+	return link;
+}
+static struct dc_link *get_link_for_edp_not_in_use(
 		struct dc *dc,
 		struct dc_state *context)
 {
@@ -1441,16 +1481,19 @@ static struct dc_link *get_link_for_eDP_not_in_use(
  */
 void dce110_enable_accelerated_mode(struct dc *dc, struct dc_state *context)
 {
-	struct dc_link *eDP_link_to_turnoff = get_link_for_eDP_not_in_use(dc, context);
+	struct dc_link *edp_link_to_turnoff = get_link_for_edp_not_in_use(dc, context);
 
-	if (eDP_link_to_turnoff)
-		dc->hwss.edp_backlight_control(eDP_link_to_turnoff, false);
+	struct dc_link *edp_link = get_link_for_edp(dc);
+
+	if (edp_link)
+		/*we need turn off backlight before DP_blank and encoder powered down*/
+		dc->hwss.edp_backlight_control(edp_link, false);
 
 	power_down_all_hw_blocks(dc);
 	disable_vga_and_power_gate_all_controllers(dc);
 
-	if (eDP_link_to_turnoff)
-		dc->hwss.edp_power_control(eDP_link_to_turnoff, false);
+	if (edp_link_to_turnoff)
+		dc->hwss.edp_power_control(edp_link_to_turnoff, false);
 
 	bios_set_scratch_acc_mode_change(dc->ctx->dc_bios);
 }
@@ -2886,6 +2929,7 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.enable_stream = dce110_enable_stream,
 	.disable_stream = dce110_disable_stream,
 	.unblank_stream = dce110_unblank_stream,
+	.blank_stream = dce110_blank_stream,
 	.enable_display_pipe_clock_gating = enable_display_pipe_clock_gating,
 	.enable_display_power_gating = dce110_enable_display_power_gating,
 	.disable_plane = dce110_power_down_fe,

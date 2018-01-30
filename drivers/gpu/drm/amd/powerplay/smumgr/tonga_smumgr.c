@@ -222,7 +222,6 @@ static int tonga_start_smu(struct pp_hwmgr *hwmgr)
 static int tonga_smu_init(struct pp_hwmgr *hwmgr)
 {
 	struct tonga_smumgr *tonga_priv = NULL;
-	int  i;
 
 	tonga_priv = kzalloc(sizeof(struct tonga_smumgr), GFP_KERNEL);
 	if (tonga_priv == NULL)
@@ -232,9 +231,6 @@ static int tonga_smu_init(struct pp_hwmgr *hwmgr)
 
 	if (smu7_init(hwmgr))
 		return -EINVAL;
-
-	for (i = 0; i < SMU72_MAX_LEVELS_GRAPHICS; i++)
-		tonga_priv->activity_target[i] = 30;
 
 	return 0;
 }
@@ -612,7 +608,6 @@ static int tonga_calculate_sclk_params(struct pp_hwmgr *hwmgr,
 
 static int tonga_populate_single_graphic_level(struct pp_hwmgr *hwmgr,
 						uint32_t engine_clock,
-				uint16_t sclk_activity_level_threshold,
 				SMU72_Discrete_GraphicsLevel *graphic_level)
 {
 	int result;
@@ -640,7 +635,7 @@ static int tonga_populate_single_graphic_level(struct pp_hwmgr *hwmgr,
 	/* SCLK frequency in units of 10KHz*/
 	graphic_level->SclkFrequency = engine_clock;
 	/* Indicates maximum activity level for this performance level. 50% for now*/
-	graphic_level->ActivityLevel = sclk_activity_level_threshold;
+	graphic_level->ActivityLevel = data->current_profile_setting.sclk_activity;
 
 	graphic_level->CcPwrDynRm = 0;
 	graphic_level->CcPwrDynRm1 = 0;
@@ -648,8 +643,8 @@ static int tonga_populate_single_graphic_level(struct pp_hwmgr *hwmgr,
 	graphic_level->EnabledForActivity = 0;
 	/* this level can be used for throttling.*/
 	graphic_level->EnabledForThrottle = 1;
-	graphic_level->UpHyst = 0;
-	graphic_level->DownHyst = 0;
+	graphic_level->UpHyst = data->current_profile_setting.sclk_up_hyst;
+	graphic_level->DownHyst = data->current_profile_setting.sclk_down_hyst;
 	graphic_level->VoltageDownHyst = 0;
 	graphic_level->PowerThrottle = 0;
 
@@ -708,7 +703,6 @@ static int tonga_populate_all_graphic_levels(struct pp_hwmgr *hwmgr)
 	for (i = 0; i < dpm_table->sclk_table.count; i++) {
 		result = tonga_populate_single_graphic_level(hwmgr,
 					dpm_table->sclk_table.dpm_levels[i].value,
-					(uint16_t)smu_data->activity_target[i],
 					&(smu_data->smc_state_table.GraphicsLevel[i]));
 		if (result != 0)
 			return result;
@@ -998,12 +992,12 @@ static int tonga_populate_single_memory_level(
 
 	memory_level->EnabledForThrottle = 1;
 	memory_level->EnabledForActivity = 0;
-	memory_level->UpHyst = 0;
-	memory_level->DownHyst = 100;
+	memory_level->UpHyst = data->current_profile_setting.mclk_up_hyst;
+	memory_level->DownHyst = data->current_profile_setting.mclk_down_hyst;
 	memory_level->VoltageDownHyst = 0;
 
 	/* Indicates maximum activity level for this performance level.*/
-	memory_level->ActivityLevel = (uint16_t)data->mclk_activity_target;
+	memory_level->ActivityLevel = data->current_profile_setting.mclk_activity;
 	memory_level->StutterEnable = 0;
 	memory_level->StrobeEnable = 0;
 	memory_level->EdcReadEnable = 0;
@@ -1293,7 +1287,7 @@ static int tonga_populate_smc_acpi_level(struct pp_hwmgr *hwmgr,
 	table->MemoryACPILevel.VoltageDownHyst = 0;
 	/* Indicates maximum activity level for this performance level.*/
 	table->MemoryACPILevel.ActivityLevel =
-			PP_HOST_TO_SMC_US((uint16_t)data->mclk_activity_target);
+			PP_HOST_TO_SMC_US(data->current_profile_setting.mclk_activity);
 
 	table->MemoryACPILevel.StutterEnable = 0;
 	table->MemoryACPILevel.StrobeEnable = 0;

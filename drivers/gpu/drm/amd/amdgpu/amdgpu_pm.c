@@ -936,17 +936,23 @@ static ssize_t amdgpu_hwmon_show_temp(struct device *dev,
 {
 	struct amdgpu_device *adev = dev_get_drvdata(dev);
 	struct drm_device *ddev = adev->ddev;
-	int temp;
+	int r, temp, size = sizeof(temp);
 
 	/* Can't get temperature when the card is off */
 	if  ((adev->flags & AMD_IS_PX) &&
 	     (ddev->switch_power_state != DRM_SWITCH_POWER_ON))
 		return -EINVAL;
 
-	if (!adev->powerplay.pp_funcs->get_temperature)
-		temp = 0;
-	else
-		temp = amdgpu_dpm_get_temperature(adev);
+	/* sanity check PP is enabled */
+	if (!(adev->powerplay.pp_funcs &&
+	      adev->powerplay.pp_funcs->read_sensor))
+		return -EINVAL;
+
+	/* get the temperature */
+	r = amdgpu_dpm_read_sensor(adev, AMDGPU_PP_SENSOR_GPU_TEMP,
+				   (void *)&temp, &size);
+	if (r)
+		return r;
 
 	return snprintf(buf, PAGE_SIZE, "%d\n", temp);
 }
@@ -991,6 +997,11 @@ static ssize_t amdgpu_hwmon_set_pwm1_enable(struct device *dev,
 	int err;
 	int value;
 
+	/* Can't adjust fan when the card is off */
+	if  ((adev->flags & AMD_IS_PX) &&
+	     (adev->ddev->switch_power_state != DRM_SWITCH_POWER_ON))
+		return -EINVAL;
+
 	if (!adev->powerplay.pp_funcs->set_fan_control_mode)
 		return -EINVAL;
 
@@ -1025,6 +1036,11 @@ static ssize_t amdgpu_hwmon_set_pwm1(struct device *dev,
 	int err;
 	u32 value;
 
+	/* Can't adjust fan when the card is off */
+	if  ((adev->flags & AMD_IS_PX) &&
+	     (adev->ddev->switch_power_state != DRM_SWITCH_POWER_ON))
+		return -EINVAL;
+
 	err = kstrtou32(buf, 10, &value);
 	if (err)
 		return err;
@@ -1048,6 +1064,11 @@ static ssize_t amdgpu_hwmon_get_pwm1(struct device *dev,
 	int err;
 	u32 speed = 0;
 
+	/* Can't adjust fan when the card is off */
+	if  ((adev->flags & AMD_IS_PX) &&
+	     (adev->ddev->switch_power_state != DRM_SWITCH_POWER_ON))
+		return -EINVAL;
+
 	if (adev->powerplay.pp_funcs->get_fan_speed_percent) {
 		err = amdgpu_dpm_get_fan_speed_percent(adev, &speed);
 		if (err)
@@ -1067,6 +1088,11 @@ static ssize_t amdgpu_hwmon_get_fan1_input(struct device *dev,
 	int err;
 	u32 speed = 0;
 
+	/* Can't adjust fan when the card is off */
+	if  ((adev->flags & AMD_IS_PX) &&
+	     (adev->ddev->switch_power_state != DRM_SWITCH_POWER_ON))
+		return -EINVAL;
+
 	if (adev->powerplay.pp_funcs->get_fan_speed_rpm) {
 		err = amdgpu_dpm_get_fan_speed_rpm(adev, &speed);
 		if (err)
@@ -1074,6 +1100,112 @@ static ssize_t amdgpu_hwmon_get_fan1_input(struct device *dev,
 	}
 
 	return sprintf(buf, "%i\n", speed);
+}
+
+static ssize_t amdgpu_hwmon_show_vddgfx(struct device *dev,
+					struct device_attribute *attr,
+					char *buf)
+{
+	struct amdgpu_device *adev = dev_get_drvdata(dev);
+	struct drm_device *ddev = adev->ddev;
+	u32 vddgfx;
+	int r, size = sizeof(vddgfx);
+
+	/* Can't get voltage when the card is off */
+	if  ((adev->flags & AMD_IS_PX) &&
+	     (ddev->switch_power_state != DRM_SWITCH_POWER_ON))
+		return -EINVAL;
+
+	/* sanity check PP is enabled */
+	if (!(adev->powerplay.pp_funcs &&
+	      adev->powerplay.pp_funcs->read_sensor))
+	      return -EINVAL;
+
+	/* get the voltage */
+	r = amdgpu_dpm_read_sensor(adev, AMDGPU_PP_SENSOR_VDDGFX,
+				   (void *)&vddgfx, &size);
+	if (r)
+		return r;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", vddgfx);
+}
+
+static ssize_t amdgpu_hwmon_show_vddgfx_label(struct device *dev,
+					      struct device_attribute *attr,
+					      char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "vddgfx\n");
+}
+
+static ssize_t amdgpu_hwmon_show_vddnb(struct device *dev,
+				       struct device_attribute *attr,
+				       char *buf)
+{
+	struct amdgpu_device *adev = dev_get_drvdata(dev);
+	struct drm_device *ddev = adev->ddev;
+	u32 vddnb;
+	int r, size = sizeof(vddnb);
+
+	/* only APUs have vddnb */
+	if  (adev->flags & AMD_IS_APU)
+		return -EINVAL;
+
+	/* Can't get voltage when the card is off */
+	if  ((adev->flags & AMD_IS_PX) &&
+	     (ddev->switch_power_state != DRM_SWITCH_POWER_ON))
+		return -EINVAL;
+
+	/* sanity check PP is enabled */
+	if (!(adev->powerplay.pp_funcs &&
+	      adev->powerplay.pp_funcs->read_sensor))
+	      return -EINVAL;
+
+	/* get the voltage */
+	r = amdgpu_dpm_read_sensor(adev, AMDGPU_PP_SENSOR_VDDNB,
+				   (void *)&vddnb, &size);
+	if (r)
+		return r;
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", vddnb);
+}
+
+static ssize_t amdgpu_hwmon_show_vddnb_label(struct device *dev,
+					      struct device_attribute *attr,
+					      char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "vddnb\n");
+}
+
+static ssize_t amdgpu_hwmon_show_power_avg(struct device *dev,
+					   struct device_attribute *attr,
+					   char *buf)
+{
+	struct amdgpu_device *adev = dev_get_drvdata(dev);
+	struct drm_device *ddev = adev->ddev;
+	struct pp_gpu_power query = {0};
+	int r, size = sizeof(query);
+	unsigned uw;
+
+	/* Can't get power when the card is off */
+	if  ((adev->flags & AMD_IS_PX) &&
+	     (ddev->switch_power_state != DRM_SWITCH_POWER_ON))
+		return -EINVAL;
+
+	/* sanity check PP is enabled */
+	if (!(adev->powerplay.pp_funcs &&
+	      adev->powerplay.pp_funcs->read_sensor))
+	      return -EINVAL;
+
+	/* get the voltage */
+	r = amdgpu_dpm_read_sensor(adev, AMDGPU_PP_SENSOR_GPU_POWER,
+				   (void *)&query, &size);
+	if (r)
+		return r;
+
+	/* convert to microwatts */
+	uw = (query.average_gpu_power >> 8) * 1000000;
+
+	return snprintf(buf, PAGE_SIZE, "%u\n", uw);
 }
 
 static SENSOR_DEVICE_ATTR(temp1_input, S_IRUGO, amdgpu_hwmon_show_temp, NULL, 0);
@@ -1084,6 +1216,11 @@ static SENSOR_DEVICE_ATTR(pwm1_enable, S_IRUGO | S_IWUSR, amdgpu_hwmon_get_pwm1_
 static SENSOR_DEVICE_ATTR(pwm1_min, S_IRUGO, amdgpu_hwmon_get_pwm1_min, NULL, 0);
 static SENSOR_DEVICE_ATTR(pwm1_max, S_IRUGO, amdgpu_hwmon_get_pwm1_max, NULL, 0);
 static SENSOR_DEVICE_ATTR(fan1_input, S_IRUGO, amdgpu_hwmon_get_fan1_input, NULL, 0);
+static SENSOR_DEVICE_ATTR(in0_input, S_IRUGO, amdgpu_hwmon_show_vddgfx, NULL, 0);
+static SENSOR_DEVICE_ATTR(in0_label, S_IRUGO, amdgpu_hwmon_show_vddgfx_label, NULL, 0);
+static SENSOR_DEVICE_ATTR(in1_input, S_IRUGO, amdgpu_hwmon_show_vddnb, NULL, 0);
+static SENSOR_DEVICE_ATTR(in1_label, S_IRUGO, amdgpu_hwmon_show_vddnb_label, NULL, 0);
+static SENSOR_DEVICE_ATTR(power1_average, S_IRUGO, amdgpu_hwmon_show_power_avg, NULL, 0);
 
 static struct attribute *hwmon_attributes[] = {
 	&sensor_dev_attr_temp1_input.dev_attr.attr,
@@ -1094,6 +1231,11 @@ static struct attribute *hwmon_attributes[] = {
 	&sensor_dev_attr_pwm1_min.dev_attr.attr,
 	&sensor_dev_attr_pwm1_max.dev_attr.attr,
 	&sensor_dev_attr_fan1_input.dev_attr.attr,
+	&sensor_dev_attr_in0_input.dev_attr.attr,
+	&sensor_dev_attr_in0_label.dev_attr.attr,
+	&sensor_dev_attr_in1_input.dev_attr.attr,
+	&sensor_dev_attr_in1_label.dev_attr.attr,
+	&sensor_dev_attr_power1_average.dev_attr.attr,
 	NULL
 };
 
@@ -1104,23 +1246,25 @@ static umode_t hwmon_attributes_visible(struct kobject *kobj,
 	struct amdgpu_device *adev = dev_get_drvdata(dev);
 	umode_t effective_mode = attr->mode;
 
-	/* no skipping for powerplay */
-	if (adev->powerplay.cgs_device)
-		return effective_mode;
+	/* handle non-powerplay limitations */
+	if (!adev->powerplay.cgs_device) {
+		/* Skip fan attributes if fan is not present */
+		if (adev->pm.no_fan &&
+		    (attr == &sensor_dev_attr_pwm1.dev_attr.attr ||
+		     attr == &sensor_dev_attr_pwm1_enable.dev_attr.attr ||
+		     attr == &sensor_dev_attr_pwm1_max.dev_attr.attr ||
+		     attr == &sensor_dev_attr_pwm1_min.dev_attr.attr))
+			return 0;
+		/* requires powerplay */
+		if (attr == &sensor_dev_attr_fan1_input.dev_attr.attr)
+			return 0;
+	}
 
 	/* Skip limit attributes if DPM is not enabled */
 	if (!adev->pm.dpm_enabled &&
 	    (attr == &sensor_dev_attr_temp1_crit.dev_attr.attr ||
 	     attr == &sensor_dev_attr_temp1_crit_hyst.dev_attr.attr ||
 	     attr == &sensor_dev_attr_pwm1.dev_attr.attr ||
-	     attr == &sensor_dev_attr_pwm1_enable.dev_attr.attr ||
-	     attr == &sensor_dev_attr_pwm1_max.dev_attr.attr ||
-	     attr == &sensor_dev_attr_pwm1_min.dev_attr.attr))
-		return 0;
-
-	/* Skip fan attributes if fan is not present */
-	if (adev->pm.no_fan &&
-	    (attr == &sensor_dev_attr_pwm1.dev_attr.attr ||
 	     attr == &sensor_dev_attr_pwm1_enable.dev_attr.attr ||
 	     attr == &sensor_dev_attr_pwm1_max.dev_attr.attr ||
 	     attr == &sensor_dev_attr_pwm1_min.dev_attr.attr))
@@ -1146,8 +1290,10 @@ static umode_t hwmon_attributes_visible(struct kobject *kobj,
 	     attr == &sensor_dev_attr_pwm1_min.dev_attr.attr))
 		return 0;
 
-	/* requires powerplay */
-	if (attr == &sensor_dev_attr_fan1_input.dev_attr.attr)
+	/* only APUs have vddnb */
+	if (!(adev->flags & AMD_IS_APU) &&
+	    (attr == &sensor_dev_attr_in1_input.dev_attr.attr ||
+	     attr == &sensor_dev_attr_in1_label.dev_attr.attr))
 		return 0;
 
 	return effective_mode;
@@ -1170,13 +1316,15 @@ void amdgpu_dpm_thermal_work_handler(struct work_struct *work)
 			     pm.dpm.thermal.work);
 	/* switch to the thermal state */
 	enum amd_pm_state_type dpm_state = POWER_STATE_TYPE_INTERNAL_THERMAL;
+	int temp, size = sizeof(temp);
 
 	if (!adev->pm.dpm_enabled)
 		return;
 
-	if (adev->powerplay.pp_funcs->get_temperature) {
-		int temp = amdgpu_dpm_get_temperature(adev);
-
+	if (adev->powerplay.pp_funcs &&
+	    adev->powerplay.pp_funcs->read_sensor &&
+	    !amdgpu_dpm_read_sensor(adev, AMDGPU_PP_SENSOR_GPU_TEMP,
+				    (void *)&temp, &size)) {
 		if (temp < adev->pm.dpm.thermal.min_temp)
 			/* switch back the user state */
 			dpm_state = adev->pm.dpm.user_state;
@@ -1474,9 +1622,6 @@ int amdgpu_pm_sysfs_init(struct amdgpu_device *adev)
 		return 0;
 
 	if (adev->pm.dpm_enabled == 0)
-		return 0;
-
-	if (adev->powerplay.pp_funcs->get_temperature == NULL)
 		return 0;
 
 	adev->pm.int_hwmon_dev = hwmon_device_register_with_groups(adev->dev,
