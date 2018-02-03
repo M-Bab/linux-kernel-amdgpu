@@ -4500,11 +4500,6 @@ static int vega10_force_clock_level(struct pp_hwmgr *hwmgr,
 {
 	struct vega10_hwmgr *data = (struct vega10_hwmgr *)(hwmgr->backend);
 
-	if (hwmgr->request_dpm_level & (AMD_DPM_FORCED_LEVEL_AUTO |
-				AMD_DPM_FORCED_LEVEL_LOW |
-				AMD_DPM_FORCED_LEVEL_HIGH))
-		return -EINVAL;
-
 	switch (type) {
 	case PP_SCLK:
 		data->smc_state_table.gfx_boot_level = mask ? (ffs(mask) - 1) : 0;
@@ -5094,8 +5089,6 @@ static int vega10_set_power_profile_mode(struct pp_hwmgr *hwmgr, long *input, ui
 		smum_send_msg_to_smc_with_parameter(hwmgr,
 					PPSMC_MSG_SetCustomGfxDpmParameters,
 					busy_set_point | FPS<<8 |
-					use_rlc_busy << 16 | min_active_level<<24);
-				pr_info("size is %d value is %x \n", size, busy_set_point | FPS<<8 |
 					use_rlc_busy << 16 | min_active_level<<24);
 	}
 
