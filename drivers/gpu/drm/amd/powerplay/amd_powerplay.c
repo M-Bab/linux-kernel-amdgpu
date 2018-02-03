@@ -162,7 +162,7 @@ static int pp_hw_init(void *handle)
 		if(hwmgr->smumgr_funcs->start_smu(pp_handle->hwmgr)) {
 			pr_err("smc start failed\n");
 			hwmgr->smumgr_funcs->smu_fini(pp_handle->hwmgr);
-			return -EINVAL;;
+			return -EINVAL;
 		}
 		if (ret == PP_DPM_DISABLED)
 			goto exit;
@@ -839,7 +839,10 @@ static int pp_dpm_force_clock_level(void *handle,
 		return 0;
 	}
 	mutex_lock(&pp_handle->pp_lock);
-	hwmgr->hwmgr_func->force_clock_level(hwmgr, type, mask);
+	if (hwmgr->dpm_level == AMD_DPM_FORCED_LEVEL_MANUAL)
+		ret = hwmgr->hwmgr_func->force_clock_level(hwmgr, type, mask);
+	else
+		ret = -EINVAL;
 	mutex_unlock(&pp_handle->pp_lock);
 	return ret;
 }
@@ -1085,6 +1088,7 @@ static int pp_set_power_profile_mode(void *handle, long *input, uint32_t size)
 {
 	struct pp_hwmgr *hwmgr;
 	struct pp_instance *pp_handle = (struct pp_instance *)handle;
+	int ret = -EINVAL;
 
 	if (pp_check(pp_handle))
 		return -EINVAL;
@@ -1095,8 +1099,11 @@ static int pp_set_power_profile_mode(void *handle, long *input, uint32_t size)
 		pr_info("%s was not implemented.\n", __func__);
 		return -EINVAL;
 	}
-
-	return hwmgr->hwmgr_func->set_power_profile_mode(hwmgr, input, size);
+	mutex_lock(&pp_handle->pp_lock);
+	if (hwmgr->dpm_level == AMD_DPM_FORCED_LEVEL_MANUAL)
+		ret = hwmgr->hwmgr_func->set_power_profile_mode(hwmgr, input, size);
+	mutex_unlock(&pp_handle->pp_lock);
+	return ret;
 }
 
 static int pp_odn_edit_dpm_table(void *handle, uint32_t type, long *input, uint32_t size)

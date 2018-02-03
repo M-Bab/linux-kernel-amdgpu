@@ -1573,7 +1573,6 @@ static int amdgpu_notify_freesync(struct drm_device *dev, void *data,
 static const struct amdgpu_display_funcs dm_display_funcs = {
 	.bandwidth_update = dm_bandwidth_update, /* called unconditionally */
 	.vblank_get_counter = dm_vblank_get_counter,/* called unconditionally */
-	.vblank_wait = NULL,
 	.backlight_set_level =
 		dm_set_backlight_level,/* called unconditionally */
 	.backlight_get_level =
@@ -1623,8 +1622,6 @@ DEVICE_ATTR_WO(s3_debug);
 static int dm_early_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-
-	adev->ddev->driver->driver_features |= DRIVER_ATOMIC;
 
 	switch (adev->asic_type) {
 	case CHIP_BONAIRE:
