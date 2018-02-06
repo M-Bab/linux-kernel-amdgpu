@@ -465,7 +465,7 @@ static void link_disconnect_sink(struct dc_link *link)
 	link->dpcd_sink_count = 0;
 }
 
-static void detect_dp(
+static bool detect_dp(
 	struct dc_link *link,
 	struct display_sink_capability *sink_caps,
 	bool *converter_disable_audio,
@@ -479,7 +479,8 @@ static void detect_dp(
 
 	if (sink_caps->transaction_type == DDC_TRANSACTION_TYPE_I2C_OVER_AUX) {
 		sink_caps->signal = SIGNAL_TYPE_DISPLAY_PORT;
-		detect_dp_sink_caps(link);
+		if (!detect_dp_sink_caps(link))
+			return false;
 
 		if (is_mst_supported(link)) {
 			sink_caps->signal = SIGNAL_TYPE_DISPLAY_PORT_MST;
@@ -530,7 +531,7 @@ static void detect_dp(
 				 * active dongle unplug processing for short irq
 				 */
 				link_disconnect_sink(link);
-				return;
+				return true;
 			}
 
 			if (link->dpcd_caps.dongle_type != DISPLAY_DONGLE_DP_HDMI_CONVERTER)
@@ -542,6 +543,8 @@ static void detect_dp(
 				sink_caps,
 				audio_support);
 	}
+
+	return true;
 }
 
 bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
@@ -605,11 +608,12 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 		}
 
 		case SIGNAL_TYPE_DISPLAY_PORT: {
-			detect_dp(
+			if (!detect_dp(
 				link,
 				&sink_caps,
 				&converter_disable_audio,
-				aud_support, reason);
+				aud_support, reason))
+				return false;
 
 			/* Active dongle downstream unplug */
 			if (link->type == dc_connection_active_dongle
@@ -678,8 +682,6 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 		case EDID_NO_RESPONSE:
 			dm_logger_write(link->ctx->logger, LOG_ERROR,
 				"No EDID read.\n");
-			return false;
-
 		default:
 			break;
 		}
@@ -697,8 +699,8 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 		}
 
 		/* Add delay for certain monitors */
-		if (sink->edid_caps.panel_patch.disconnect_delay > 0 &&
-				SIGNAL_TYPE_HDMI_TYPE_A)
+		if (sink->edid_caps.panel_patch.disconnect_delay > 0
+				&& sink->sink_signal == SIGNAL_TYPE_HDMI_TYPE_A)
 			program_hpd_filter(link, sink->edid_caps.panel_patch.disconnect_delay);
 		else
 			program_hpd_filter(link, DEFAULT_DELAY_DISCONNECT);
@@ -1803,12 +1805,12 @@ static enum dc_status enable_link(
 			if (core_dc->current_state->res_ctx.pipe_ctx[i].stream_res.audio != NULL)
 				num_audio++;
 		}
-		if (num_audio == 1 && pp_smu != NULL && pp_smu->set_pme_wa_enable != NULL)
-			/*this is the first audio. apply the PME w/a in order to wake AZ from D3*/
-			pp_smu->set_pme_wa_enable(&pp_smu->pp_smu);
 
 		pipe_ctx->stream_res.audio->funcs->az_enable(pipe_ctx->stream_res.audio);
 
+		if (num_audio == 1 && pp_smu != NULL && pp_smu->set_pme_wa_enable != NULL)
+			/*this is the first audio. apply the PME w/a in order to wake AZ from D3*/
+			pp_smu->set_pme_wa_enable(&pp_smu->pp_smu);
 		/* un-mute audio */
 		/* TODO: audio should be per stream rather than per link */
 		pipe_ctx->stream_res.stream_enc->funcs->audio_mute_control(

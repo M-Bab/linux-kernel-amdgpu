@@ -329,6 +329,11 @@ static int amdgpu_vm_clear_bo(struct amdgpu_device *adev,
 	amdgpu_ring_pad_ib(ring, &job->ibs[0]);
 
 	WARN_ON(job->ibs[0].length_dw > 64);
+	r = amdgpu_sync_resv(adev, &job->sync, bo->tbo.resv,
+			     AMDGPU_FENCE_OWNER_UNDEFINED, false);
+	if (r)
+		goto error_free;
+
 	r = amdgpu_job_submit(job, ring, &vm->entity,
 			      AMDGPU_FENCE_OWNER_UNDEFINED, &fence);
 	if (r)
@@ -336,6 +341,11 @@ static int amdgpu_vm_clear_bo(struct amdgpu_device *adev,
 
 	amdgpu_bo_fence(bo, fence, true);
 	dma_fence_put(fence);
+
+	if (bo->shadow)
+		return amdgpu_vm_clear_bo(adev, vm, bo->shadow,
+					  level, pte_support_ats);
+
 	return 0;
 
 error_free:
@@ -411,6 +421,7 @@ static int amdgpu_vm_alloc_levels(struct amdgpu_device *adev,
 
 			r = amdgpu_vm_clear_bo(adev, vm, pt, level, ats);
 			if (r) {
+				amdgpu_bo_unref(&pt->shadow);
 				amdgpu_bo_unref(&pt);
 				return r;
 			}
@@ -418,6 +429,7 @@ static int amdgpu_vm_alloc_levels(struct amdgpu_device *adev,
 			if (vm->use_cpu_for_update) {
 				r = amdgpu_bo_kmap(pt, NULL);
 				if (r) {
+					amdgpu_bo_unref(&pt->shadow);
 					amdgpu_bo_unref(&pt);
 					return r;
 				}
