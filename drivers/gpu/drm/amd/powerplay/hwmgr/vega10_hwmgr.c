@@ -761,6 +761,7 @@ static int vega10_hwmgr_backend_init(struct pp_hwmgr *hwmgr)
 	hwmgr->backend = data;
 
 	hwmgr->power_profile_mode = PP_SMC_POWER_PROFILE_VIDEO;
+	hwmgr->default_power_profile_mode = PP_SMC_POWER_PROFILE_VIDEO;
 
 	vega10_set_default_registry_data(hwmgr);
 
@@ -3889,7 +3890,9 @@ static int vega10_get_gpu_power(struct pp_hwmgr *hwmgr,
 			return -EINVAL);
 
 	vega10_read_arg_from_smc(hwmgr, &value);
+
 	/* power value is an integer */
+	memset(query, 0, sizeof *query);
 	query->average_gpu_power = value << 8;
 
 	return 0;
@@ -4230,6 +4233,11 @@ static int vega10_dpm_force_dpm_level(struct pp_hwmgr *hwmgr,
 		break;
 	case AMD_DPM_FORCED_LEVEL_AUTO:
 		ret = vega10_unforce_dpm_levels(hwmgr);
+		if (hwmgr->default_power_profile_mode != hwmgr->power_profile_mode) {
+				smum_send_msg_to_smc_with_parameter(hwmgr, PPSMC_MSG_SetWorkloadMask,
+						1 << hwmgr->default_power_profile_mode);
+				hwmgr->power_profile_mode = hwmgr->default_power_profile_mode;
+		}
 		break;
 	case AMD_DPM_FORCED_LEVEL_PROFILE_STANDARD:
 	case AMD_DPM_FORCED_LEVEL_PROFILE_MIN_SCLK:
@@ -4253,6 +4261,7 @@ static int vega10_dpm_force_dpm_level(struct pp_hwmgr *hwmgr,
 		else if (level != AMD_DPM_FORCED_LEVEL_PROFILE_PEAK && hwmgr->dpm_level == AMD_DPM_FORCED_LEVEL_PROFILE_PEAK)
 			vega10_set_fan_control_mode(hwmgr, AMD_FAN_CTRL_AUTO);
 	}
+
 	return ret;
 }
 
@@ -5070,9 +5079,6 @@ static int vega10_set_power_profile_mode(struct pp_hwmgr *hwmgr, long *input, ui
 	uint8_t use_rlc_busy;
 	uint8_t min_active_level;
 
-	if (input[size] == PP_SMC_POWER_PROFILE_AUTO)
-		return 0; /* TO DO auto wattman feature not enabled */
-
 	hwmgr->power_profile_mode = input[size];
 
 	smum_send_msg_to_smc_with_parameter(hwmgr, PPSMC_MSG_SetWorkloadMask,
@@ -5153,6 +5159,7 @@ static const struct pp_hwmgr_func vega10_hwmgr_funcs = {
 	.start_thermal_controller = vega10_start_thermal_controller,
 	.get_power_profile_mode = vega10_get_power_profile_mode,
 	.set_power_profile_mode = vega10_set_power_profile_mode,
+	.set_power_limit = vega10_set_power_limit,
 };
 
 int vega10_hwmgr_init(struct pp_hwmgr *hwmgr)

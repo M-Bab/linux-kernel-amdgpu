@@ -1237,6 +1237,65 @@ static int pp_dpm_notify_smu_memory_info(void *handle,
 	return ret;
 }
 
+static int pp_set_power_limit(void *handle, uint32_t limit)
+{
+	struct pp_hwmgr *hwmgr;
+	struct pp_instance *pp_handle = (struct pp_instance *)handle;
+	int ret = 0;
+
+	ret = pp_check(pp_handle);
+
+	if (ret)
+		return ret;
+
+	hwmgr = pp_handle->hwmgr;
+
+	if (hwmgr->hwmgr_func->set_power_limit == NULL) {
+		pr_info("%s was not implemented.\n", __func__);
+		return -EINVAL;
+	}
+
+	if (limit == 0)
+		limit = hwmgr->default_power_limit;
+
+	if (limit > hwmgr->default_power_limit)
+		return -EINVAL;
+
+	mutex_lock(&pp_handle->pp_lock);
+	hwmgr->hwmgr_func->set_power_limit(hwmgr, limit);
+	hwmgr->power_limit = limit;
+	mutex_unlock(&pp_handle->pp_lock);
+	return ret;
+}
+
+static int pp_get_power_limit(void *handle, uint32_t *limit, bool default_limit)
+{
+	struct pp_hwmgr *hwmgr;
+	struct pp_instance *pp_handle = (struct pp_instance *)handle;
+	int ret = 0;
+
+	ret = pp_check(pp_handle);
+
+	if (ret)
+		return ret;
+
+	if (limit == NULL)
+		return -EINVAL;
+
+	hwmgr = pp_handle->hwmgr;
+
+	mutex_lock(&pp_handle->pp_lock);
+
+	if (default_limit)
+		*limit = hwmgr->default_power_limit;
+	else
+		*limit = hwmgr->power_limit;
+
+	mutex_unlock(&pp_handle->pp_lock);
+
+	return ret;
+}
+
 static int pp_display_configuration_change(void *handle,
 	const struct amd_pp_display_configuration *display_config)
 {
@@ -1475,6 +1534,27 @@ static int pp_get_display_mode_validation_clocks(void *handle,
 	return ret;
 }
 
+static int pp_set_mmhub_powergating_by_smu(void *handle)
+{
+	struct pp_hwmgr *hwmgr;
+	struct pp_instance *pp_handle = (struct pp_instance *)handle;
+	int ret = 0;
+
+	ret = pp_check(pp_handle);
+
+	if (ret)
+		return ret;
+
+	hwmgr = pp_handle->hwmgr;
+
+	if (hwmgr->hwmgr_func->set_mmhub_powergating_by_smu == NULL) {
+		pr_info("%s was not implemented.\n", __func__);
+		return 0;
+	}
+
+	return hwmgr->hwmgr_func->set_mmhub_powergating_by_smu(hwmgr);
+}
+
 const struct amd_pm_funcs pp_dpm_funcs = {
 	.load_firmware = pp_dpm_load_fw,
 	.wait_for_fw_loading_complete = pp_dpm_fw_loading_complete,
@@ -1509,6 +1589,8 @@ const struct amd_pm_funcs pp_dpm_funcs = {
 	.get_power_profile_mode = pp_get_power_profile_mode,
 	.set_power_profile_mode = pp_set_power_profile_mode,
 	.odn_edit_dpm_table = pp_odn_edit_dpm_table,
+	.set_power_limit = pp_set_power_limit,
+	.get_power_limit = pp_get_power_limit,
 /* export to DC */
 	.get_sclk = pp_dpm_get_sclk,
 	.get_mclk = pp_dpm_get_mclk,
@@ -1521,4 +1603,5 @@ const struct amd_pm_funcs pp_dpm_funcs = {
 	.set_watermarks_for_clocks_ranges = pp_set_watermarks_for_clocks_ranges,
 	.display_clock_voltage_request = pp_display_clock_voltage_request,
 	.get_display_mode_validation_clocks = pp_get_display_mode_validation_clocks,
+	.set_mmhub_powergating_by_smu = pp_set_mmhub_powergating_by_smu,
 };
