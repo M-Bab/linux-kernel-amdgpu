@@ -1,7 +1,7 @@
 /*
  * cs35l41-tables.c -- CS35L41 ALSA SoC audio driver
  *
- * Copyright 2016 Cirrus Logic, Inc.
+ * Copyright 2018 Cirrus Logic, Inc.
  *
  * Author: Brian Austin <brian.austin@cirrus.com>
  *         David Rhodes <david.rhodes@cirrus.com>
