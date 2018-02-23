@@ -42,6 +42,7 @@ struct cs35l41_platform_data {
 	int temp_warn_thld;
 	int ng_pcm_thld;
 	int ng_delay;
+	int dout_hiz;
 	struct irq_cfg irq_config1;
 	struct irq_cfg irq_config2;
 	struct classh_cfg classh_config;

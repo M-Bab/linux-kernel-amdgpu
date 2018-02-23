@@ -58,6 +58,14 @@ Optional properties:
   user-controlled amplifier gain change will occur on a zero-crossing point.
   (Default) Disabled
 
+  - cirrus,asp-sdout-hiz : Audio serial port SDOUT Hi-Z control. Sets the Hi-Z
+  configuration for SDOUT pin of amplifier.
+
+  0 = Logic 0 during unused slots, and while all transmit channels disabled
+  1 = Hi-Z during unused slots but logic 0 while all transmit channels disabled
+  2 = (Default) Logic 0 during unused slots, but Hi-Z while all transmit channels disabled
+  3 = Hi-Z during unused slots and while all transmit channels disabled
+
   - cirrus,temp-warn-threshold : Amplifier overtemperature warning threshold.
   Configures the threshold at which the overtemperature warning condition occurs.
   When the threshold is met, the ovetemperature warning attenuation is applied
