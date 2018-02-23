@@ -264,11 +264,37 @@ static SOC_VALUE_ENUM_SINGLE_DECL(cs35l41_asptx2_enum,
 static const struct snd_kcontrol_new asp_tx2_mux =
 	SOC_DAPM_ENUM("ASPTX2 SRC", cs35l41_asptx2_enum);
 
+static SOC_VALUE_ENUM_SINGLE_DECL(cs35l41_asptx3_enum,
+				CS35L41_ASP_TX3_SRC,
+				0, CS35L41_ASP_SOURCE_MASK,
+				cs35l41_tx_input_texts,
+				cs35l41_tx_input_values);
+
+static const struct snd_kcontrol_new asp_tx3_mux =
+	SOC_DAPM_ENUM("ASPTX3 SRC", cs35l41_asptx3_enum);
+
+static SOC_VALUE_ENUM_SINGLE_DECL(cs35l41_asptx4_enum,
+				CS35L41_ASP_TX4_SRC,
+				0, CS35L41_ASP_SOURCE_MASK,
+				cs35l41_tx_input_texts,
+				cs35l41_tx_input_values);
+
+static const struct snd_kcontrol_new asp_tx4_mux =
+	SOC_DAPM_ENUM("ASPTX4 SRC", cs35l41_asptx4_enum);
+
 static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 	SOC_SINGLE_SX_TLV("Digital PCM Volume", CS35L41_AMP_DIG_VOL_CTRL,
 		      3, 0x4D0, 0x390, dig_vol_tlv),
 	SOC_SINGLE_TLV("AMP PCM Gain", CS35L41_AMP_GAIN_CTRL, 5, 0x14, 0,
 			amp_gain_tlv),
+	SOC_SINGLE_RANGE("ASPTX1 Slot Position", CS35L41_SP_FRAME_TX_SLOT, 0,
+			 0, 7, 0),
+	SOC_SINGLE_RANGE("ASPTX2 Slot Position", CS35L41_SP_FRAME_TX_SLOT, 8,
+			 0, 7, 0),
+	SOC_SINGLE_RANGE("ASPTX3 Slot Position", CS35L41_SP_FRAME_TX_SLOT, 16,
+			 0, 7, 0),
+	SOC_SINGLE_RANGE("ASPTX4 Slot Position", CS35L41_SP_FRAME_TX_SLOT, 24,
+			 0, 7, 0),
 	SOC_ENUM("PCM Soft Ramp", pcm_sft_ramp),
 	SOC_SINGLE_EXT("DSP Booted", SND_SOC_NOPM, 0, 1, 0,
 			cs35l41_halo_booted_get, cs35l41_halo_booted_put),
@@ -590,6 +616,8 @@ static const struct snd_soc_dapm_widget cs35l41_dapm_widgets[] = {
 	SND_SOC_DAPM_AIF_IN("ASPRX2", NULL, 0, CS35L41_SP_ENABLES, 17, 0),
 	SND_SOC_DAPM_AIF_OUT("ASPTX1", NULL, 0, CS35L41_SP_ENABLES, 0, 0),
 	SND_SOC_DAPM_AIF_OUT("ASPTX2", NULL, 0, CS35L41_SP_ENABLES, 1, 0),
+	SND_SOC_DAPM_AIF_OUT("ASPTX3", NULL, 0, CS35L41_SP_ENABLES, 2, 0),
+	SND_SOC_DAPM_AIF_OUT("ASPTX4", NULL, 0, CS35L41_SP_ENABLES, 3, 0),
 
 	SND_SOC_DAPM_ADC("VMON ADC", NULL, CS35L41_PWR_CTRL2, 12, 0),
 	SND_SOC_DAPM_ADC("IMON ADC", NULL, CS35L41_PWR_CTRL2, 13, 0),
@@ -610,6 +638,8 @@ static const struct snd_soc_dapm_widget cs35l41_dapm_widgets[] = {
 
 	SND_SOC_DAPM_MUX("ASP TX1 Source", SND_SOC_NOPM, 0, 0, &asp_tx1_mux),
 	SND_SOC_DAPM_MUX("ASP TX2 Source", SND_SOC_NOPM, 0, 0, &asp_tx2_mux),
+	SND_SOC_DAPM_MUX("ASP TX3 Source", SND_SOC_NOPM, 0, 0, &asp_tx3_mux),
+	SND_SOC_DAPM_MUX("ASP TX4 Source", SND_SOC_NOPM, 0, 0, &asp_tx4_mux),
 	SND_SOC_DAPM_MUX("PCM Source", SND_SOC_NOPM, 0, 0, &pcm_source_mux),
 	SND_SOC_DAPM_SWITCH("DRE", SND_SOC_NOPM, 0, 0, &dre_ctrl),
 };
@@ -637,10 +667,30 @@ static const struct snd_soc_dapm_route cs35l41_audio_map[] = {
 	{"ASP TX2 Source", "ASPRX1", "ASPRX1" },
 	{"ASP TX2 Source", "ASPRX2", "ASPRX2" },
 	{"ASP TX2 Source", "Zero", "ASPRX1" },
+	{"ASP TX3 Source", "VMON", "VMON ADC"},
+	{"ASP TX3 Source", "IMON", "IMON ADC"},
+	{"ASP TX3 Source", "VPMON", "VPMON ADC"},
+	{"ASP TX3 Source", "DSPTX1", "DSP1"},
+	{"ASP TX3 Source", "DSPTX2", "DSP1"},
+	{"ASP TX3 Source", "ASPRX1", "ASPRX1" },
+	{"ASP TX3 Source", "ASPRX2", "ASPRX2" },
+	{"ASP TX3 Source", "Zero", "ASPRX1" },
+	{"ASP TX4 Source", "VMON", "VMON ADC"},
+	{"ASP TX4 Source", "IMON", "IMON ADC"},
+	{"ASP TX4 Source", "VPMON", "VPMON ADC"},
+	{"ASP TX4 Source", "DSPTX1", "DSP1"},
+	{"ASP TX4 Source", "DSPTX2", "DSP1"},
+	{"ASP TX4 Source", "ASPRX1", "ASPRX1" },
+	{"ASP TX4 Source", "ASPRX2", "ASPRX2" },
+	{"ASP TX4 Source", "Zero", "ASPRX1" },
 	{"ASPTX1", NULL, "ASP TX1 Source"},
 	{"ASPTX2", NULL, "ASP TX2 Source"},
+	{"ASPTX3", NULL, "ASP TX3 Source"},
+	{"ASPTX4", NULL, "ASP TX4 Source"},
 	{"AMP Capture", NULL, "ASPTX1"},
 	{"AMP Capture", NULL, "ASPTX2"},
+	{"AMP Capture", NULL, "ASPTX3"},
+	{"AMP Capture", NULL, "ASPTX4"},
 
 	{"VMON ADC", NULL, "ASPRX1"},
 	{"IMON ADC", NULL, "ASPRX1"},
