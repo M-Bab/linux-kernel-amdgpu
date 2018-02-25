@@ -414,6 +414,12 @@
 	INTEL_CFL_U_GT2_IDS(info), \
 	INTEL_CFL_U_GT3_IDS(info)
 
+#define INTEL_CFL_IDS(info) \
+	INTEL_CFL_S_GT1_IDS(info), \
+	INTEL_CFL_S_GT2_IDS(info), \
+	INTEL_CFL_H_GT2_IDS(info), \
+	INTEL_CFL_U_GT3_IDS(info)
+
 /* CNL U 2+2 */
 #define INTEL_CNL_U_GT2_IDS(info) \
 	INTEL_VGA_DEVICE(0x5A52, info), \
