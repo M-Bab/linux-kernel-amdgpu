@@ -406,7 +406,8 @@ int amdgpu_vmid_grab(struct amdgpu_vm *vm, struct amdgpu_ring *ring,
 	struct amdgpu_device *adev = ring->adev;
 	unsigned vmhub = ring->funcs->vmhub;
 	struct amdgpu_vmid_mgr *id_mgr = &adev->vm_manager.id_mgr[vmhub];
-	struct amdgpu_vmid *id, *idle;
+	struct amdgpu_vmid *idle = NULL;
+	struct amdgpu_vmid *id = NULL;
 	int r = 0;
 
 	mutex_lock(&id_mgr->lock);
@@ -606,6 +607,7 @@ void amdgpu_vmid_mgr_fini(struct amdgpu_device *adev)
 			amdgpu_sync_free(&id->active);
 			dma_fence_put(id->flushed_updates);
 			dma_fence_put(id->last_flush);
+			dma_fence_put(id->pasid_mapping);
 		}
 	}
 }

@@ -341,8 +341,8 @@ static int amdgpu_bo_do_create(struct amdgpu_device *adev,
 	struct ttm_operation_ctx ctx = {
 		.interruptible = !kernel,
 		.no_wait_gpu = false,
-		.allow_reserved_eviction = true,
-		.resv = resv
+		.resv = resv,
+		.flags = TTM_OPT_FLAG_ALLOW_RES_EVICT
 	};
 	struct amdgpu_bo *bo;
 	enum ttm_bo_type type;
@@ -371,11 +371,7 @@ static int amdgpu_bo_do_create(struct amdgpu_device *adev,
 	bo = kzalloc(sizeof(struct amdgpu_bo), GFP_KERNEL);
 	if (bo == NULL)
 		return -ENOMEM;
-	r = drm_gem_object_init(adev->ddev, &bo->gem_base, size);
-	if (unlikely(r)) {
-		kfree(bo);
-		return r;
-	}
+	drm_gem_private_object_init(adev->ddev, &bo->gem_base, size);
 	INIT_LIST_HEAD(&bo->shadow_list);
 	INIT_LIST_HEAD(&bo->va);
 	bo->preferred_domains = domain & (AMDGPU_GEM_DOMAIN_VRAM |
@@ -422,8 +418,8 @@ static int amdgpu_bo_do_create(struct amdgpu_device *adev,
 	amdgpu_ttm_placement_from_domain(bo, domain);
 
 	r = ttm_bo_init_reserved(&adev->mman.bdev, &bo->tbo, size, type,
-				 &bo->placement, page_align, &ctx, NULL,
-				 acc_size, sg, resv, &amdgpu_ttm_bo_destroy);
+				 &bo->placement, page_align, &ctx, acc_size,
+				 sg, resv, &amdgpu_ttm_bo_destroy);
 	if (unlikely(r != 0))
 		return r;
 

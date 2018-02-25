@@ -50,7 +50,6 @@
 	dm_logger_write(dc_ctx->logger, LOG_HW_HOTPLUG, \
 		__VA_ARGS__)
 
-#define DEFAULT_DELAY_DISCONNECT 100
 /*******************************************************************************
  * Private structures
  ******************************************************************************/
@@ -118,7 +117,7 @@ struct gpio *get_hpd_gpio(struct dc_bios *dcb,
  *     true on success, false otherwise
  */
 static bool program_hpd_filter(
-	const struct dc_link *link, int default_disconnect_delay)
+	const struct dc_link *link)
 {
 	bool result = false;
 
@@ -127,6 +126,8 @@ static bool program_hpd_filter(
 	int delay_on_connect_in_ms = 0;
 	int delay_on_disconnect_in_ms = 0;
 
+	if (link->is_hpd_filter_disabled)
+		return false;
 	/* Verify feature is supported */
 	switch (link->connector_signal) {
 	case SIGNAL_TYPE_DVI_SINGLE_LINK:
@@ -134,7 +135,7 @@ static bool program_hpd_filter(
 	case SIGNAL_TYPE_HDMI_TYPE_A:
 		/* Program hpd filter */
 		delay_on_connect_in_ms = 500;
-		delay_on_disconnect_in_ms = default_disconnect_delay;
+		delay_on_disconnect_in_ms = 100;
 		break;
 	case SIGNAL_TYPE_DISPLAY_PORT:
 	case SIGNAL_TYPE_DISPLAY_PORT_MST:
@@ -698,13 +699,6 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 			dp_hbr_verify_link_cap(link, &link->reported_link_cap);
 		}
 
-		/* Add delay for certain monitors */
-		if (sink->edid_caps.panel_patch.disconnect_delay > 0
-				&& sink->sink_signal == SIGNAL_TYPE_HDMI_TYPE_A)
-			program_hpd_filter(link, sink->edid_caps.panel_patch.disconnect_delay);
-		else
-			program_hpd_filter(link, DEFAULT_DELAY_DISCONNECT);
-
 		/* HDMI-DVI Dongle */
 		if (sink->sink_signal == SIGNAL_TYPE_HDMI_TYPE_A &&
 				!sink->edid_caps.edid_hdmi)
@@ -1091,7 +1085,7 @@ static bool construct(
 	 * If GPIO isn't programmed correctly HPD might not rise or drain
 	 * fast enough, leading to bounces.
 	 */
-	program_hpd_filter(link, DEFAULT_DELAY_DISCONNECT);
+	program_hpd_filter(link);
 
 	return true;
 device_tag_fail:
@@ -1257,6 +1251,12 @@ static enum dc_status enable_link_dp(
 		pipe_ctx->stream->signal,
 		pipe_ctx->clock_source->id,
 		&link_settings);
+
+	if (stream->sink->edid_caps.panel_patch.dppowerup_delay > 0) {
+		int delay_dp_power_up_in_ms = stream->sink->edid_caps.panel_patch.dppowerup_delay;
+
+		msleep(delay_dp_power_up_in_ms);
+	}
 
 	panel_mode = dp_get_panel_mode(link);
 	dpcd_configure_panel_mode(link, panel_mode);
@@ -2010,7 +2010,7 @@ const struct dc_link_status *dc_link_get_status(const struct dc_link *link)
 void core_link_resume(struct dc_link *link)
 {
 	if (link->connector_signal != SIGNAL_TYPE_VIRTUAL)
-		program_hpd_filter(link, DEFAULT_DELAY_DISCONNECT);
+		program_hpd_filter(link);
 }
 
 static struct fixed31_32 get_pbn_per_slot(struct dc_stream_state *stream)
@@ -2288,7 +2288,16 @@ void core_link_enable_stream(
 {
 	struct dc  *core_dc = pipe_ctx->stream->ctx->dc;
 
-	enum dc_status status = enable_link(state, pipe_ctx);
+	enum dc_status status;
+
+	/* eDP lit up by bios already, no need to enable again. */
+	if (pipe_ctx->stream->signal == SIGNAL_TYPE_EDP &&
+		core_dc->apply_edp_fast_boot_optimization) {
+		core_dc->apply_edp_fast_boot_optimization = false;
+		return;
+	}
+
+	status = enable_link(state, pipe_ctx);
 
 	if (status != DC_OK) {
 			dm_logger_write(pipe_ctx->stream->ctx->logger,
@@ -2344,5 +2353,35 @@ void core_link_set_avmute(struct pipe_ctx *pipe_ctx, bool enable)
 		return;
 
 	core_dc->hwss.set_avmute(pipe_ctx, enable);
+}
+
+void dc_link_disable_hpd_filter(struct dc_link *link)
+{
+	struct gpio *hpd;
+
+	if (!link->is_hpd_filter_disabled) {
+		link->is_hpd_filter_disabled = true;
+		/* Obtain HPD handle */
+		hpd = get_hpd_gpio(link->ctx->dc_bios, link->link_id, link->ctx->gpio_service);
+
+		if (!hpd)
+			return;
+
+		/* Setup HPD filtering */
+		if (dal_gpio_open(hpd, GPIO_MODE_INTERRUPT) == GPIO_RESULT_OK) {
+			struct gpio_hpd_config config;
+
+			config.delay_on_connect = 0;
+			config.delay_on_disconnect = 0;
+
+			dal_irq_setup_hpd_filter(hpd, &config);
+
+			dal_gpio_close(hpd);
+		} else {
+			ASSERT_CRITICAL(false);
+		}
+		/* Release HPD handle */
+		dal_gpio_destroy_irq(&hpd);
+	}
 }
 

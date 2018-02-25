@@ -39,6 +39,7 @@
 #include "bios_parser_interface.h"
 #include "include/irq_service_interface.h"
 #include "transform.h"
+#include "dmcu.h"
 #include "dpp.h"
 #include "timing_generator.h"
 #include "virtual/virtual_link_encoder.h"
@@ -298,6 +299,45 @@ bool dc_stream_get_crc(struct dc *dc, struct dc_stream_state *stream,
 		return tg->funcs->get_crc(tg, r_cr, g_y, b_cb);
 	dm_logger_write(dc->ctx->logger, LOG_WARNING, "CRC capture not supported.");
 	return false;
+}
+
+void dc_stream_set_dither_option(struct dc_stream_state *stream,
+		enum dc_dither_option option)
+{
+	struct bit_depth_reduction_params params;
+	struct dc_link *link = stream->status.link;
+	struct pipe_ctx *pipes = NULL;
+	int i;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (link->dc->current_state->res_ctx.pipe_ctx[i].stream ==
+				stream) {
+			pipes = &link->dc->current_state->res_ctx.pipe_ctx[i];
+			break;
+		}
+	}
+
+	if (!pipes)
+		return;
+	if (option > DITHER_OPTION_MAX)
+		return;
+
+	stream->dither_option = option;
+
+	memset(&params, 0, sizeof(params));
+	resource_build_bit_depth_reduction_params(stream, &params);
+	stream->bit_depth_params = params;
+
+	if (pipes->plane_res.xfm &&
+	    pipes->plane_res.xfm->funcs->transform_set_pixel_storage_depth) {
+		pipes->plane_res.xfm->funcs->transform_set_pixel_storage_depth(
+			pipes->plane_res.xfm,
+			pipes->plane_res.scl_data.lb_params.depth,
+			&stream->bit_depth_params);
+	}
+
+	pipes->stream_res.opp->funcs->
+		opp_program_bit_depth_reduction(pipes->stream_res.opp, &params);
 }
 
 void dc_stream_set_static_screen_events(struct dc *dc,
@@ -569,6 +609,12 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 	dc->caps.max_links = dc->link_count;
 	dc->caps.max_audios = dc->res_pool->audio_count;
 	dc->caps.linear_pitch_alignment = 64;
+
+	/* Populate versioning information */
+	dc->versions.dc_ver = DC_VER;
+
+	if (dc->res_pool->dmcu != NULL)
+		dc->versions.dmcu_version = dc->res_pool->dmcu->dmcu_version;
 
 	dc->config = init_params->flags;
 
@@ -1598,12 +1644,17 @@ struct dc_sink *dc_link_add_remote_sink(
 			&dc_sink->dc_edid,
 			&dc_sink->edid_caps);
 
-	if (edid_status != EDID_OK)
-		goto fail;
+	/*
+	 * Treat device as no EDID device if EDID
+	 * parsing fails
+	 */
+	if (edid_status != EDID_OK) {
+		dc_sink->dc_edid.length = 0;
+		dm_error("Bad EDID, status%d!\n", edid_status);
+	}
 
 	return dc_sink;
-fail:
-	dc_link_remove_remote_sink(link, dc_sink);
+
 fail_add_sink:
 	dc_sink_release(dc_sink);
 	return NULL;

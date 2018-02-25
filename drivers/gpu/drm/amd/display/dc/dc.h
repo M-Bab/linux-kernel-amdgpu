@@ -38,7 +38,7 @@
 #include "inc/compressor.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.1.32"
+#define DC_VER "3.1.34"
 
 #define MAX_SURFACES 3
 #define MAX_STREAMS 6
@@ -48,6 +48,18 @@
 /*******************************************************************************
  * Display Core Interfaces
  ******************************************************************************/
+struct dmcu_version {
+	unsigned int date;
+	unsigned int month;
+	unsigned int year;
+	unsigned int interface_version;
+};
+
+struct dc_versions {
+	const char *dc_ver;
+	struct dmcu_version dmcu_version;
+};
+
 struct dc_caps {
 	uint32_t max_streams;
 	uint32_t max_links;
@@ -95,6 +107,7 @@ struct dc_surface_dcc_cap {
 };
 
 struct dc_static_screen_events {
+	bool force_trigger;
 	bool cursor_update;
 	bool surface_update;
 	bool overlay_update;
@@ -220,6 +233,7 @@ struct dc_state;
 struct resource_pool;
 struct dce_hwseq;
 struct dc {
+	struct dc_versions versions;
 	struct dc_caps caps;
 	struct dc_cap_funcs cap_funcs;
 	struct dc_config config;
@@ -255,6 +269,8 @@ struct dc {
 	struct dm_pp_display_configuration prev_display_config;
 
 	bool optimized_required;
+
+	bool apply_edp_fast_boot_optimization;
 
 	/* FBC compressor */
 #if defined(CONFIG_DRM_AMD_DC_FBC)

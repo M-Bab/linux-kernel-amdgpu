@@ -1009,35 +1009,8 @@ static void cz_reset_acp_boot_level(struct pp_hwmgr *hwmgr)
 	cz_hwmgr->acp_boot_level = 0xff;
 }
 
-static bool cz_dpm_check_smu_features(struct pp_hwmgr *hwmgr,
-				unsigned long check_feature)
-{
-	int result;
-	unsigned long features;
-
-	result = smum_send_msg_to_smc_with_parameter(hwmgr, PPSMC_MSG_GetFeatureStatus, 0);
-	if (result == 0) {
-		features = smum_get_argument(hwmgr);
-		if (features & check_feature)
-			return true;
-	}
-
-	return false;
-}
-
-static bool cz_check_for_dpm_enabled(struct pp_hwmgr *hwmgr)
-{
-	if (cz_dpm_check_smu_features(hwmgr, SMU_EnabledFeatureScoreboard_SclkDpmOn))
-		return true;
-	return false;
-}
-
 static int cz_disable_dpm_tasks(struct pp_hwmgr *hwmgr)
 {
-	if (!cz_check_for_dpm_enabled(hwmgr)) {
-		pr_info("dpm has been disabled\n");
-		return 0;
-	}
 	cz_disable_nb_dpm(hwmgr);
 
 	cz_clear_voting_clients(hwmgr);
@@ -1049,11 +1022,6 @@ static int cz_disable_dpm_tasks(struct pp_hwmgr *hwmgr)
 
 static int cz_enable_dpm_tasks(struct pp_hwmgr *hwmgr)
 {
-	if (cz_check_for_dpm_enabled(hwmgr)) {
-		pr_info("dpm has been enabled\n");
-		return 0;
-	}
-
 	cz_program_voting_clients(hwmgr);
 	if (cz_start_dpm(hwmgr))
 		return -EINVAL;

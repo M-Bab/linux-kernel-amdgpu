@@ -57,6 +57,8 @@
 #include "dce/dce_11_0_sh_mask.h"
 #include "custom_float.h"
 
+#include "atomfirmware.h"
+
 /*
  * All values are in milliseconds;
  * For eDP, after power-up/power/down,
@@ -407,7 +409,7 @@ static bool convert_to_custom_float(struct pwl_result_data *rgb_resulted,
 	return true;
 }
 
-#define MAX_LOW_POINT      11
+#define MAX_LOW_POINT      25
 #define NUMBER_REGIONS     16
 #define NUMBER_SW_SEGMENTS 16
 
@@ -441,8 +443,8 @@ dce110_translate_regamma_to_hw_format(const struct dc_transfer_func *output_tf,
 		/* 16 segments
 		 * segments are from 2^-11 to 2^5
 		 */
-		region_start = -MAX_LOW_POINT;
-		region_end = NUMBER_REGIONS - MAX_LOW_POINT;
+		region_start = -11;
+		region_end = region_start + NUMBER_REGIONS;
 
 		for (i = 0; i < NUMBER_REGIONS; i++)
 			seg_distr[i] = 4;
@@ -479,7 +481,7 @@ dce110_translate_regamma_to_hw_format(const struct dc_transfer_func *output_tf,
 
 	j = 0;
 	for (k = 0; k < (region_end - region_start); k++) {
-		increment = 32 / (1 << seg_distr[k]);
+		increment = NUMBER_SW_SEGMENTS / (1 << seg_distr[k]);
 		start_index = (region_start + k + MAX_LOW_POINT) *
 				NUMBER_SW_SEGMENTS;
 		for (i = start_index; i < start_index + NUMBER_SW_SEGMENTS;
@@ -1425,23 +1427,6 @@ static void disable_vga_and_power_gate_all_controllers(
 	}
 }
 
-static struct dc_link *get_link_for_edp(
-		struct dc *dc)
-{
-	int i;
-	struct dc_link *link = NULL;
-
-	/* check if there is an eDP panel not in use */
-	for (i = 0; i < dc->link_count; i++) {
-		if (dc->links[i]->local_sink &&
-			dc->links[i]->local_sink->sink_signal == SIGNAL_TYPE_EDP) {
-			link = dc->links[i];
-			break;
-		}
-	}
-
-	return link;
-}
 static struct dc_link *get_link_for_edp_not_in_use(
 		struct dc *dc,
 		struct dc_state *context)
@@ -1477,13 +1462,27 @@ static struct dc_link *get_link_for_edp_not_in_use(
 void dce110_enable_accelerated_mode(struct dc *dc, struct dc_state *context)
 {
 	struct dc_bios *dcb = dc->ctx->dc_bios;
-	struct dc_link *edp_link_to_turnoff = get_link_for_edp_not_in_use(dc, context);
 
-	struct dc_link *edp_link = get_link_for_edp(dc);
-	if (dcb->funcs->get_vga_enabled_displays(dc->ctx->dc_bios) != 0) {
+	/* vbios already light up eDP, so we can leverage vbios and skip eDP
+	 * programming
+	 */
+	bool can_eDP_fast_boot_optimize =
+			(dcb->funcs->get_vga_enabled_displays(dc->ctx->dc_bios) == ATOM_DISPLAY_LCD1_ACTIVE);
+
+	/* if OS doesn't light up eDP and eDP link is available, we want to disable */
+	struct dc_link *edp_link_to_turnoff = NULL;
+
+	if (can_eDP_fast_boot_optimize) {
+		edp_link_to_turnoff = get_link_for_edp_not_in_use(dc, context);
+
+		if (!edp_link_to_turnoff)
+			dc->apply_edp_fast_boot_optimization = true;
+	}
+
+	if (!dc->apply_edp_fast_boot_optimization) {
 		if (edp_link_to_turnoff) {
-			/*we need turn off backlight before DP_blank and encoder powered down, todo add optimization*/
-			dc->hwss.edp_backlight_control(edp_link, false);
+			/*turn off backlight before DP_blank and encoder powered down*/
+			dc->hwss.edp_backlight_control(edp_link_to_turnoff, false);
 		}
 		/*resume from S3, no vbios posting, no need to power down again*/
 		power_down_all_hw_blocks(dc);
@@ -1625,6 +1624,8 @@ static void set_static_screen_control(struct pipe_ctx **pipe_ctx,
 		value |= 0x80;
 	if (events->cursor_update)
 		value |= 0x2;
+	if (events->force_trigger)
+		value |= 0x1;
 
 #if defined(CONFIG_DRM_AMD_DC_FBC)
 	value |= 0x84;
