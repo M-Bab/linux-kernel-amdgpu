@@ -493,6 +493,7 @@ retry:
 	i = -1;
 	seq = read_seqcount_begin(&obj->seq);
 	rcu_read_lock();
+	i = -1;
 
 	fence = rcu_dereference(obj->fence_excl);
 	if (fence && !test_bit(DMA_FENCE_FLAG_SIGNALED_BIT, &fence->flags)) {
