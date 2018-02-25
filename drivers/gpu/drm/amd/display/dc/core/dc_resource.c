@@ -35,6 +35,7 @@
 #include "core_types.h"
 #include "set_mode_types.h"
 #include "virtual/virtual_stream_encoder.h"
+#include "dpcd_defs.h"
 
 #include "dce80/dce80_resource.h"
 #include "dce100/dce100_resource.h"
@@ -696,7 +697,7 @@ static void calculate_inits_and_adj_vp(struct pipe_ctx *pipe_ctx, struct view *r
 
 
 	/* Adjust for viewport end clip-off */
-	if ((data->viewport.x + data->viewport.width) < (src.x + src.width)) {
+	if ((data->viewport.x + data->viewport.width) < (src.x + src.width) && !flip_horz_scan_dir) {
 		int vp_clip = src.x + src.width - data->viewport.width - data->viewport.x;
 		int int_part = dal_fixed31_32_floor(
 				dal_fixed31_32_sub(data->inits.h, data->ratios.horz));
@@ -704,7 +705,7 @@ static void calculate_inits_and_adj_vp(struct pipe_ctx *pipe_ctx, struct view *r
 		int_part = int_part > 0 ? int_part : 0;
 		data->viewport.width += int_part < vp_clip ? int_part : vp_clip;
 	}
-	if ((data->viewport.y + data->viewport.height) < (src.y + src.height)) {
+	if ((data->viewport.y + data->viewport.height) < (src.y + src.height) && !flip_vert_scan_dir) {
 		int vp_clip = src.y + src.height - data->viewport.height - data->viewport.y;
 		int int_part = dal_fixed31_32_floor(
 				dal_fixed31_32_sub(data->inits.v, data->ratios.vert));
@@ -712,7 +713,7 @@ static void calculate_inits_and_adj_vp(struct pipe_ctx *pipe_ctx, struct view *r
 		int_part = int_part > 0 ? int_part : 0;
 		data->viewport.height += int_part < vp_clip ? int_part : vp_clip;
 	}
-	if ((data->viewport_c.x + data->viewport_c.width) < (src.x + src.width) / vpc_div) {
+	if ((data->viewport_c.x + data->viewport_c.width) < (src.x + src.width) / vpc_div && !flip_horz_scan_dir) {
 		int vp_clip = (src.x + src.width) / vpc_div -
 				data->viewport_c.width - data->viewport_c.x;
 		int int_part = dal_fixed31_32_floor(
@@ -721,7 +722,7 @@ static void calculate_inits_and_adj_vp(struct pipe_ctx *pipe_ctx, struct view *r
 		int_part = int_part > 0 ? int_part : 0;
 		data->viewport_c.width += int_part < vp_clip ? int_part : vp_clip;
 	}
-	if ((data->viewport_c.y + data->viewport_c.height) < (src.y + src.height) / vpc_div) {
+	if ((data->viewport_c.y + data->viewport_c.height) < (src.y + src.height) / vpc_div && !flip_vert_scan_dir) {
 		int vp_clip = (src.y + src.height) / vpc_div -
 				data->viewport_c.height - data->viewport_c.y;
 		int int_part = dal_fixed31_32_floor(
@@ -2434,7 +2435,8 @@ static void set_vsc_info_packet(
 	unsigned int vscPacketRevision = 0;
 	unsigned int i;
 
-	if (stream->sink->link->psr_enabled) {
+	/*VSC packet set to 2 when DP revision >= 1.2*/
+	if (stream->sink->link->dpcd_caps.dpcd_rev.raw >= DPCD_REV_12) {
 		vscPacketRevision = 2;
 	}
 

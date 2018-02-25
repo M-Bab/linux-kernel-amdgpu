@@ -1,5 +1,5 @@
 #
-# Copyright 2017 Advanced Micro Devices, Inc.
+# Copyright 2018 Advanced Micro Devices, Inc.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -20,15 +20,12 @@
 # OTHER DEALINGS IN THE SOFTWARE.
 #
 #
-# Makefile for the 'controller' sub-component of DAL.
-# It provides the control and status of HW CRTC block.
+# Makefile for the color sub-module of DAL.
+#
 
-DCE80 = dce80_timing_generator.o dce80_hw_sequencer.o \
-	dce80_resource.o
+MOD_COLOR = color_gamma.o
 
-AMD_DAL_DCE80 = $(addprefix $(AMDDALPATH)/dc/dce80/,$(DCE80))
+AMD_DAL_MOD_COLOR = $(addprefix $(AMDDALPATH)/modules/color/,$(MOD_COLOR))
+#$(info ************  DAL COLOR MODULE MAKEFILE ************)
 
-AMD_DISPLAY_FILES += $(AMD_DAL_DCE80)
-
-
-
+AMD_DISPLAY_FILES += $(AMD_DAL_MOD_COLOR)

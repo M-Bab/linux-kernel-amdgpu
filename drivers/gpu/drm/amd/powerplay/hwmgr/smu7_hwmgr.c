@@ -1239,11 +1239,6 @@ static int smu7_enable_dpm_tasks(struct pp_hwmgr *hwmgr)
 	int tmp_result = 0;
 	int result = 0;
 
-	tmp_result = (!smum_is_dpm_running(hwmgr)) ? 0 : -1;
-	PP_ASSERT_WITH_CODE(tmp_result == 0,
-			"DPM is already running",
-			);
-
 	if (smu7_voltage_control(hwmgr)) {
 		tmp_result = smu7_enable_voltage_control(hwmgr);
 		PP_ASSERT_WITH_CODE(tmp_result == 0,
@@ -1405,11 +1400,6 @@ static int smu7_update_avfs(struct pp_hwmgr *hwmgr)
 int smu7_disable_dpm_tasks(struct pp_hwmgr *hwmgr)
 {
 	int tmp_result, result = 0;
-
-	tmp_result = (smum_is_dpm_running(hwmgr)) ? 0 : -1;
-	PP_ASSERT_WITH_CODE(tmp_result == 0,
-			"DPM is not running right now, no need to disable DPM!",
-			return 0);
 
 	if (phm_cap_enabled(hwmgr->platform_descriptor.platformCaps,
 			PHM_PlatformCaps_ThermalController))
@@ -4650,20 +4640,26 @@ static int smu7_set_power_profile_state(struct pp_hwmgr *hwmgr,
 	if (hwmgr->dpm_level != AMD_DPM_FORCED_LEVEL_AUTO)
 		return -EINVAL;
 
-	tmp_result = smu7_freeze_sclk_mclk_dpm(hwmgr);
-	PP_ASSERT_WITH_CODE(!tmp_result,
-			"Failed to freeze SCLK MCLK DPM!",
-			result = tmp_result);
+	if (smum_is_dpm_running(hwmgr)) {
+		if (!data->sclk_dpm_key_disabled)
+			smum_send_msg_to_smc(hwmgr, PPSMC_MSG_SCLKDPM_FreezeLevel);
+
+		if (!data->mclk_dpm_key_disabled)
+			smum_send_msg_to_smc(hwmgr, PPSMC_MSG_MCLKDPM_FreezeLevel);
+	}
 
 	tmp_result = smum_populate_requested_graphic_levels(hwmgr, request);
 	PP_ASSERT_WITH_CODE(!tmp_result,
 			"Failed to populate requested graphic levels!",
 			result = tmp_result);
 
-	tmp_result = smu7_unfreeze_sclk_mclk_dpm(hwmgr);
-	PP_ASSERT_WITH_CODE(!tmp_result,
-			"Failed to unfreeze SCLK MCLK DPM!",
-			result = tmp_result);
+	if (smum_is_dpm_running(hwmgr)) {
+		if (!data->sclk_dpm_key_disabled)
+			smum_send_msg_to_smc(hwmgr, PPSMC_MSG_SCLKDPM_UnfreezeLevel);
+
+		if (!data->mclk_dpm_key_disabled)
+			smum_send_msg_to_smc(hwmgr, PPSMC_MSG_MCLKDPM_UnfreezeLevel);
+	}
 
 	smu7_find_min_clock_masks(hwmgr, &sclk_mask, &mclk_mask,
 			request->min_sclk, request->min_mclk);

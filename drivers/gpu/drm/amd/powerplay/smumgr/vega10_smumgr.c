@@ -83,15 +83,16 @@ static bool vega10_is_smc_ram_running(struct pp_hwmgr *hwmgr)
 static uint32_t vega10_wait_for_response(struct pp_hwmgr *hwmgr)
 {
 	uint32_t reg;
-
-	if (!vega10_is_smc_ram_running(hwmgr))
-		return -EINVAL;
+	uint32_t ret;
 
 	reg = soc15_get_register_offset(MP1_HWID, 0,
 			mmMP1_SMN_C2PMSG_90_BASE_IDX, mmMP1_SMN_C2PMSG_90);
 
-	phm_wait_for_register_unequal(hwmgr, reg,
+	ret = phm_wait_for_register_unequal(hwmgr, reg,
 			0, MP1_C2PMSG_90__CONTENT_MASK);
+
+	if (ret)
+		pr_err("No response from smu\n");
 
 	return cgs_read_register(hwmgr->device, reg);
 }
@@ -106,9 +107,6 @@ int vega10_send_msg_to_smc_without_waiting(struct pp_hwmgr *hwmgr,
 		uint16_t msg)
 {
 	uint32_t reg;
-
-	if (!vega10_is_smc_ram_running(hwmgr))
-		return -EINVAL;
 
 	reg = soc15_get_register_offset(MP1_HWID, 0,
 			mmMP1_SMN_C2PMSG_66_BASE_IDX, mmMP1_SMN_C2PMSG_66);
@@ -126,9 +124,7 @@ int vega10_send_msg_to_smc_without_waiting(struct pp_hwmgr *hwmgr,
 int vega10_send_msg_to_smc(struct pp_hwmgr *hwmgr, uint16_t msg)
 {
 	uint32_t reg;
-
-	if (!vega10_is_smc_ram_running(hwmgr))
-		return -EINVAL;
+	uint32_t ret;
 
 	vega10_wait_for_response(hwmgr);
 
@@ -138,8 +134,9 @@ int vega10_send_msg_to_smc(struct pp_hwmgr *hwmgr, uint16_t msg)
 
 	vega10_send_msg_to_smc_without_waiting(hwmgr, msg);
 
-	if (vega10_wait_for_response(hwmgr) != 1)
-		pr_err("Failed to send message: 0x%x\n", msg);
+	ret = vega10_wait_for_response(hwmgr);
+	if (ret != 1)
+		pr_err("Failed to send message: 0x%x, ret value: 0x%x\n", msg, ret);
 
 	return 0;
 }
@@ -155,9 +152,7 @@ int vega10_send_msg_to_smc_with_parameter(struct pp_hwmgr *hwmgr,
 		uint16_t msg, uint32_t parameter)
 {
 	uint32_t reg;
-
-	if (!vega10_is_smc_ram_running(hwmgr))
-		return -EINVAL;
+	uint32_t ret;
 
 	vega10_wait_for_response(hwmgr);
 
@@ -171,8 +166,9 @@ int vega10_send_msg_to_smc_with_parameter(struct pp_hwmgr *hwmgr,
 
 	vega10_send_msg_to_smc_without_waiting(hwmgr, msg);
 
-	if (vega10_wait_for_response(hwmgr) != 1)
-		pr_err("Failed to send message: 0x%x\n", msg);
+	ret = vega10_wait_for_response(hwmgr);
+	if (ret != 1)
+		pr_err("Failed to send message: 0x%x, ret value: 0x%x\n", msg, ret);
 
 	return 0;
 }
@@ -232,20 +228,15 @@ int vega10_copy_table_from_smc(struct pp_hwmgr *hwmgr,
 			"Invalid SMU Table version!", return -EINVAL);
 	PP_ASSERT_WITH_CODE(priv->smu_tables.entry[table_id].size != 0,
 			"Invalid SMU Table Length!", return -EINVAL);
-	PP_ASSERT_WITH_CODE(vega10_send_msg_to_smc_with_parameter(hwmgr,
+	vega10_send_msg_to_smc_with_parameter(hwmgr,
 			PPSMC_MSG_SetDriverDramAddrHigh,
-			priv->smu_tables.entry[table_id].table_addr_high) == 0,
-			"[CopyTableFromSMC] Attempt to Set Dram Addr High Failed!", return -EINVAL);
-	PP_ASSERT_WITH_CODE(vega10_send_msg_to_smc_with_parameter(hwmgr,
+			priv->smu_tables.entry[table_id].table_addr_high);
+	vega10_send_msg_to_smc_with_parameter(hwmgr,
 			PPSMC_MSG_SetDriverDramAddrLow,
-			priv->smu_tables.entry[table_id].table_addr_low) == 0,
-			"[CopyTableFromSMC] Attempt to Set Dram Addr Low Failed!",
-			return -EINVAL);
-	PP_ASSERT_WITH_CODE(vega10_send_msg_to_smc_with_parameter(hwmgr,
+			priv->smu_tables.entry[table_id].table_addr_low);
+	vega10_send_msg_to_smc_with_parameter(hwmgr,
 			PPSMC_MSG_TransferTableSmu2Dram,
-			priv->smu_tables.entry[table_id].table_id) == 0,
-			"[CopyTableFromSMC] Attempt to Transfer Table From SMU Failed!",
-			return -EINVAL);
+			priv->smu_tables.entry[table_id].table_id);
 
 	memcpy(table, priv->smu_tables.entry[table_id].table,
 			priv->smu_tables.entry[table_id].size);
@@ -274,21 +265,15 @@ int vega10_copy_table_to_smc(struct pp_hwmgr *hwmgr,
 	memcpy(priv->smu_tables.entry[table_id].table, table,
 			priv->smu_tables.entry[table_id].size);
 
-	PP_ASSERT_WITH_CODE(vega10_send_msg_to_smc_with_parameter(hwmgr,
+	vega10_send_msg_to_smc_with_parameter(hwmgr,
 			PPSMC_MSG_SetDriverDramAddrHigh,
-			priv->smu_tables.entry[table_id].table_addr_high) == 0,
-			"[CopyTableToSMC] Attempt to Set Dram Addr High Failed!",
-			return -EINVAL;);
-	PP_ASSERT_WITH_CODE(vega10_send_msg_to_smc_with_parameter(hwmgr,
+			priv->smu_tables.entry[table_id].table_addr_high);
+	vega10_send_msg_to_smc_with_parameter(hwmgr,
 			PPSMC_MSG_SetDriverDramAddrLow,
-			priv->smu_tables.entry[table_id].table_addr_low) == 0,
-			"[CopyTableToSMC] Attempt to Set Dram Addr Low Failed!",
-			return -EINVAL);
-	PP_ASSERT_WITH_CODE(vega10_send_msg_to_smc_with_parameter(hwmgr,
+			priv->smu_tables.entry[table_id].table_addr_low);
+	vega10_send_msg_to_smc_with_parameter(hwmgr,
 			PPSMC_MSG_TransferTableDram2Smu,
-			priv->smu_tables.entry[table_id].table_id) == 0,
-			"[CopyTableToSMC] Attempt to Transfer Table To SMU Failed!",
-			return -EINVAL);
+			priv->smu_tables.entry[table_id].table_id);
 
 	return 0;
 }
@@ -327,13 +312,21 @@ int vega10_get_smc_features(struct pp_hwmgr *hwmgr,
 	if (features_enabled == NULL)
 		return -EINVAL;
 
-	if (!vega10_send_msg_to_smc(hwmgr,
-			PPSMC_MSG_GetEnabledSmuFeatures)) {
-		vega10_read_arg_from_smc(hwmgr, features_enabled);
-		return 0;
-	}
+	vega10_send_msg_to_smc(hwmgr, PPSMC_MSG_GetEnabledSmuFeatures);
+	vega10_read_arg_from_smc(hwmgr, features_enabled);
+	return 0;
+}
 
-	return -EINVAL;
+static bool vega10_is_dpm_running(struct pp_hwmgr *hwmgr)
+{
+	uint32_t features_enabled = 0;
+
+	vega10_get_smc_features(hwmgr, &features_enabled);
+
+	if (features_enabled & SMC_DPM_FEATURES)
+		return true;
+	else
+		return false;
 }
 
 int vega10_set_tools_address(struct pp_hwmgr *hwmgr)
@@ -343,12 +336,12 @@ int vega10_set_tools_address(struct pp_hwmgr *hwmgr)
 
 	if (priv->smu_tables.entry[TOOLSTABLE].table_addr_high ||
 			priv->smu_tables.entry[TOOLSTABLE].table_addr_low) {
-		if (!vega10_send_msg_to_smc_with_parameter(hwmgr,
+		vega10_send_msg_to_smc_with_parameter(hwmgr,
 				PPSMC_MSG_SetToolsDramAddrHigh,
-				priv->smu_tables.entry[TOOLSTABLE].table_addr_high))
-			vega10_send_msg_to_smc_with_parameter(hwmgr,
-					PPSMC_MSG_SetToolsDramAddrLow,
-					priv->smu_tables.entry[TOOLSTABLE].table_addr_low);
+				priv->smu_tables.entry[TOOLSTABLE].table_addr_high);
+		vega10_send_msg_to_smc_with_parameter(hwmgr,
+				PPSMC_MSG_SetToolsDramAddrLow,
+				priv->smu_tables.entry[TOOLSTABLE].table_addr_low);
 	}
 	return 0;
 }
@@ -581,6 +574,9 @@ static int vega10_smu_fini(struct pp_hwmgr *hwmgr)
 
 static int vega10_start_smu(struct pp_hwmgr *hwmgr)
 {
+	if (!vega10_is_smc_ram_running(hwmgr))
+		return -EINVAL;
+
 	PP_ASSERT_WITH_CODE(!vega10_verify_smc_interface(hwmgr),
 			"Failed to verify SMC interface!",
 			return -EINVAL);
@@ -599,4 +595,5 @@ const struct pp_smumgr_func vega10_smu_funcs = {
 	.send_msg_to_smc_with_parameter = &vega10_send_msg_to_smc_with_parameter,
 	.download_pptable_settings = NULL,
 	.upload_pptable_settings = NULL,
+	.is_dpm_running = vega10_is_dpm_running,
 };

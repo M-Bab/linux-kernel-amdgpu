@@ -1,11 +1,11 @@
 /*
- * Copyright 2012-15 Advanced Micro Devices, Inc.
+ * Copyright 2016 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
  * to deal in the Software without restriction, including without limitation
  * the rights to use, copy, modify, merge, publish, distribute, sublicense,
- *  and/or sell copies of the Software, and to permit persons to whom the
+ * and/or sell copies of the Software, and to permit persons to whom the
  * Software is furnished to do so, subject to the following conditions:
  *
  * The above copyright notice and this permission notice shall be included in
@@ -23,17 +23,31 @@
  *
  */
 
-#ifndef __DC_TIMING_GENERATOR_DCE80_H__
-#define __DC_TIMING_GENERATOR_DCE80_H__
+#ifndef COLOR_MOD_COLOR_GAMMA_H_
+#define COLOR_MOD_COLOR_GAMMA_H_
 
-#include "timing_generator.h"
-#include "../include/grph_object_id.h"
+struct dc_transfer_func;
+struct dc_gamma;
+struct dc_transfer_func_distributed_points;
+struct dc_rgb_fixed;
+enum dc_transfer_func_predefined;
 
-/* DCE8.0 implementation inherits from DCE11.0 */
-void dce80_timing_generator_construct(
-	struct dce110_timing_generator *tg,
-	struct dc_context *ctx,
-	uint32_t instance,
-	const struct dce110_timing_generator_offsets *offsets);
+void setup_x_points_distribution(void);
+void precompute_pq(void);
+void precompute_de_pq(void);
 
-#endif /* __DC_TIMING_GENERATOR_DCE80_H__ */
+bool mod_color_calculate_regamma_params(struct dc_transfer_func *output_tf,
+		const struct dc_gamma *ramp, bool mapUserRamp);
+
+bool mod_color_calculate_degamma_params(struct dc_transfer_func *output_tf,
+		const struct dc_gamma *ramp, bool mapUserRamp);
+
+bool mod_color_calculate_curve(enum dc_transfer_func_predefined  trans,
+		struct dc_transfer_func_distributed_points *points);
+
+bool  mod_color_calculate_degamma_curve(enum dc_transfer_func_predefined trans,
+				struct dc_transfer_func_distributed_points *points);
+
+
+
+#endif /* COLOR_MOD_COLOR_GAMMA_H_ */

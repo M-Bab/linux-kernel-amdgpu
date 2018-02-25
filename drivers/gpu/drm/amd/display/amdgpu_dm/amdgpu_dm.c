@@ -348,35 +348,28 @@ static void hotplug_notify_work_func(struct work_struct *work)
 
 #if defined(CONFIG_DRM_AMD_DC_FBC)
 /* Allocate memory for FBC compressed data  */
-static void amdgpu_dm_fbc_init(struct amdgpu_device *adev)
+static void amdgpu_dm_fbc_init(struct drm_connector *connector)
 {
+	struct drm_device *dev = connector->dev;
+	struct amdgpu_device *adev = dev->dev_private;
 	struct dm_comressor_info *compressor = &adev->dm.compressor;
-	struct drm_connector *conn;
-	struct drm_device *dev = adev->ddev;
+	struct amdgpu_dm_connector *aconn = to_amdgpu_dm_connector(connector);
+	struct drm_display_mode *mode;
 	unsigned long max_size = 0;
 
 	if (adev->dm.dc->fbc_compressor == NULL)
 		return;
 
+	if (aconn->dc_link->connector_signal != SIGNAL_TYPE_EDP)
+		return;
+
 	if (compressor->bo_ptr)
 		return;
 
-	drm_modeset_lock(&dev->mode_config.connection_mutex, NULL);
 
-	/* For eDP connector find a mode requiring max size */
-	list_for_each_entry(conn,
-		    &dev->mode_config.connector_list, head) {
-		struct amdgpu_dm_connector *aconn;
-
-		aconn = to_amdgpu_dm_connector(conn);
-		if (aconn->dc_link->connector_signal == SIGNAL_TYPE_EDP) {
-			struct drm_display_mode *mode;
-
-			list_for_each_entry(mode, &conn->modes, head) {
-				if (max_size < mode->hdisplay * mode->vdisplay)
-					max_size = mode->htotal * mode->vtotal;
-			}
-		}
+	list_for_each_entry(mode, &connector->modes, head) {
+		if (max_size < mode->htotal * mode->vtotal)
+			max_size = mode->htotal * mode->vtotal;
 	}
 
 	if (max_size) {
@@ -393,7 +386,6 @@ static void amdgpu_dm_fbc_init(struct amdgpu_device *adev)
 
 	}
 
-	drm_modeset_unlock(&dev->mode_config.connection_mutex);
 }
 #endif
 
@@ -473,6 +465,8 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	} else
 		DRM_DEBUG_DRIVER("amdgpu: freesync_module init done %p.\n",
 				adev->dm.freesync_module);
+
+	amdgpu_dm_init_color_mod();
 
 	if (amdgpu_dm_initialize_drm_device(adev)) {
 		DRM_ERROR(
@@ -569,9 +563,6 @@ static int dm_late_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-#if defined(CONFIG_DRM_AMD_DC_FBC)
-	amdgpu_dm_fbc_init(adev);
-#endif
 	return detect_mst_link_for_all_connectors(adev->ddev);
 }
 
@@ -659,11 +650,13 @@ static int dm_resume(void *handle)
 {
 	struct amdgpu_device *adev = handle;
 	struct amdgpu_display_manager *dm = &adev->dm;
+	int ret = 0;
 
 	/* power on hardware */
 	dc_set_power_state(dm->dc, DC_ACPI_CM_POWER_STATE_D0);
 
-	return 0;
+	ret = amdgpu_dm_display_resume(adev);
+	return ret;
 }
 
 int amdgpu_dm_display_resume(struct amdgpu_device *adev)
@@ -1956,32 +1949,6 @@ static int fill_plane_attributes_from_fb(struct amdgpu_device *adev,
 
 }
 
-static void fill_gamma_from_crtc_state(const struct drm_crtc_state *crtc_state,
-				       struct dc_plane_state *plane_state)
-{
-	int i;
-	struct dc_gamma *gamma;
-	struct drm_color_lut *lut =
-			(struct drm_color_lut *) crtc_state->gamma_lut->data;
-
-	gamma = dc_create_gamma();
-
-	if (gamma == NULL) {
-		WARN_ON(1);
-		return;
-	}
-
-	gamma->type = GAMMA_RGB_256;
-	gamma->num_entries = GAMMA_RGB_256_ENTRIES;
-	for (i = 0; i < GAMMA_RGB_256_ENTRIES; i++) {
-		gamma->entries.red[i] = dal_fixed31_32_from_int(lut[i].red);
-		gamma->entries.green[i] = dal_fixed31_32_from_int(lut[i].green);
-		gamma->entries.blue[i] = dal_fixed31_32_from_int(lut[i].blue);
-	}
-
-	plane_state->gamma_correction = gamma;
-}
-
 static int fill_plane_attributes(struct amdgpu_device *adev,
 				 struct dc_plane_state *dc_plane_state,
 				 struct drm_plane_state *plane_state,
@@ -2009,14 +1976,13 @@ static int fill_plane_attributes(struct amdgpu_device *adev,
 	if (input_tf == NULL)
 		return -ENOMEM;
 
-	input_tf->type = TF_TYPE_PREDEFINED;
-	input_tf->tf = TRANSFER_FUNCTION_SRGB;
-
 	dc_plane_state->in_transfer_func = input_tf;
 
-	/* In case of gamma set, update gamma value */
-	if (crtc_state->gamma_lut)
-		fill_gamma_from_crtc_state(crtc_state, dc_plane_state);
+	/*
+	 * Always set input transfer function, since plane state is refreshed
+	 * every time.
+	 */
+	ret = amdgpu_dm_set_degamma_lut(crtc_state, dc_plane_state);
 
 	return ret;
 }
@@ -3256,7 +3222,9 @@ static int amdgpu_dm_crtc_init(struct amdgpu_display_manager *dm,
 	acrtc->base.enabled = false;
 
 	dm->adev->mode_info.crtcs[crtc_index] = acrtc;
-	drm_mode_crtc_set_gamma_size(&acrtc->base, 256);
+	drm_crtc_enable_color_mgmt(&acrtc->base, MAX_COLOR_LUT_ENTRIES,
+				   true, MAX_COLOR_LUT_ENTRIES);
+	drm_mode_crtc_set_gamma_size(&acrtc->base, MAX_COLOR_LUT_ENTRIES);
 
 	return 0;
 
@@ -3432,9 +3400,12 @@ static int amdgpu_dm_connector_get_modes(struct drm_connector *connector)
 	struct edid *edid = amdgpu_dm_connector->edid;
 
 	encoder = helper->best_encoder(connector);
-
 	amdgpu_dm_connector_ddc_get_modes(connector, edid);
 	amdgpu_dm_connector_add_common_modes(encoder, connector);
+
+#if defined(CONFIG_DRM_AMD_DC_FBC)
+	amdgpu_dm_fbc_init(connector);
+#endif
 	return amdgpu_dm_connector->num_modes;
 }
 
@@ -4677,6 +4648,30 @@ next_crtc:
 		/* Release extra reference */
 		if (new_stream)
 			 dc_stream_release(new_stream);
+
+		/*
+		 * We want to do dc stream updates that do not require a
+		 * full modeset below.
+		 */
+		if (!enable || !aconnector || modereset_required(new_crtc_state))
+			continue;
+		/*
+		 * Given above conditions, the dc state cannot be NULL because:
+		 * 1. We're attempting to enable a CRTC. Which has a...
+		 * 2. Valid connector attached, and
+		 * 3. User does not want to reset it (disable or mark inactive,
+		 *    which can happen on a CRTC that's already disabled).
+		 * => It currently exists.
+		 */
+		BUG_ON(dm_new_crtc_state->stream == NULL);
+
+		/* Color managment settings */
+		if (dm_new_crtc_state->base.color_mgmt_changed) {
+			ret = amdgpu_dm_set_regamma_lut(dm_new_crtc_state);
+			if (ret)
+				goto fail;
+			amdgpu_dm_set_ctm(dm_new_crtc_state);
+		}
 	}
 
 	return ret;
@@ -4784,7 +4779,6 @@ static int dm_update_planes_state(struct dc *dc,
 				new_crtc_state);
 			if (ret)
 				return ret;
-
 
 			if (!dc_add_plane_to_context(
 					dc,
