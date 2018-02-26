@@ -11,25 +11,6 @@ Required properties:
     as covered in
     Documentation/devicetree/bindings/regulator/regulator.txt.
 
-Optional properties:
-  - cirrus,sclk-force-output : Audio serial port SCLK force
-  output control. Forces the SCLK to continue to drive even
-  if no ASP_TXn channels are enabled.
-
-  - cirrus,lrclk-force-output : Audio serial port LRCLK force
-  output control. Forces the LRCLK to continue to drive even
-  if no ASP_TXn channels are enabled.
-
-  - cirrus,right-channel-amp : Boolean to determine which channel
-  the amplifier is to receive the audio data on. If present the
-  amplifier receives data on the right channel of I2S data.
-  If not present the amplifier receives data on the left
-  channel of I2S data
-
-  - cirrus,boost-ctl-millivolt : Boost Voltage Value. Configures the
-  boost converter's output voltage in mV. The range is from 2550 mV to
-  11000 mV with increments of 50 mV.
-  (Default) VP
 
   Boost hardware configuration:
 
@@ -50,6 +31,27 @@ Optional properties:
       - cirrus,boost-cap-microfarad : Total equivalent boost capacitance on the VBST
       and VAMP pins, derated at 11 volts DC. The value must be rounded to the
       nearest integer and expressed in uF.
+
+
+Optional properties:
+  - cirrus,sclk-force-output : Audio serial port SCLK force
+  output control. Forces the SCLK to continue to drive even
+  if no ASP_TXn channels are enabled.
+
+  - cirrus,lrclk-force-output : Audio serial port LRCLK force
+  output control. Forces the LRCLK to continue to drive even
+  if no ASP_TXn channels are enabled.
+
+  - cirrus,right-channel-amp : Boolean to determine which channel
+  the amplifier is to receive the audio data on. If present the
+  amplifier receives data on the right channel of I2S data.
+  If not present the amplifier receives data on the left
+  channel of I2S data
+
+  - cirrus,boost-ctl-millivolt : Boost Voltage Value. Configures the
+  boost converter's output voltage in mV. The range is from 2550 mV to
+  11000 mV with increments of 50 mV.
+  (Default) VP
 
   - cirrus,amp-gain-zc : Boolean to determine whether to use the amplifier
   gain-change zero-crossing feature. If the feature is enabled, any
@@ -181,4 +183,8 @@ cs35l41: cs35l41@2 {
 	reg = <2>;
 	VA-supply = <&dummy_vreg>;
 	VP-supply = <&dummy_vreg>;
+
+	cirrus,boost-peak-milliamp = <4500>;
+	cirrus,boost-ind-nanohenry = <1000>;
+	cirrus,boost-cap-microfarad = <15>;
 };
