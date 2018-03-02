@@ -31,11 +31,25 @@ Optional properties:
   11000 mV with increments of 50 mV.
   (Default) VP
 
-  - cirrus,boost-peak-milliamp : Boost-converter peak current limit in mA.
-  Configures the peak current by monitoring the current through the boost FET.
-  Range starts at 1600 mA and goes to a maximum of 4500 mA with increments
-  of 50 mA.
-  (Default) 4.50 Amps
+  Boost hardware configuration:
+
+      These three properties should be used together to specify the external
+      component configuration of the part. See section 4.3.6 of the datasheet
+      for details regarding how these values are used to configure the
+      digital boost converter's control loop.
+
+      - cirrus,boost-peak-milliamp : Boost-converter peak current limit in mA.
+      Configures the peak current by monitoring the current through the boost FET.
+      Range starts at 1600 mA and goes to a maximum of 4500 mA with increments
+      of 50 mA.
+      (Default) 4.50 Amps
+
+      - cirrus,boost-ind-nanohenry : Boost inductor value, expressed in nH. Valid
+      values include 1000, 1200, 1500 and 2200.
+
+      - cirrus,boost-cap-microfarad : Total equivalent boost capacitance on the VBST
+      and VAMP pins, derated at 11 volts DC. The value must be rounded to the
+      nearest integer and expressed in uF.
 
   - cirrus,amp-gain-zc : Boolean to determine whether to use the amplifier
   gain-change zero-crossing feature. If the feature is enabled, any
