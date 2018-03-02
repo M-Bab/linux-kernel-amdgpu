@@ -53,6 +53,41 @@ Optional properties:
   2 = 125C (Default)
   3 = 135C
 
+  - cirrus,noise-gate-enable : DSP Noise Gate feature. If present, noise
+  gate feature will be enabled.
+
+  - cirrus,noise-gate-threshold : Threshold of audio signal input which the
+  noise gate considers the input audio to be at a low enough level to be
+  valid to enter a noise gating state of operation.
+
+  0 = -66 dBFS
+  1 = -72 dBFS
+  2 = -78 dBFS
+  3 = -84 dBFS (default)
+  4 = -90 dBFS
+  5 = -96 dBFS
+  6 = -102 dBFS
+  7 = -108 dBFS
+
+  - cirrus,noise-gate-delay : Time that the incoming audio signal must be
+  below the noise gate threshold prior to entering a noise gated state
+
+  0 = 5 ms
+  1 = 10 ms
+  2 = 25 ms
+  3 = 50 ms (default)
+  4 = 100 ms
+  5 = 250 ms
+  6 = 500 ms
+  7 = 1 s
+  8 = 5 s
+  9 = 10 s
+  10 = 20 s
+  11 = 30 s
+  12 = 40 s
+  13 = 50 s
+  14 = 60 s
+  15 = 120 s
 
 Optional H/G Algorithm sub-node:
 
