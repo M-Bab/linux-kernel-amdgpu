@@ -1,0 +1,8 @@
+This is the list of patches/features which have been temporarily
+reverted or disabled for CC:
+
+AUFS
+LSM stacking patches
+
+UBUNTU: SAUCE: (no-up) elide some ioctl warnings which are known benign
+UBUNTU: SAUCE: perf callchain: Include errno.h on x86 unconditinally

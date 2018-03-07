@@ -660,7 +660,7 @@ static int get_file_caps(struct linux_binprm *bprm, bool *effective, bool *has_f
 	if (!file_caps_enabled)
 		return 0;
 
-	if (!mnt_may_suid(bprm->file->f_path.mnt))
+	if (path_nosuid(&bprm->file->f_path))
 		return 0;
 
 	/*
@@ -929,7 +929,7 @@ int cap_inode_setxattr(struct dentry *dentry, const char *name,
 	if (strcmp(name, XATTR_NAME_CAPS) == 0)
 		return 0;
 
-	if (!capable(CAP_SYS_ADMIN))
+	if (!ns_capable(dentry->d_sb->s_user_ns, CAP_SYS_ADMIN))
 		return -EPERM;
 	return 0;
 }
@@ -962,7 +962,7 @@ int cap_inode_removexattr(struct dentry *dentry, const char *name)
 		return 0;
 	}
 
-	if (!capable(CAP_SYS_ADMIN))
+	if (!ns_capable(dentry->d_sb->s_user_ns, CAP_SYS_ADMIN))
 		return -EPERM;
 	return 0;
 }

@@ -1,0 +1,14 @@
+#!/bin/bash
+
+cd "$1" || exit 1
+
+{
+	echo "./vmlinux"
+	find . -name \*.ko
+} | xargs objdump --disassemble | \
+awk -F'	' '
+	/^.\//				{ file=$1; sub(":.*", "", file); sub("^.*/", "", file); }
+	/^[0-9a-f][0-9a-f]* <.*>:/	{ tag=$1; sub(".*<", "", tag); sub(">.*", "", tag); tag=file " " tag; }
+	$3 ~ /(call|jmp)q?  *\*(0x[a-f0-9]+\()?%/	{ print(tag " " $3); }
+' | \
+	grep -v " \*%cs:0x"		# elide 32bit code-segment absolute offsets.
