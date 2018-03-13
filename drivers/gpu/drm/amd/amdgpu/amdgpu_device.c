@@ -87,6 +87,8 @@ static const char *amdgpu_asic_name[] = {
 	"LAST",
 };
 
+static void amdgpu_device_get_pcie_info(struct amdgpu_device *adev);
+
 bool amdgpu_device_is_px(struct drm_device *dev)
 {
 	struct amdgpu_device *adev = dev->dev_private;
@@ -120,6 +122,32 @@ uint32_t amdgpu_mm_rreg(struct amdgpu_device *adev, uint32_t reg,
 	trace_amdgpu_mm_rreg(adev->pdev->device, reg, ret);
 	return ret;
 }
+
+/*
+ * MMIO register read with bytes helper functions
+ * @offset:bytes offset from MMIO start
+ *
+*/
+
+uint8_t amdgpu_mm_rreg8(struct amdgpu_device *adev, uint32_t offset) {
+	if (offset < adev->rmmio_size)
+		return (readb(adev->rmmio + offset));
+	BUG();
+}
+
+/*
+ * MMIO register write with bytes helper functions
+ * @offset:bytes offset from MMIO start
+ * @value: the value want to be written to the register
+ *
+*/
+void amdgpu_mm_wreg8(struct amdgpu_device *adev, uint32_t offset, uint8_t value) {
+	if (offset < adev->rmmio_size)
+		writeb(value, adev->rmmio + offset);
+	else
+		BUG();
+}
+
 
 void amdgpu_mm_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v,
 		    uint32_t acc_flags)
@@ -830,6 +858,8 @@ static void amdgpu_device_check_arguments(struct amdgpu_device *adev)
 		dev_warn(adev->dev, "lockup_timeout msut be > 0, adjusting to 10000\n");
 		amdgpu_lockup_timeout = 10000;
 	}
+
+	adev->firmware.load_type = amdgpu_ucode_get_load_type(adev, amdgpu_fw_load_type);
 }
 
 /**
@@ -1457,6 +1487,9 @@ static int amdgpu_device_ip_fini(struct amdgpu_device *adev)
 	}
 
 	for (i = adev->num_ip_blocks - 1; i >= 0; i--) {
+		if (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_SMC &&
+			adev->firmware.load_type == AMDGPU_FW_LOAD_SMU)
+			amdgpu_ucode_fini_bo(adev);
 		if (!adev->ip_blocks[i].status.hw)
 			continue;
 
@@ -1878,6 +1911,8 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	if (adev->rio_mem == NULL)
 		DRM_INFO("PCI I/O BAR is not found.\n");
 
+	amdgpu_device_get_pcie_info(adev);
+
 	/* early init functions */
 	r = amdgpu_device_ip_early_init(adev);
 	if (r)
@@ -2086,6 +2121,7 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
 
 	amdgpu_ib_pool_fini(adev);
 	amdgpu_fence_driver_fini(adev);
+	amdgpu_pm_sysfs_fini(adev);
 	amdgpu_fbdev_fini(adev);
 	r = amdgpu_device_ip_fini(adev);
 	if (adev->firmware.gpu_info_fw) {
@@ -2114,7 +2150,6 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
 	iounmap(adev->rmmio);
 	adev->rmmio = NULL;
 	amdgpu_device_doorbell_fini(adev);
-	amdgpu_pm_sysfs_fini(adev);
 	amdgpu_debugfs_regs_cleanup(adev);
 }
 
@@ -2756,7 +2791,7 @@ int amdgpu_device_gpu_recover(struct amdgpu_device *adev,
 	return r;
 }
 
-void amdgpu_device_get_pcie_info(struct amdgpu_device *adev)
+static void amdgpu_device_get_pcie_info(struct amdgpu_device *adev)
 {
 	u32 mask;
 	int ret;

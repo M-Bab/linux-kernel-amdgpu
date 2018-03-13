@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Advanced Micro Devices, Inc.
+ * Copyright 2018 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,16 +19,20 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
+ * Authors: AMD
+ *
  */
 
-#ifndef __AMDGPU_ATOMFIRMWARE_H__
-#define __AMDGPU_ATOMFIRMWARE_H__
 
-bool amdgpu_atomfirmware_gpu_supports_virtualization(struct amdgpu_device *adev);
-void amdgpu_atomfirmware_scratch_regs_init(struct amdgpu_device *adev);
-int amdgpu_atomfirmware_allocate_fb_scratch(struct amdgpu_device *adev);
-int amdgpu_atomfirmware_get_vram_width(struct amdgpu_device *adev);
-int amdgpu_atomfirmware_get_vram_type(struct amdgpu_device *adev);
-int amdgpu_atomfirmware_get_clock_info(struct amdgpu_device *adev);
+#ifndef __DML_LOGGER_H_
+#define __DML_LOGGER_H_
+
+#define DC_LOGGER \
+	mode_lib->logger
+
+#define dml_print(str, ...) {DC_LOG_DML(str, ##__VA_ARGS__); }
+#define DTRACE(str, ...) {DC_LOG_DML(str, ##__VA_ARGS__); }
 
 #endif
+
+

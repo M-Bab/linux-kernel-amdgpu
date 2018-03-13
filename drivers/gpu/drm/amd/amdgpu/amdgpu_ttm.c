@@ -203,6 +203,12 @@ static void amdgpu_evict_flags(struct ttm_buffer_object *bo,
 		.flags = TTM_PL_MASK_CACHING | TTM_PL_FLAG_SYSTEM
 	};
 
+	if (bo->type == ttm_bo_type_sg) {
+		placement->num_placement = 0;
+		placement->num_busy_placement = 0;
+		return;
+	}
+
 	if (!amdgpu_ttm_bo_is_amdgpu_bo(bo)) {
 		placement->placement = &placements;
 		placement->busy_placement = &placements;
@@ -974,20 +980,20 @@ static struct ttm_backend_func amdgpu_backend_func = {
 	.destroy = &amdgpu_ttm_backend_destroy,
 };
 
-static struct ttm_tt *amdgpu_ttm_tt_create(struct ttm_bo_device *bdev,
-				    unsigned long size, uint32_t page_flags)
+static struct ttm_tt *amdgpu_ttm_tt_create(struct ttm_buffer_object *bo,
+					   uint32_t page_flags)
 {
 	struct amdgpu_device *adev;
 	struct amdgpu_ttm_tt *gtt;
 
-	adev = amdgpu_ttm_adev(bdev);
+	adev = amdgpu_ttm_adev(bo->bdev);
 
 	gtt = kzalloc(sizeof(struct amdgpu_ttm_tt), GFP_KERNEL);
 	if (gtt == NULL) {
 		return NULL;
 	}
 	gtt->ttm.ttm.func = &amdgpu_backend_func;
-	if (ttm_sg_tt_init(&gtt->ttm, bdev, size, page_flags)) {
+	if (ttm_sg_tt_init(&gtt->ttm, bo, page_flags)) {
 		kfree(gtt);
 		return NULL;
 	}
@@ -1311,11 +1317,12 @@ static int amdgpu_ttm_fw_reserve_vram_init(struct amdgpu_device *adev)
 	if (adev->fw_vram_usage.size > 0 &&
 		adev->fw_vram_usage.size <= vram_size) {
 
-		r = amdgpu_bo_create(adev, adev->fw_vram_usage.size,
-			PAGE_SIZE, true, AMDGPU_GEM_DOMAIN_VRAM,
-			AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED |
-			AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS, NULL, NULL,
-			&adev->fw_vram_usage.reserved_bo);
+		r = amdgpu_bo_create(adev, adev->fw_vram_usage.size, PAGE_SIZE,
+				     AMDGPU_GEM_DOMAIN_VRAM,
+				     AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED |
+				     AMDGPU_GEM_CREATE_VRAM_CONTIGUOUS,
+				     ttm_bo_type_kernel, NULL,
+				     &adev->fw_vram_usage.reserved_bo);
 		if (r)
 			goto error_create;
 
@@ -1958,38 +1965,98 @@ static const struct file_operations amdgpu_ttm_gtt_fops = {
 
 #endif
 
-static ssize_t amdgpu_iova_to_phys_read(struct file *f, char __user *buf,
-				   size_t size, loff_t *pos)
+static ssize_t amdgpu_iomem_read(struct file *f, char __user *buf,
+				 size_t size, loff_t *pos)
 {
 	struct amdgpu_device *adev = file_inode(f)->i_private;
-	int r;
-	uint64_t phys;
 	struct iommu_domain *dom;
-
-	// always return 8 bytes
-	if (size != 8)
-		return -EINVAL;
-
-	// only accept page addresses
-	if (*pos & 0xFFF)
-		return -EINVAL;
+	ssize_t result = 0;
+	int r;
 
 	dom = iommu_get_domain_for_dev(adev->dev);
-	if (dom)
-		phys = iommu_iova_to_phys(dom, *pos);
-	else
-		phys = *pos;
 
-	r = copy_to_user(buf, &phys, 8);
-	if (r)
-		return -EFAULT;
+	while (size) {
+		phys_addr_t addr = *pos & PAGE_MASK;
+		loff_t off = *pos & ~PAGE_MASK;
+		size_t bytes = PAGE_SIZE - off;
+		unsigned long pfn;
+		struct page *p;
+		void *ptr;
 
-	return 8;
+		bytes = bytes < size ? bytes : size;
+
+		addr = dom ? iommu_iova_to_phys(dom, addr) : addr;
+
+		pfn = addr >> PAGE_SHIFT;
+		if (!pfn_valid(pfn))
+			return -EPERM;
+
+		p = pfn_to_page(pfn);
+		if (p->mapping != adev->mman.bdev.dev_mapping)
+			return -EPERM;
+
+		ptr = kmap(p);
+		r = copy_to_user(buf, ptr, bytes);
+		kunmap(p);
+		if (r)
+			return -EFAULT;
+
+		size -= bytes;
+		*pos += bytes;
+		result += bytes;
+	}
+
+	return result;
 }
 
-static const struct file_operations amdgpu_ttm_iova_fops = {
+static ssize_t amdgpu_iomem_write(struct file *f, const char __user *buf,
+				 size_t size, loff_t *pos)
+{
+	struct amdgpu_device *adev = file_inode(f)->i_private;
+	struct iommu_domain *dom;
+	ssize_t result = 0;
+	int r;
+
+	dom = iommu_get_domain_for_dev(adev->dev);
+
+	while (size) {
+		phys_addr_t addr = *pos & PAGE_MASK;
+		loff_t off = *pos & ~PAGE_MASK;
+		size_t bytes = PAGE_SIZE - off;
+		unsigned long pfn;
+		struct page *p;
+		void *ptr;
+
+		bytes = bytes < size ? bytes : size;
+
+		addr = dom ? iommu_iova_to_phys(dom, addr) : addr;
+
+		pfn = addr >> PAGE_SHIFT;
+		if (!pfn_valid(pfn))
+			return -EPERM;
+
+		p = pfn_to_page(pfn);
+		if (p->mapping != adev->mman.bdev.dev_mapping)
+			return -EPERM;
+
+		ptr = kmap(p);
+		r = copy_from_user(ptr, buf, bytes);
+		kunmap(p);
+		if (r)
+			return -EFAULT;
+
+		size -= bytes;
+		*pos += bytes;
+		result += bytes;
+	}
+
+	return result;
+}
+
+static const struct file_operations amdgpu_ttm_iomem_fops = {
 	.owner = THIS_MODULE,
-	.read = amdgpu_iova_to_phys_read,
+	.read = amdgpu_iomem_read,
+	.write = amdgpu_iomem_write,
 	.llseek = default_llseek
 };
 
@@ -2002,7 +2069,7 @@ static const struct {
 #ifdef CONFIG_DRM_AMDGPU_GART_DEBUGFS
 	{ "amdgpu_gtt", &amdgpu_ttm_gtt_fops, TTM_PL_TT },
 #endif
-	{ "amdgpu_iova", &amdgpu_ttm_iova_fops, TTM_PL_SYSTEM },
+	{ "amdgpu_iomem", &amdgpu_ttm_iomem_fops, TTM_PL_SYSTEM },
 };
 
 #endif

@@ -215,8 +215,9 @@ int alloc_gtt_mem(struct kgd_dev *kgd, size_t size,
 	if ((*mem) == NULL)
 		return -ENOMEM;
 
-	r = amdgpu_bo_create(adev, size, PAGE_SIZE, true, AMDGPU_GEM_DOMAIN_GTT,
-			     AMDGPU_GEM_CREATE_CPU_GTT_USWC, NULL, NULL, &(*mem)->bo);
+	r = amdgpu_bo_create(adev, size, PAGE_SIZE, AMDGPU_GEM_DOMAIN_GTT,
+			     AMDGPU_GEM_CREATE_CPU_GTT_USWC, ttm_bo_type_kernel,
+			     NULL, &(*mem)->bo);
 	if (r) {
 		dev_err(adev->dev,
 			"failed to allocate BO for amdkfd (%d)\n", r);

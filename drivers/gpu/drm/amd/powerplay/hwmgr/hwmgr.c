@@ -133,11 +133,11 @@ static void hwmgr_init_workload_prority(struct pp_hwmgr *hwmgr)
 	hwmgr->workload_prority[PP_SMC_POWER_PROFILE_VR] = 3;
 	hwmgr->workload_prority[PP_SMC_POWER_PROFILE_COMPUTE] = 4;
 
-	hwmgr->workload_setting[0]= PP_SMC_POWER_PROFILE_POWERSAVING;
-	hwmgr->workload_setting[1]= PP_SMC_POWER_PROFILE_VIDEO;
-	hwmgr->workload_setting[2]= PP_SMC_POWER_PROFILE_FULLSCREEN3D;
-	hwmgr->workload_setting[3]= PP_SMC_POWER_PROFILE_VR;
-	hwmgr->workload_setting[4]= PP_SMC_POWER_PROFILE_COMPUTE;
+	hwmgr->workload_setting[0] = PP_SMC_POWER_PROFILE_POWERSAVING;
+	hwmgr->workload_setting[1] = PP_SMC_POWER_PROFILE_VIDEO;
+	hwmgr->workload_setting[2] = PP_SMC_POWER_PROFILE_FULLSCREEN3D;
+	hwmgr->workload_setting[3] = PP_SMC_POWER_PROFILE_VR;
+	hwmgr->workload_setting[4] = PP_SMC_POWER_PROFILE_COMPUTE;
 }
 
 int hwmgr_early_init(struct pp_instance *handle)
@@ -902,8 +902,10 @@ void hwmgr_init_default_caps(struct pp_hwmgr *hwmgr)
 	phm_cap_set(hwmgr->platform_descriptor.platformCaps, PHM_PlatformCaps_UVDDPM);
 	phm_cap_set(hwmgr->platform_descriptor.platformCaps, PHM_PlatformCaps_VCEDPM);
 
+#if defined(CONFIG_ACPI)
 	if (amdgpu_acpi_is_pcie_performance_request_supported(hwmgr->adev))
 		phm_cap_set(hwmgr->platform_descriptor.platformCaps, PHM_PlatformCaps_PCIEPerformanceRequest);
+#endif
 
 	phm_cap_set(hwmgr->platform_descriptor.platformCaps,
 		PHM_PlatformCaps_DynamicPatchPowerState);
