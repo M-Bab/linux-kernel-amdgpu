@@ -225,8 +225,7 @@ struct ttm_bo_driver {
 	/**
 	 * ttm_tt_create
 	 *
-	 * @bdev: pointer to a struct ttm_bo_device:
-	 * @size: Size of the data needed backing.
+	 * @bo: The buffer object to create the ttm for.
 	 * @page_flags: Page flags as identified by TTM_PAGE_FLAG_XX flags.
 	 *
 	 * Create a struct ttm_tt to back data with system memory pages.
@@ -234,8 +233,7 @@ struct ttm_bo_driver {
 	 * Returns:
 	 * NULL: Out of memory.
 	 */
-	struct ttm_tt *(*ttm_tt_create)(struct ttm_bo_device *bdev,
-					unsigned long size,
+	struct ttm_tt *(*ttm_tt_create)(struct ttm_buffer_object *bo,
 					uint32_t page_flags);
 
 	/**
@@ -848,6 +846,15 @@ int ttm_bo_move_accel_cleanup(struct ttm_buffer_object *bo,
 int ttm_bo_pipeline_move(struct ttm_buffer_object *bo,
 			 struct dma_fence *fence, bool evict,
 			 struct ttm_mem_reg *new_mem);
+
+/**
+ * ttm_bo_pipeline_gutting.
+ *
+ * @bo: A pointer to a struct ttm_buffer_object.
+ *
+ * Pipelined gutting a BO of it's backing store.
+ */
+int ttm_bo_pipeline_gutting(struct ttm_buffer_object *bo);
 
 /**
  * ttm_io_prot
