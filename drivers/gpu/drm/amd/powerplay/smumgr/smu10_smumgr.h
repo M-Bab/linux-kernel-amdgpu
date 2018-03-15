@@ -1,5 +1,5 @@
 /*
- * Copyright 2015 Advanced Micro Devices, Inc.
+ * Copyright 2017 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -20,28 +20,31 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  */
-#ifndef PP_ASICBLOCKS_H
-#define PP_ASICBLOCKS_H
 
+#ifndef PP_SMU10_SMUMANAGER_H
+#define PP_SMU10_SMUMANAGER_H
 
-enum PHM_AsicBlock {
-	PHM_AsicBlock_GFX,
-	PHM_AsicBlock_UVD_MVC,
-	PHM_AsicBlock_UVD,
-	PHM_AsicBlock_UVD_HD,
-	PHM_AsicBlock_UVD_SD,
-	PHM_AsicBlock_Count
+#include "rv_ppsmc.h"
+#include "smu10_driver_if.h"
+
+#define MAX_SMU_TABLE 2
+
+struct smu_table_entry {
+	uint32_t version;
+	uint32_t size;
+	uint32_t table_id;
+	uint64_t mc_addr;
+	void *table;
+	struct amdgpu_bo *handle;
 };
 
-enum PHM_ClockGateSetting {
-	PHM_ClockGateSetting_StaticOn,
-	PHM_ClockGateSetting_StaticOff,
-	PHM_ClockGateSetting_Dynamic
+struct smu_table_array {
+	struct smu_table_entry entry[MAX_SMU_TABLE];
 };
 
-struct phm_asic_blocks {
-	bool gfx : 1;
-	bool uvd : 1;
+struct smu10_smumgr {
+	struct smu_table_array            smu_tables;
 };
+
 
 #endif
