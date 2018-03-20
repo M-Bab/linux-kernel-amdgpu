@@ -1,5 +1,27 @@
 linux (4.16.0-2.3) bionic; urgency=medium
 
+  * devpts: handle bind-mounts (LP: #1755857)
+    - SAUCE: devpts: hoist out check for DEVPTS_SUPER_MAGIC
+    - SAUCE: devpts: resolve devpts bind-mounts
+    - SAUCE: devpts: comment devpts_mntget()
+    - SAUCE: selftests: add devpts selftests
+
+  * [bionic][arm64] d-i: add hisi_sas_v3_hw to scsi-modules (LP: #1756103)
+    - d-i: add hisi_sas_v3_hw to scsi-modules
+
+  * [Bionic][ARM64] PCI and SAS driver patches for hip08 SoCs (LP: #1756094)
+    - SAUCE: scsi: hisi_sas: config for hip08 ES
+    - SAUCE: scsi: hisi_sas: export device table of v3 hw to userspace
+
+  * s390/crypto: Fix kernel crash on aes_s390 module remove (LP: #1753424)
+    - SAUCE: s390/crypto: Fix kernel crash on aes_s390 module remove.
+
+  * Fix ARC hit rate (LP: #1755158)
+    - SAUCE: Fix ARC hit rate (LP: #1755158)
+
+  * ZFS setgid broken on 0.7 (LP: #1753288)
+    - SAUCE: Fix ZFS setgid
+
   * CONFIG_EFI=y on armhf (LP: #1726362)
     - [Config] CONFIG_EFI=y on armhf, reconcile secureboot EFI settings
 
@@ -13,12 +35,14 @@ linux (4.16.0-2.3) bionic; urgency=medium
   * Miscellaneous Ubuntu changes
     - [Packaging] retpoline-extract: flag *0xNNN(%reg) branches
     - [Config] fix up retpoline abi files
+    - [Config] fix up retpoline abi files
+    - d-i: Add netsec to nic-modules
 
   [ Upstream Kernel Changes ]
 
-  * Rebase to v4.16-rc4
+  * Rebase to v4.16-rc6
 
- -- Seth Forshee <seth.forshee@canonical.com>  Thu, 08 Mar 2018 08:43:33 +0100
+ -- Seth Forshee <seth.forshee@canonical.com>  Mon, 19 Mar 2018 14:09:49 -0500
 
 linux (4.16.0-1.2) bionic; urgency=medium
 
