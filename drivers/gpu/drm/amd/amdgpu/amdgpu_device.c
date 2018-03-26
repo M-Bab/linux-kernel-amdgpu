@@ -59,6 +59,7 @@
 #include "amdgpu_pm.h"
 
 MODULE_FIRMWARE("amdgpu/vega10_gpu_info.bin");
+MODULE_FIRMWARE("amdgpu/vega12_gpu_info.bin");
 MODULE_FIRMWARE("amdgpu/raven_gpu_info.bin");
 
 #define AMDGPU_RESUME_MS		2000
@@ -83,6 +84,7 @@ static const char *amdgpu_asic_name[] = {
 	"POLARIS11",
 	"POLARIS12",
 	"VEGA10",
+	"VEGA12",
 	"RAVEN",
 	"LAST",
 };
@@ -1157,6 +1159,9 @@ static int amdgpu_device_parse_gpu_info_fw(struct amdgpu_device *adev)
 	case CHIP_VEGA10:
 		chip_name = "vega10";
 		break;
+	case CHIP_VEGA12:
+		chip_name = "vega12";
+		break;
 	case CHIP_RAVEN:
 		chip_name = "raven";
 		break;
@@ -1270,8 +1275,9 @@ static int amdgpu_device_ip_early_init(struct amdgpu_device *adev)
 			return r;
 		break;
 #endif
-	case  CHIP_VEGA10:
-	case  CHIP_RAVEN:
+	case CHIP_VEGA10:
+	case CHIP_VEGA12:
+	case CHIP_RAVEN:
 		if (adev->asic_type == CHIP_RAVEN)
 			adev->family = AMDGPU_FAMILY_RV;
 		else
@@ -1493,7 +1499,8 @@ static int amdgpu_device_ip_fini(struct amdgpu_device *adev)
 			continue;
 
 		if (adev->ip_blocks[i].version->type != AMD_IP_BLOCK_TYPE_UVD &&
-			adev->ip_blocks[i].version->type != AMD_IP_BLOCK_TYPE_VCE) {
+			adev->ip_blocks[i].version->type != AMD_IP_BLOCK_TYPE_VCE &&
+			adev->ip_blocks[i].version->funcs->set_clockgating_state) {
 			/* ungate blocks before hw fini so that we can shutdown the blocks safely */
 			r = adev->ip_blocks[i].version->funcs->set_clockgating_state((void *)adev,
 										     AMD_CG_STATE_UNGATE);
@@ -1514,8 +1521,6 @@ static int amdgpu_device_ip_fini(struct amdgpu_device *adev)
 		adev->ip_blocks[i].status.hw = false;
 	}
 
-	/* disable all interrupts */
-	amdgpu_irq_disable_all(adev);
 
 	for (i = adev->num_ip_blocks - 1; i >= 0; i--) {
 		if (!adev->ip_blocks[i].status.sw)
@@ -1760,6 +1765,7 @@ bool amdgpu_device_asic_has_dc_support(enum amd_asic_type asic_type)
 		return amdgpu_dc != 0;
 #endif
 	case CHIP_VEGA10:
+	case CHIP_VEGA12:
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 	case CHIP_RAVEN:
 #endif
@@ -2017,7 +2023,6 @@ fence_driver_init:
 		}
 		dev_err(adev->dev, "amdgpu_device_ip_init failed\n");
 		amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_AMDGPU_INIT_FAIL, 0, 0);
-		amdgpu_device_ip_fini(adev);
 		goto failed;
 	}
 
@@ -2116,9 +2121,14 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
 
 	DRM_INFO("amdgpu: finishing device.\n");
 	adev->shutdown = true;
-	if (adev->mode_info.mode_config_initialized)
-		drm_crtc_force_disable_all(adev->ddev);
-
+	/* disable all interrupts */
+	amdgpu_irq_disable_all(adev);
+	if (adev->mode_info.mode_config_initialized){
+		if (!amdgpu_device_has_dc_support(adev))
+			drm_crtc_force_disable_all(adev->ddev);
+		else
+			drm_atomic_helper_shutdown(adev->ddev);
+	}
 	amdgpu_ib_pool_fini(adev);
 	amdgpu_fence_driver_fini(adev);
 	amdgpu_pm_sysfs_fini(adev);
