@@ -559,19 +559,19 @@ static irqreturn_t cs35l41_irq(int irq, void *data)
 }
 
 static const struct reg_sequence cs35l41_pup_patch[] = {
-	{0x00000040,			0x00005555},
-	{0x00000040,			0x0000AAAA},
-	{0x00002084,			0x002F1AA0},
-	{0x00000040,			0x0000CCCC},
-	{0x00000040,			0x00003333},
+	{0x00000040, 0x00000055},
+	{0x00000040, 0x000000AA},
+	{0x00002084, 0x002F1AA0},
+	{0x00000040, 0x000000CC},
+	{0x00000040, 0x00000033},
 };
 
 static const struct reg_sequence cs35l41_pdn_patch[] = {
-	{0x00000040,			0x00005555},
-	{0x00000040,			0x0000AAAA},
-	{0x00002084,			0x002F1AA3},
-	{0x00000040,			0x0000CCCC},
-	{0x00000040,			0x00003333},
+	{0x00000040, 0x00000055},
+	{0x00000040, 0x000000AA},
+	{0x00002084, 0x002F1AA3},
+	{0x00000040, 0x000000CC},
+	{0x00000040, 0x00000033},
 };
 
 static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
@@ -584,9 +584,9 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
-		regmap_register_patch(cs35l41->regmap,
-				cs35l41_pup_patch,
-				ARRAY_SIZE(cs35l41_pup_patch));
+		regmap_multi_reg_write_bypassed(cs35l41->regmap,
+					cs35l41_pup_patch,
+					ARRAY_SIZE(cs35l41_pup_patch));
 
 		regmap_update_bits(cs35l41->regmap, CS35L41_PWR_CTRL1,
 				CS35L41_GLOBAL_EN_MASK,
@@ -604,9 +604,9 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 
 		usleep_range(1000, 1100);
 
-		regmap_register_patch(cs35l41->regmap,
-				cs35l41_pdn_patch,
-				ARRAY_SIZE(cs35l41_pdn_patch));
+		regmap_multi_reg_write_bypassed(cs35l41->regmap,
+					cs35l41_pdn_patch,
+					ARRAY_SIZE(cs35l41_pdn_patch));
 		break;
 	default:
 		dev_err(cs35l41->dev, "Invalid event = 0x%x\n", event);
