@@ -1183,16 +1183,21 @@ static void enable_stream_features(struct pipe_ctx *pipe_ctx)
 {
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct dc_link *link = stream->sink->link;
-	union down_spread_ctrl downspread;
+	union down_spread_ctrl old_downspread;
+	union down_spread_ctrl new_downspread;
 
 	core_link_read_dpcd(link, DP_DOWNSPREAD_CTRL,
-			&downspread.raw, sizeof(downspread));
+			&old_downspread.raw, sizeof(old_downspread));
 
-	downspread.bits.IGNORE_MSA_TIMING_PARAM =
+	new_downspread.raw = old_downspread.raw;
+
+	new_downspread.bits.IGNORE_MSA_TIMING_PARAM =
 			(stream->ignore_msa_timing_param) ? 1 : 0;
 
-	core_link_write_dpcd(link, DP_DOWNSPREAD_CTRL,
-			&downspread.raw, sizeof(downspread));
+	if (new_downspread.raw != old_downspread.raw) {
+		core_link_write_dpcd(link, DP_DOWNSPREAD_CTRL,
+			&new_downspread.raw, sizeof(new_downspread));
+	}
 }
 
 static enum dc_status enable_link_dp(
@@ -2165,11 +2170,11 @@ static enum dc_status allocate_mst_payload(struct pipe_ctx *pipe_ctx)
 			link->mst_stream_alloc_table.stream_count);
 
 	for (i = 0; i < MAX_CONTROLLER_NUM; i++) {
-		DC_LOG_MST("stream_enc[%d]: 0x%x      "
+		DC_LOG_MST("stream_enc[%d]: %p      "
 		"stream[%d].vcp_id: %d      "
 		"stream[%d].slot_count: %d\n",
 		i,
-		link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
+		(void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
 		i,
 		link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
 		i,
@@ -2255,11 +2260,11 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 			link->mst_stream_alloc_table.stream_count);
 
 	for (i = 0; i < MAX_CONTROLLER_NUM; i++) {
-		DC_LOG_MST("stream_enc[%d]: 0x%x      "
+		DC_LOG_MST("stream_enc[%d]: %p      "
 		"stream[%d].vcp_id: %d      "
 		"stream[%d].slot_count: %d\n",
 		i,
-		link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
+		(void *) link->mst_stream_alloc_table.stream_allocations[i].stream_enc,
 		i,
 		link->mst_stream_alloc_table.stream_allocations[i].vcp_id,
 		i,

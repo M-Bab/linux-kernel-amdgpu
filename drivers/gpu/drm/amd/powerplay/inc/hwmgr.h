@@ -718,6 +718,7 @@ struct pp_hwmgr {
 	uint32_t chip_family;
 	uint32_t chip_id;
 	uint32_t smu_version;
+	bool not_vf;
 	bool pm_en;
 	struct mutex smu_lock;
 
@@ -764,7 +765,7 @@ struct pp_hwmgr {
 	struct pp_power_state    *request_ps;
 	struct pp_power_state    *boot_ps;
 	struct pp_power_state    *uvd_ps;
-	struct amd_pp_display_configuration display_config;
+	const struct amd_pp_display_configuration *display_config;
 	uint32_t feature_mask;
 	bool avfs_supported;
 	/* UMD Pstate */
@@ -782,10 +783,13 @@ struct pp_hwmgr {
 };
 
 int hwmgr_early_init(struct pp_hwmgr *hwmgr);
+int hwmgr_sw_init(struct pp_hwmgr *hwmgr);
+int hwmgr_sw_fini(struct pp_hwmgr *hwmgr);
 int hwmgr_hw_init(struct pp_hwmgr *hwmgr);
 int hwmgr_hw_fini(struct pp_hwmgr *hwmgr);
-int hwmgr_hw_suspend(struct pp_hwmgr *hwmgr);
-int hwmgr_hw_resume(struct pp_hwmgr *hwmgr);
+int hwmgr_suspend(struct pp_hwmgr *hwmgr);
+int hwmgr_resume(struct pp_hwmgr *hwmgr);
+
 int hwmgr_handle_task(struct pp_hwmgr *hwmgr,
 				enum amd_pp_task task_id,
 				enum amd_pm_state_type *user_state);
