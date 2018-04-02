@@ -320,11 +320,14 @@ static const struct dcn_dpp_registers tf_regs[] = {
 };
 
 static const struct dcn_dpp_shift tf_shift = {
-	TF_REG_LIST_SH_MASK_DCN10(__SHIFT)
+	TF_REG_LIST_SH_MASK_DCN10(__SHIFT),
+	TF_DEBUG_REG_LIST_SH_DCN10
+
 };
 
 static const struct dcn_dpp_mask tf_mask = {
 	TF_REG_LIST_SH_MASK_DCN10(_MASK),
+	TF_DEBUG_REG_LIST_MASK_DCN10
 };
 
 static const struct dcn_mpc_registers mpc_regs = {
@@ -918,36 +921,6 @@ enum dc_status dcn10_add_stream_to_ctx(
 	return result;
 }
 
-enum dc_status dcn10_validate_guaranteed(
-		struct dc *dc,
-		struct dc_stream_state *dc_stream,
-		struct dc_state *context)
-{
-	enum dc_status result = DC_ERROR_UNEXPECTED;
-
-	context->streams[0] = dc_stream;
-	dc_stream_retain(context->streams[0]);
-	context->stream_count++;
-
-	result = resource_map_pool_resources(dc, context, dc_stream);
-
-	if (result == DC_OK)
-		result = resource_map_phy_clock_resources(dc, context, dc_stream);
-
-	if (result == DC_OK)
-		result = build_mapped_resource(dc, context, dc_stream);
-
-	if (result == DC_OK) {
-		validate_guaranteed_copy_streams(
-				context, dc->caps.max_streams);
-		result = resource_build_scaling_params_for_context(dc, context);
-	}
-	if (result == DC_OK && !dcn_validate_bandwidth(dc, context))
-		return DC_FAIL_BANDWIDTH_VALIDATE;
-
-	return result;
-}
-
 static struct pipe_ctx *dcn10_acquire_idle_pipe_for_layer(
 		struct dc_state *context,
 		const struct resource_pool *pool,
@@ -1233,7 +1206,6 @@ static struct dc_cap_funcs cap_funcs = {
 static struct resource_funcs dcn10_res_pool_funcs = {
 	.destroy = dcn10_destroy_resource_pool,
 	.link_enc_create = dcn10_link_encoder_create,
-	.validate_guaranteed = dcn10_validate_guaranteed,
 	.validate_bandwidth = dcn_validate_bandwidth,
 	.acquire_idle_pipe_for_layer = dcn10_acquire_idle_pipe_for_layer,
 	.validate_plane = dcn10_validate_plane,
