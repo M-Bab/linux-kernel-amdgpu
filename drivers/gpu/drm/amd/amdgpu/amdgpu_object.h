@@ -92,6 +92,8 @@ struct amdgpu_bo {
 		struct list_head	mn_list;
 		struct list_head	shadow_list;
 	};
+
+	struct kgd_mem                  *kfd_bo;
 };
 
 static inline struct amdgpu_bo *ttm_to_amdgpu_bo(struct ttm_buffer_object *tbo)
@@ -191,6 +193,27 @@ static inline bool amdgpu_bo_gpu_accessible(struct amdgpu_bo *bo)
 	case TTM_PL_VRAM: return true;
 	default: return false;
 	}
+}
+
+/**
+ * amdgpu_bo_in_cpu_visible_vram - check if BO is (partly) in visible VRAM
+ */
+static inline bool amdgpu_bo_in_cpu_visible_vram(struct amdgpu_bo *bo)
+{
+	struct amdgpu_device *adev = amdgpu_ttm_adev(bo->tbo.bdev);
+	unsigned fpfn = adev->gmc.visible_vram_size >> PAGE_SHIFT;
+	struct drm_mm_node *node = bo->tbo.mem.mm_node;
+	unsigned long pages_left;
+
+	if (bo->tbo.mem.mem_type != TTM_PL_VRAM)
+		return false;
+
+	for (pages_left = bo->tbo.mem.num_pages; pages_left;
+	     pages_left -= node->size, node++)
+		if (node->start < fpfn)
+			return true;
+
+	return false;
 }
 
 /**

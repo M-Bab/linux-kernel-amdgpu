@@ -45,8 +45,8 @@
 #include "dcn10_hubbub.h"
 #include "dcn10_cm_common.h"
 
-#define DC_LOGGER \
-	ctx->logger
+#define DC_LOGGER_INIT(logger)
+
 #define CTX \
 	hws->ctx
 #define REG(reg)\
@@ -165,7 +165,7 @@ void dcn10_log_hw_state(struct dc *dc)
 	}
 	DTN_INFO("\n");
 
-	DTN_INFO("OTG:  v_bs  v_be  v_ss  v_se  vpol  vmax  vmin"
+	DTN_INFO("OTG:  v_bs  v_be  v_ss  v_se  vpol  vmax  vmin  vmax_sel  vmin_sel"
 			"  h_bs  h_be  h_ss  h_se  hpol  htot  vtot  underflow\n");
 
 	for (i = 0; i < pool->timing_generator_count; i++) {
@@ -178,7 +178,7 @@ void dcn10_log_hw_state(struct dc *dc)
 		if ((s.otg_enabled & 1) == 0)
 			continue;
 
-		DTN_INFO("[%d]: %5d %5d %5d %5d %5d %5d %5d %5d %5d %5d"
+		DTN_INFO("[%d]: %5d %5d %5d %5d %5d %5d %5d %9d %9d %5d %5d %5d"
 				" %5d %5d %5d %5d  %9d\n",
 				tg->inst,
 				s.v_blank_start,
@@ -188,6 +188,8 @@ void dcn10_log_hw_state(struct dc *dc)
 				s.v_sync_a_pol,
 				s.v_total_max,
 				s.v_total_min,
+				s.v_total_max_sel,
+				s.v_total_min_sel,
 				s.h_blank_start,
 				s.h_blank_end,
 				s.h_sync_a_start,
@@ -363,7 +365,7 @@ static void power_on_plane(
 	struct dce_hwseq *hws,
 	int plane_id)
 {
-	struct dc_context *ctx = hws->ctx;
+	DC_LOGGER_INIT(hws->ctx->logger);
 	if (REG(DC_IP_REQUEST_CNTL)) {
 		REG_SET(DC_IP_REQUEST_CNTL, 0,
 				IP_REQUEST_EN, 1);
@@ -478,6 +480,8 @@ static enum dc_status dcn10_prog_pixclk_crtc_otg(
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	enum dc_color_space color_space;
 	struct tg_color black_color = {0};
+	struct drr_params params = {0};
+	unsigned int event_triggers = 0;
 
 	/* by upper caller loop, pipe0 is parent pipe and be called first.
 	 * back end is set up by for pipe0. Other children pipe share back end
@@ -545,6 +549,19 @@ static enum dc_status dcn10_prog_pixclk_crtc_otg(
 		return DC_ERROR_UNEXPECTED;
 	}
 
+	params.vertical_total_min = stream->adjust.v_total_min;
+	params.vertical_total_max = stream->adjust.v_total_max;
+	if (pipe_ctx->stream_res.tg->funcs->set_drr)
+		pipe_ctx->stream_res.tg->funcs->set_drr(
+			pipe_ctx->stream_res.tg, &params);
+
+	// DRR should set trigger event to monitor surface update event
+	if (stream->adjust.v_total_min != 0 && stream->adjust.v_total_max != 0)
+		event_triggers = 0x80;
+	if (pipe_ctx->stream_res.tg->funcs->set_static_screen_control)
+		pipe_ctx->stream_res.tg->funcs->set_static_screen_control(
+				pipe_ctx->stream_res.tg, event_triggers);
+
 	/* TODO program crtc source select for non-virtual signal*/
 	/* TODO program FMT */
 	/* TODO setup link_enc */
@@ -562,7 +579,7 @@ static void reset_back_end_for_pipe(
 		struct dc_state *context)
 {
 	int i;
-	struct dc_context *ctx = dc->ctx;
+	DC_LOGGER_INIT(dc->ctx->logger);
 	if (pipe_ctx->stream_res.stream_enc == NULL) {
 		pipe_ctx->stream = NULL;
 		return;
@@ -658,7 +675,7 @@ static void plane_atomic_power_down(struct dc *dc, struct pipe_ctx *pipe_ctx)
 {
 	struct dce_hwseq *hws = dc->hwseq;
 	struct dpp *dpp = pipe_ctx->plane_res.dpp;
-	struct dc_context *ctx = dc->ctx;
+	DC_LOGGER_INIT(dc->ctx->logger);
 
 	if (REG(DC_IP_REQUEST_CNTL)) {
 		REG_SET(DC_IP_REQUEST_CNTL, 0,
@@ -708,7 +725,7 @@ static void plane_atomic_disable(struct dc *dc, struct pipe_ctx *pipe_ctx)
 
 static void dcn10_disable_plane(struct dc *dc, struct pipe_ctx *pipe_ctx)
 {
-	struct dc_context *ctx = dc->ctx;
+	DC_LOGGER_INIT(dc->ctx->logger);
 
 	if (!pipe_ctx->plane_res.hubp || pipe_ctx->plane_res.hubp->power_gated)
 		return;
@@ -954,9 +971,8 @@ static bool dcn10_set_input_transfer_func(struct pipe_ctx *pipe_ctx,
 		tf = plane_state->in_transfer_func;
 
 	if (plane_state->gamma_correction &&
-		plane_state->gamma_correction->is_identity)
-		dpp_base->funcs->dpp_set_degamma(dpp_base, IPP_DEGAMMA_MODE_BYPASS);
-	else if (plane_state->gamma_correction && dce_use_lut(plane_state->format))
+		!plane_state->gamma_correction->is_identity
+			&& dce_use_lut(plane_state->format))
 		dpp_base->funcs->dpp_program_input_lut(dpp_base, plane_state->gamma_correction);
 
 	if (tf == NULL)
@@ -2001,9 +2017,9 @@ static void dcn10_apply_ctx_for_surface(
 	bool removed_pipe[4] = { false };
 	unsigned int ref_clk_mhz = dc->res_pool->ref_clock_inKhz/1000;
 	bool program_water_mark = false;
-	struct dc_context *ctx = dc->ctx;
 	struct pipe_ctx *top_pipe_to_program =
 			find_top_pipe_for_stream(dc, context, stream);
+	DC_LOGGER_INIT(dc->ctx->logger);
 
 	if (!top_pipe_to_program)
 		return;
@@ -2311,15 +2327,23 @@ static void set_drr(struct pipe_ctx **pipe_ctx,
 {
 	int i = 0;
 	struct drr_params params = {0};
+	// DRR should set trigger event to monitor surface update event
+	unsigned int event_triggers = 0x80;
 
 	params.vertical_total_max = vmax;
 	params.vertical_total_min = vmin;
 
 	/* TODO: If multiple pipes are to be supported, you need
-	 * some GSL stuff
+	 * some GSL stuff. Static screen triggers may be programmed differently
+	 * as well.
 	 */
 	for (i = 0; i < num_pipes; i++) {
-		pipe_ctx[i]->stream_res.tg->funcs->set_drr(pipe_ctx[i]->stream_res.tg, &params);
+		pipe_ctx[i]->stream_res.tg->funcs->set_drr(
+			pipe_ctx[i]->stream_res.tg, &params);
+		if (vmax != 0 && vmin != 0)
+			pipe_ctx[i]->stream_res.tg->funcs->set_static_screen_control(
+					pipe_ctx[i]->stream_res.tg,
+					event_triggers);
 	}
 }
 

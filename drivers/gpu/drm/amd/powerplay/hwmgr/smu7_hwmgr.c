@@ -61,10 +61,6 @@
 #define SMC_CG_IND_START            0xc0030000
 #define SMC_CG_IND_END              0xc0040000
 
-#define VOLTAGE_SCALE               4
-#define VOLTAGE_VID_OFFSET_SCALE1   625
-#define VOLTAGE_VID_OFFSET_SCALE2   100
-
 #define MEM_FREQ_LOW_LATENCY        25000
 #define MEM_FREQ_HIGH_LATENCY       80000
 
@@ -3787,12 +3783,14 @@ static int smu7_notify_link_speed_change_after_state_change(
 				smu7_get_current_pcie_speed(hwmgr) > 0)
 			return 0;
 
+#ifdef CONFIG_ACPI
 		if (amdgpu_acpi_pcie_performance_request(hwmgr->adev, request, false)) {
 			if (PP_PCIEGen2 == target_link_speed)
 				pr_info("PSPP request to switch to Gen2 from Gen3 Failed!");
 			else
 				pr_info("PSPP request to switch to Gen1 from Gen2 Failed!");
 		}
+#endif
 	}
 
 	return 0;

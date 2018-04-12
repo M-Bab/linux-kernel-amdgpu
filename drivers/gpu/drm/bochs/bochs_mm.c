@@ -192,7 +192,7 @@ static struct ttm_tt *bochs_ttm_tt_create(struct ttm_buffer_object *bo,
 	return tt;
 }
 
-struct ttm_bo_driver bochs_bo_driver = {
+static struct ttm_bo_driver bochs_bo_driver = {
 	.ttm_tt_create = bochs_ttm_tt_create,
 	.init_mem_type = bochs_bo_init_mem_type,
 	.eviction_valuable = ttm_bo_eviction_valuable,

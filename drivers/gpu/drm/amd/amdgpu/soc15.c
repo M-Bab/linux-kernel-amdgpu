@@ -287,6 +287,7 @@ static struct soc15_allowed_register_entry soc15_allowed_read_registers[] = {
 	{ SOC15_REG_ENTRY(GC, 0, mmCP_CPC_STALLED_STAT1)},
 	{ SOC15_REG_ENTRY(GC, 0, mmCP_CPC_STATUS)},
 	{ SOC15_REG_ENTRY(GC, 0, mmGB_ADDR_CONFIG)},
+	{ SOC15_REG_ENTRY(GC, 0, mmDB_DEBUG2)},
 };
 
 static uint32_t soc15_read_indexed_register(struct amdgpu_device *adev, u32 se_num,
@@ -315,6 +316,8 @@ static uint32_t soc15_get_register_value(struct amdgpu_device *adev,
 	} else {
 		if (reg_offset == SOC15_REG_OFFSET(GC, 0, mmGB_ADDR_CONFIG))
 			return adev->gfx.config.gb_addr_config;
+		else if (reg_offset == SOC15_REG_OFFSET(GC, 0, mmDB_DEBUG2))
+			return adev->gfx.config.db_debug2;
 		return RREG32(reg_offset);
 	}
 }
@@ -568,6 +571,12 @@ static void soc15_invalidate_hdp(struct amdgpu_device *adev,
 			HDP, 0, mmHDP_READ_CACHE_INVALIDATE), 1);
 }
 
+static bool soc15_need_full_reset(struct amdgpu_device *adev)
+{
+	/* change this when we implement soft reset */
+	return true;
+}
+
 static const struct amdgpu_asic_funcs soc15_asic_funcs =
 {
 	.read_disabled_bios = &soc15_read_disabled_bios,
@@ -581,6 +590,7 @@ static const struct amdgpu_asic_funcs soc15_asic_funcs =
 	.get_config_memsize = &soc15_get_config_memsize,
 	.flush_hdp = &soc15_flush_hdp,
 	.invalidate_hdp = &soc15_invalidate_hdp,
+	.need_full_reset = &soc15_need_full_reset,
 };
 
 static int soc15_common_early_init(void *handle)

@@ -80,29 +80,6 @@ struct dm_comressor_info {
 };
 #endif
 
-/**
- * for_each_oldnew_plane_in_state_reverse - iterate over all planes in an atomic
- * update in reverse order
- * @__state: &struct drm_atomic_state pointer
- * @plane: &struct drm_plane iteration cursor
- * @old_plane_state: &struct drm_plane_state iteration cursor for the old state
- * @new_plane_state: &struct drm_plane_state iteration cursor for the new state
- * @__i: int iteration cursor, for macro-internal use
- *
- * This iterates over all planes in an atomic update in reverse order,
- * tracking both old and  new state. This is useful in places where the
- * state delta needs to be considered, for example in atomic check functions.
- */
-#ifndef for_each_oldnew_plane_in_state_reverse
-#define for_each_oldnew_plane_in_state_reverse(__state, plane, old_plane_state, new_plane_state, __i) \
-	for ((__i) = ((__state)->dev->mode_config.num_total_plane - 1);	\
-	     (__i) >= 0;						\
-	     (__i)--)							\
-		for_each_if ((__state)->planes[__i].ptr &&		\
-			     ((plane) = (__state)->planes[__i].ptr,	\
-			      (old_plane_state) = (__state)->planes[__i].old_state,\
-			      (new_plane_state) = (__state)->planes[__i].new_state, 1))
-#endif
 
 struct amdgpu_display_manager {
 	struct dal *dal;
@@ -193,9 +170,6 @@ struct amdgpu_dm_connector {
 	int max_vfreq ;
 	int pixel_clock_mhz;
 
-	/*freesync caps*/
-	struct mod_freesync_caps caps;
-
 	struct mutex hpd_lock;
 
 	bool fake_enable;
@@ -223,9 +197,13 @@ struct dm_crtc_state {
 
 	int crc_skip_count;
 	bool crc_enabled;
+
+	bool freesync_enabled;
+	struct dc_crtc_timing_adjust adjust;
+	struct dc_info_packet vrr_infopacket;
 };
 
-#define to_dm_crtc_state(x)    container_of(x, struct dm_crtc_state, base)
+#define to_dm_crtc_state(x) container_of(x, struct dm_crtc_state, base)
 
 struct dm_atomic_state {
 	struct drm_atomic_state base;
@@ -242,7 +220,7 @@ struct dm_connector_state {
 	uint8_t underscan_vborder;
 	uint8_t underscan_hborder;
 	bool underscan_enable;
-	struct mod_freesync_user_enable user_enable;
+	bool freesync_enable;
 	bool freesync_capable;
 };
 
@@ -276,11 +254,8 @@ int amdgpu_dm_connector_mode_valid(struct drm_connector *connector,
 void dm_restore_drm_connector_state(struct drm_device *dev,
 				    struct drm_connector *connector);
 
-void amdgpu_dm_add_sink_to_freesync_module(struct drm_connector *connector,
-					   struct edid *edid);
-
-void
-amdgpu_dm_remove_sink_from_freesync_module(struct drm_connector *connector);
+void amdgpu_dm_update_freesync_caps(struct drm_connector *connector,
+					struct edid *edid);
 
 /* amdgpu_dm_crc.c */
 #ifdef CONFIG_DEBUG_FS

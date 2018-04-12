@@ -46,6 +46,7 @@
 #include "amdgpu.h"
 #include "amdgpu_object.h"
 #include "amdgpu_trace.h"
+#include "amdgpu_amdkfd.h"
 #include "bif/bif_4_1_d.h"
 
 #define DRM_FILE_PAGE_OFFSET (0x100000000ULL >> PAGE_SHIFT)
@@ -222,20 +223,8 @@ static void amdgpu_evict_flags(struct ttm_buffer_object *bo,
 		if (!adev->mman.buffer_funcs_enabled) {
 			amdgpu_ttm_placement_from_domain(abo, AMDGPU_GEM_DOMAIN_CPU);
 		} else if (adev->gmc.visible_vram_size < adev->gmc.real_vram_size &&
-			   !(abo->flags & AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED)) {
-			unsigned fpfn = adev->gmc.visible_vram_size >> PAGE_SHIFT;
-			struct drm_mm_node *node = bo->mem.mm_node;
-			unsigned long pages_left;
-
-			for (pages_left = bo->mem.num_pages;
-			     pages_left;
-			     pages_left -= node->size, node++) {
-				if (node->start < fpfn)
-					break;
-			}
-
-			if (!pages_left)
-				goto gtt;
+			   !(abo->flags & AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED) &&
+			   amdgpu_bo_in_cpu_visible_vram(abo)) {
 
 			/* Try evicting to the CPU inaccessible part of VRAM
 			 * first, but only set GTT as busy placement, so this
@@ -244,12 +233,11 @@ static void amdgpu_evict_flags(struct ttm_buffer_object *bo,
 			 */
 			amdgpu_ttm_placement_from_domain(abo, AMDGPU_GEM_DOMAIN_VRAM |
 							 AMDGPU_GEM_DOMAIN_GTT);
-			abo->placements[0].fpfn = fpfn;
+			abo->placements[0].fpfn = adev->gmc.visible_vram_size >> PAGE_SHIFT;
 			abo->placements[0].lpfn = 0;
 			abo->placement.busy_placement = &abo->placements[1];
 			abo->placement.num_busy_placement = 1;
 		} else {
-gtt:
 			amdgpu_ttm_placement_from_domain(abo, AMDGPU_GEM_DOMAIN_GTT);
 		}
 		break;
@@ -263,6 +251,13 @@ gtt:
 static int amdgpu_verify_access(struct ttm_buffer_object *bo, struct file *filp)
 {
 	struct amdgpu_bo *abo = ttm_to_amdgpu_bo(bo);
+
+	/*
+	 * Don't verify access for KFD BOs. They don't have a GEM
+	 * object associated with them.
+	 */
+	if (abo->kfd_bo)
+		return 0;
 
 	if (amdgpu_ttm_tt_get_usermm(bo->ttm))
 		return -EPERM;
@@ -1178,6 +1173,23 @@ static bool amdgpu_ttm_bo_eviction_valuable(struct ttm_buffer_object *bo,
 {
 	unsigned long num_pages = bo->mem.num_pages;
 	struct drm_mm_node *node = bo->mem.mm_node;
+	struct reservation_object_list *flist;
+	struct dma_fence *f;
+	int i;
+
+	/* If bo is a KFD BO, check if the bo belongs to the current process.
+	 * If true, then return false as any KFD process needs all its BOs to
+	 * be resident to run successfully
+	 */
+	flist = reservation_object_get_list(bo->resv);
+	if (flist) {
+		for (i = 0; i < flist->shared_count; ++i) {
+			f = rcu_dereference_protected(flist->shared[i],
+				reservation_object_held(bo->resv));
+			if (amdkfd_fence_check_mm(f, current->mm))
+				return false;
+		}
+	}
 
 	switch (bo->mem.mem_type) {
 	case TTM_PL_TT:

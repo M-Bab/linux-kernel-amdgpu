@@ -36,7 +36,7 @@
 #include "smu9.h"
 #include "smu9_driver_if.h"
 #include "vega10_inc.h"
-#include "pp_soc15.h"
+#include "soc15_common.h"
 #include "pppcielanes.h"
 #include "vega10_hwmgr.h"
 #include "vega10_processpptables.h"
@@ -50,10 +50,6 @@
 
 #include "smuio/smuio_9_0_offset.h"
 #include "smuio/smuio_9_0_sh_mask.h"
-
-#define VOLTAGE_SCALE  4
-#define VOLTAGE_VID_OFFSET_SCALE1   625
-#define VOLTAGE_VID_OFFSET_SCALE2   100
 
 #define HBM_MEMORY_CHANNEL_WIDTH    128
 
@@ -79,8 +75,6 @@ static const uint32_t channel_number[] = {1, 2, 0, 4, 0, 8, 0, 16, 2};
 #define DF_CS_AON0_DramBaseAddress0__IntLvNumChan_MASK                                                        0x000000F0L
 #define DF_CS_AON0_DramBaseAddress0__IntLvAddrSel_MASK                                                        0x00000700L
 #define DF_CS_AON0_DramBaseAddress0__DramBaseAddr_MASK                                                        0xFFFFF000L
-static int vega10_force_clock_level(struct pp_hwmgr *hwmgr,
-		enum pp_clock_type type, uint32_t mask);
 
 static const ULONG PhwVega10_Magic = (ULONG)(PHM_VIslands_Magic);
 
@@ -754,7 +748,6 @@ static int vega10_hwmgr_backend_init(struct pp_hwmgr *hwmgr)
 	uint32_t config_telemetry = 0;
 	struct pp_atomfwctrl_voltage_table vol_table;
 	struct amdgpu_device *adev = hwmgr->adev;
-	uint32_t reg;
 
 	data = kzalloc(sizeof(struct vega10_hwmgr), GFP_KERNEL);
 	if (data == NULL)
@@ -860,10 +853,7 @@ static int vega10_hwmgr_backend_init(struct pp_hwmgr *hwmgr)
 			advanceFanControlParameters.usFanPWMMinLimit *
 			hwmgr->thermal_controller.fanInfo.ulMaxRPM / 100;
 
-	reg = soc15_get_register_offset(DF_HWID, 0,
-			mmDF_CS_AON0_DramBaseAddress0_BASE_IDX,
-			mmDF_CS_AON0_DramBaseAddress0);
-	data->mem_channels = (cgs_read_register(hwmgr->device, reg) &
+	data->mem_channels = (RREG32_SOC15(DF, 0, mmDF_CS_AON0_DramBaseAddress0) &
 			DF_CS_AON0_DramBaseAddress0__IntLvNumChan_MASK) >>
 			DF_CS_AON0_DramBaseAddress0__IntLvNumChan__SHIFT;
 	PP_ASSERT_WITH_CODE(data->mem_channels < ARRAY_SIZE(channel_number),
@@ -2481,6 +2471,12 @@ static int vega10_init_smc_table(struct pp_hwmgr *hwmgr)
 		data->vbios_boot_state.mvddc    = boot_up_values.usMvddc;
 		data->vbios_boot_state.gfx_clock = boot_up_values.ulGfxClk;
 		data->vbios_boot_state.mem_clock = boot_up_values.ulUClk;
+		pp_atomfwctrl_get_clk_information_by_clkid(hwmgr,
+				SMU9_SYSPLL0_SOCCLK_ID, &boot_up_values.ulSocClk);
+
+		pp_atomfwctrl_get_clk_information_by_clkid(hwmgr,
+				SMU9_SYSPLL0_DCEFCLK_ID, &boot_up_values.ulDCEFClk);
+
 		data->vbios_boot_state.soc_clock = boot_up_values.ulSocClk;
 		data->vbios_boot_state.dcef_clock = boot_up_values.ulDCEFClk;
 		if (0 != boot_up_values.usVddc) {
@@ -3802,22 +3798,18 @@ static int vega10_get_gpu_power(struct pp_hwmgr *hwmgr,
 static int vega10_read_sensor(struct pp_hwmgr *hwmgr, int idx,
 			      void *value, int *size)
 {
-	uint32_t sclk_idx, mclk_idx, activity_percent = 0;
+	struct amdgpu_device *adev = hwmgr->adev;
+	uint32_t sclk_mhz, mclk_idx, activity_percent = 0;
 	struct vega10_hwmgr *data = hwmgr->backend;
 	struct vega10_dpm_table *dpm_table = &data->dpm_table;
 	int ret = 0;
-	uint32_t reg, val_vid;
+	uint32_t val_vid;
 
 	switch (idx) {
 	case AMDGPU_PP_SENSOR_GFX_SCLK:
-		smum_send_msg_to_smc(hwmgr, PPSMC_MSG_GetCurrentGfxclkIndex);
-		sclk_idx = smum_get_argument(hwmgr);
-		if (sclk_idx <  dpm_table->gfx_table.count) {
-			*((uint32_t *)value) = dpm_table->gfx_table.dpm_levels[sclk_idx].value;
-			*size = 4;
-		} else {
-			ret = -EINVAL;
-		}
+		smum_send_msg_to_smc(hwmgr, PPSMC_MSG_GetAverageGfxclkActualFrequency);
+		sclk_mhz = smum_get_argument(hwmgr);
+		*((uint32_t *)value) = sclk_mhz * 100;
 		break;
 	case AMDGPU_PP_SENSOR_GFX_MCLK:
 		smum_send_msg_to_smc(hwmgr, PPSMC_MSG_GetCurrentUclkIndex);
@@ -3856,10 +3848,7 @@ static int vega10_read_sensor(struct pp_hwmgr *hwmgr, int idx,
 		}
 		break;
 	case AMDGPU_PP_SENSOR_VDDGFX:
-		reg = soc15_get_register_offset(SMUIO_HWID, 0,
-			mmSMUSVI0_PLANE0_CURRENTVID_BASE_IDX,
-			mmSMUSVI0_PLANE0_CURRENTVID);
-		val_vid = (cgs_read_register(hwmgr->device, reg) &
+		val_vid = (RREG32_SOC15(SMUIO, 0, mmSMUSVI0_PLANE0_CURRENTVID) &
 			SMUSVI0_PLANE0_CURRENTVID__CURRENT_SVI0_PLANE0_VID_MASK) >>
 			SMUSVI0_PLANE0_CURRENTVID__CURRENT_SVI0_PLANE0_VID__SHIFT;
 		*((uint32_t *)value) = (uint32_t)convert_to_vddc((uint8_t)val_vid);
@@ -4102,6 +4091,47 @@ static void vega10_set_fan_control_mode(struct pp_hwmgr *hwmgr, uint32_t mode)
 	default:
 		break;
 	}
+}
+
+static int vega10_force_clock_level(struct pp_hwmgr *hwmgr,
+		enum pp_clock_type type, uint32_t mask)
+{
+	struct vega10_hwmgr *data = hwmgr->backend;
+
+	switch (type) {
+	case PP_SCLK:
+		data->smc_state_table.gfx_boot_level = mask ? (ffs(mask) - 1) : 0;
+		data->smc_state_table.gfx_max_level = mask ? (fls(mask) - 1) : 0;
+
+		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_bootup_level(hwmgr),
+			"Failed to upload boot level to lowest!",
+			return -EINVAL);
+
+		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_max_level(hwmgr),
+			"Failed to upload dpm max level to highest!",
+			return -EINVAL);
+		break;
+
+	case PP_MCLK:
+		data->smc_state_table.mem_boot_level = mask ? (ffs(mask) - 1) : 0;
+		data->smc_state_table.mem_max_level = mask ? (fls(mask) - 1) : 0;
+
+		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_bootup_level(hwmgr),
+			"Failed to upload boot level to lowest!",
+			return -EINVAL);
+
+		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_max_level(hwmgr),
+			"Failed to upload dpm max level to highest!",
+			return -EINVAL);
+
+		break;
+
+	case PP_PCIE:
+	default:
+		break;
+	}
+
+	return 0;
 }
 
 static int vega10_dpm_force_dpm_level(struct pp_hwmgr *hwmgr,
@@ -4388,47 +4418,6 @@ static int vega10_set_watermarks_for_clocks_ranges(struct pp_hwmgr *hwmgr,
 	}
 
 	return result;
-}
-
-static int vega10_force_clock_level(struct pp_hwmgr *hwmgr,
-		enum pp_clock_type type, uint32_t mask)
-{
-	struct vega10_hwmgr *data = hwmgr->backend;
-
-	switch (type) {
-	case PP_SCLK:
-		data->smc_state_table.gfx_boot_level = mask ? (ffs(mask) - 1) : 0;
-		data->smc_state_table.gfx_max_level = mask ? (fls(mask) - 1) : 0;
-
-		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_bootup_level(hwmgr),
-			"Failed to upload boot level to lowest!",
-			return -EINVAL);
-
-		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_max_level(hwmgr),
-			"Failed to upload dpm max level to highest!",
-			return -EINVAL);
-		break;
-
-	case PP_MCLK:
-		data->smc_state_table.mem_boot_level = mask ? (ffs(mask) - 1) : 0;
-		data->smc_state_table.mem_max_level = mask ? (fls(mask) - 1) : 0;
-
-		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_bootup_level(hwmgr),
-			"Failed to upload boot level to lowest!",
-			return -EINVAL);
-
-		PP_ASSERT_WITH_CODE(!vega10_upload_dpm_max_level(hwmgr),
-			"Failed to upload dpm max level to highest!",
-			return -EINVAL);
-
-		break;
-
-	case PP_PCIE:
-	default:
-		break;
-	}
-
-	return 0;
 }
 
 static int vega10_print_clock_levels(struct pp_hwmgr *hwmgr,
