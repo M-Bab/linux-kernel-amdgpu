@@ -1378,37 +1378,48 @@ static uint32_t bandwidth_in_kbps_from_timing(
 {
 	uint32_t bits_per_channel = 0;
 	uint32_t kbps;
-	switch (timing->display_color_depth) {
 
-	case COLOR_DEPTH_666:
-		bits_per_channel = 6;
-		break;
-	case COLOR_DEPTH_888:
-		bits_per_channel = 8;
-		break;
-	case COLOR_DEPTH_101010:
-		bits_per_channel = 10;
-		break;
-	case COLOR_DEPTH_121212:
+	if (timing->pixel_encoding == PIXEL_ENCODING_YCBCR422)
 		bits_per_channel = 12;
-		break;
-	case COLOR_DEPTH_141414:
-		bits_per_channel = 14;
-		break;
-	case COLOR_DEPTH_161616:
-		bits_per_channel = 16;
-		break;
-	default:
-		break;
+	else{
+
+		switch (timing->display_color_depth) {
+
+		case COLOR_DEPTH_666:
+			bits_per_channel = 6;
+			break;
+		case COLOR_DEPTH_888:
+			bits_per_channel = 8;
+			break;
+		case COLOR_DEPTH_101010:
+			bits_per_channel = 10;
+			break;
+		case COLOR_DEPTH_121212:
+			bits_per_channel = 12;
+			break;
+		case COLOR_DEPTH_141414:
+			bits_per_channel = 14;
+			break;
+		case COLOR_DEPTH_161616:
+			bits_per_channel = 16;
+			break;
+		default:
+			break;
+		}
 	}
 	ASSERT(bits_per_channel != 0);
 
 	kbps = timing->pix_clk_khz;
 	kbps *= bits_per_channel;
 
-	if (timing->flags.Y_ONLY != 1)
+	if (timing->flags.Y_ONLY != 1) {
 		/*Only YOnly make reduce bandwidth by 1/3 compares to RGB*/
 		kbps *= 3;
+		if (timing->pixel_encoding == PIXEL_ENCODING_YCBCR420)
+			kbps /= 2;
+		else if (timing->pixel_encoding == PIXEL_ENCODING_YCBCR422)
+			kbps = kbps * 2 / 3;
+	}
 
 	return kbps;
 
@@ -2326,6 +2337,9 @@ static bool retrieve_link_cap(struct dc_link *link)
 	get_active_converter_info(ds_port.byte, link);
 
 	dp_wa_power_up_0010FA(link, dpcd_data, sizeof(dpcd_data));
+
+	down_strm_port_count.raw = dpcd_data[DP_DOWN_STREAM_PORT_COUNT -
+				 DP_DPCD_REV];
 
 	link->dpcd_caps.allow_invalid_MSA_timing_param =
 		down_strm_port_count.bits.IGNORE_MSA_TIMING_PARAM;

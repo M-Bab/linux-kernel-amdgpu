@@ -855,17 +855,17 @@ void optc1_set_drr(
 				OTG_SET_V_TOTAL_MIN_MASK_EN, 0,
 				OTG_SET_V_TOTAL_MIN_MASK, 0);
 	} else {
-		REG_SET(OTG_V_TOTAL_MIN, 0,
-			OTG_V_TOTAL_MIN, 0);
-
-		REG_SET(OTG_V_TOTAL_MAX, 0,
-			OTG_V_TOTAL_MAX, 0);
-
 		REG_UPDATE_4(OTG_V_TOTAL_CONTROL,
 				OTG_SET_V_TOTAL_MIN_MASK, 0,
 				OTG_V_TOTAL_MIN_SEL, 0,
 				OTG_V_TOTAL_MAX_SEL, 0,
 				OTG_FORCE_LOCK_ON_EVENT, 0);
+
+		REG_SET(OTG_V_TOTAL_MIN, 0,
+			OTG_V_TOTAL_MIN, 0);
+
+		REG_SET(OTG_V_TOTAL_MAX, 0,
+			OTG_V_TOTAL_MAX, 0);
 	}
 }
 
@@ -1228,6 +1228,12 @@ void optc1_read_otg_state(struct optc *optc1,
 
 	REG_GET(OTG_V_TOTAL_MIN,
 			OTG_V_TOTAL_MIN, &s->v_total_min);
+
+	REG_GET(OTG_V_TOTAL_CONTROL,
+			OTG_V_TOTAL_MAX_SEL, &s->v_total_max_sel);
+
+	REG_GET(OTG_V_TOTAL_CONTROL,
+			OTG_V_TOTAL_MIN_SEL, &s->v_total_min_sel);
 
 	REG_GET_2(OTG_V_SYNC_A,
 			OTG_V_SYNC_A_START, &s->v_sync_a_start,

@@ -29,7 +29,6 @@
 #include <drm/drmP.h>
 #include <drm/i915_drm.h>
 #include "i915_drv.h"
-#include <linux/dmi.h>
 
 #define _INTEL_BIOS_PRIVATE
 #include "intel_vbt_defs.h"
@@ -392,7 +391,7 @@ parse_sdvo_panel_data(struct drm_i915_private *dev_priv,
 static int intel_bios_ssc_frequency(struct drm_i915_private *dev_priv,
 				    bool alternate)
 {
-	switch (INTEL_INFO(dev_priv)->gen) {
+	switch (INTEL_GEN(dev_priv)) {
 	case 2:
 		return alternate ? 66667 : 48000;
 	case 3:
@@ -948,6 +947,86 @@ static int goto_next_sequence_v3(const u8 *data, int index, int total)
 	return 0;
 }
 
+/*
+ * Get len of pre-fixed deassert fragment from a v1 init OTP sequence,
+ * skip all delay + gpio operands and stop at the first DSI packet op.
+ */
+static int get_init_otp_deassert_fragment_len(struct drm_i915_private *dev_priv)
+{
+	const u8 *data = dev_priv->vbt.dsi.sequence[MIPI_SEQ_INIT_OTP];
+	int index, len;
+
+	if (WARN_ON(!data || dev_priv->vbt.dsi.seq_version != 1))
+		return 0;
+
+	/* index = 1 to skip sequence byte */
+	for (index = 1; data[index] != MIPI_SEQ_ELEM_END; index += len) {
+		switch (data[index]) {
+		case MIPI_SEQ_ELEM_SEND_PKT:
+			return index == 1 ? 0 : index;
+		case MIPI_SEQ_ELEM_DELAY:
+			len = 5; /* 1 byte for operand + uint32 */
+			break;
+		case MIPI_SEQ_ELEM_GPIO:
+			len = 3; /* 1 byte for op, 1 for gpio_nr, 1 for value */
+			break;
+		default:
+			return 0;
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * Some v1 VBT MIPI sequences do the deassert in the init OTP sequence.
+ * The deassert must be done before calling intel_dsi_device_ready, so for
+ * these devices we split the init OTP sequence into a deassert sequence and
+ * the actual init OTP part.
+ */
+static void fixup_mipi_sequences(struct drm_i915_private *dev_priv)
+{
+	u8 *init_otp;
+	int len;
+
+	/* Limit this to VLV for now. */
+	if (!IS_VALLEYVIEW(dev_priv))
+		return;
+
+	/* Limit this to v1 vid-mode sequences */
+	if (dev_priv->vbt.dsi.config->is_cmd_mode ||
+	    dev_priv->vbt.dsi.seq_version != 1)
+		return;
+
+	/* Only do this if there are otp and assert seqs and no deassert seq */
+	if (!dev_priv->vbt.dsi.sequence[MIPI_SEQ_INIT_OTP] ||
+	    !dev_priv->vbt.dsi.sequence[MIPI_SEQ_ASSERT_RESET] ||
+	    dev_priv->vbt.dsi.sequence[MIPI_SEQ_DEASSERT_RESET])
+		return;
+
+	/* The deassert-sequence ends at the first DSI packet */
+	len = get_init_otp_deassert_fragment_len(dev_priv);
+	if (!len)
+		return;
+
+	DRM_DEBUG_KMS("Using init OTP fragment to deassert reset\n");
+
+	/* Copy the fragment, update seq byte and terminate it */
+	init_otp = (u8 *)dev_priv->vbt.dsi.sequence[MIPI_SEQ_INIT_OTP];
+	dev_priv->vbt.dsi.deassert_seq = kmemdup(init_otp, len + 1, GFP_KERNEL);
+	if (!dev_priv->vbt.dsi.deassert_seq)
+		return;
+	dev_priv->vbt.dsi.deassert_seq[0] = MIPI_SEQ_DEASSERT_RESET;
+	dev_priv->vbt.dsi.deassert_seq[len] = MIPI_SEQ_ELEM_END;
+	/* Use the copy for deassert */
+	dev_priv->vbt.dsi.sequence[MIPI_SEQ_DEASSERT_RESET] =
+		dev_priv->vbt.dsi.deassert_seq;
+	/* Replace the last byte of the fragment with init OTP seq byte */
+	init_otp[len - 1] = MIPI_SEQ_INIT_OTP;
+	/* And make MIPI_MIPI_SEQ_INIT_OTP point to it */
+	dev_priv->vbt.dsi.sequence[MIPI_SEQ_INIT_OTP] = init_otp + len - 1;
+}
+
 static void
 parse_mipi_sequence(struct drm_i915_private *dev_priv,
 		    const struct bdb_header *bdb)
@@ -1016,6 +1095,8 @@ parse_mipi_sequence(struct drm_i915_private *dev_priv,
 	dev_priv->vbt.dsi.data = data;
 	dev_priv->vbt.dsi.size = seq_size;
 	dev_priv->vbt.dsi.seq_version = sequence->version;
+
+	fixup_mipi_sequences(dev_priv);
 
 	DRM_DEBUG_DRIVER("MIPI related VBT parsing complete\n");
 	return;
@@ -1543,22 +1624,6 @@ static const struct vbt_header *find_vbt(void __iomem *bios, size_t size)
 	return NULL;
 }
 
-#define DRM_DMI_PRODUCT_VERSION 0x6
-
-static void parse_product_info(struct drm_i915_private *dev_priv)
-{
-	const char *product_ver = dmi_get_system_info(DRM_DMI_PRODUCT_VERSION);
-	if (!product_ver)
-		return;
-
-	if (!strncmp(product_ver, "ThinkPad X1", 11)) {
-		DRM_DEBUG_KMS("dmi: %s, Bypassing TMDS_OE write\n", product_ver);
-		dev_priv->bypass_tmds_oe = true;
-	}
-
-	return;
-}
-
 /**
  * intel_bios_init - find VBT and initialize settings from the BIOS
  * @dev_priv: i915 device instance
@@ -1617,8 +1682,6 @@ void intel_bios_init(struct drm_i915_private *dev_priv)
 	parse_sdvo_device_mapping(dev_priv, bdb->version);
 	parse_ddi_ports(dev_priv, bdb->version);
 
-	parse_product_info(dev_priv);
-
 out:
 	if (!vbt) {
 		DRM_INFO("Failed to find VBIOS tables (VBT)\n");
@@ -1627,6 +1690,29 @@ out:
 
 	if (bios)
 		pci_unmap_rom(pdev, bios);
+}
+
+/**
+ * intel_bios_cleanup - Free any resources allocated by intel_bios_init()
+ * @dev_priv: i915 device instance
+ */
+void intel_bios_cleanup(struct drm_i915_private *dev_priv)
+{
+	kfree(dev_priv->vbt.child_dev);
+	dev_priv->vbt.child_dev = NULL;
+	dev_priv->vbt.child_dev_num = 0;
+	kfree(dev_priv->vbt.sdvo_lvds_vbt_mode);
+	dev_priv->vbt.sdvo_lvds_vbt_mode = NULL;
+	kfree(dev_priv->vbt.lfp_lvds_vbt_mode);
+	dev_priv->vbt.lfp_lvds_vbt_mode = NULL;
+	kfree(dev_priv->vbt.dsi.data);
+	dev_priv->vbt.dsi.data = NULL;
+	kfree(dev_priv->vbt.dsi.pps);
+	dev_priv->vbt.dsi.pps = NULL;
+	kfree(dev_priv->vbt.dsi.config);
+	dev_priv->vbt.dsi.config = NULL;
+	kfree(dev_priv->vbt.dsi.deassert_seq);
+	dev_priv->vbt.dsi.deassert_seq = NULL;
 }
 
 /**

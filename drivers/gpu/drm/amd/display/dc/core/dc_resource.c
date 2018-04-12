@@ -45,8 +45,9 @@
 #include "dcn10/dcn10_resource.h"
 #endif
 #include "dce120/dce120_resource.h"
-#define DC_LOGGER \
-	ctx->logger
+
+#define DC_LOGGER_INIT(logger)
+
 enum dce_version resource_parse_asic_id(struct hw_asic_id asic_id)
 {
 	enum dce_version dc_version = DCE_VERSION_UNKNOWN;
@@ -835,13 +836,16 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 	struct dc_crtc_timing *timing = &pipe_ctx->stream->timing;
 	struct view recout_skip = { 0 };
 	bool res = false;
-	struct dc_context *ctx = pipe_ctx->stream->ctx;
+	DC_LOGGER_INIT(pipe_ctx->stream->ctx->logger);
 	/* Important: scaling ratio calculation requires pixel format,
 	 * lb depth calculation requires recout and taps require scaling ratios.
 	 * Inits require viewport, taps, ratios and recout of split pipe
 	 */
 	pipe_ctx->plane_res.scl_data.format = convert_pixel_format_to_dalsurface(
 			pipe_ctx->plane_state->format);
+
+	if (pipe_ctx->stream->timing.flags.INTERLACE)
+		pipe_ctx->stream->dst.height *= 2;
 
 	calculate_scaling_ratios(pipe_ctx);
 
@@ -863,6 +867,8 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 
 	pipe_ctx->plane_res.scl_data.h_active = timing->h_addressable + timing->h_border_left + timing->h_border_right;
 	pipe_ctx->plane_res.scl_data.v_active = timing->v_addressable + timing->v_border_top + timing->v_border_bottom;
+	if (pipe_ctx->stream->timing.flags.INTERLACE)
+		pipe_ctx->plane_res.scl_data.v_active *= 2;
 
 
 	/* Taps calculations */
@@ -907,6 +913,9 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 				plane_state->dst_rect.width,
 				plane_state->dst_rect.x,
 				plane_state->dst_rect.y);
+
+	if (pipe_ctx->stream->timing.flags.INTERLACE)
+		pipe_ctx->stream->dst.height /= 2;
 
 	return res;
 }
@@ -1844,10 +1853,12 @@ static void set_avi_info_frame(
 	unsigned int cn0_cn1_value = 0;
 	uint8_t *check_sum = NULL;
 	uint8_t byte_index = 0;
-	union hdmi_info_packet hdmi_info = {0};
+	union hdmi_info_packet hdmi_info;
 	union display_content_support support = {0};
 	unsigned int vic = pipe_ctx->stream->timing.vic;
 	enum dc_timing_3d_format format;
+
+	memset(&hdmi_info, 0, sizeof(union hdmi_info_packet));
 
 	color_space = pipe_ctx->stream->output_color_space;
 	if (color_space == COLOR_SPACE_UNKNOWN)
@@ -2187,216 +2198,25 @@ static void set_spd_info_packet(
 {
 	/* SPD info packet for FreeSync */
 
-	unsigned char checksum = 0;
-	unsigned int idx, payload_size = 0;
-
 	/* Check if Freesync is supported. Return if false. If true,
 	 * set the corresponding bit in the info packet
 	 */
-	if (stream->freesync_ctx.supported == false)
+	if (!stream->vrr_infopacket.valid)
 		return;
 
-	if (dc_is_hdmi_signal(stream->signal)) {
-
-		/* HEADER */
-
-		/* HB0  = Packet Type = 0x83 (Source Product
-		 *	  Descriptor InfoFrame)
-		 */
-		info_packet->hb0 = HDMI_INFOFRAME_TYPE_SPD;
-
-		/* HB1  = Version = 0x01 */
-		info_packet->hb1 = 0x01;
-
-		/* HB2  = [Bits 7:5 = 0] [Bits 4:0 = Length = 0x08] */
-		info_packet->hb2 = 0x08;
-
-		payload_size = 0x08;
-
-	} else if (dc_is_dp_signal(stream->signal)) {
-
-		/* HEADER */
-
-		/* HB0  = Secondary-data Packet ID = 0 - Only non-zero
-		 *	  when used to associate audio related info packets
-		 */
-		info_packet->hb0 = 0x00;
-
-		/* HB1  = Packet Type = 0x83 (Source Product
-		 *	  Descriptor InfoFrame)
-		 */
-		info_packet->hb1 = HDMI_INFOFRAME_TYPE_SPD;
-
-		/* HB2  = [Bits 7:0 = Least significant eight bits -
-		 *	  For INFOFRAME, the value must be 1Bh]
-		 */
-		info_packet->hb2 = 0x1B;
-
-		/* HB3  = [Bits 7:2 = INFOFRAME SDP Version Number = 0x1]
-		 *	  [Bits 1:0 = Most significant two bits = 0x00]
-		 */
-		info_packet->hb3 = 0x04;
-
-		payload_size = 0x1B;
-	}
-
-	/* PB1 = 0x1A (24bit AMD IEEE OUI (0x00001A) - Byte 0) */
-	info_packet->sb[1] = 0x1A;
-
-	/* PB2 = 0x00 (24bit AMD IEEE OUI (0x00001A) - Byte 1) */
-	info_packet->sb[2] = 0x00;
-
-	/* PB3 = 0x00 (24bit AMD IEEE OUI (0x00001A) - Byte 2) */
-	info_packet->sb[3] = 0x00;
-
-	/* PB4 = Reserved */
-	info_packet->sb[4] = 0x00;
-
-	/* PB5 = Reserved */
-	info_packet->sb[5] = 0x00;
-
-	/* PB6 = [Bits 7:3 = Reserved] */
-	info_packet->sb[6] = 0x00;
-
-	if (stream->freesync_ctx.supported == true)
-		/* PB6 = [Bit 0 = FreeSync Supported] */
-		info_packet->sb[6] |= 0x01;
-
-	if (stream->freesync_ctx.enabled == true)
-		/* PB6 = [Bit 1 = FreeSync Enabled] */
-		info_packet->sb[6] |= 0x02;
-
-	if (stream->freesync_ctx.active == true)
-		/* PB6 = [Bit 2 = FreeSync Active] */
-		info_packet->sb[6] |= 0x04;
-
-	/* PB7 = FreeSync Minimum refresh rate (Hz) */
-	info_packet->sb[7] = (unsigned char) (stream->freesync_ctx.
-			min_refresh_in_micro_hz / 1000000);
-
-	/* PB8 = FreeSync Maximum refresh rate (Hz)
-	 *
-	 * Note: We do not use the maximum capable refresh rate
-	 * of the panel, because we should never go above the field
-	 * rate of the mode timing set.
-	 */
-	info_packet->sb[8] = (unsigned char) (stream->freesync_ctx.
-			nominal_refresh_in_micro_hz / 1000000);
-
-	/* PB9 - PB27  = Reserved */
-	for (idx = 9; idx <= 27; idx++)
-		info_packet->sb[idx] = 0x00;
-
-	/* Calculate checksum */
-	checksum += info_packet->hb0;
-	checksum += info_packet->hb1;
-	checksum += info_packet->hb2;
-	checksum += info_packet->hb3;
-
-	for (idx = 1; idx <= payload_size; idx++)
-		checksum += info_packet->sb[idx];
-
-	/* PB0 = Checksum (one byte complement) */
-	info_packet->sb[0] = (unsigned char) (0x100 - checksum);
-
-	info_packet->valid = true;
+	*info_packet = stream->vrr_infopacket;
 }
 
 static void set_hdr_static_info_packet(
 		struct dc_info_packet *info_packet,
 		struct dc_stream_state *stream)
 {
-	uint16_t i = 0;
-	enum signal_type signal = stream->signal;
-	uint32_t data;
+	/* HDR Static Metadata info packet for HDR10 */
 
-	if (!stream->hdr_static_metadata.hdr_supported)
+	if (!stream->hdr_static_metadata.valid)
 		return;
 
-	if (dc_is_hdmi_signal(signal)) {
-		info_packet->valid = true;
-
-		info_packet->hb0 = 0x87;
-		info_packet->hb1 = 0x01;
-		info_packet->hb2 = 0x1A;
-		i = 1;
-	} else if (dc_is_dp_signal(signal)) {
-		info_packet->valid = true;
-
-		info_packet->hb0 = 0x00;
-		info_packet->hb1 = 0x87;
-		info_packet->hb2 = 0x1D;
-		info_packet->hb3 = (0x13 << 2);
-		i = 2;
-	}
-
-	data = stream->hdr_static_metadata.is_hdr;
-	info_packet->sb[i++] = data ? 0x02 : 0x00;
-	info_packet->sb[i++] = 0x00;
-
-	data = stream->hdr_static_metadata.chromaticity_green_x / 2;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	data = stream->hdr_static_metadata.chromaticity_green_y / 2;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	data = stream->hdr_static_metadata.chromaticity_blue_x / 2;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	data = stream->hdr_static_metadata.chromaticity_blue_y / 2;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	data = stream->hdr_static_metadata.chromaticity_red_x / 2;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	data = stream->hdr_static_metadata.chromaticity_red_y / 2;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	data = stream->hdr_static_metadata.chromaticity_white_point_x / 2;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	data = stream->hdr_static_metadata.chromaticity_white_point_y / 2;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	data = stream->hdr_static_metadata.max_luminance;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	data = stream->hdr_static_metadata.min_luminance;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	data = stream->hdr_static_metadata.maximum_content_light_level;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	data = stream->hdr_static_metadata.maximum_frame_average_light_level;
-	info_packet->sb[i++] = data & 0xFF;
-	info_packet->sb[i++] = (data & 0xFF00) >> 8;
-
-	if (dc_is_hdmi_signal(signal)) {
-		uint32_t checksum = 0;
-
-		checksum += info_packet->hb0;
-		checksum += info_packet->hb1;
-		checksum += info_packet->hb2;
-
-		for (i = 1; i <= info_packet->hb2; i++)
-			checksum += info_packet->sb[i];
-
-		info_packet->sb[0] = 0x100 - checksum;
-	} else if (dc_is_dp_signal(signal)) {
-		info_packet->sb[0] = 0x01;
-		info_packet->sb[1] = 0x1A;
-	}
+	*info_packet = stream->hdr_static_metadata;
 }
 
 static void set_vsc_info_packet(

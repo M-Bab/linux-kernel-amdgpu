@@ -170,11 +170,9 @@ failed_alloc:
 }
 
 bool dc_stream_adjust_vmin_vmax(struct dc *dc,
-		struct dc_stream_state **streams, int num_streams,
-		int vmin, int vmax)
+		struct dc_stream_state *stream,
+		struct dc_crtc_timing_adjust *adjust)
 {
-	/* TODO: Support multiple streams */
-	struct dc_stream_state *stream = streams[0];
 	int i = 0;
 	bool ret = false;
 
@@ -182,11 +180,11 @@ bool dc_stream_adjust_vmin_vmax(struct dc *dc,
 		struct pipe_ctx *pipe = &dc->current_state->res_ctx.pipe_ctx[i];
 
 		if (pipe->stream == stream && pipe->stream_res.stream_enc) {
-			dc->hwss.set_drr(&pipe, 1, vmin, vmax);
-
-			/* build and update the info frame */
-			resource_build_info_frame(pipe);
-			dc->hwss.update_info_frame(pipe);
+			pipe->stream->adjust = *adjust;
+			dc->hwss.set_drr(&pipe,
+					1,
+					adjust->v_total_min,
+					adjust->v_total_max);
 
 			ret = true;
 		}
@@ -199,7 +197,7 @@ bool dc_stream_get_crtc_position(struct dc *dc,
 		unsigned int *v_pos, unsigned int *nom_v_pos)
 {
 	/* TODO: Support multiple streams */
-	struct dc_stream_state *stream = streams[0];
+	const struct dc_stream_state *stream = streams[0];
 	int i = 0;
 	bool ret = false;
 	struct crtc_position position;
@@ -1018,9 +1016,6 @@ static enum surface_update_type get_plane_info_update_type(const struct dc_surfa
 	if (u->plane_info->color_space != u->surface->color_space)
 		update_flags->bits.color_space_change = 1;
 
-	if (u->plane_info->input_tf != u->surface->input_tf)
-		update_flags->bits.input_tf_change = 1;
-
 	if (u->plane_info->horizontal_mirror != u->surface->horizontal_mirror)
 		update_flags->bits.horizontal_mirror_change = 1;
 
@@ -1154,9 +1149,17 @@ static enum surface_update_type det_surface_update(const struct dc *dc,
 	if (u->input_csc_color_matrix)
 		update_flags->bits.input_csc_change = 1;
 
-	if (update_flags->bits.in_transfer_func_change
-			|| update_flags->bits.input_csc_change) {
+	if (u->coeff_reduction_factor)
+		update_flags->bits.coeff_reduction_change = 1;
+
+	if (update_flags->bits.in_transfer_func_change) {
 		type = UPDATE_TYPE_MED;
+		elevate_update_type(&overall_type, type);
+	}
+
+	if (update_flags->bits.input_csc_change
+			|| update_flags->bits.coeff_reduction_change) {
+		type = UPDATE_TYPE_FULL;
 		elevate_update_type(&overall_type, type);
 	}
 
@@ -1176,8 +1179,25 @@ static enum surface_update_type check_update_surfaces_for_stream(
 	if (stream_status == NULL || stream_status->plane_count != surface_count)
 		return UPDATE_TYPE_FULL;
 
-	if (stream_update)
-		return UPDATE_TYPE_FULL;
+	/* some stream updates require passive update */
+	if (stream_update) {
+		if ((stream_update->src.height != 0) &&
+				(stream_update->src.width != 0))
+			return UPDATE_TYPE_FULL;
+
+		if ((stream_update->dst.height != 0) &&
+				(stream_update->dst.width != 0))
+			return UPDATE_TYPE_FULL;
+
+		if (stream_update->out_transfer_func)
+			return UPDATE_TYPE_FULL;
+
+		if (stream_update->hdr_static_metadata)
+			return UPDATE_TYPE_FULL;
+
+		if (stream_update->abm_level)
+			return UPDATE_TYPE_FULL;
+	}
 
 	for (i = 0 ; i < surface_count; i++) {
 		enum surface_update_type type =
@@ -1208,7 +1228,7 @@ enum surface_update_type dc_check_update_surfaces_for_stream(
 	type = check_update_surfaces_for_stream(dc, updates, surface_count, stream_update, stream_status);
 	if (type == UPDATE_TYPE_FULL)
 		for (i = 0; i < surface_count; i++)
-			updates[i].surface->update_flags.bits.full_update = 1;
+			updates[i].surface->update_flags.raw = 0xFFFFFFFF;
 
 	return type;
 }
@@ -1256,7 +1276,6 @@ static void commit_planes_for_stream(struct dc *dc,
 		return;
 	}
 
-	/* Full fe update*/
 	for (j = 0; j < dc->res_pool->pipe_count; j++) {
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[j];
 
@@ -1267,11 +1286,22 @@ static void commit_planes_for_stream(struct dc *dc,
 
 			top_pipe_to_program = pipe_ctx;
 
-			if (update_type == UPDATE_TYPE_FAST || !pipe_ctx->plane_state)
+			if (!pipe_ctx->plane_state)
+				continue;
+
+			/* Fast update*/
+			// VRR program can be done as part of FAST UPDATE
+			if (stream_update && stream_update->adjust)
+				dc->hwss.set_drr(&pipe_ctx, 1,
+					stream_update->adjust->v_total_min,
+					stream_update->adjust->v_total_max);
+
+			/* Full fe update*/
+			if (update_type == UPDATE_TYPE_FAST)
 				continue;
 
 			stream_status =
-					stream_get_status(context, pipe_ctx->stream);
+				stream_get_status(context, pipe_ctx->stream);
 
 			dc->hwss.apply_ctx_for_surface(
 					dc, pipe_ctx->stream, stream_status->plane_count, context);
@@ -1326,7 +1356,7 @@ static void commit_planes_for_stream(struct dc *dc,
 		dc->hwss.pipe_control_lock(dc, top_pipe_to_program, false);
 	}
 
-	if (stream && stream_update && update_type > UPDATE_TYPE_FAST)
+	if (stream && stream_update)
 		for (j = 0; j < dc->res_pool->pipe_count; j++) {
 			struct pipe_ctx *pipe_ctx =
 					&context->res_ctx.pipe_ctx[j];
@@ -1334,7 +1364,8 @@ static void commit_planes_for_stream(struct dc *dc,
 			if (pipe_ctx->stream != stream)
 				continue;
 
-			if (stream_update->hdr_static_metadata) {
+			if (stream_update->hdr_static_metadata ||
+				(stream_update->vrr_infopacket)) {
 				resource_build_info_frame(pipe_ctx);
 				dc->hwss.update_info_frame(pipe_ctx);
 			}

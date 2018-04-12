@@ -415,6 +415,87 @@ static int i915_pmu_event_init(struct perf_event *event)
 	return 0;
 }
 
+static u64 __get_rc6(struct drm_i915_private *i915)
+{
+	u64 val;
+
+	val = intel_rc6_residency_ns(i915,
+				     IS_VALLEYVIEW(i915) ?
+				     VLV_GT_RENDER_RC6 :
+				     GEN6_GT_GFX_RC6);
+
+	if (HAS_RC6p(i915))
+		val += intel_rc6_residency_ns(i915, GEN6_GT_GFX_RC6p);
+
+	if (HAS_RC6pp(i915))
+		val += intel_rc6_residency_ns(i915, GEN6_GT_GFX_RC6pp);
+
+	return val;
+}
+
+static u64 get_rc6(struct drm_i915_private *i915)
+{
+#if IS_ENABLED(CONFIG_PM)
+	unsigned long flags;
+	u64 val;
+
+	if (intel_runtime_pm_get_if_in_use(i915)) {
+		val = __get_rc6(i915);
+		intel_runtime_pm_put(i915);
+
+		/*
+		 * If we are coming back from being runtime suspended we must
+		 * be careful not to report a larger value than returned
+		 * previously.
+		 */
+
+		spin_lock_irqsave(&i915->pmu.lock, flags);
+
+		if (val >= i915->pmu.sample[__I915_SAMPLE_RC6_ESTIMATED].cur) {
+			i915->pmu.sample[__I915_SAMPLE_RC6_ESTIMATED].cur = 0;
+			i915->pmu.sample[__I915_SAMPLE_RC6].cur = val;
+		} else {
+			val = i915->pmu.sample[__I915_SAMPLE_RC6_ESTIMATED].cur;
+		}
+
+		spin_unlock_irqrestore(&i915->pmu.lock, flags);
+	} else {
+		struct pci_dev *pdev = i915->drm.pdev;
+		struct device *kdev = &pdev->dev;
+
+		/*
+		 * We are runtime suspended.
+		 *
+		 * Report the delta from when the device was suspended to now,
+		 * on top of the last known real value, as the approximated RC6
+		 * counter value.
+		 */
+		spin_lock_irqsave(&i915->pmu.lock, flags);
+		spin_lock(&kdev->power.lock);
+
+		if (!i915->pmu.sample[__I915_SAMPLE_RC6_ESTIMATED].cur)
+			i915->pmu.suspended_jiffies_last =
+						kdev->power.suspended_jiffies;
+
+		val = kdev->power.suspended_jiffies -
+		      i915->pmu.suspended_jiffies_last;
+		val += jiffies - kdev->power.accounting_timestamp;
+
+		spin_unlock(&kdev->power.lock);
+
+		val = jiffies_to_nsecs(val);
+		val += i915->pmu.sample[__I915_SAMPLE_RC6].cur;
+		i915->pmu.sample[__I915_SAMPLE_RC6_ESTIMATED].cur = val;
+
+		spin_unlock_irqrestore(&i915->pmu.lock, flags);
+	}
+
+	return val;
+#else
+	return __get_rc6(i915);
+#endif
+}
+
 static u64 __i915_pmu_event_read(struct perf_event *event)
 {
 	struct drm_i915_private *i915 =
@@ -453,18 +534,7 @@ static u64 __i915_pmu_event_read(struct perf_event *event)
 			val = count_interrupts(i915);
 			break;
 		case I915_PMU_RC6_RESIDENCY:
-			intel_runtime_pm_get(i915);
-			val = intel_rc6_residency_ns(i915,
-						     IS_VALLEYVIEW(i915) ?
-						     VLV_GT_RENDER_RC6 :
-						     GEN6_GT_GFX_RC6);
-			if (HAS_RC6p(i915))
-				val += intel_rc6_residency_ns(i915,
-							      GEN6_GT_GFX_RC6p);
-			if (HAS_RC6pp(i915))
-				val += intel_rc6_residency_ns(i915,
-							      GEN6_GT_GFX_RC6pp);
-			intel_runtime_pm_put(i915);
+			val = get_rc6(i915);
 			break;
 		}
 	}
@@ -529,14 +599,14 @@ static void i915_pmu_enable(struct perf_event *event)
 		engine->pmu.enable_count[sample]++;
 	}
 
+	spin_unlock_irqrestore(&i915->pmu.lock, flags);
+
 	/*
 	 * Store the current counter value so we can report the correct delta
 	 * for all listeners. Even when the event was already enabled and has
 	 * an existing non-zero value.
 	 */
 	local64_set(&event->hw.prev_count, __i915_pmu_event_read(event));
-
-	spin_unlock_irqrestore(&i915->pmu.lock, flags);
 }
 
 static void i915_pmu_disable(struct perf_event *event)

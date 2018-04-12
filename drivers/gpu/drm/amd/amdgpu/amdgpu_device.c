@@ -2093,9 +2093,6 @@ bool amdgpu_device_asic_has_dc_support(enum amd_asic_type asic_type)
 	case CHIP_POLARIS12:
 	case CHIP_TONGA:
 	case CHIP_FIJI:
-#if defined(CONFIG_DRM_AMD_DC_PRE_VEGA)
-		return amdgpu_dc != 0;
-#endif
 	case CHIP_VEGA10:
 	case CHIP_VEGA12:
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
@@ -2739,6 +2736,9 @@ static bool amdgpu_device_ip_check_soft_reset(struct amdgpu_device *adev)
 	if (amdgpu_sriov_vf(adev))
 		return true;
 
+	if (amdgpu_asic_need_full_reset(adev))
+		return true;
+
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if (!adev->ip_blocks[i].status.valid)
 			continue;
@@ -2794,6 +2794,9 @@ static int amdgpu_device_ip_pre_soft_reset(struct amdgpu_device *adev)
 static bool amdgpu_device_ip_need_full_reset(struct amdgpu_device *adev)
 {
 	int i;
+
+	if (amdgpu_asic_need_full_reset(adev))
+		return true;
 
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if (!adev->ip_blocks[i].status.valid)
