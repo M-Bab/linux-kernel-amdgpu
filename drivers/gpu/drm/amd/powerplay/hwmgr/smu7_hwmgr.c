@@ -4071,7 +4071,7 @@ static int smu7_check_states_equal(struct pp_hwmgr *hwmgr,
 	return 0;
 }
 
-static int smu7_upload_mc_firmware(struct pp_hwmgr *hwmgr)
+static int smu7_check_mc_firmware(struct pp_hwmgr *hwmgr)
 {
 	struct smu7_hwmgr *data = (struct smu7_hwmgr *)(hwmgr->backend);
 
@@ -4150,13 +4150,9 @@ static int smu7_read_clock_registers(struct pp_hwmgr *hwmgr)
 static int smu7_get_memory_type(struct pp_hwmgr *hwmgr)
 {
 	struct smu7_hwmgr *data = (struct smu7_hwmgr *)(hwmgr->backend);
-	uint32_t temp;
+	struct amdgpu_device *adev = hwmgr->adev;
 
-	temp = cgs_read_register(hwmgr->device, mmMC_SEQ_MISC0);
-
-	data->is_memory_gddr5 = (MC_SEQ_MISC0_GDDR5_VALUE ==
-			((temp & MC_SEQ_MISC0_GDDR5_MASK) >>
-			 MC_SEQ_MISC0_GDDR5_SHIFT));
+	data->is_memory_gddr5 = (adev->gmc.vram_type == AMDGPU_VRAM_TYPE_GDDR5);
 
 	return 0;
 }
@@ -4204,7 +4200,7 @@ static int smu7_setup_asic_task(struct pp_hwmgr *hwmgr)
 {
 	int tmp_result, result = 0;
 
-	smu7_upload_mc_firmware(hwmgr);
+	smu7_check_mc_firmware(hwmgr);
 
 	tmp_result = smu7_read_clock_registers(hwmgr);
 	PP_ASSERT_WITH_CODE((0 == tmp_result),
