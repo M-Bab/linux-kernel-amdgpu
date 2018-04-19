@@ -699,6 +699,16 @@ static int smu10_set_cpu_power_state(struct pp_hwmgr *hwmgr)
 static int smu10_store_cc6_data(struct pp_hwmgr *hwmgr, uint32_t separation_time,
 			bool cc6_disable, bool pstate_disable, bool pstate_switch_disable)
 {
+	struct smu10_hwmgr *data = (struct smu10_hwmgr *)(hwmgr->backend);
+
+	if (separation_time != data->separation_time ||
+			cc6_disable != data->cc6_disable ||
+			pstate_disable != data->pstate_disable) {
+		data->separation_time = separation_time;
+		data->cc6_disable = cc6_disable;
+		data->pstate_disable = pstate_disable;
+		data->cc6_setting_changed = true;
+	}
 	return 0;
 }
 
@@ -992,6 +1002,18 @@ static int smu10_read_sensor(struct pp_hwmgr *hwmgr, int idx,
 	return ret;
 }
 
+static int smu10_set_watermarks_for_clocks_ranges(struct pp_hwmgr *hwmgr,
+		struct pp_wm_sets_with_clock_ranges_soc15 *wm_with_clock_ranges)
+{
+	struct smu10_hwmgr *data = hwmgr->backend;
+	Watermarks_t *table = &(data->water_marks_table);
+	int result = 0;
+
+	smu_set_watermarks_for_clocks_ranges(table,wm_with_clock_ranges);
+	smum_smc_table_manager(hwmgr, (uint8_t *)table, (uint16_t)SMU10_WMTABLE, false);
+	data->water_marks_exist = true;
+	return result;
+}
 static int smu10_set_mmhub_powergating_by_smu(struct pp_hwmgr *hwmgr)
 {
 	return smum_send_msg_to_smc(hwmgr, PPSMC_MSG_PowerGateMmHub);
@@ -1021,6 +1043,7 @@ static const struct pp_hwmgr_func smu10_hwmgr_funcs = {
 	.get_current_shallow_sleep_clocks = smu10_get_current_shallow_sleep_clocks,
 	.get_clock_by_type_with_latency = smu10_get_clock_by_type_with_latency,
 	.get_clock_by_type_with_voltage = smu10_get_clock_by_type_with_voltage,
+	.set_watermarks_for_clocks_ranges = smu10_set_watermarks_for_clocks_ranges,
 	.get_max_high_clocks = smu10_get_max_high_clocks,
 	.read_sensor = smu10_read_sensor,
 	.set_active_display_count = smu10_set_active_display_count,

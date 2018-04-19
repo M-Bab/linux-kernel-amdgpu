@@ -48,19 +48,39 @@ int amdgpu_gem_object_create(struct amdgpu_device *adev, unsigned long size,
 			     struct drm_gem_object **obj)
 {
 	struct amdgpu_bo *bo;
+	struct amdgpu_bo_param bp;
 	int r;
 
+	memset(&bp, 0, sizeof(bp));
 	*obj = NULL;
 	/* At least align on page size */
 	if (alignment < PAGE_SIZE) {
 		alignment = PAGE_SIZE;
 	}
 
-	r = amdgpu_bo_create(adev, size, alignment, initial_domain,
-			     flags, type, resv, &bo);
+	bp.size = size;
+	bp.byte_align = alignment;
+	bp.type = type;
+	bp.resv = resv;
+	bp.preferred_domain = initial_domain;
+retry:
+	bp.flags = flags;
+	bp.domain = initial_domain;
+	r = amdgpu_bo_create(adev, &bp, &bo);
 	if (r) {
-		DRM_DEBUG("Failed to allocate GEM object (%ld, %d, %u, %d)\n",
-			  size, initial_domain, alignment, r);
+		if (r != -ERESTARTSYS) {
+			if (flags & AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED) {
+				flags &= ~AMDGPU_GEM_CREATE_CPU_ACCESS_REQUIRED;
+				goto retry;
+			}
+
+			if (initial_domain == AMDGPU_GEM_DOMAIN_VRAM) {
+				initial_domain |= AMDGPU_GEM_DOMAIN_GTT;
+				goto retry;
+			}
+			DRM_DEBUG("Failed to allocate GEM object (%ld, %d, %u, %d)\n",
+				  size, initial_domain, alignment, r);
+		}
 		return r;
 	}
 	*obj = &bo->gem_base;
@@ -209,12 +229,7 @@ int amdgpu_gem_create_ioctl(struct drm_device *dev, void *data,
 		return -EINVAL;
 
 	/* reject invalid gem domains */
-	if (args->in.domains & ~(AMDGPU_GEM_DOMAIN_CPU |
-				 AMDGPU_GEM_DOMAIN_GTT |
-				 AMDGPU_GEM_DOMAIN_VRAM |
-				 AMDGPU_GEM_DOMAIN_GDS |
-				 AMDGPU_GEM_DOMAIN_GWS |
-				 AMDGPU_GEM_DOMAIN_OA))
+	if (args->in.domains & ~AMDGPU_GEM_DOMAIN_MASK)
 		return -EINVAL;
 
 	/* create a gem object to contain this object in */
@@ -765,6 +780,8 @@ static int amdgpu_debugfs_gem_bo_info(int id, void *ptr, void *data)
 	struct amdgpu_bo *bo = gem_to_amdgpu_bo(gobj);
 	struct seq_file *m = data;
 
+	struct dma_buf_attachment *attachment;
+	struct dma_buf *dma_buf;
 	unsigned domain;
 	const char *placement;
 	unsigned pin_count;
@@ -793,6 +810,15 @@ static int amdgpu_debugfs_gem_bo_info(int id, void *ptr, void *data)
 	pin_count = READ_ONCE(bo->pin_count);
 	if (pin_count)
 		seq_printf(m, " pin count %d", pin_count);
+
+	dma_buf = READ_ONCE(bo->gem_base.dma_buf);
+	attachment = READ_ONCE(bo->gem_base.import_attach);
+
+	if (attachment)
+		seq_printf(m, " imported from %p", dma_buf);
+	else if (dma_buf)
+		seq_printf(m, " exported as %p", dma_buf);
+
 	seq_printf(m, "\n");
 
 	return 0;

@@ -33,6 +33,16 @@
 
 #define AMDGPU_BO_INVALID_OFFSET	LONG_MAX
 
+struct amdgpu_bo_param {
+	unsigned long			size;
+	int				byte_align;
+	u32				domain;
+	u32				preferred_domain;
+	u64				flags;
+	enum ttm_bo_type		type;
+	struct reservation_object	*resv;
+};
+
 /* bo virtual addresses in a vm */
 struct amdgpu_bo_va_mapping {
 	struct amdgpu_bo_va		*bo_va;
@@ -224,10 +234,8 @@ static inline bool amdgpu_bo_explicit_sync(struct amdgpu_bo *bo)
 	return bo->flags & AMDGPU_GEM_CREATE_EXPLICIT_SYNC;
 }
 
-int amdgpu_bo_create(struct amdgpu_device *adev, unsigned long size,
-		     int byte_align, u32 domain,
-		     u64 flags, enum ttm_bo_type type,
-		     struct reservation_object *resv,
+int amdgpu_bo_create(struct amdgpu_device *adev,
+		     struct amdgpu_bo_param *bp,
 		     struct amdgpu_bo **bo_ptr);
 int amdgpu_bo_create_reserved(struct amdgpu_device *adev,
 			      unsigned long size, int align,
@@ -251,6 +259,7 @@ int amdgpu_bo_pin_restricted(struct amdgpu_bo *bo, u32 domain,
 int amdgpu_bo_unpin(struct amdgpu_bo *bo);
 int amdgpu_bo_evict_vram(struct amdgpu_device *adev);
 int amdgpu_bo_init(struct amdgpu_device *adev);
+int amdgpu_bo_late_init(struct amdgpu_device *adev);
 void amdgpu_bo_fini(struct amdgpu_device *adev);
 int amdgpu_bo_fbdev_mmap(struct amdgpu_bo *bo,
 				struct vm_area_struct *vma);

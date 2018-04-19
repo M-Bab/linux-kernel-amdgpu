@@ -412,11 +412,16 @@ static int amdgpu_vm_alloc_levels(struct amdgpu_device *adev,
 		struct amdgpu_bo *pt;
 
 		if (!entry->base.bo) {
-			r = amdgpu_bo_create(adev,
-					     amdgpu_vm_bo_size(adev, level),
-					     AMDGPU_GPU_PAGE_SIZE,
-					     AMDGPU_GEM_DOMAIN_VRAM, flags,
-					     ttm_bo_type_kernel, resv, &pt);
+			struct amdgpu_bo_param bp;
+
+			memset(&bp, 0, sizeof(bp));
+			bp.size = amdgpu_vm_bo_size(adev, level);
+			bp.byte_align = AMDGPU_GPU_PAGE_SIZE;
+			bp.domain = AMDGPU_GEM_DOMAIN_VRAM;
+			bp.flags = flags;
+			bp.type = ttm_bo_type_kernel;
+			bp.resv = resv;
+			r = amdgpu_bo_create(adev, &bp, &pt);
 			if (r)
 				return r;
 
@@ -628,7 +633,7 @@ int amdgpu_vm_flush(struct amdgpu_ring *ring, struct amdgpu_job *job, bool need_
 		amdgpu_gmc_emit_pasid_mapping(ring, job->vmid, job->pasid);
 
 	if (vm_flush_needed || pasid_mapping_needed) {
-		r = amdgpu_fence_emit(ring, &fence);
+		r = amdgpu_fence_emit(ring, &fence, 0);
 		if (r)
 			return r;
 	}
@@ -1504,6 +1509,7 @@ int amdgpu_vm_bo_update(struct amdgpu_device *adev,
 	struct drm_mm_node *nodes;
 	struct dma_fence *exclusive, **last_update;
 	uint64_t flags;
+	uint32_t mem_type;
 	int r;
 
 	if (clear || !bo_va->base.bo) {
@@ -1557,6 +1563,15 @@ int amdgpu_vm_bo_update(struct amdgpu_device *adev,
 
 	spin_lock(&vm->status_lock);
 	list_del_init(&bo_va->base.vm_status);
+
+	/* If the BO is not in its preferred location add it back to
+	 * the evicted list so that it gets validated again on the
+	 * next command submission.
+	 */
+	mem_type = bo->tbo.mem.mem_type;
+	if (bo && bo->tbo.resv == vm->root.base.bo->tbo.resv &&
+	    !(bo->preferred_domains & amdgpu_mem_type_to_domain(mem_type)))
+		list_add_tail(&bo_va->base.vm_status, &vm->evicted);
 	spin_unlock(&vm->status_lock);
 
 	list_splice_init(&bo_va->invalids, &bo_va->valids);
@@ -2355,6 +2370,7 @@ void amdgpu_vm_adjust_size(struct amdgpu_device *adev, uint32_t vm_size,
 int amdgpu_vm_init(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 		   int vm_context, unsigned int pasid)
 {
+	struct amdgpu_bo_param bp;
 	const unsigned align = min(AMDGPU_VM_PTB_ALIGN_SIZE,
 		AMDGPU_VM_PTE_COUNT(adev) * 8);
 	unsigned ring_instance;
@@ -2409,8 +2425,14 @@ int amdgpu_vm_init(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 		flags |= AMDGPU_GEM_CREATE_SHADOW;
 
 	size = amdgpu_vm_bo_size(adev, adev->vm_manager.root_level);
-	r = amdgpu_bo_create(adev, size, align, AMDGPU_GEM_DOMAIN_VRAM, flags,
-			     ttm_bo_type_kernel, NULL, &vm->root.base.bo);
+	memset(&bp, 0, sizeof(bp));
+	bp.size = size;
+	bp.byte_align = align;
+	bp.domain = AMDGPU_GEM_DOMAIN_VRAM;
+	bp.flags = flags;
+	bp.type = ttm_bo_type_kernel;
+	bp.resv = NULL;
+	r = amdgpu_bo_create(adev, &bp, &vm->root.base.bo);
 	if (r)
 		goto error_free_sched_entity;
 

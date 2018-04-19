@@ -149,13 +149,6 @@ struct pp_states_info {
 	uint32_t states[16];
 };
 
-struct pp_gpu_power {
-	uint32_t vddc_power;
-	uint32_t vddci_power;
-	uint32_t max_gpu_power;
-	uint32_t average_gpu_power;
-};
-
 #define PP_GROUP_MASK        0xF0000000
 #define PP_GROUP_SHIFT       28
 
@@ -246,11 +239,6 @@ struct amd_pm_funcs {
 	int (*load_firmware)(void *handle);
 	int (*wait_for_fw_loading_complete)(void *handle);
 	int (*set_clockgating_by_smu)(void *handle, uint32_t msg_id);
-	int (*notify_smu_memory_info)(void *handle, uint32_t virtual_addr_low,
-					uint32_t virtual_addr_hi,
-					uint32_t mc_addr_low,
-					uint32_t mc_addr_hi,
-					uint32_t size);
 	int (*set_power_limit)(void *handle, uint32_t n);
 	int (*get_power_limit)(void *handle, uint32_t *limit, bool default_limit);
 /* export to DC */
