@@ -75,9 +75,10 @@
  * - 3.23.0 - Add query for VRAM lost counter
  * - 3.24.0 - Add high priority compute support for gfx9
  * - 3.25.0 - Add support for sensor query info (stable pstate sclk/mclk).
+ * - 3.26.0 - GFX9: Process AMDGPU_IB_FLAG_TC_WB_NOT_INVALIDATE.
  */
 #define KMS_DRIVER_MAJOR	3
-#define KMS_DRIVER_MINOR	25
+#define KMS_DRIVER_MINOR	26
 #define KMS_DRIVER_PATCHLEVEL	0
 
 int amdgpu_vram_limit = 0;
@@ -132,6 +133,7 @@ int amdgpu_lbpw = -1;
 int amdgpu_compute_multipipe = -1;
 int amdgpu_gpu_recovery = -1; /* auto */
 int amdgpu_emu_mode = 0;
+uint amdgpu_smu_memory_pool_size = 0;
 
 MODULE_PARM_DESC(vramlimit, "Restrict VRAM for testing, in megabytes");
 module_param_named(vramlimit, amdgpu_vram_limit, int, 0600);
@@ -315,6 +317,11 @@ MODULE_PARM_DESC(cik_support, "CIK support (1 = enabled (default), 0 = disabled)
 
 module_param_named(cik_support, amdgpu_cik_support, int, 0444);
 #endif
+
+MODULE_PARM_DESC(smu_memory_pool_size,
+	"reserve gtt for smu debug usage, 0 = disable,"
+		"0x1 = 256Mbyte, 0x2 = 512Mbyte, 0x4 = 1 Gbyte, 0x8 = 2GByte");
+module_param_named(smu_memory_pool_size, amdgpu_smu_memory_pool_size, uint, 0444);
 
 static const struct pci_device_id pciidlist[] = {
 #ifdef  CONFIG_DRM_AMDGPU_SI

@@ -690,6 +690,8 @@ void amdgpu_device_gart_location(struct amdgpu_device *adev,
 {
 	u64 size_af, size_bf;
 
+	mc->gart_size += adev->pm.smu_prv_buffer_size;
+
 	size_af = adev->gmc.mc_mask - mc->vram_end;
 	size_bf = mc->vram_start;
 	if (size_bf > size_af) {
@@ -907,6 +909,46 @@ static void amdgpu_device_check_vm_size(struct amdgpu_device *adev)
 	}
 }
 
+static void amdgpu_device_check_smu_prv_buffer_size(struct amdgpu_device *adev)
+{
+	struct sysinfo si;
+	bool is_os_64 = (sizeof(void *) == 8) ? true : false;
+	uint64_t total_memory;
+	uint64_t dram_size_seven_GB = 0x1B8000000;
+	uint64_t dram_size_three_GB = 0xB8000000;
+
+	if (amdgpu_smu_memory_pool_size == 0)
+		return;
+
+	if (!is_os_64) {
+		DRM_WARN("Not 64-bit OS, feature not supported\n");
+		goto def_value;
+	}
+	si_meminfo(&si);
+	total_memory = (uint64_t)si.totalram * si.mem_unit;
+
+	if ((amdgpu_smu_memory_pool_size == 1) ||
+		(amdgpu_smu_memory_pool_size == 2)) {
+		if (total_memory < dram_size_three_GB)
+			goto def_value1;
+	} else if ((amdgpu_smu_memory_pool_size == 4) ||
+		(amdgpu_smu_memory_pool_size == 8)) {
+		if (total_memory < dram_size_seven_GB)
+			goto def_value1;
+	} else {
+		DRM_WARN("Smu memory pool size not supported\n");
+		goto def_value;
+	}
+	adev->pm.smu_prv_buffer_size = amdgpu_smu_memory_pool_size << 28;
+
+	return;
+
+def_value1:
+	DRM_WARN("No enough system memory\n");
+def_value:
+	adev->pm.smu_prv_buffer_size = 0;
+}
+
 /**
  * amdgpu_device_check_arguments - validate module params
  *
@@ -947,6 +989,8 @@ static void amdgpu_device_check_arguments(struct amdgpu_device *adev)
 		dev_warn(adev->dev, "valid range is between 4 and 9\n");
 		amdgpu_vm_fragment_size = -1;
 	}
+
+	amdgpu_device_check_smu_prv_buffer_size(adev);
 
 	amdgpu_device_check_vm_size(adev);
 
@@ -1656,6 +1700,10 @@ static int amdgpu_device_ip_late_set_cg_state(struct amdgpu_device *adev)
 	if (amdgpu_emu_mode == 1)
 		return 0;
 
+	r = amdgpu_ib_ring_tests(adev);
+	if (r)
+		DRM_ERROR("ib ring test failed (%d).\n", r);
+
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if (!adev->ip_blocks[i].status.valid)
 			continue;
@@ -1706,8 +1754,8 @@ static int amdgpu_device_ip_late_init(struct amdgpu_device *adev)
 		}
 	}
 
-	mod_delayed_work(system_wq, &adev->late_init_work,
-			msecs_to_jiffies(AMDGPU_RESUME_MS));
+	queue_delayed_work(system_wq, &adev->late_init_work,
+			   msecs_to_jiffies(AMDGPU_RESUME_MS));
 
 	amdgpu_device_fill_reset_magic(adev);
 
@@ -2374,10 +2422,6 @@ fence_driver_init:
 		goto failed;
 	}
 
-	r = amdgpu_ib_ring_tests(adev);
-	if (r)
-		DRM_ERROR("ib ring test failed (%d).\n", r);
-
 	if (amdgpu_sriov_vf(adev))
 		amdgpu_virt_init_data_exchange(adev);
 
@@ -2640,11 +2684,6 @@ int amdgpu_device_resume(struct drm_device *dev, bool resume, bool fbcon)
 
 	amdgpu_fence_driver_resume(adev);
 
-	if (resume) {
-		r = amdgpu_ib_ring_tests(adev);
-		if (r)
-			DRM_ERROR("ib ring test failed (%d).\n", r);
-	}
 
 	r = amdgpu_device_ip_late_init(adev);
 	if (r)

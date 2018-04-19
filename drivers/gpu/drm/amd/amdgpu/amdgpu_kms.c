@@ -31,6 +31,7 @@
 #include "amdgpu_sched.h"
 #include "amdgpu_uvd.h"
 #include "amdgpu_vce.h"
+#include "atom.h"
 
 #include <linux/vga_switcheroo.h>
 #include <linux/slab.h>
@@ -278,6 +279,9 @@ static int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file
 
 	if (!info->return_size || !info->return_pointer)
 		return -EINVAL;
+
+	/* Ensure IB tests are run on ring */
+	flush_delayed_work(&adev->late_init_work);
 
 	switch (info->query) {
 	case AMDGPU_INFO_ACCEL_WORKING:
@@ -701,9 +705,6 @@ static int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file
 		}
 	}
 	case AMDGPU_INFO_SENSOR: {
-		struct pp_gpu_power query = {0};
-		int query_size = sizeof(query);
-
 		if (!adev->pm.dpm_enabled)
 			return -ENOENT;
 
@@ -746,10 +747,10 @@ static int amdgpu_info_ioctl(struct drm_device *dev, void *data, struct drm_file
 			/* get average GPU power */
 			if (amdgpu_dpm_read_sensor(adev,
 						   AMDGPU_PP_SENSOR_GPU_POWER,
-						   (void *)&query, &query_size)) {
+						   (void *)&ui32, &ui32_size)) {
 				return -EINVAL;
 			}
-			ui32 = query.average_gpu_power >> 8;
+			ui32 >>= 8;
 			break;
 		case AMDGPU_INFO_SENSOR_VDDNB:
 			/* get VDDNB in millivolts */
@@ -913,8 +914,7 @@ void amdgpu_driver_postclose_kms(struct drm_device *dev,
 		return;
 
 	pm_runtime_get_sync(dev->dev);
-
-	amdgpu_ctx_mgr_fini(&fpriv->ctx_mgr);
+	amdgpu_ctx_mgr_entity_fini(&fpriv->ctx_mgr);
 
 	if (adev->asic_type != CHIP_RAVEN) {
 		amdgpu_uvd_free_handles(adev, file_priv);
@@ -935,6 +935,8 @@ void amdgpu_driver_postclose_kms(struct drm_device *dev,
 	pd = amdgpu_bo_ref(fpriv->vm.root.base.bo);
 
 	amdgpu_vm_fini(adev, &fpriv->vm);
+	amdgpu_ctx_mgr_fini(&fpriv->ctx_mgr);
+
 	if (pasid)
 		amdgpu_pasid_free_delayed(pd->tbo.resv, pasid);
 	amdgpu_bo_unref(&pd);
@@ -1089,6 +1091,7 @@ static int amdgpu_debugfs_firmware_info(struct seq_file *m, void *data)
 	struct amdgpu_device *adev = dev->dev_private;
 	struct drm_amdgpu_info_firmware fw_info;
 	struct drm_amdgpu_query_fw query_fw;
+	struct atom_context *ctx = adev->mode_info.atom_context;
 	int ret, i;
 
 	/* VCE */
@@ -1210,6 +1213,9 @@ static int amdgpu_debugfs_firmware_info(struct seq_file *m, void *data)
 		return ret;
 	seq_printf(m, "VCN feature version: %u, firmware version: 0x%08x\n",
 		   fw_info.feature, fw_info.ver);
+
+
+	seq_printf(m, "VBIOS version: %s\n", ctx->vbios_version);
 
 	return 0;
 }
