@@ -77,6 +77,37 @@ void amdgpu_pm_acpi_event_handler(struct amdgpu_device *adev)
 	}
 }
 
+/**
+ * DOC: power_dpm_state
+ *
+ * This is a legacy interface and is only provided for backwards compatibility.
+ * The amdgpu driver provides a sysfs API for adjusting certain power
+ * related parameters.  The file power_dpm_state is used for this.
+ * It accepts the following arguments:
+ * - battery
+ * - balanced
+ * - performance
+ *
+ * battery
+ *
+ * On older GPUs, the vbios provided a special power state for battery
+ * operation.  Selecting battery switched to this state.  This is no
+ * longer provided on newer GPUs so the option does nothing in that case.
+ *
+ * balanced
+ *
+ * On older GPUs, the vbios provided a special power state for balanced
+ * operation.  Selecting balanced switched to this state.  This is no
+ * longer provided on newer GPUs so the option does nothing in that case.
+ *
+ * performance
+ *
+ * On older GPUs, the vbios provided a special power state for performance
+ * operation.  Selecting performance switched to this state.  This is no
+ * longer provided on newer GPUs so the option does nothing in that case.
+ *
+ */
+
 static ssize_t amdgpu_get_dpm_state(struct device *dev,
 				    struct device_attribute *attr,
 				    char *buf)
@@ -130,6 +161,59 @@ static ssize_t amdgpu_set_dpm_state(struct device *dev,
 fail:
 	return count;
 }
+
+
+/**
+ * DOC: power_dpm_force_performance_level
+ *
+ * The amdgpu driver provides a sysfs API for adjusting certain power
+ * related parameters.  The file power_dpm_force_performance_level is
+ * used for this.  It accepts the following arguments:
+ * - auto
+ * - low
+ * - high
+ * - manual
+ * - GPU fan
+ * - profile_standard
+ * - profile_min_sclk
+ * - profile_min_mclk
+ * - profile_peak
+ *
+ * auto
+ *
+ * When auto is selected, the driver will attempt to dynamically select
+ * the optimal power profile for current conditions in the driver.
+ *
+ * low
+ *
+ * When low is selected, the clocks are forced to the lowest power state.
+ *
+ * high
+ *
+ * When high is selected, the clocks are forced to the highest power state.
+ *
+ * manual
+ *
+ * When manual is selected, the user can manually adjust which power states
+ * are enabled for each clock domain via the sysfs pp_dpm_mclk, pp_dpm_sclk,
+ * and pp_dpm_pcie files and adjust the power state transition heuristics
+ * via the pp_power_profile_mode sysfs file.
+ *
+ * profile_standard
+ * profile_min_sclk
+ * profile_min_mclk
+ * profile_peak
+ *
+ * When the profiling modes are selected, clock and power gating are
+ * disabled and the clocks are set for different profiling cases. This
+ * mode is recommended for profiling specific work loads where you do
+ * not want clock or power gating for clock fluctuation to interfere
+ * with your results. profile_standard sets the clocks to a fixed clock
+ * level which varies from asic to asic.  profile_min_sclk forces the sclk
+ * to the lowest level.  profile_min_mclk forces the mclk to the lowest level.
+ * profile_peak sets all clocks (mclk, sclk, pcie) to the highest levels.
+ *
+ */
 
 static ssize_t amdgpu_get_dpm_forced_performance_level(struct device *dev,
 						struct device_attribute *attr,
@@ -324,6 +408,17 @@ fail:
 	return count;
 }
 
+/**
+ * DOC: pp_table
+ *
+ * The amdgpu driver provides a sysfs API for uploading new powerplay
+ * tables.  The file pp_table is used for this.  Reading the file
+ * will dump the current power play table.  Writing to the file
+ * will attempt to upload a new powerplay table and re-initialize
+ * powerplay using that new table.
+ *
+ */
+
 static ssize_t amdgpu_get_pp_table(struct device *dev,
 		struct device_attribute *attr,
 		char *buf)
@@ -359,6 +454,29 @@ static ssize_t amdgpu_set_pp_table(struct device *dev,
 
 	return count;
 }
+
+/**
+ * DOC: pp_od_clk_voltage
+ *
+ * The amdgpu driver provides a sysfs API for adjusting the clocks and voltages
+ * in each power level within a power state.  The pp_od_clk_voltage is used for
+ * this.
+ *
+ * Reading the file will display:
+ * - a list of engine clock levels and voltages labeled OD_SCLK
+ * - a list of memory clock levels and voltages labeled OD_MCLK
+ * - a list of valid ranges for sclk, mclk, and voltage labeled OD_RANGE
+ *
+ * To manually adjust these settings, first select manual using
+ * power_dpm_force_performance_level. Enter a new value for each
+ * level by writing a string that contains "s/m level clock voltage" to
+ * the file.  E.g., "s 1 500 820" will update sclk level 1 to be 500 MHz
+ * at 820 mV; "m 0 350 810" will update mclk level 0 to be 350 MHz at
+ * 810 mV.  When you have edited all of the states as needed, write
+ * "c" (commit) to the file to commit your changes.  If you want to reset to the
+ * default power levels, write "r" (reset) to the file to reset them.
+ *
+ */
 
 static ssize_t amdgpu_set_pp_od_clk_voltage(struct device *dev,
 		struct device_attribute *attr,
@@ -437,12 +555,30 @@ static ssize_t amdgpu_get_pp_od_clk_voltage(struct device *dev,
 	if (adev->powerplay.pp_funcs->print_clock_levels) {
 		size = amdgpu_dpm_print_clock_levels(adev, OD_SCLK, buf);
 		size += amdgpu_dpm_print_clock_levels(adev, OD_MCLK, buf+size);
+		size += amdgpu_dpm_print_clock_levels(adev, OD_RANGE, buf+size);
 		return size;
 	} else {
 		return snprintf(buf, PAGE_SIZE, "\n");
 	}
 
 }
+
+/**
+ * DOC: pp_dpm_sclk pp_dpm_mclk pp_dpm_pcie
+ *
+ * The amdgpu driver provides a sysfs API for adjusting what power levels
+ * are enabled for a given power state.  The files pp_dpm_sclk, pp_dpm_mclk,
+ * and pp_dpm_pcie are used for this.
+ *
+ * Reading back the files will show you the available power levels within
+ * the power state and the clock information for those levels.
+ *
+ * To manually adjust these states, first select manual using
+ * power_dpm_force_performance_level.  Writing a string of the level
+ * numbers to the file will select which levels you want to enable.
+ * E.g., writing 456 to the file will enable levels 4, 5, and 6.
+ *
+ */
 
 static ssize_t amdgpu_get_pp_dpm_sclk(struct device *dev,
 		struct device_attribute *attr,
@@ -667,6 +803,26 @@ static ssize_t amdgpu_set_pp_mclk_od(struct device *dev,
 fail:
 	return count;
 }
+
+/**
+ * DOC: pp_power_profile_mode
+ *
+ * The amdgpu driver provides a sysfs API for adjusting the heuristics
+ * related to switching between power levels in a power state.  The file
+ * pp_power_profile_mode is used for this.
+ *
+ * Reading this file outputs a list of all of the predefined power profiles
+ * and the relevant heuristics settings for that profile.
+ *
+ * To select a profile or create a custom profile, first select manual using
+ * power_dpm_force_performance_level.  Writing the number of a predefined
+ * profile to pp_power_profile_mode will enable those heuristics.  To
+ * create a custom set of heuristics, write a string of numbers to the file
+ * starting with the number of the custom profile along with a setting
+ * for each heuristic parameter.  Due to differences across asic families
+ * the heuristic parameters vary from family to family.
+ *
+ */
 
 static ssize_t amdgpu_get_pp_power_profile_mode(struct device *dev,
 		struct device_attribute *attr,

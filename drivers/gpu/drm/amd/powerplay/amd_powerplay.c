@@ -53,7 +53,7 @@ static int amd_powerplay_create(struct amdgpu_device *adev)
 	mutex_init(&hwmgr->smu_lock);
 	hwmgr->chip_family = adev->family;
 	hwmgr->chip_id = adev->asic_type;
-	hwmgr->feature_mask = amdgpu_pp_feature_mask;
+	hwmgr->feature_mask = adev->powerplay.pp_feature;
 	hwmgr->display_config = &adev->pm.pm_display_cfg;
 	adev->powerplay.pp_handle = hwmgr;
 	adev->powerplay.pp_funcs = &pp_dpm_funcs;
@@ -180,6 +180,7 @@ static int pp_late_init(void *handle)
 {
 	struct amdgpu_device *adev = handle;
 	struct pp_hwmgr *hwmgr = adev->powerplay.pp_handle;
+	int ret;
 
 	if (hwmgr && hwmgr->pm_en) {
 		mutex_lock(&hwmgr->smu_lock);
@@ -189,6 +190,14 @@ static int pp_late_init(void *handle)
 	}
 	if (adev->pm.smu_prv_buffer_size != 0)
 		pp_reserve_vram_for_smu(adev);
+
+	if (hwmgr->hwmgr_func->gfx_off_control &&
+	    (hwmgr->feature_mask & PP_GFXOFF_MASK)) {
+		ret = hwmgr->hwmgr_func->gfx_off_control(hwmgr, true);
+		if (ret)
+			pr_err("gfx off enabling failed!\n");
+	}
+
 	return 0;
 }
 
@@ -222,9 +231,18 @@ static int pp_set_powergating_state(void *handle,
 {
 	struct amdgpu_device *adev = handle;
 	struct pp_hwmgr *hwmgr = adev->powerplay.pp_handle;
+	int ret;
 
 	if (!hwmgr || !hwmgr->pm_en)
 		return 0;
+
+	if (hwmgr->hwmgr_func->gfx_off_control) {
+		/* Enable/disable GFX off through SMU */
+		ret = hwmgr->hwmgr_func->gfx_off_control(hwmgr,
+							 state == AMD_PG_STATE_GATE);
+		if (ret)
+			pr_err("gfx off control failed!\n");
+	}
 
 	if (hwmgr->hwmgr_func->enable_per_cu_power_gating == NULL) {
 		pr_info("%s was not implemented.\n", __func__);
