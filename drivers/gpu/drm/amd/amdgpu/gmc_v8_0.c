@@ -138,6 +138,7 @@ static void gmc_v8_0_init_golden_registers(struct amdgpu_device *adev)
 		break;
 	case CHIP_POLARIS11:
 	case CHIP_POLARIS12:
+	case CHIP_VEGAM:
 		amdgpu_device_program_register_sequence(adev,
 							golden_settings_polaris11_a11,
 							ARRAY_SIZE(golden_settings_polaris11_a11));
@@ -231,6 +232,7 @@ static int gmc_v8_0_init_microcode(struct amdgpu_device *adev)
 	case CHIP_FIJI:
 	case CHIP_CARRIZO:
 	case CHIP_STONEY:
+	case CHIP_VEGAM:
 		return 0;
 	default: BUG();
 	}
@@ -567,9 +569,10 @@ static int gmc_v8_0_mc_init(struct amdgpu_device *adev)
 	/* set the gart size */
 	if (amdgpu_gart_size == -1) {
 		switch (adev->asic_type) {
-		case CHIP_POLARIS11: /* all engines support GPUVM */
 		case CHIP_POLARIS10: /* all engines support GPUVM */
+		case CHIP_POLARIS11: /* all engines support GPUVM */
 		case CHIP_POLARIS12: /* all engines support GPUVM */
+		case CHIP_VEGAM:     /* all engines support GPUVM */
 		default:
 			adev->gmc.gart_size = 256ULL << 20;
 			break;
@@ -1089,7 +1092,8 @@ static int gmc_v8_0_sw_init(void *handle)
 	} else {
 		u32 tmp;
 
-		if (adev->asic_type == CHIP_FIJI)
+		if ((adev->asic_type == CHIP_FIJI) ||
+		    (adev->asic_type == CHIP_VEGAM))
 			tmp = RREG32(mmMC_SEQ_MISC0_FIJI);
 		else
 			tmp = RREG32(mmMC_SEQ_MISC0);

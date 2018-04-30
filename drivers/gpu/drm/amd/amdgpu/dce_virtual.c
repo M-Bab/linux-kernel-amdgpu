@@ -327,7 +327,7 @@ static int dce_virtual_get_modes(struct drm_connector *connector)
 	return 0;
 }
 
-static int dce_virtual_mode_valid(struct drm_connector *connector,
+static enum drm_mode_status dce_virtual_mode_valid(struct drm_connector *connector,
 				  struct drm_display_mode *mode)
 {
 	return MODE_OK;
@@ -460,8 +460,9 @@ static int dce_virtual_hw_init(void *handle)
 		break;
 	case CHIP_CARRIZO:
 	case CHIP_STONEY:
-	case CHIP_POLARIS11:
 	case CHIP_POLARIS10:
+	case CHIP_POLARIS11:
+	case CHIP_VEGAM:
 		dce_v11_0_disable_dce(adev);
 		break;
 	case CHIP_TOPAZ:

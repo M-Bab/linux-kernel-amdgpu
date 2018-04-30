@@ -1520,6 +1520,9 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 	case CHIP_POLARIS11:
 	case CHIP_POLARIS10:
 	case CHIP_POLARIS12:
+#if defined(CONFIG_DRM_AMD_DC_VEGAM)
+	case CHIP_VEGAM:
+#endif
 	case CHIP_VEGA10:
 	case CHIP_VEGA12:
 		if (dce110_register_irq_handlers(dm->adev)) {
@@ -1758,6 +1761,9 @@ static int dm_early_init(void *handle)
 		adev->mode_info.plane_type = dm_plane_type_default;
 		break;
 	case CHIP_POLARIS10:
+#if defined(CONFIG_DRM_AMD_DC_VEGAM)
+	case CHIP_VEGAM:
+#endif
 		adev->mode_info.num_crtc = 6;
 		adev->mode_info.num_hpd = 6;
 		adev->mode_info.num_dig = 6;
@@ -2898,7 +2904,7 @@ static void handle_edid_mgmt(struct amdgpu_dm_connector *aconnector)
 	create_eml_sink(aconnector);
 }
 
-int amdgpu_dm_connector_mode_valid(struct drm_connector *connector,
+enum drm_mode_status amdgpu_dm_connector_mode_valid(struct drm_connector *connector,
 				   struct drm_display_mode *mode)
 {
 	int result = MODE_ERROR;
@@ -3109,12 +3115,11 @@ static int dm_plane_helper_prepare_fb(struct drm_plane *plane,
 		return r;
 
 	if (plane->type != DRM_PLANE_TYPE_CURSOR)
-		domain = amdgpu_display_framebuffer_domains(adev);
+		domain = amdgpu_display_supported_domains(adev);
 	else
 		domain = AMDGPU_GEM_DOMAIN_VRAM;
 
 	r = amdgpu_bo_pin(rbo, domain, &afb->address);
-
 	amdgpu_bo_unreserve(rbo);
 
 	if (unlikely(r != 0)) {
