@@ -325,6 +325,8 @@ static int cs35l41_otp_unpack(void *data)
 	const struct cs35l41_otp_map_element_t *otp_map_match;
 	const struct cs35l41_otp_packed_element_t *otp_map;
 	int ret;
+	struct spi_device *spi;
+	u32 orig_spi_freq;
 
 	ret = regmap_read(cs35l41->regmap, CS35L41_OTPID, &otp_id_reg);
 	if (ret < 0) {
@@ -340,11 +342,23 @@ static int cs35l41_otp_unpack(void *data)
 		return -EINVAL;
 	}
 
+	if (cs35l41->bus_spi) {
+		spi = to_spi_device(cs35l41->dev);
+		orig_spi_freq = spi->max_speed_hz;
+		spi->max_speed_hz = CS35L41_SPI_MAX_FREQ_OTP;
+		spi_setup(spi);
+	}
+
 	ret = regmap_bulk_read(cs35l41->regmap, CS35L41_OTP_MEM0, otp_mem,
 						CS35L41_OTP_SIZE_WORDS);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "Read OTP Mem failed\n");
 		return -EINVAL;
+	}
+
+	if (cs35l41->bus_spi) {
+		spi->max_speed_hz = orig_spi_freq;
+		spi_setup(spi);
 	}
 
 	otp_map = otp_map_match->map;

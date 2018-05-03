@@ -77,6 +77,7 @@ static int cs35l41_spi_probe(struct spi_device *spi)
 
 	cs35l41->dev = &spi->dev;
 	cs35l41->irq = spi->irq;
+	cs35l41->bus_spi = true;
 
 	return cs35l41_probe(cs35l41, pdata);
 }

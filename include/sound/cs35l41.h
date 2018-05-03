@@ -65,6 +65,7 @@ struct cs35l41_private {
 	bool i2s_mode;
 	bool swire_mode;
 	bool halo_booted;
+	bool bus_spi;
 	/* GPIO for /RST */
 	struct gpio_desc *reset_gpio;
 	struct completion global_pup_done;

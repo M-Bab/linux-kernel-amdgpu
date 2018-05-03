@@ -72,6 +72,7 @@ static int cs35l41_i2c_probe(struct i2c_client *client,
 
 	cs35l41->dev = dev;
 	cs35l41->irq = client->irq;
+	cs35l41->bus_spi = false;
 
 	i2c_set_clientdata(client, cs35l41);
 	cs35l41->regmap = devm_regmap_init_i2c(client, regmap_config);
