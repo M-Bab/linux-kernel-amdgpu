@@ -1233,7 +1233,7 @@ static void program_scaler(const struct dc *dc,
 		&pipe_ctx->plane_res.scl_data);
 }
 
-static enum dc_status dce110_prog_pixclk_crtc_otg(
+static enum dc_status dce110_enable_stream_timing(
 		struct pipe_ctx *pipe_ctx,
 		struct dc_state *context,
 		struct dc *dc)
@@ -1309,7 +1309,7 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 			pipe_ctx[pipe_ctx->pipe_idx];
 
 	/*  */
-	dc->hwss.prog_pixclk_crtc_otg(pipe_ctx, context, dc);
+	dc->hwss.enable_stream_timing(pipe_ctx, context, dc);
 
 	/* FPGA does not program backend */
 	if (IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment)) {
@@ -2765,6 +2765,9 @@ static void dce110_program_front_end_for_pipe(
 	struct dc_plane_state *plane_state = pipe_ctx->plane_state;
 	struct xfm_grph_csc_adjustment adjust;
 	struct out_csc_color_matrix tbl_entry;
+#if defined(CONFIG_DRM_AMD_DC_FBC)
+	unsigned int underlay_idx = dc->res_pool->underlay_pipe_index;
+#endif
 	unsigned int i;
 	DC_LOGGER_INIT();
 	memset(&tbl_entry, 0, sizeof(tbl_entry));
@@ -2806,7 +2809,9 @@ static void dce110_program_front_end_for_pipe(
 	program_scaler(dc, pipe_ctx);
 
 #if defined(CONFIG_DRM_AMD_DC_FBC)
-	if (dc->fbc_compressor && old_pipe->stream) {
+	/* fbc not applicable on Underlay pipe */
+	if (dc->fbc_compressor && old_pipe->stream &&
+	    pipe_ctx->pipe_idx != underlay_idx) {
 		if (plane_state->tiling_info.gfx8.array_mode == DC_ARRAY_LINEAR_GENERAL)
 			dc->fbc_compressor->funcs->disable_fbc(dc->fbc_compressor);
 		else
@@ -3059,7 +3064,7 @@ static const struct hw_sequencer_funcs dce110_funcs = {
 	.get_position = get_position,
 	.set_static_screen_control = set_static_screen_control,
 	.reset_hw_ctx_wrap = dce110_reset_hw_ctx_wrap,
-	.prog_pixclk_crtc_otg = dce110_prog_pixclk_crtc_otg,
+	.enable_stream_timing = dce110_enable_stream_timing,
 	.setup_stereo = NULL,
 	.set_avmute = dce110_set_avmute,
 	.wait_for_mpcc_disconnect = dce110_wait_for_mpcc_disconnect,

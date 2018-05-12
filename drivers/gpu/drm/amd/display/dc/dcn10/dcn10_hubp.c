@@ -146,6 +146,9 @@ void hubp1_program_size_and_rotation(
 	 * 444 or 420 luma
 	 */
 	if (format >= SURFACE_PIXEL_FORMAT_VIDEO_BEGIN) {
+		ASSERT(plane_size->video.chroma_pitch != 0);
+		/* Chroma pitch zero can cause system hang! */
+
 		pitch = plane_size->video.luma_pitch - 1;
 		meta_pitch = dcc->video.meta_pitch_l - 1;
 		pitch_c = plane_size->video.chroma_pitch - 1;
@@ -613,6 +616,13 @@ void hubp1_program_deadline(
 	REG_SET(DCN_SURF1_TTU_CNTL1, 0,
 		REFCYC_PER_REQ_DELIVERY_PRE,
 		ttu_attr->refcyc_per_req_delivery_pre_c);
+
+	REG_SET_3(DCN_CUR0_TTU_CNTL0, 0,
+		REFCYC_PER_REQ_DELIVERY, ttu_attr->refcyc_per_req_delivery_cur0,
+		QoS_LEVEL_FIXED, ttu_attr->qos_level_fixed_cur0,
+		QoS_RAMP_DISABLE, ttu_attr->qos_ramp_disable_cur0);
+	REG_SET(DCN_CUR0_TTU_CNTL1, 0,
+		REFCYC_PER_REQ_DELIVERY_PRE, ttu_attr->refcyc_per_req_delivery_pre_cur0);
 }
 
 static void hubp1_setup(
@@ -756,10 +766,10 @@ void min_set_viewport(
 		  PRI_VIEWPORT_Y_START_C, viewport_c->y);
 }
 
-void hubp1_read_state(struct hubp *hubp,
-		struct dcn_hubp_state *s)
+void hubp1_read_state(struct hubp *hubp)
 {
 	struct dcn10_hubp *hubp1 = TO_DCN10_HUBP(hubp);
+	struct dcn_hubp_state *s = &hubp1->state;
 	struct _vcs_dpi_display_dlg_regs_st *dlg_attr = &s->dlg_attr;
 	struct _vcs_dpi_display_ttu_regs_st *ttu_attr = &s->ttu_attr;
 	struct _vcs_dpi_display_rq_regs_st *rq_regs = &s->rq_regs;
