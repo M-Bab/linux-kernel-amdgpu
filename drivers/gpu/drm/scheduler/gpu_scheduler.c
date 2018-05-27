@@ -117,7 +117,6 @@ drm_sched_rq_select_entity(struct drm_sched_rq *rq)
  * @sched	The pointer to the scheduler
  * @entity	The pointer to a valid drm_sched_entity
  * @rq		The run queue this entity belongs
- * @jobs	The max number of jobs in the job queue
  * @guilty      atomic_t set to 1 when a job on this queue
  *              is found to be guilty causing a timeout
  *
@@ -126,7 +125,7 @@ drm_sched_rq_select_entity(struct drm_sched_rq *rq)
 int drm_sched_entity_init(struct drm_gpu_scheduler *sched,
 			  struct drm_sched_entity *entity,
 			  struct drm_sched_rq *rq,
-			  uint32_t jobs, atomic_t *guilty)
+			  atomic_t *guilty)
 {
 	if (!(sched && entity && rq))
 		return -EINVAL;
@@ -140,7 +139,6 @@ int drm_sched_entity_init(struct drm_gpu_scheduler *sched,
 	entity->last_scheduled = NULL;
 
 	spin_lock_init(&entity->rq_lock);
-	spin_lock_init(&entity->queue_lock);
 	spsc_queue_init(&entity->job_queue);
 
 	atomic_set(&entity->fence_seq, 0);
@@ -351,8 +349,13 @@ static bool drm_sched_entity_add_dependency_cb(struct drm_sched_entity *entity)
 	struct dma_fence * fence = entity->dependency;
 	struct drm_sched_fence *s_fence;
 
-	if (fence->context == entity->fence_context) {
-		/* We can ignore fences from ourself */
+	if (fence->context == entity->fence_context ||
+            fence->context == entity->fence_context + 1) {
+                /*
+                 * Fence is a scheduled/finished fence from a job
+                 * which belongs to the same entity, we can ignore
+                 * fences from ourself
+                 */
 		dma_fence_put(entity->dependency);
 		return false;
 	}
@@ -414,6 +417,10 @@ drm_sched_entity_pop_job(struct drm_sched_entity *entity)
  *
  * @sched_job		The pointer to job required to submit
  *
+ * Note: To guarantee that the order of insertion to queue matches
+ * the job's fence sequence number this function should be
+ * called with drm_sched_job_init under common lock.
+ *
  * Returns 0 for success, negative error code otherwise.
  */
 void drm_sched_entity_push_job(struct drm_sched_job *sched_job,
@@ -424,10 +431,7 @@ void drm_sched_entity_push_job(struct drm_sched_job *sched_job,
 
 	trace_drm_sched_job(sched_job, entity);
 
-	spin_lock(&entity->queue_lock);
 	first = spsc_queue_push(&entity->job_queue, &sched_job->queue_node);
-
-	spin_unlock(&entity->queue_lock);
 
 	/* first job wakes up scheduler */
 	if (first) {
@@ -594,7 +598,12 @@ void drm_sched_job_recovery(struct drm_gpu_scheduler *sched)
 }
 EXPORT_SYMBOL(drm_sched_job_recovery);
 
-/* init a sched_job with basic field */
+/**
+ * Init a sched_job with basic field
+ *
+ * Note: Refer to drm_sched_entity_push_job documentation
+ * for locking considerations.
+ */
 int drm_sched_job_init(struct drm_sched_job *job,
 		       struct drm_gpu_scheduler *sched,
 		       struct drm_sched_entity *entity,
