@@ -38,7 +38,7 @@
 #include "inc/compressor.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.1.44"
+#define DC_VER "3.1.47"
 
 #define MAX_SURFACES 3
 #define MAX_STREAMS 6
@@ -68,6 +68,7 @@ struct dc_caps {
 	uint32_t max_planes;
 	uint32_t max_downscale_ratio;
 	uint32_t i2c_speed_in_khz;
+	uint32_t dmdata_alloc_size;
 	unsigned int max_cursor_size;
 	unsigned int max_video_width;
 	int linear_pitch_alignment;
@@ -377,6 +378,8 @@ enum dc_transfer_func_predefined {
 	TRANSFER_FUNCTION_PQ,
 	TRANSFER_FUNCTION_LINEAR,
 	TRANSFER_FUNCTION_UNITY,
+	TRANSFER_FUNCTION_HLG,
+	TRANSFER_FUNCTION_HLG12
 };
 
 struct dc_transfer_func {
