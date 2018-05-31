@@ -1431,15 +1431,7 @@ static int dss_probe(struct platform_device *pdev)
 	else
 		dss->feat = of_match_device(dss_of_match, &pdev->dev)->data;
 
-	/* Map I/O registers, get and setup clocks. */
-	dss_mem = platform_get_resource(pdev, IORESOURCE_MEM, 0);
-	dss->base = devm_ioremap_resource(&pdev->dev, dss_mem);
-	if (IS_ERR(dss->base)) {
-		r = PTR_ERR(dss->base);
-		goto err_free_dss;
-	}
-
-	r = dss_get_clocks(dss);
+	r = dss_initialize_debugfs();
 	if (r)
 		goto err_free_dss;
 
@@ -1481,29 +1473,6 @@ static int dss_probe(struct platform_device *pdev)
 		goto err_uninit_debugfs;
 
 	return 0;
-
-err_uninit_debugfs:
-	dss_debugfs_remove_file(dss->debugfs.clk);
-	dss_debugfs_remove_file(dss->debugfs.dss);
-	dss_uninitialize_debugfs(dss);
-
-err_pm_runtime_disable:
-	pm_runtime_disable(&pdev->dev);
-	dss_uninit_ports(dss);
-
-err_uninit_plls:
-	if (dss->video1_pll)
-		dss_video_pll_uninit(dss->video1_pll);
-	if (dss->video2_pll)
-		dss_video_pll_uninit(dss->video2_pll);
-
-err_put_clocks:
-	dss_put_clocks(dss);
-
-err_free_dss:
-	kfree(dss);
-
-	return r;
 }
 
 static int dss_remove(struct platform_device *pdev)
@@ -1529,6 +1498,18 @@ static int dss_remove(struct platform_device *pdev)
 	dss_put_clocks(dss);
 
 	kfree(dss);
+
+	pm_runtime_disable(&pdev->dev);
+
+	dss_uninit_ports(pdev);
+
+	if (dss.video1_pll)
+		dss_video_pll_uninit(dss.video1_pll);
+
+	if (dss.video2_pll)
+		dss_video_pll_uninit(dss.video2_pll);
+
+	dss_put_clocks();
 
 	return 0;
 }
