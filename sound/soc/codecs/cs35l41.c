@@ -1608,6 +1608,25 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	usleep_range(2000, 2100);
 
+	do {
+		if (timeout == 0) {
+			dev_err(cs35l41->dev,
+				"Timeout waiting for OTP_BOOT_DONE\n");
+			ret = -EBUSY;
+			goto err;
+		}
+		usleep_range(1000, 1100);
+		regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS4, &int_status);
+		timeout--;
+	} while (!(int_status & CS35L41_OTP_BOOT_DONE));
+
+	regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS3, &int_status);
+	if (int_status & CS35L41_OTP_BOOT_ERR) {
+		dev_err(cs35l41->dev, "OTP Boot error\n");
+		ret = -EINVAL;
+		goto err;
+	}
+
 	ret = regmap_read(cs35l41->regmap, CS35L41_DEVID, &regid);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "Get Device ID failed\n");
@@ -1662,25 +1681,6 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 				"Failed to apply A0 errata patch %d\n", ret);
 			goto err;
 		}
-	}
-
-	do {
-		if (timeout == 0) {
-			dev_err(cs35l41->dev,
-				"Timeout waiting for OTP_BOOT_DONE\n");
-			ret = -EBUSY;
-			goto err;
-		}
-		usleep_range(1000, 1100);
-		regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS4, &int_status);
-		timeout--;
-	} while (!(int_status & CS35L41_OTP_BOOT_DONE));
-
-	regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS3, &int_status);
-	if (int_status & CS35L41_OTP_BOOT_ERR) {
-		dev_err(cs35l41->dev, "OTP Boot error\n");
-		ret = -EINVAL;
-		goto err;
 	}
 
 	ret = cs35l41_otp_unpack(cs35l41);
