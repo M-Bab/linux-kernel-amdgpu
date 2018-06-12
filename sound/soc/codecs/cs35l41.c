@@ -174,14 +174,6 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 			wm_adsp_event(w, kcontrol, event);
 			cs35l41->halo_booted = true;
 		}
-
-		regmap_write(cs35l41->regmap, CS35L41_CSPL_COMMAND,
-				(CS35L41_CSPL_CMD_UNMUTE));
-
-		return 0;
-	case SND_SOC_DAPM_PRE_PMD:
-		regmap_write(cs35l41->regmap, CS35L41_CSPL_COMMAND,
-				CS35L41_CSPL_CMD_MUTE);
 	default:
 		return 0;
 	}
@@ -630,8 +622,7 @@ static const struct snd_soc_dapm_widget cs35l41_dapm_widgets[] = {
 				SND_SOC_NOPM, 0, 0, cs35l41_dsp_power_ev,
 				SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_PRE_PMD),
 	SND_SOC_DAPM_OUT_DRV_E("DSP1", SND_SOC_NOPM, 0, 0, NULL, 0,
-				cs35l41_dsp_load_ev,
-				SND_SOC_DAPM_POST_PMU | SND_SOC_DAPM_PRE_PMD),
+				cs35l41_dsp_load_ev, SND_SOC_DAPM_POST_PMU),
 	SND_SOC_DAPM_OUTPUT("SPK"),
 
 	SND_SOC_DAPM_AIF_IN("ASPRX1", NULL, 0, CS35L41_SP_ENABLES, 16, 0),
