@@ -121,13 +121,23 @@ static unsigned long super_cache_count(struct shrinker *shrink,
 	sb = container_of(shrink, struct super_block, s_shrink);
 
 	/*
-	 * Don't call trylock_super as it is a potential
-	 * scalability bottleneck. The counts could get updated
-	 * between super_cache_count and super_cache_scan anyway.
-	 * Call to super_cache_count with shrinker_rwsem held
-	 * ensures the safety of call to list_lru_shrink_count() and
-	 * s_op->nr_cached_objects().
+	 * We don't call trylock_super() here as it is a scalability bottleneck,
+	 * so we're exposed to partial setup state. The shrinker rwsem does not
+	 * protect filesystem operations backing list_lru_shrink_count() or
+	 * s_op->nr_cached_objects(). Counts can change between
+	 * super_cache_count and super_cache_scan, so we really don't need locks
+	 * here.
+	 *
+	 * However, if we are currently mounting the superblock, the underlying
+	 * filesystem might be in a state of partial construction and hence it
+	 * is dangerous to access it.  trylock_super() uses a SB_BORN check to
+	 * avoid this situation, so do the same here. The memory barrier is
+	 * matched with the one in mount_fs() as we don't hold locks here.
 	 */
+	if (!(sb->s_flags & SB_BORN))
+		return 0;
+	smp_rmb();
+
 	if (sb->s_op && sb->s_op->nr_cached_objects)
 		total_objects = sb->s_op->nr_cached_objects(sb, sc);
 
@@ -1123,6 +1133,23 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 	if (IS_ERR(bdev))
 		return ERR_CAST(bdev);
 
+	if (current_user_ns() != &init_user_ns) {
+		/*
+		 * For userns mounts, disallow mounting if bdev is open for
+		 * writing
+		 */
+		if (!atomic_dec_unless_positive(&bdev->bd_inode->i_writecount)) {
+			error = -EBUSY;
+			goto error_bdev;
+		}
+		if (bdev->bd_contains != bdev &&
+		    !atomic_dec_unless_positive(&bdev->bd_contains->bd_inode->i_writecount)) {
+			atomic_inc(&bdev->bd_inode->i_writecount);
+			error = -EBUSY;
+			goto error_bdev;
+		}
+	}
+
 	/*
 	 * once the super is inserted into the list by sget, s_umount
 	 * will protect the lockfs code from trying to start a snapshot
@@ -1132,7 +1159,7 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 	if (bdev->bd_fsfreeze_count > 0) {
 		mutex_unlock(&bdev->bd_fsfreeze_mutex);
 		error = -EBUSY;
-		goto error_bdev;
+		goto error_inc;
 	}
 	s = sget(fs_type, test_bdev_super, set_bdev_super, flags | SB_NOSEC,
 		 bdev);
@@ -1144,7 +1171,7 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 		if ((flags ^ s->s_flags) & SB_RDONLY) {
 			deactivate_locked_super(s);
 			error = -EBUSY;
-			goto error_bdev;
+			goto error_inc;
 		}
 
 		/*
@@ -1175,6 +1202,12 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 
 error_s:
 	error = PTR_ERR(s);
+error_inc:
+	if (current_user_ns() != &init_user_ns) {
+		atomic_inc(&bdev->bd_inode->i_writecount);
+		if (bdev->bd_contains != bdev)
+			atomic_inc(&bdev->bd_contains->bd_inode->i_writecount);
+	}
 error_bdev:
 	blkdev_put(bdev, mode);
 error:
@@ -1191,6 +1224,11 @@ void kill_block_super(struct super_block *sb)
 	generic_shutdown_super(sb);
 	sync_blockdev(bdev);
 	WARN_ON_ONCE(!(mode & FMODE_EXCL));
+	if (sb->s_user_ns != &init_user_ns) {
+		atomic_inc(&bdev->bd_inode->i_writecount);
+		if (bdev->bd_contains != bdev)
+			atomic_inc(&bdev->bd_contains->bd_inode->i_writecount);
+	}
 	blkdev_put(bdev, mode | FMODE_EXCL);
 }
 
@@ -1272,6 +1310,14 @@ mount_fs(struct file_system_type *type, int flags, const char *name, void *data)
 	sb = root->d_sb;
 	BUG_ON(!sb);
 	WARN_ON(!sb->s_bdi);
+
+	/*
+	 * Write barrier is for super_cache_count(). We place it before setting
+	 * SB_BORN as the data dependency between the two functions is the
+	 * superblock structure contents that we just set up, not the SB_BORN
+	 * flag.
+	 */
+	smp_wmb();
 	sb->s_flags |= SB_BORN;
 
 	error = security_sb_kern_mount(sb, flags, secdata);

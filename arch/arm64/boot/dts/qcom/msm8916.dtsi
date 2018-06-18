@@ -117,6 +117,11 @@
 			clocks = <&apcs 0>;
 			operating-points-v2 = <&cpu_opp_table>;
 			#cooling-cells = <2>;
+			clock-latency = <200000>;
+			cpu-supply = <&pm8916_spmi_s2>;
+			/* cooling options */
+			cooling-min-level = <0>;
+			cooling-max-level = <7>;
 		};
 
 		CPU1: cpu@1 {
@@ -129,6 +134,11 @@
 			clocks = <&apcs 0>;
 			operating-points-v2 = <&cpu_opp_table>;
 			#cooling-cells = <2>;
+			clock-latency = <200000>;
+			cpu-supply = <&pm8916_spmi_s2>;
+			/* cooling options */
+			cooling-min-level = <0>;
+			cooling-max-level = <7>;
 		};
 
 		CPU2: cpu@2 {
@@ -141,6 +151,11 @@
 			clocks = <&apcs 0>;
 			operating-points-v2 = <&cpu_opp_table>;
 			#cooling-cells = <2>;
+			clock-latency = <200000>;
+			cpu-supply = <&pm8916_spmi_s2>;
+			/* cooling options */
+			cooling-min-level = <0>;
+			cooling-max-level = <7>;
 		};
 
 		CPU3: cpu@3 {
@@ -153,6 +168,11 @@
 			clocks = <&apcs 0>;
 			operating-points-v2 = <&cpu_opp_table>;
 			#cooling-cells = <2>;
+			clock-latency = <200000>;
+			cpu-supply = <&pm8916_spmi_s2>;
+			/* cooling options */
+			cooling-min-level = <0>;
+			cooling-max-level = <7>;
 		};
 
 		L2_0: l2-cache {
@@ -781,6 +801,13 @@
 			clock-names = "iface", "bus";
 			qcom,iommu-secure-id = <17>;
 
+			// vfe:
+			iommu-ctx@3000 {
+				compatible = "qcom,msm-iommu-v1-sec";
+				reg = <0x3000 0x1000>;
+				interrupts = <GIC_SPI 70 IRQ_TYPE_LEVEL_HIGH>;
+			};
+
 			// mdp_0:
 			iommu-ctx@4000 {
 				compatible = "qcom,msm-iommu-v1-ns";
@@ -1383,6 +1410,131 @@
 
 			video-encoder {
 				compatible = "venus-encoder";
+			};
+		};
+
+		uqfprom: eeprom@58000 {
+			compatible = "qcom,qfprom-msm8916";
+			reg = <0x58000 0x7000>;
+		};
+
+		cpr@b018000 {
+			compatible = "qcom,cpr";
+			reg = <0xb018000 0x1000>;
+			interrupts = <0 15 1>, <0 16 1>, <0 17 1>;
+			vdd-mx-supply = <&pm8916_l3>;
+			acc-syscon = <&tcsr>;
+			eeprom = <&uqfprom>;
+
+			qcom,cpr-ref-clk = <19200>;
+			qcom,cpr-timer-delay-us = <5000>;
+			qcom,cpr-timer-cons-up = <0>;
+			qcom,cpr-timer-cons-down = <2>;
+			qcom,cpr-up-threshold = <0>;
+			qcom,cpr-down-threshold = <2>;
+			qcom,cpr-idle-clocks = <15>;
+			qcom,cpr-gcnt-us = <1>;
+			qcom,vdd-apc-step-up-limit = <1>;
+			qcom,vdd-apc-step-down-limit = <1>;
+			qcom,cpr-cpus = <&CPU0 &CPU1 &CPU2 &CPU3>;
+		};
+
+		cci: cci@1b0c000 {
+			compatible = "qcom,cci-v1.0.8";
+			#address-cells = <1>;
+			#size-cells = <0>;
+			reg = <0x1b0c000 0x1000>;
+			interrupts = <GIC_SPI 50 IRQ_TYPE_EDGE_RISING>;
+			clocks = <&gcc GCC_CAMSS_TOP_AHB_CLK>,
+				<&gcc GCC_CAMSS_CCI_AHB_CLK>,
+				<&gcc GCC_CAMSS_CCI_CLK>,
+				<&gcc GCC_CAMSS_AHB_CLK>;
+			clock-names = "camss_top_ahb",
+				"cci_ahb",
+				"cci",
+				"camss_ahb";
+			pinctrl-names = "default";
+			pinctrl-0 = <&cci0_default>;
+			status = "disabled";
+		};
+
+		camss: camss@1b00000 {
+			compatible = "qcom,msm8916-camss";
+			reg = <0x1b0ac00 0x200>,
+				<0x1b00030 0x4>,
+				<0x1b0b000 0x200>,
+				<0x1b00038 0x4>,
+				<0x1b08000 0x100>,
+				<0x1b08400 0x100>,
+				<0x1b0a000 0x500>,
+				<0x1b00020 0x10>,
+				<0x1b10000 0x1000>;
+			reg-names = "csiphy0",
+				"csiphy0_clk_mux",
+				"csiphy1",
+				"csiphy1_clk_mux",
+				"csid0",
+				"csid1",
+				"ispif",
+				"csi_clk_mux",
+				"vfe0";
+			interrupts = <GIC_SPI 78 0>,
+				<GIC_SPI 79 0>,
+				<GIC_SPI 51 0>,
+				<GIC_SPI 52 0>,
+				<GIC_SPI 55 0>,
+				<GIC_SPI 57 0>;
+			interrupt-names = "csiphy0",
+				"csiphy1",
+				"csid0",
+				"csid1",
+				"ispif",
+				"vfe0";
+			power-domains = <&gcc VFE_GDSC>;
+			clocks = <&gcc GCC_CAMSS_TOP_AHB_CLK>,
+				<&gcc GCC_CAMSS_ISPIF_AHB_CLK>,
+				<&gcc GCC_CAMSS_CSI0PHYTIMER_CLK>,
+				<&gcc GCC_CAMSS_CSI1PHYTIMER_CLK>,
+				<&gcc GCC_CAMSS_CSI0_AHB_CLK>,
+				<&gcc GCC_CAMSS_CSI0_CLK>,
+				<&gcc GCC_CAMSS_CSI0PHY_CLK>,
+				<&gcc GCC_CAMSS_CSI0PIX_CLK>,
+				<&gcc GCC_CAMSS_CSI0RDI_CLK>,
+				<&gcc GCC_CAMSS_CSI1_AHB_CLK>,
+				<&gcc GCC_CAMSS_CSI1_CLK>,
+				<&gcc GCC_CAMSS_CSI1PHY_CLK>,
+				<&gcc GCC_CAMSS_CSI1PIX_CLK>,
+				<&gcc GCC_CAMSS_CSI1RDI_CLK>,
+				<&gcc GCC_CAMSS_AHB_CLK>,
+				<&gcc GCC_CAMSS_VFE0_CLK>,
+				<&gcc GCC_CAMSS_CSI_VFE0_CLK>,
+				<&gcc GCC_CAMSS_VFE_AHB_CLK>,
+				<&gcc GCC_CAMSS_VFE_AXI_CLK>;
+			clock-names = "camss_top_ahb",
+				"ispif_ahb",
+				"csiphy0_timer",
+				"csiphy1_timer",
+				"csi0_ahb",
+				"csi0",
+				"csi0_phy",
+				"csi0_pix",
+				"csi0_rdi",
+				"csi1_ahb",
+				"csi1",
+				"csi1_phy",
+				"csi1_pix",
+				"csi1_rdi",
+				"camss_ahb",
+				"camss_vfe_vfe",
+				"camss_csi_vfe",
+				"iface",
+				"bus";
+			vdda-supply = <&pm8916_l2>;
+			iommus = <&apps_iommu 3>;
+			status = "disabled";
+			ports {
+				#address-cells = <1>;
+				#size-cells = <0>;
 			};
 		};
 	};

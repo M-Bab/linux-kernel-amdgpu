@@ -1669,19 +1669,22 @@ char *pointer_string(char *buf, char *end, const void *ptr,
 	return number(buf, end, (unsigned long int)ptr, spec);
 }
 
-static bool have_filled_random_ptr_key __read_mostly;
+static DEFINE_STATIC_KEY_TRUE(not_filled_random_ptr_key);
 static siphash_key_t ptr_key __read_mostly;
+
+static void enable_ptr_key_workfn(struct work_struct *work)
+{
+	get_random_bytes(&ptr_key, sizeof(ptr_key));
+	/* Needs to run from preemptible context */
+	static_branch_disable(&not_filled_random_ptr_key);
+}
+
+static DECLARE_WORK(enable_ptr_key_work, enable_ptr_key_workfn);
 
 static void fill_random_ptr_key(struct random_ready_callback *unused)
 {
-	get_random_bytes(&ptr_key, sizeof(ptr_key));
-	/*
-	 * have_filled_random_ptr_key==true is dependent on get_random_bytes().
-	 * ptr_to_id() needs to see have_filled_random_ptr_key==true
-	 * after get_random_bytes() returns.
-	 */
-	smp_mb();
-	WRITE_ONCE(have_filled_random_ptr_key, true);
+	/* This may be in an interrupt handler. */
+	queue_work(system_unbound_wq, &enable_ptr_key_work);
 }
 
 static struct random_ready_callback random_ready = {
@@ -1695,7 +1698,8 @@ static int __init initialize_ptr_random(void)
 	if (!ret) {
 		return 0;
 	} else if (ret == -EALREADY) {
-		fill_random_ptr_key(&random_ready);
+		/* This is in preemptible context */
+		enable_ptr_key_workfn(&enable_ptr_key_work);
 		return 0;
 	}
 
@@ -1709,7 +1713,7 @@ static char *ptr_to_id(char *buf, char *end, void *ptr, struct printf_spec spec)
 	unsigned long hashval;
 	const int default_width = 2 * sizeof(ptr);
 
-	if (unlikely(!have_filled_random_ptr_key)) {
+	if (static_branch_unlikely(&not_filled_random_ptr_key)) {
 		spec.field_width = default_width;
 		/* string length must be less than default_width */
 		return string(buf, end, "(ptrval)", spec);
@@ -1735,6 +1739,29 @@ static char *ptr_to_id(char *buf, char *end, void *ptr, struct printf_spec spec)
 
 	return number(buf, end, hashval, spec);
 }
+
+#ifdef CONFIG_KMSG_IDS
+
+unsigned long long __jhash_string(const char *str);
+
+static noinline_for_stack
+char *jhash_string(char *buf, char *end, const char *str, const char *fmt)
+{
+	struct printf_spec spec;
+	unsigned long long num;
+
+	num = __jhash_string(str);
+
+	spec.type = FORMAT_TYPE_PTR;
+	spec.field_width = 6;
+	spec.flags = SMALL | ZEROPAD;
+	spec.base = 16;
+	spec.precision = -1;
+
+	return number(buf, end, num, spec);
+}
+
+#endif
 
 /*
  * Show a '%p' thing.  A kernel extension is that the '%p' is followed
@@ -1830,6 +1857,7 @@ static char *ptr_to_id(char *buf, char *end, void *ptr, struct printf_spec spec)
  *       p page flags (see struct page) given as pointer to unsigned long
  *       g gfp flags (GFP_* and __GFP_*) given as pointer to gfp_t
  *       v vma flags (VM_*) given as pointer to unsigned long
+ * - 'j' Kernel message catalog jhash for System z
  * - 'O' For a kobject based struct. Must be one of the following:
  *       - 'OF[fnpPcCF]'  For a device tree object
  *                        Without any optional arguments prints the full_name
@@ -1970,6 +1998,10 @@ char *pointer(const char *fmt, char *buf, char *end, void *ptr,
 		}
 	case 'x':
 		return pointer_string(buf, end, ptr, spec);
+#ifdef CONFIG_KMSG_IDS
+	case 'j':
+		return jhash_string(buf, end, ptr, fmt);
+#endif
 	}
 
 	/* default is to _not_ leak addresses, hash before printing */

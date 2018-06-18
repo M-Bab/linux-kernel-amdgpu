@@ -34,6 +34,7 @@
 MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Netfilter Core Team <coreteam@netfilter.org>");
 MODULE_DESCRIPTION("IPv4 packet filter");
+MODULE_ALIAS("ipt_icmp");
 
 void *ipt_alloc_initial_table(const struct xt_table *info)
 {
@@ -364,6 +365,17 @@ ipt_do_table(struct sk_buff *skb,
 	else return verdict;
 }
 
+static bool next_offset_ok(const struct xt_table_info *t, unsigned int newpos)
+{
+	if (newpos > t->size - sizeof(struct ipt_entry))
+		return false;
+
+	if (newpos % __alignof__(struct ipt_entry) != 0)
+		return false;
+
+	return true;
+}
+
 /* Figures out from what hook each rule can be called: returns 0 if
    there are loops.  Puts hook bitmask in comefrom. */
 static int
@@ -419,6 +431,8 @@ mark_source_chains(const struct xt_table_info *newinfo,
 
 				/* Move along one */
 				size = e->next_offset;
+				if (!next_offset_ok(newinfo, pos + size))
+					return 0;
 				e = entry0 + pos + size;
 				if (pos + size >= newinfo->size)
 					return 0;
@@ -440,6 +454,10 @@ mark_source_chains(const struct xt_table_info *newinfo,
 					if (newpos >= newinfo->size)
 						return 0;
 				}
+
+				if (!next_offset_ok(newinfo, newpos))
+					return 0;
+
 				e = entry0 + newpos;
 				e->counters.pcnt = pos;
 				pos = newpos;

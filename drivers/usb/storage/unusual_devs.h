@@ -1319,6 +1319,13 @@ UNUSUAL_DEV(  0x0af0, 0x6971, 0x0000, 0x9999,
 		USB_SC_DEVICE, USB_PR_DEVICE, option_ms_init,
 		0),
 
+/* Reported by Timo Aaltonen <tjaalton@ubuntu.com> */
+UNUSUAL_DEV( 0x0af0, 0x7011, 0x0000, 0x9999,
+		"Option",
+		"Mass Storage",
+		USB_SC_DEVICE, USB_PR_DEVICE, option_ms_init,
+		0 ),
+
 /*
  * Reported by F. Aben <f.aben@option.com>
  * This device (wrongly) has a vendor-specific device descriptor.
@@ -2320,6 +2327,15 @@ UNUSUAL_DEV(  0x4146, 0xba01, 0x0100, 0x0100,
 		"Iomega",
 		"Micro Mini 1GB",
 		USB_SC_DEVICE, USB_PR_DEVICE, NULL, US_FL_NOT_LOCKABLE ),
+
+/* "G-DRIVE" external HDD hangs on write without these.
+ * Patch submitted by Alexander Kappner <agk@godking.net>
+ */
+UNUSUAL_DEV(0x4971, 0x8024, 0x0000, 0x9999,
+		"SimpleTech",
+		"External HDD",
+		USB_SC_DEVICE, USB_PR_DEVICE, NULL,
+		US_FL_ALWAYS_SYNC),
 
 /*
  * Nick Bowler <nbowler@elliptictech.com>

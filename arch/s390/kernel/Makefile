@@ -65,6 +65,7 @@ obj-y	+= nospec-branch.o
 
 extra-y				+= head.o head64.o vmlinux.lds
 
+obj-$(CONFIG_SYSFS)		+= nospec-sysfs.o
 CFLAGS_REMOVE_nospec-branch.o	+= $(CC_FLAGS_EXPOLINE)
 
 obj-$(CONFIG_MODULES)		+= module.o
@@ -93,3 +94,6 @@ obj-$(CONFIG_TRACEPOINTS)	+= trace.o
 # vdso
 obj-y				+= vdso64/
 obj-$(CONFIG_COMPAT)		+= vdso32/
+
+# kernel message catalog
+obj-$(CONFIG_KMSG_IDS)		+= kmsg.o

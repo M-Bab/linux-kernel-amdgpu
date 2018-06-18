@@ -971,6 +971,7 @@ static void cxlflash_remove(struct pci_dev *pdev)
 	case INIT_STATE_AFU:
 		term_afu(cfg);
 	case INIT_STATE_PCI:
+		cfg->ops->destroy_afu(cfg->afu_cookie);
 		pci_disable_device(pdev);
 	case INIT_STATE_NONE:
 		free_mem(cfg);
@@ -1303,7 +1304,10 @@ static void afu_err_intr_init(struct afu *afu)
 	for (i = 0; i < afu->num_hwqs; i++) {
 		hwq = get_hwq(afu, i);
 
-		writeq_be(SISL_MSI_SYNC_ERROR, &hwq->host_map->ctx_ctrl);
+		reg = readq_be(&hwq->host_map->ctx_ctrl);
+		WARN_ON((reg & SISL_CTX_CTRL_LISN_MASK) != 0);
+		reg |= SISL_MSI_SYNC_ERROR;
+		writeq_be(reg, &hwq->host_map->ctx_ctrl);
 		writeq_be(SISL_ISTATUS_MASK, &hwq->host_map->intr_mask);
 	}
 }
@@ -1752,6 +1756,8 @@ static int init_global(struct cxlflash_cfg *cfg)
 	u64 wwpn[MAX_FC_PORTS];	/* wwpn of AFU ports */
 	int i = 0, num_ports = 0;
 	int rc = 0;
+	int j;
+	void *ctx;
 	u64 reg;
 
 	rc = read_vpd(cfg, &wwpn[0]);
@@ -1810,6 +1816,25 @@ static int init_global(struct cxlflash_cfg *cfg)
 		 * offline/online transitions and a PLOGI
 		 */
 		msleep(100);
+	}
+
+	if (afu_is_ocxl_lisn(afu)) {
+		/* Set up the LISN effective address for each master */
+		for (i = 0; i < afu->num_hwqs; i++) {
+			hwq = get_hwq(afu, i);
+			ctx = hwq->ctx_cookie;
+
+			for (j = 0; j < hwq->num_irqs; j++) {
+				reg = cfg->ops->get_irq_objhndl(ctx, j);
+				writeq_be(reg, &hwq->ctrl_map->lisn_ea[j]);
+			}
+
+			reg = hwq->ctx_hndl;
+			writeq_be(SISL_LISN_PASID(reg, reg),
+				  &hwq->ctrl_map->lisn_pasid[0]);
+			writeq_be(SISL_LISN_PASID(0UL, reg),
+				  &hwq->ctrl_map->lisn_pasid[1]);
+		}
 	}
 
 	/* Set up master's own CTX_CAP to allow real mode, host translation */
@@ -1911,7 +1936,7 @@ static enum undo_level init_intr(struct cxlflash_cfg *cfg,
 	int rc = 0;
 	enum undo_level level = UNDO_NOOP;
 	bool is_primary_hwq = (hwq->index == PRIMARY_HWQ);
-	int num_irqs = is_primary_hwq ? 3 : 2;
+	int num_irqs = hwq->num_irqs;
 
 	rc = cfg->ops->allocate_afu_irqs(ctx, num_irqs);
 	if (unlikely(rc)) {
@@ -1965,16 +1990,20 @@ static int init_mc(struct cxlflash_cfg *cfg, u32 index)
 	struct device *dev = &cfg->dev->dev;
 	struct hwq *hwq = get_hwq(cfg->afu, index);
 	int rc = 0;
+	int num_irqs;
 	enum undo_level level;
 
 	hwq->afu = cfg->afu;
 	hwq->index = index;
 	INIT_LIST_HEAD(&hwq->pending_cmds);
 
-	if (index == PRIMARY_HWQ)
+	if (index == PRIMARY_HWQ) {
 		ctx = cfg->ops->get_context(cfg->dev, cfg->afu_cookie);
-	else
+		num_irqs = 3;
+	} else {
 		ctx = cfg->ops->dev_context_init(cfg->dev, cfg->afu_cookie);
+		num_irqs = 2;
+	}
 	if (IS_ERR_OR_NULL(ctx)) {
 		rc = -ENOMEM;
 		goto err1;
@@ -1982,6 +2011,7 @@ static int init_mc(struct cxlflash_cfg *cfg, u32 index)
 
 	WARN_ON(hwq->ctx_cookie);
 	hwq->ctx_cookie = ctx;
+	hwq->num_irqs = num_irqs;
 
 	/* Set it up as a master with the CXL */
 	cfg->ops->set_master(ctx);
@@ -3138,7 +3168,8 @@ static struct dev_dependent_vals dev_corsa_vals = { CXLFLASH_MAX_SECTORS,
 static struct dev_dependent_vals dev_flash_gt_vals = { CXLFLASH_MAX_SECTORS,
 					CXLFLASH_NOTIFY_SHUTDOWN };
 static struct dev_dependent_vals dev_briard_vals = { CXLFLASH_MAX_SECTORS,
-					CXLFLASH_NOTIFY_SHUTDOWN };
+					(CXLFLASH_NOTIFY_SHUTDOWN |
+					CXLFLASH_OCXL_DEV) };
 
 /*
  * PCI device binding table
@@ -3649,8 +3680,12 @@ static int cxlflash_probe(struct pci_dev *pdev,
 
 	cfg->init_state = INIT_STATE_NONE;
 	cfg->dev = pdev;
-	cfg->ops = &cxlflash_cxl_ops;
 	cfg->cxl_fops = cxlflash_cxl_fops;
+
+	if (ddv->flags & CXLFLASH_OCXL_DEV)
+		cfg->ops = &cxlflash_ocxl_ops;
+	else
+		cfg->ops = &cxlflash_cxl_ops;
 
 	/*
 	 * Promoted LUNs move to the top of the LUN table. The rest stay on
@@ -3681,14 +3716,18 @@ static int cxlflash_probe(struct pci_dev *pdev,
 
 	pci_set_drvdata(pdev, cfg);
 
-	cfg->afu_cookie = cfg->ops->create_afu(pdev);
-
 	rc = init_pci(cfg);
 	if (rc) {
 		dev_err(dev, "%s: init_pci failed rc=%d\n", __func__, rc);
 		goto out_remove;
 	}
 	cfg->init_state = INIT_STATE_PCI;
+
+	cfg->afu_cookie = cfg->ops->create_afu(pdev);
+	if (unlikely(!cfg->afu_cookie)) {
+		dev_err(dev, "%s: create_afu failed\n", __func__);
+		goto out_remove;
+	}
 
 	rc = init_afu(cfg);
 	if (rc && !wq_has_sleeper(&cfg->reset_waitq)) {

@@ -211,6 +211,7 @@ struct hwq {
 	struct sisl_ctrl_map __iomem *ctrl_map;		/* MC control map */
 	ctx_hndl_t ctx_hndl;	/* master's context handle */
 	u32 index;		/* Index of this hwq */
+	int num_irqs;		/* Numer of interrupts requested for context */
 	struct list_head pending_cmds;	/* Commands pending completion */
 
 	atomic_t hsq_credits;
@@ -231,8 +232,8 @@ struct hwq {
 
 struct afu {
 	struct hwq hwqs[CXLFLASH_MAX_HWQS];
-	int (*send_cmd)(struct afu *, struct afu_cmd *);
-	int (*context_reset)(struct hwq *);
+	int (*send_cmd)(struct afu *afu, struct afu_cmd *cmd);
+	int (*context_reset)(struct hwq *hwq);
 
 	/* AFU HW */
 	struct cxlflash_afu_map __iomem *afu_map;	/* entire MMIO map */
@@ -270,6 +271,11 @@ static inline bool afu_has_cap(struct afu *afu, u64 cap)
 	u64 afu_cap = afu->interface_version >> SISL_INTVER_CAP_SHIFT;
 
 	return afu_cap & cap;
+}
+
+static inline bool afu_is_ocxl_lisn(struct afu *afu)
+{
+	return afu_has_cap(afu, SISL_INTVER_CAP_OCXL_LISN);
 }
 
 static inline bool afu_is_afu_debug(struct afu *afu)

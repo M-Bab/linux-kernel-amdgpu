@@ -2411,8 +2411,7 @@ static int ext4_add_nondir(handle_t *handle,
 	int err = ext4_add_entry(handle, dentry, inode);
 	if (!err) {
 		ext4_mark_inode_dirty(handle, inode);
-		unlock_new_inode(inode);
-		d_instantiate(dentry, inode);
+		d_instantiate_new(dentry, inode);
 		return 0;
 	}
 	drop_nlink(inode);
@@ -2651,8 +2650,7 @@ out_clear_inode:
 	err = ext4_mark_inode_dirty(handle, dir);
 	if (err)
 		goto out_clear_inode;
-	unlock_new_inode(inode);
-	d_instantiate(dentry, inode);
+	d_instantiate_new(dentry, inode);
 	if (IS_DIRSYNC(dir))
 		ext4_handle_sync(handle);
 
@@ -3195,8 +3193,8 @@ static int ext4_link(struct dentry *old_dentry,
 		return err;
 
 	if ((ext4_test_inode_flag(dir, EXT4_INODE_PROJINHERIT)) &&
-	    (!projid_eq(EXT4_I(dir)->i_projid,
-			EXT4_I(old_dentry->d_inode)->i_projid)))
+	    (!projid_valid_eq(EXT4_I(dir)->i_projid,
+			      EXT4_I(old_dentry->d_inode)->i_projid)))
 		return -EXDEV;
 
 	err = dquot_initialize(dir);
@@ -3480,8 +3478,8 @@ static int ext4_rename(struct inode *old_dir, struct dentry *old_dentry,
 	u8 old_file_type;
 
 	if ((ext4_test_inode_flag(new_dir, EXT4_INODE_PROJINHERIT)) &&
-	    (!projid_eq(EXT4_I(new_dir)->i_projid,
-			EXT4_I(old_dentry->d_inode)->i_projid)))
+	    (!projid_valid_eq(EXT4_I(new_dir)->i_projid,
+			      EXT4_I(old_dentry->d_inode)->i_projid)))
 		return -EXDEV;
 
 	retval = dquot_initialize(old.dir);
@@ -3678,11 +3676,11 @@ static int ext4_cross_rename(struct inode *old_dir, struct dentry *old_dentry,
 	struct timespec ctime;
 
 	if ((ext4_test_inode_flag(new_dir, EXT4_INODE_PROJINHERIT) &&
-	     !projid_eq(EXT4_I(new_dir)->i_projid,
-			EXT4_I(old_dentry->d_inode)->i_projid)) ||
+	     !projid_valid_eq(EXT4_I(new_dir)->i_projid,
+			      EXT4_I(old_dentry->d_inode)->i_projid)) ||
 	    (ext4_test_inode_flag(old_dir, EXT4_INODE_PROJINHERIT) &&
-	     !projid_eq(EXT4_I(old_dir)->i_projid,
-			EXT4_I(new_dentry->d_inode)->i_projid)))
+	     !projid_valid_eq(EXT4_I(old_dir)->i_projid,
+			      EXT4_I(new_dentry->d_inode)->i_projid)))
 		return -EXDEV;
 
 	retval = dquot_initialize(old.dir);
