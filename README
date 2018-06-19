@@ -1,14 +1,18 @@
+The amd-staging-4.17 linux kernel, forward-patched to the latest security level and configured.
+
+More information and amd64 builds available here:
+https://github.com/M-Bab/linux-kernel-amdgpu-binaries
+
 Linux kernel
 ============
 
-There are several guides for kernel developers and users. These guides can
-be rendered in a number of formats, like HTML and PDF. Please read
-Documentation/admin-guide/README.rst first.
+This file was moved to Documentation/admin-guide/README.rst
+
+Please notice that there are several guides for kernel developers and users.
+These guides can be rendered in a number of formats, like HTML and PDF.
 
 In order to build the documentation, use ``make htmldocs`` or
-``make pdfdocs``.  The formatted documentation can also be read online at:
-
-    https://www.kernel.org/doc/html/latest/
+``make pdfdocs``.
 
 There are various text files in the Documentation/ subdirectory,
 several of them using the Restructured Text markup notation.
