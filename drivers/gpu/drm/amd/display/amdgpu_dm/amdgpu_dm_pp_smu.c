@@ -454,9 +454,20 @@ void pp_rv_set_display_requirement(struct pp_smu *pp,
 	struct dc_context *ctx = pp->ctx;
 	struct amdgpu_device *adev = ctx->driver_context;
 	const struct amd_pm_funcs *pp_funcs = adev->powerplay.pp_funcs;
+	void *pp_handle = adev->powerplay.pp_handle;
+	struct pp_display_clock_request request;
 
-	if (!pp_funcs || !pp_funcs->display_configuration_changed)
+	if (!pp_funcs || !pp_funcs->display_configuration_changed
+		|| !pp_funcs->display_clock_voltage_request)
 		return;
+
+	request.clock_type = dc_to_pp_clock_type(DM_PP_CLOCK_TYPE_DCFCLK);
+	request.clock_freq_in_khz = req->hard_min_dcefclk_khz;
+	pp_funcs->display_clock_voltage_request(pp_handle, &request);
+
+	request.clock_type = dc_to_pp_clock_type(DM_PP_CLOCK_TYPE_FCLK);
+	request.clock_freq_in_khz = req->hard_min_fclk_khz;
+	pp_funcs->display_clock_voltage_request(pp_handle, &request);
 
 	amdgpu_dpm_display_configuration_changed(adev);
 }
