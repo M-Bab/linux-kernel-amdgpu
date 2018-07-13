@@ -620,7 +620,7 @@ static void profile_query_cb(struct aa_profile *profile, struct aa_perms *perms,
 			tmp = aa_compute_fperms(dfa, state, &cond);
 		}
 	} else if (profile->policy.dfa) {
-		if (!PROFILE_MEDIATES(profile, *match_str))
+		if (!PROFILE_MEDIATES_SAFE(profile, *match_str))
 			return;	/* no change to current perms */
 		dfa = profile->policy.dfa;
 		state = aa_dfa_match_len(dfa, profile->policy.start[0],
@@ -2256,6 +2256,11 @@ static struct aa_sfs_entry aa_sfs_entry_ns[] = {
 	{ }
 };
 
+static struct aa_sfs_entry aa_sfs_entry_dbus[] = {
+	AA_SFS_FILE_STRING("mask", "acquire send receive"),
+	{ }
+};
+
 static struct aa_sfs_entry aa_sfs_entry_query_label[] = {
 	AA_SFS_FILE_STRING("perms", "allow deny audit quiet"),
 	AA_SFS_FILE_BOOLEAN("data",		1),
@@ -2272,6 +2277,7 @@ static struct aa_sfs_entry aa_sfs_entry_features[] = {
 	AA_SFS_DIR("domain",			aa_sfs_entry_domain),
 	AA_SFS_DIR("file",			aa_sfs_entry_file),
 	AA_SFS_DIR("network_v8",		aa_sfs_entry_network),
+	AA_SFS_DIR("network",			aa_sfs_entry_network_compat),
 	AA_SFS_DIR("mount",			aa_sfs_entry_mount),
 	AA_SFS_DIR("namespaces",		aa_sfs_entry_ns),
 	AA_SFS_FILE_U64("capability",		VFS_CAP_FLAGS_MASK),
@@ -2279,6 +2285,7 @@ static struct aa_sfs_entry aa_sfs_entry_features[] = {
 	AA_SFS_DIR("caps",			aa_sfs_entry_caps),
 	AA_SFS_DIR("ptrace",			aa_sfs_entry_ptrace),
 	AA_SFS_DIR("signal",			aa_sfs_entry_signal),
+	AA_SFS_DIR("dbus",			aa_sfs_entry_dbus),
 	AA_SFS_DIR("query",			aa_sfs_entry_query),
 	{ }
 };

@@ -199,6 +199,21 @@ static void quirk_mmio_always_on(struct pci_dev *dev)
 DECLARE_PCI_FIXUP_CLASS_EARLY(PCI_ANY_ID, PCI_ANY_ID,
 				PCI_CLASS_BRIDGE_HOST, 8, quirk_mmio_always_on);
 
+/* The BAR0 ~ BAR4 of Marvell 9125 device can't be accessed
+*  by IO resource file, and need to skip the files
+*/
+static void quirk_marvell_mask_bar(struct pci_dev *dev)
+{
+	int i;
+
+	for (i = 0; i < 5; i++)
+		if (dev->resource[i].start)
+			dev->resource[i].start =
+				dev->resource[i].end = 0;
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_MARVELL_EXT, 0x9125,
+				quirk_marvell_mask_bar);
+
 /*
  * The Mellanox Tavor device gives false positive parity errors.  Mark this
  * device with a broken_parity_status to allow PCI scanning code to "skip"
@@ -4672,6 +4687,27 @@ static void quirk_intel_no_flr(struct pci_dev *dev)
 }
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x1502, quirk_intel_no_flr);
 DECLARE_PCI_FIXUP_EARLY(PCI_VENDOR_ID_INTEL, 0x1503, quirk_intel_no_flr);
+
+static void quirk_intel_th_rtit_bar(struct pci_dev *dev)
+{
+	struct resource *r = &dev->resource[4];
+
+	/*
+	 * Hello, Denverton!
+	 * Denverton reports 2k of RTIT_BAR (resource 4), which can't be
+	 * right given the 16 threads. When Intel TH gets enabled, the
+	 * actual resource overlaps the XHCI MMIO space and causes it
+	 * to die.
+	 * We're not really using RTIT_BAR at all at the moment, so it's
+	 * a safe choice to disable this resource.
+	 */
+	if (r->end == r->start + 0x7ff) {
+		r->flags = 0;
+		r->start = 0;
+		r->end   = 0;
+	}
+}
+DECLARE_PCI_FIXUP_HEADER(PCI_VENDOR_ID_INTEL, 0x19e1, quirk_intel_th_rtit_bar);
 
 static void quirk_no_ext_tags(struct pci_dev *pdev)
 {

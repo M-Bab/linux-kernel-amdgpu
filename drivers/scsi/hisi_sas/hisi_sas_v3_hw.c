@@ -51,7 +51,6 @@
 #define CFG_ABT_SET_IPTT_DONE	0xd8
 #define CFG_ABT_SET_IPTT_DONE_OFF	0
 #define HGC_IOMB_PROC1_STATUS	0x104
-#define CFG_1US_TIMER_TRSH		0xcc
 #define CHNL_INT_STATUS			0x148
 #define HGC_AXI_FIFO_ERR_INFO  0x154
 #define AXI_ERR_INFO_OFF               0
@@ -131,6 +130,9 @@
 #define SL_CONTROL_NOTIFY_EN_MSK	(0x1 << SL_CONTROL_NOTIFY_EN_OFF)
 #define SL_CTA_OFF		17
 #define SL_CTA_MSK		(0x1 << SL_CTA_OFF)
+#define RX_PRIMS_STATUS			(PORT_BASE + 0x98)
+#define RX_BCAST_CHG_OFF		1
+#define RX_BCAST_CHG_MSK		(0x1 << RX_BCAST_CHG_OFF)
 #define TX_ID_DWORD0			(PORT_BASE + 0x9c)
 #define TX_ID_DWORD1			(PORT_BASE + 0xa0)
 #define TX_ID_DWORD2			(PORT_BASE + 0xa4)
@@ -425,7 +427,6 @@ static void init_reg_v3_hw(struct hisi_hba *hisi_hba)
 			 (u32)((1ULL << hisi_hba->queue_count) - 1));
 	hisi_sas_write32(hisi_hba, CFG_MAX_TAG, 0xfff0400);
 	hisi_sas_write32(hisi_hba, HGC_SAS_TXFAIL_RETRY_CTRL, 0x108);
-	hisi_sas_write32(hisi_hba, CFG_1US_TIMER_TRSH, 0xd);
 	hisi_sas_write32(hisi_hba, INT_COAL_EN, 0x1);
 	hisi_sas_write32(hisi_hba, OQ_INT_COAL_TIME, 0x1);
 	hisi_sas_write32(hisi_hba, OQ_INT_COAL_CNT, 0x1);
@@ -486,6 +487,7 @@ static void init_reg_v3_hw(struct hisi_hba *hisi_hba)
 		hisi_sas_phy_write32(hisi_hba, i, SL_RX_BCAST_CHK_MSK, 0x0);
 		hisi_sas_phy_write32(hisi_hba, i, PHYCTRL_OOB_RESTART_MSK, 0x1);
 		hisi_sas_phy_write32(hisi_hba, i, STP_LINK_TIMER, 0x7f7a120);
+		hisi_sas_phy_write32(hisi_hba, i, CON_CFG_DRIVER, 0x2a0a01);
 
 		/* used for 12G negotiate */
 		hisi_sas_phy_write32(hisi_hba, i, COARSETUNE_TIME, 0x1e);
@@ -1256,9 +1258,13 @@ static irqreturn_t phy_bcast_v3_hw(int phy_no, struct hisi_hba *hisi_hba)
 	struct hisi_sas_phy *phy = &hisi_hba->phy[phy_no];
 	struct asd_sas_phy *sas_phy = &phy->sas_phy;
 	struct sas_ha_struct *sas_ha = &hisi_hba->sha;
+	u32 bcast_status;
 
 	hisi_sas_phy_write32(hisi_hba, phy_no, SL_RX_BCAST_CHK_MSK, 1);
-	sas_ha->notify_port_event(sas_phy, PORTE_BROADCAST_RCVD);
+	bcast_status = hisi_sas_phy_read32(hisi_hba, phy_no, RX_PRIMS_STATUS);
+	if ((bcast_status & RX_BCAST_CHG_MSK) &&
+	    !test_bit(HISI_SAS_RESET_BIT, &hisi_hba->flags))
+		sas_ha->notify_port_event(sas_phy, PORTE_BROADCAST_RCVD);
 	hisi_sas_phy_write32(hisi_hba, phy_no, CHL_INT0,
 			     CHL_INT0_SL_RX_BCST_ACK_MSK);
 	hisi_sas_phy_write32(hisi_hba, phy_no, SL_RX_BCAST_CHK_MSK, 0);
@@ -2453,7 +2459,9 @@ static int hisi_sas_v3_suspend(struct pci_dev *pdev, pm_message_t state)
 		return -ENODEV;
 	}
 
-	set_bit(HISI_SAS_RESET_BIT, &hisi_hba->flags);
+	if (test_and_set_bit(HISI_SAS_RESET_BIT, &hisi_hba->flags))
+		return -1;
+
 	scsi_block_requests(shost);
 	set_bit(HISI_SAS_REJECT_CMD_BIT, &hisi_hba->flags);
 	flush_workqueue(hisi_hba->wq);

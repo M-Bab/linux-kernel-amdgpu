@@ -90,6 +90,8 @@ static int ext4_validate_inode_bitmap(struct super_block *sb,
 		return -EFSCORRUPTED;
 
 	ext4_lock_group(sb, block_group);
+	if (buffer_verified(bh))
+		goto verified;
 	blk = ext4_inode_bitmap(sb, desc);
 	if (!ext4_inode_bitmap_csum_verify(sb, block_group, desc, bh,
 					   EXT4_INODES_PER_GROUP(sb) / 8)) {
@@ -101,6 +103,7 @@ static int ext4_validate_inode_bitmap(struct super_block *sb,
 		return -EFSBADCRC;
 	}
 	set_buffer_verified(bh);
+verified:
 	ext4_unlock_group(sb, block_group);
 	return 0;
 }
@@ -768,6 +771,10 @@ struct inode *__ext4_new_inode(handle_t *handle, struct inode *dir,
 	if (unlikely(ext4_forced_shutdown(sbi)))
 		return ERR_PTR(-EIO);
 
+	/* Supplied owner must be valid */
+	if (owner && (owner[0] == (uid_t)-1 || owner[1] == (uid_t)-1))
+		return ERR_PTR(-EOVERFLOW);
+
 	if ((ext4_encrypted_inode(dir) || DUMMY_ENCRYPTION_ENABLED(sbi)) &&
 	    (S_ISREG(mode) || S_ISDIR(mode) || S_ISLNK(mode)) &&
 	    !(i_flags & EXT4_EA_INODE_FL)) {
@@ -848,7 +855,7 @@ struct inode *__ext4_new_inode(handle_t *handle, struct inode *dir,
 	    ext4_test_inode_flag(dir, EXT4_INODE_PROJINHERIT))
 		ei->i_projid = EXT4_I(dir)->i_projid;
 	else
-		ei->i_projid = make_kprojid(&init_user_ns, EXT4_DEF_PROJID);
+		ei->i_projid = make_kprojid(sb->s_user_ns, EXT4_DEF_PROJID);
 
 	err = dquot_initialize(inode);
 	if (err)
