@@ -849,7 +849,7 @@ static bool dcn10_hw_wa_force_recovery(struct dc *dc)
 }
 
 
-static void dcn10_verify_allow_pstate_change_high(struct dc *dc)
+void dcn10_verify_allow_pstate_change_high(struct dc *dc)
 {
 	static bool should_log_hw_state; /* prevent hw state log by default */
 
@@ -1863,11 +1863,10 @@ static void update_dpp(struct dpp *dpp, struct dc_plane_state *plane_state)
 		dpp->funcs->dpp_program_bias_and_scale(dpp, &bns_params);
 }
 
-
-static void update_mpcc(struct dc *dc, struct pipe_ctx *pipe_ctx)
+static void dcn10_update_mpcc(struct dc *dc, struct pipe_ctx *pipe_ctx)
 {
 	struct hubp *hubp = pipe_ctx->plane_res.hubp;
-	struct mpcc_blnd_cfg blnd_cfg;
+	struct mpcc_blnd_cfg blnd_cfg = {0};
 	bool per_pixel_alpha = pipe_ctx->plane_state->per_pixel_alpha && pipe_ctx->bottom_pipe;
 	int mpcc_id;
 	struct mpcc *new_mpcc;
@@ -2009,7 +2008,7 @@ static void update_dchubp_dpp(
 
 	if (plane_state->update_flags.bits.full_update ||
 		plane_state->update_flags.bits.per_pixel_alpha_change)
-		update_mpcc(dc, pipe_ctx);
+		dc->hwss.update_mpcc(dc, pipe_ctx);
 
 	if (plane_state->update_flags.bits.full_update ||
 		plane_state->update_flags.bits.per_pixel_alpha_change ||
@@ -2119,6 +2118,33 @@ static void set_hdr_multiplier(struct pipe_ctx *pipe_ctx)
 			pipe_ctx->plane_res.dpp, hw_mult);
 }
 
+void dcn10_program_pipe(
+		struct dc *dc,
+		struct pipe_ctx *pipe_ctx,
+		struct dc_state *context)
+{
+	if (pipe_ctx->plane_state->update_flags.bits.full_update)
+		dcn10_enable_plane(dc, pipe_ctx, context);
+
+	update_dchubp_dpp(dc, pipe_ctx, context);
+
+	set_hdr_multiplier(pipe_ctx);
+
+	if (pipe_ctx->plane_state->update_flags.bits.full_update ||
+			pipe_ctx->plane_state->update_flags.bits.in_transfer_func_change ||
+			pipe_ctx->plane_state->update_flags.bits.gamma_change)
+		dc->hwss.set_input_transfer_func(pipe_ctx, pipe_ctx->plane_state);
+
+	/* dcn10_translate_regamma_to_hw_format takes 750us to finish
+	 * only do gamma programming for full update.
+	 * TODO: This can be further optimized/cleaned up
+	 * Always call this for now since it does memcmp inside before
+	 * doing heavy calculation and programming
+	 */
+	if (pipe_ctx->plane_state->update_flags.bits.full_update)
+		dc->hwss.set_output_transfer_func(pipe_ctx, pipe_ctx->stream);
+}
+
 static void program_all_pipe_in_tree(
 		struct dc *dc,
 		struct pipe_ctx *pipe_ctx,
@@ -2140,26 +2166,7 @@ static void program_all_pipe_in_tree(
 	}
 
 	if (pipe_ctx->plane_state != NULL) {
-		if (pipe_ctx->plane_state->update_flags.bits.full_update)
-			dcn10_enable_plane(dc, pipe_ctx, context);
-
-		update_dchubp_dpp(dc, pipe_ctx, context);
-
-		set_hdr_multiplier(pipe_ctx);
-
-		if (pipe_ctx->plane_state->update_flags.bits.full_update ||
-				pipe_ctx->plane_state->update_flags.bits.in_transfer_func_change ||
-				pipe_ctx->plane_state->update_flags.bits.gamma_change)
-			dc->hwss.set_input_transfer_func(pipe_ctx, pipe_ctx->plane_state);
-
-		/* dcn10_translate_regamma_to_hw_format takes 750us to finish
-		 * only do gamma programming for full update.
-		 * TODO: This can be further optimized/cleaned up
-		 * Always call this for now since it does memcmp inside before
-		 * doing heavy calculation and programming
-		 */
-		if (pipe_ctx->plane_state->update_flags.bits.full_update)
-			dc->hwss.set_output_transfer_func(pipe_ctx, pipe_ctx->stream);
+		dcn10_program_pipe(dc, pipe_ctx, context);
 	}
 
 	if (pipe_ctx->bottom_pipe != NULL && pipe_ctx->bottom_pipe != pipe_ctx) {
@@ -2284,7 +2291,7 @@ static void dcn10_apply_ctx_for_surface(
 			old_pipe_ctx->plane_state &&
 			old_pipe_ctx->stream_res.tg == tg) {
 
-			hwss1_plane_atomic_disconnect(dc, old_pipe_ctx);
+			dc->hwss.plane_atomic_disconnect(dc, old_pipe_ctx);
 			removed_pipe[i] = true;
 
 			DC_LOG_DC("Reset mpcc for pipe %d\n",
@@ -2543,9 +2550,11 @@ static void dcn10_set_cursor_position(struct pipe_ctx *pipe_ctx)
 	struct dc_cursor_mi_param param = {
 		.pixel_clk_khz = pipe_ctx->stream->timing.pix_clk_khz,
 		.ref_clk_khz = pipe_ctx->stream->ctx->dc->res_pool->ref_clock_inKhz,
-		.viewport_x_start = pipe_ctx->plane_res.scl_data.viewport.x,
-		.viewport_width = pipe_ctx->plane_res.scl_data.viewport.width,
-		.h_scale_ratio = pipe_ctx->plane_res.scl_data.ratios.horz
+		.viewport = pipe_ctx->plane_res.scl_data.viewport,
+		.h_scale_ratio = pipe_ctx->plane_res.scl_data.ratios.horz,
+		.v_scale_ratio = pipe_ctx->plane_res.scl_data.ratios.vert,
+		.rotation = pipe_ctx->plane_state->rotation,
+		.mirror = pipe_ctx->plane_state->horizontal_mirror
 	};
 
 	if (pipe_ctx->plane_state->address.type
@@ -2576,7 +2585,9 @@ static const struct hw_sequencer_funcs dcn10_funcs = {
 	.apply_ctx_to_hw = dce110_apply_ctx_to_hw,
 	.apply_ctx_for_surface = dcn10_apply_ctx_for_surface,
 	.update_plane_addr = dcn10_update_plane_addr,
+	.plane_atomic_disconnect = hwss1_plane_atomic_disconnect,
 	.update_dchub = dcn10_update_dchub,
+	.update_mpcc = dcn10_update_mpcc,
 	.update_pending_status = dcn10_update_pending_status,
 	.set_input_transfer_func = dcn10_set_input_transfer_func,
 	.set_output_transfer_func = dcn10_set_output_transfer_func,

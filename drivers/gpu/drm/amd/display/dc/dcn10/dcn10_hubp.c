@@ -27,6 +27,7 @@
 #include "reg_helper.h"
 #include "basics/conversion.h"
 #include "dcn10_hubp.h"
+#include "custom_float.h"
 
 #define REG(reg)\
 	hubp1->hubp_regs->reg
@@ -152,16 +153,14 @@ void hubp1_program_tiling(
 			PIPE_ALIGNED, info->gfx9.pipe_aligned);
 }
 
-void hubp1_program_size_and_rotation(
+void hubp1_program_size(
 	struct hubp *hubp,
-	enum dc_rotation_angle rotation,
 	enum surface_pixel_format format,
 	const union plane_size *plane_size,
-	struct dc_plane_dcc_param *dcc,
-	bool horizontal_mirror)
+	struct dc_plane_dcc_param *dcc)
 {
 	struct dcn10_hubp *hubp1 = TO_DCN10_HUBP(hubp);
-	uint32_t pitch, meta_pitch, pitch_c, meta_pitch_c, mirror;
+	uint32_t pitch, meta_pitch, pitch_c, meta_pitch_c;
 
 	/* Program data and meta surface pitch (calculation from addrlib)
 	 * 444 or 420 luma
@@ -192,12 +191,21 @@ void hubp1_program_size_and_rotation(
 	if (format >= SURFACE_PIXEL_FORMAT_VIDEO_BEGIN)
 		REG_UPDATE_2(DCSURF_SURFACE_PITCH_C,
 			PITCH_C, pitch_c, META_PITCH_C, meta_pitch_c);
+}
+
+void hubp1_program_rotation(
+	struct hubp *hubp,
+	enum dc_rotation_angle rotation,
+	bool horizontal_mirror)
+{
+	struct dcn10_hubp *hubp1 = TO_DCN10_HUBP(hubp);
+	uint32_t mirror;
+
 
 	if (horizontal_mirror)
 		mirror = 1;
 	else
 		mirror = 0;
-
 
 	/* Program rotation angle and horz mirror - no mirror */
 	if (rotation == ROTATION_ANGLE_0)
@@ -495,8 +503,8 @@ void hubp1_program_surface_config(
 {
 	hubp1_dcc_control(hubp, dcc->enable, dcc->grph.independent_64b_blks);
 	hubp1_program_tiling(hubp, tiling_info, format);
-	hubp1_program_size_and_rotation(
-			hubp, rotation, format, plane_size, dcc, horizontal_mirror);
+	hubp1_program_size(hubp, format, plane_size, dcc);
+	hubp1_program_rotation(hubp, rotation, horizontal_mirror);
 	hubp1_program_pixel_format(hubp, format);
 }
 
@@ -1045,6 +1053,18 @@ void hubp1_cursor_set_attributes(
 	enum cursor_pitch hw_pitch = hubp1_get_cursor_pitch(attr->pitch);
 	enum cursor_lines_per_chunk lpc = hubp1_get_lines_per_chunk(
 			attr->width, attr->color_format);
+	struct fixed31_32 multiplier;
+	uint32_t hw_mult = 0x3c00; // 1.0 default multiplier
+	struct custom_float_format fmt;
+
+	fmt.exponenta_bits = 5;
+	fmt.mantissa_bits = 10;
+	fmt.sign = true;
+
+	if (attr->sdr_white_level > 80) {
+		multiplier = dc_fixpt_from_fraction(attr->sdr_white_level, 80);
+		convert_to_custom_float_format(multiplier, &fmt, &hw_mult);
+	}
 
 	hubp->curs_attr = *attr;
 
@@ -1067,6 +1087,8 @@ void hubp1_cursor_set_attributes(
 			CURSOR0_DST_Y_OFFSET, 0,
 			 /* used to shift the cursor chunk request deadline */
 			CURSOR0_CHUNK_HDL_ADJUST, 3);
+
+	REG_UPDATE(CURSOR0_FP_SCALE_BIAS, CUR0_FP_SCALE, hw_mult);
 }
 
 void hubp1_cursor_set_position(
@@ -1075,9 +1097,11 @@ void hubp1_cursor_set_position(
 		const struct dc_cursor_mi_param *param)
 {
 	struct dcn10_hubp *hubp1 = TO_DCN10_HUBP(hubp);
-	int src_x_offset = pos->x - pos->x_hotspot - param->viewport_x_start;
+	int src_x_offset = pos->x - pos->x_hotspot - param->viewport.x;
+	int x_hotspot = pos->x_hotspot;
+	int y_hotspot = pos->y_hotspot;
+	uint32_t dst_x_offset;
 	uint32_t cur_en = pos->enable ? 1 : 0;
-	uint32_t dst_x_offset = (src_x_offset >= 0) ? src_x_offset : 0;
 
 	/*
 	 * Guard aganst cursor_set_position() from being called with invalid
@@ -1089,6 +1113,18 @@ void hubp1_cursor_set_position(
 	if (hubp->curs_attr.address.quad_part == 0)
 		return;
 
+	if (param->rotation == ROTATION_ANGLE_90 || param->rotation == ROTATION_ANGLE_270) {
+		src_x_offset = pos->y - pos->y_hotspot - param->viewport.x;
+		y_hotspot = pos->x_hotspot;
+		x_hotspot = pos->y_hotspot;
+	}
+
+	if (param->mirror) {
+		x_hotspot = param->viewport.width - x_hotspot;
+		src_x_offset = param->viewport.x + param->viewport.width - src_x_offset;
+	}
+
+	dst_x_offset = (src_x_offset >= 0) ? src_x_offset : 0;
 	dst_x_offset *= param->ref_clk_khz;
 	dst_x_offset /= param->pixel_clk_khz;
 
@@ -1099,7 +1135,7 @@ void hubp1_cursor_set_position(
 				dc_fixpt_from_int(dst_x_offset),
 				param->h_scale_ratio));
 
-	if (src_x_offset >= (int)param->viewport_width)
+	if (src_x_offset >= (int)param->viewport.width)
 		cur_en = 0;  /* not visible beyond right edge*/
 
 	if (src_x_offset + (int)hubp->curs_attr.width <= 0)
@@ -1116,8 +1152,8 @@ void hubp1_cursor_set_position(
 			CURSOR_Y_POSITION, pos->y);
 
 	REG_SET_2(CURSOR_HOT_SPOT, 0,
-			CURSOR_HOT_SPOT_X, pos->x_hotspot,
-			CURSOR_HOT_SPOT_Y, pos->y_hotspot);
+			CURSOR_HOT_SPOT_X, x_hotspot,
+			CURSOR_HOT_SPOT_Y, y_hotspot);
 
 	REG_SET(CURSOR_DST_OFFSET, 0,
 			CURSOR_DST_X_OFFSET, dst_x_offset);

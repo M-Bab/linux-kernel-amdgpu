@@ -38,7 +38,7 @@
 #include "inc/compressor.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.1.52"
+#define DC_VER "3.1.55"
 
 #define MAX_SURFACES 3
 #define MAX_STREAMS 6
@@ -249,6 +249,9 @@ struct dc_debug {
 	bool always_use_regamma;
 	bool p010_mpo_support;
 	bool recovery_enabled;
+	bool avoid_vbios_exec_table;
+	bool scl_reset_length10;
+	bool hdmi20_disable;
 
 };
 struct dc_state;
@@ -627,9 +630,14 @@ struct dpcd_caps {
 	struct dc_dongle_caps dongle_caps;
 
 	uint32_t sink_dev_id;
+	int8_t sink_dev_id_str[6];
+	int8_t sink_hw_revision;
+	int8_t sink_fw_revision[2];
+
 	uint32_t branch_dev_id;
 	int8_t branch_dev_name[6];
 	int8_t branch_hw_revision;
+	int8_t branch_fw_revision[2];
 
 	bool allow_invalid_MSA_timing_param;
 	bool panel_mode_edp;

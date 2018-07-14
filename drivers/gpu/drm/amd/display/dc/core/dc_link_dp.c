@@ -1996,12 +1996,16 @@ static void handle_automated_test(struct dc_link *link)
 			sizeof(test_response));
 }
 
-bool dc_link_handle_hpd_rx_irq(struct dc_link *link, union hpd_irq_data *out_hpd_irq_dpcd_data)
+bool dc_link_handle_hpd_rx_irq(struct dc_link *link, union hpd_irq_data *out_hpd_irq_dpcd_data, bool *out_link_loss)
 {
 	union hpd_irq_data hpd_irq_dpcd_data = {{{{0}}}};
 	union device_service_irq device_service_clear = { { 0 } };
 	enum dc_status result;
+
 	bool status = false;
+
+	if (out_link_loss)
+		*out_link_loss = false;
 	/* For use cases related to down stream connection status change,
 	 * PSR and device auto test, refer to function handle_sst_hpd_irq
 	 * in DAL2.1*/
@@ -2076,6 +2080,8 @@ bool dc_link_handle_hpd_rx_irq(struct dc_link *link, union hpd_irq_data *out_hpd
 			true, LINK_TRAINING_ATTEMPTS);
 
 		status = false;
+		if (out_link_loss)
+			*out_link_loss = true;
 	}
 
 	if (link->type == dc_connection_active_dongle &&
@@ -2262,6 +2268,11 @@ static void get_active_converter_info(
 
 		link->dpcd_caps.branch_hw_revision =
 			dp_hw_fw_revision.ieee_hw_rev;
+
+		memmove(
+			link->dpcd_caps.branch_fw_revision,
+			dp_hw_fw_revision.ieee_fw_rev,
+			sizeof(dp_hw_fw_revision.ieee_fw_rev));
 	}
 }
 
@@ -2317,6 +2328,7 @@ static bool retrieve_link_cap(struct dc_link *link)
 	enum dc_status status = DC_ERROR_UNEXPECTED;
 	uint32_t read_dpcd_retry_cnt = 3;
 	int i;
+	struct dp_sink_hw_fw_revision dp_hw_fw_revision;
 
 	memset(dpcd_data, '\0', sizeof(dpcd_data));
 	memset(&down_strm_port_count,
@@ -2410,6 +2422,25 @@ static bool retrieve_link_cap(struct dc_link *link)
 			(sink_id.ieee_oui[0] << 16) +
 			(sink_id.ieee_oui[1] << 8) +
 			(sink_id.ieee_oui[2]);
+
+	memmove(
+		link->dpcd_caps.sink_dev_id_str,
+		sink_id.ieee_device_id,
+		sizeof(sink_id.ieee_device_id));
+
+	core_link_read_dpcd(
+		link,
+		DP_SINK_HW_REVISION_START,
+		(uint8_t *)&dp_hw_fw_revision,
+		sizeof(dp_hw_fw_revision));
+
+	link->dpcd_caps.sink_hw_revision =
+		dp_hw_fw_revision.ieee_hw_rev;
+
+	memmove(
+		link->dpcd_caps.sink_fw_revision,
+		dp_hw_fw_revision.ieee_fw_rev,
+		sizeof(dp_hw_fw_revision.ieee_fw_rev));
 
 	/* Connectivity log: detection */
 	CONN_DATA_DETECT(link, dpcd_data, sizeof(dpcd_data), "Rx Caps: ");

@@ -133,7 +133,8 @@
 	SRI(CURSOR_CONTROL, CURSOR, id), \
 	SRI(CURSOR_POSITION, CURSOR, id), \
 	SRI(CURSOR_HOT_SPOT, CURSOR, id), \
-	SRI(CURSOR_DST_OFFSET, CURSOR, id)
+	SRI(CURSOR_DST_OFFSET, CURSOR, id), \
+	SRI(CURSOR0_FP_SCALE_BIAS, CNVC_CUR, id)
 
 #define HUBP_COMMON_REG_VARIABLE_LIST \
 	uint32_t DCHUBP_CNTL; \
@@ -241,7 +242,8 @@
 	uint32_t CURSOR_POSITION; \
 	uint32_t CURSOR_HOT_SPOT; \
 	uint32_t CURSOR_DST_OFFSET; \
-	uint32_t HUBP_CLK_CNTL
+	uint32_t HUBP_CLK_CNTL; \
+	uint32_t CURSOR0_FP_SCALE_BIAS
 
 #define HUBP_SF(reg_name, field_name, post_fix)\
 	.field_name = reg_name ## __ ## field_name ## post_fix
@@ -268,8 +270,6 @@
 	HUBP_SF(HUBPREQ0_DCSURF_SURFACE_PITCH, META_PITCH, mask_sh),\
 	HUBP_SF(HUBPREQ0_DCSURF_SURFACE_PITCH_C, PITCH_C, mask_sh),\
 	HUBP_SF(HUBPREQ0_DCSURF_SURFACE_PITCH_C, META_PITCH_C, mask_sh),\
-	HUBP_SF(HUBP0_DCSURF_SURFACE_CONFIG, ROTATION_ANGLE, mask_sh),\
-	HUBP_SF(HUBP0_DCSURF_SURFACE_CONFIG, H_MIRROR_EN, mask_sh),\
 	HUBP_SF(HUBP0_DCSURF_SURFACE_CONFIG, SURFACE_PIXEL_FORMAT, mask_sh),\
 	HUBP_SF(HUBPREQ0_DCSURF_FLIP_CONTROL, SURFACE_FLIP_TYPE, mask_sh),\
 	HUBP_SF(HUBPREQ0_DCSURF_FLIP_CONTROL, SURFACE_FLIP_MODE_FOR_STEREOSYNC, mask_sh),\
@@ -390,6 +390,8 @@
 #define HUBP_MASK_SH_LIST_DCN10(mask_sh)\
 	HUBP_MASK_SH_LIST_DCN(mask_sh),\
 	HUBP_MASK_SH_LIST_DCN_VM(mask_sh),\
+	HUBP_SF(HUBP0_DCSURF_SURFACE_CONFIG, ROTATION_ANGLE, mask_sh),\
+	HUBP_SF(HUBP0_DCSURF_SURFACE_CONFIG, H_MIRROR_EN, mask_sh),\
 	HUBP_SF(HUBPREQ0_PREFETCH_SETTINS, DST_Y_PREFETCH, mask_sh),\
 	HUBP_SF(HUBPREQ0_PREFETCH_SETTINS, VRATIO_PREFETCH, mask_sh),\
 	HUBP_SF(HUBPREQ0_PREFETCH_SETTINS_C, VRATIO_PREFETCH_C, mask_sh),\
@@ -426,7 +428,8 @@
 	HUBP_SF(CURSOR0_CURSOR_POSITION, CURSOR_Y_POSITION, mask_sh), \
 	HUBP_SF(CURSOR0_CURSOR_HOT_SPOT, CURSOR_HOT_SPOT_X, mask_sh), \
 	HUBP_SF(CURSOR0_CURSOR_HOT_SPOT, CURSOR_HOT_SPOT_Y, mask_sh), \
-	HUBP_SF(CURSOR0_CURSOR_DST_OFFSET, CURSOR_DST_X_OFFSET, mask_sh)
+	HUBP_SF(CURSOR0_CURSOR_DST_OFFSET, CURSOR_DST_X_OFFSET, mask_sh), \
+	HUBP_SF(CNVC_CUR0_CURSOR0_FP_SCALE_BIAS, CUR0_FP_SCALE, mask_sh)
 
 #define DCN_HUBP_REG_FIELD_LIST(type) \
 	type HUBP_BLANK_EN;\
@@ -619,7 +622,8 @@
 	type CURSOR_HOT_SPOT_X; \
 	type CURSOR_HOT_SPOT_Y; \
 	type CURSOR_DST_X_OFFSET; \
-	type OUTPUT_FP
+	type OUTPUT_FP; \
+	type CUR0_FP_SCALE
 
 struct dcn_mi_registers {
 	HUBP_COMMON_REG_VARIABLE_LIST;
@@ -683,12 +687,15 @@ void hubp1_program_pixel_format(
 	struct hubp *hubp,
 	enum surface_pixel_format format);
 
-void hubp1_program_size_and_rotation(
+void hubp1_program_size(
 	struct hubp *hubp,
-	enum dc_rotation_angle rotation,
 	enum surface_pixel_format format,
 	const union plane_size *plane_size,
-	struct dc_plane_dcc_param *dcc,
+	struct dc_plane_dcc_param *dcc);
+
+void hubp1_program_rotation(
+	struct hubp *hubp,
+	enum dc_rotation_angle rotation,
 	bool horizontal_mirror);
 
 void hubp1_program_tiling(
