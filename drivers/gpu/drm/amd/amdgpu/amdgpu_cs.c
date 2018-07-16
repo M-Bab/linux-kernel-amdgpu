@@ -1256,10 +1256,12 @@ static int amdgpu_cs_submit(struct amdgpu_cs_parser *p,
 	job->uf_sequence = seq;
 
 	amdgpu_job_free_resources(job);
-	amdgpu_ring_priority_get(p->ring, job->base.s_priority);
 
 	trace_amdgpu_cs_ioctl(job);
 	drm_sched_entity_push_job(&job->base, entity);
+
+	ring = to_amdgpu_ring(entity->sched);
+	amdgpu_ring_priority_get(ring, job->base.s_priority);
 
 	ttm_eu_fence_buffer_objects(&p->ticket, &p->validated, p->fence);
 	amdgpu_mn_unlock(p->mn);
