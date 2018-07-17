@@ -692,11 +692,11 @@ static int amdgpu_uvd_cs_msg(struct amdgpu_uvd_cs_ctx *ctx,
 			     struct amdgpu_bo *bo, unsigned offset)
 {
 	struct amdgpu_device *adev = ctx->parser->adev;
+	uint32_t ip_instance = ctx->parser->ring->me;
 	int32_t *msg, msg_type, handle;
 	void *ptr;
 	long r;
 	int i;
-	uint32_t ip_instance = ctx->parser->job->ring->me;
 
 	if (offset & 0x3F) {
 		DRM_ERROR("UVD(%d) messages must be 64 byte aligned!\n", ip_instance);
@@ -1062,19 +1062,16 @@ static int amdgpu_uvd_send_msg(struct amdgpu_ring *ring, struct amdgpu_bo *bo,
 		if (r < 0)
 			goto err_free;
 
-		r = amdgpu_ib_schedule(ring, 1, ib, NULL, &f);
-		job->fence = dma_fence_get(f);
+		r = amdgpu_job_submit_direct(job, ring, &f);
 		if (r)
 			goto err_free;
-
-		amdgpu_job_free(job);
 	} else {
 		r = amdgpu_sync_resv(adev, &job->sync, bo->tbo.resv,
 				     AMDGPU_FENCE_OWNER_UNDEFINED, false);
 		if (r)
 			goto err_free;
 
-		r = amdgpu_job_submit(job, ring, &adev->uvd.inst[ring->me].entity,
+		r = amdgpu_job_submit(job, &adev->uvd.inst[ring->me].entity,
 				      AMDGPU_FENCE_OWNER_UNDEFINED, &f);
 		if (r)
 			goto err_free;

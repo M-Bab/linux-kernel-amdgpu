@@ -2004,7 +2004,7 @@ static int amdgpu_device_ip_reinit_early_sriov(struct amdgpu_device *adev)
 				continue;
 
 			r = block->version->funcs->hw_init(adev);
-			DRM_INFO("RE-INIT: %s %s\n", block->version->funcs->name, r?"failed":"successed");
+			DRM_INFO("RE-INIT: %s %s\n", block->version->funcs->name, r?"failed":"succeeded");
 			if (r)
 				return r;
 		}
@@ -2039,7 +2039,7 @@ static int amdgpu_device_ip_reinit_late_sriov(struct amdgpu_device *adev)
 				continue;
 
 			r = block->version->funcs->hw_init(adev);
-			DRM_INFO("RE-INIT: %s %s\n", block->version->funcs->name, r?"failed":"successed");
+			DRM_INFO("RE-INIT: %s %s\n", block->version->funcs->name, r?"failed":"succeeded");
 			if (r)
 				return r;
 		}
@@ -2771,6 +2771,9 @@ int amdgpu_device_resume(struct drm_device *dev, bool resume, bool fbcon)
 	if (r)
 		return r;
 
+	/* Make sure IB tests flushed */
+	flush_delayed_work(&adev->late_init_work);
+
 	/* blat the mode back in */
 	if (fbcon) {
 		if (!amdgpu_device_has_dc_support(adev)) {
@@ -3092,7 +3095,7 @@ static int amdgpu_device_handle_vram_lost(struct amdgpu_device *adev)
  * @adev: amdgpu device pointer
  *
  * attempt to do soft-reset or full-reset and reinitialize Asic
- * return 0 means successed otherwise failed
+ * return 0 means succeeded otherwise failed
  */
 static int amdgpu_device_reset(struct amdgpu_device *adev)
 {
@@ -3170,7 +3173,7 @@ out:
  * @from_hypervisor: request from hypervisor
  *
  * do VF FLR and reinitialize Asic
- * return 0 means successed otherwise failed
+ * return 0 means succeeded otherwise failed
  */
 static int amdgpu_device_reset_sriov(struct amdgpu_device *adev,
 				     bool from_hypervisor)
@@ -3254,7 +3257,7 @@ int amdgpu_device_gpu_recover(struct amdgpu_device *adev,
 
 		kthread_park(ring->sched.thread);
 
-		if (job && job->ring->idx != i)
+		if (job && job->base.sched == &ring->sched)
 			continue;
 
 		drm_sched_hw_job_reset(&ring->sched, &job->base);
@@ -3278,7 +3281,7 @@ int amdgpu_device_gpu_recover(struct amdgpu_device *adev,
 		 * or all rings (in the case @job is NULL)
 		 * after above amdgpu_reset accomplished
 		 */
-		if ((!job || job->ring->idx == i) && !r)
+		if ((!job || job->base.sched == &ring->sched) && !r)
 			drm_sched_job_recovery(&ring->sched);
 
 		kthread_unpark(ring->sched.thread);
@@ -3295,7 +3298,7 @@ int amdgpu_device_gpu_recover(struct amdgpu_device *adev,
 		dev_info(adev->dev, "GPU reset(%d) failed\n", atomic_read(&adev->gpu_reset_counter));
 		amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_GPU_RESET_FAIL, 0, r);
 	} else {
-		dev_info(adev->dev, "GPU reset(%d) successed!\n",atomic_read(&adev->gpu_reset_counter));
+		dev_info(adev->dev, "GPU reset(%d) succeeded!\n",atomic_read(&adev->gpu_reset_counter));
 	}
 
 	amdgpu_vf_error_trans_all(adev);
