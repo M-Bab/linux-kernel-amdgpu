@@ -54,6 +54,11 @@ int amdgpu_job_alloc(struct amdgpu_device *adev, unsigned num_ibs,
 	if (!*job)
 		return -ENOMEM;
 
+	/*
+	 * Initialize the scheduler to at least some ring so that we always
+	 * have a pointer to adev.
+	 */
+	(*job)->base.sched = &adev->rings[0]->sched;
 	(*job)->vm = vm;
 	(*job)->ibs = (void *)&(*job)[1];
 	(*job)->num_ibs = num_ibs;
