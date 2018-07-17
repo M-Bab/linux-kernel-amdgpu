@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Advanced Micro Devices, Inc.
+ * Copyright 2016 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,43 +19,33 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
+ * Authors: AMD
+ *
  */
-#ifndef _VEGA12_SMUMANAGER_H_
-#define _VEGA12_SMUMANAGER_H_
+#ifndef LUTS_1D_H
+#define LUTS_1D_H
 
-#include "hwmgr.h"
-#include "vega12/smu9_driver_if.h"
-#include "vega12_hwmgr.h"
+#include "hw_shared.h"
 
-struct smu_table_entry {
-	uint32_t version;
-	uint32_t size;
-	uint64_t mc_addr;
-	void *table;
-	struct amdgpu_bo *handle;
+struct point_config {
+	uint32_t custom_float_x;
+	uint32_t custom_float_y;
+	uint32_t custom_float_slope;
 };
 
-struct smu_table_array {
-	struct smu_table_entry entry[TABLE_COUNT];
+struct lut_point {
+	uint32_t red;
+	uint32_t green;
+	uint32_t blue;
+	uint32_t delta_red;
+	uint32_t delta_green;
+	uint32_t delta_blue;
 };
 
-struct vega12_smumgr {
-	struct smu_table_array            smu_tables;
+struct pwl_1dlut_parameter {
+	struct gamma_curve	arr_curve_points[34];
+	struct point_config	arr_points[2];
+	struct lut_point rgb_resulted[256];
+	uint32_t hw_points_num;
 };
-
-#define SMU_FEATURES_LOW_MASK        0x00000000FFFFFFFF
-#define SMU_FEATURES_LOW_SHIFT       0
-#define SMU_FEATURES_HIGH_MASK       0xFFFFFFFF00000000
-#define SMU_FEATURES_HIGH_SHIFT      32
-
-int vega12_copy_table_from_smc(struct pp_hwmgr *hwmgr,
-		uint8_t *table, int16_t table_id);
-int vega12_copy_table_to_smc(struct pp_hwmgr *hwmgr,
-		uint8_t *table, int16_t table_id);
-int vega12_enable_smc_features(struct pp_hwmgr *hwmgr,
-		bool enable, uint64_t feature_mask);
-int vega12_get_enabled_smc_features(struct pp_hwmgr *hwmgr,
-		uint64_t *features_enabled);
-
-#endif
-
+#endif // LUTS_1D_H

@@ -1172,12 +1172,19 @@ static void dcn10_update_plane_addr(const struct dc *dc, struct pipe_ctx *pipe_c
 
 	if (plane_state == NULL)
 		return;
+
 	addr_patched = patch_address_for_sbs_tb_stereo(pipe_ctx, &addr);
+
 	pipe_ctx->plane_res.hubp->funcs->hubp_program_surface_flip_and_addr(
 			pipe_ctx->plane_res.hubp,
 			&plane_state->address,
 			plane_state->flip_immediate);
+
 	plane_state->status.requested_address = plane_state->address;
+
+	if (plane_state->flip_immediate)
+		plane_state->status.current_address = plane_state->address;
+
 	if (addr_patched)
 		pipe_ctx->plane_state->address.grph_stereo.left_addr = addr;
 }
@@ -1783,6 +1790,43 @@ static void dcn10_get_surface_visual_confirm_color(
 	}
 }
 
+static void dcn10_get_hdr_visual_confirm_color(
+		struct pipe_ctx *pipe_ctx,
+		struct tg_color *color)
+{
+	uint32_t color_value = MAX_TG_COLOR_VALUE;
+
+	// Determine the overscan color based on the top-most (desktop) plane's context
+	struct pipe_ctx *top_pipe_ctx  = pipe_ctx;
+
+	while (top_pipe_ctx->top_pipe != NULL)
+		top_pipe_ctx = top_pipe_ctx->top_pipe;
+
+	switch (top_pipe_ctx->plane_res.scl_data.format) {
+	case PIXEL_FORMAT_ARGB2101010:
+		if (top_pipe_ctx->stream->out_transfer_func->tf == TRANSFER_FUNCTION_UNITY) {
+			/* HDR10, ARGB2101010 - set boarder color to red */
+			color->color_r_cr = color_value;
+		}
+		break;
+	case PIXEL_FORMAT_FP16:
+		if (top_pipe_ctx->stream->out_transfer_func->tf == TRANSFER_FUNCTION_PQ) {
+			/* HDR10, FP16 - set boarder color to blue */
+			color->color_b_cb = color_value;
+		} else if (top_pipe_ctx->stream->out_transfer_func->tf == TRANSFER_FUNCTION_GAMMA22) {
+			/* FreeSync 2 HDR - set boarder color to green */
+			color->color_g_y = color_value;
+		}
+		break;
+	default:
+		/* SDR - set boarder color to Gray */
+		color->color_r_cr = color_value/2;
+		color->color_b_cb = color_value/2;
+		color->color_g_y = color_value/2;
+		break;
+	}
+}
+
 static uint16_t fixed_point_to_int_frac(
 	struct fixed31_32 arg,
 	uint8_t integer_bits,
@@ -1877,13 +1921,17 @@ static void dcn10_update_mpcc(struct dc *dc, struct pipe_ctx *pipe_ctx)
 
 	/* TODO: proper fix once fpga works */
 
-	if (dc->debug.surface_visual_confirm)
+	if (dc->debug.visual_confirm == VISUAL_CONFIRM_HDR) {
+		dcn10_get_hdr_visual_confirm_color(
+				pipe_ctx, &blnd_cfg.black_color);
+	} else if (dc->debug.visual_confirm == VISUAL_CONFIRM_SURFACE) {
 		dcn10_get_surface_visual_confirm_color(
 				pipe_ctx, &blnd_cfg.black_color);
-	else
+	} else {
 		color_space_to_black_color(
-			dc, pipe_ctx->stream->output_color_space,
-			&blnd_cfg.black_color);
+				dc, pipe_ctx->stream->output_color_space,
+				&blnd_cfg.black_color);
+	}
 
 	if (per_pixel_alpha)
 		blnd_cfg.alpha_mode = MPCC_ALPHA_BLEND_MODE_PER_PIXEL_ALPHA;
@@ -2163,6 +2211,7 @@ static void program_all_pipe_in_tree(
 				pipe_ctx->stream_res.tg);
 
 		dc->hwss.blank_pixel_data(dc, pipe_ctx, blank);
+
 	}
 
 	if (pipe_ctx->plane_state != NULL) {
@@ -2514,16 +2563,20 @@ static void dcn10_update_pending_status(struct pipe_ctx *pipe_ctx)
 {
 	struct dc_plane_state *plane_state = pipe_ctx->plane_state;
 	struct timing_generator *tg = pipe_ctx->stream_res.tg;
+	bool flip_pending;
 
 	if (plane_state == NULL)
 		return;
 
-	plane_state->status.is_flip_pending =
-			pipe_ctx->plane_res.hubp->funcs->hubp_is_flip_pending(
+	flip_pending = pipe_ctx->plane_res.hubp->funcs->hubp_is_flip_pending(
 					pipe_ctx->plane_res.hubp);
 
-	plane_state->status.current_address = pipe_ctx->plane_res.hubp->current_address;
-	if (pipe_ctx->plane_res.hubp->current_address.type == PLN_ADDR_TYPE_GRPH_STEREO &&
+	plane_state->status.is_flip_pending = flip_pending;
+
+	if (!flip_pending)
+		plane_state->status.current_address = plane_state->status.requested_address;
+
+	if (plane_state->status.current_address.type == PLN_ADDR_TYPE_GRPH_STEREO &&
 			tg->funcs->is_stereo_left_eye) {
 		plane_state->status.is_right_eye =
 				!tg->funcs->is_stereo_left_eye(pipe_ctx->stream_res.tg);
@@ -2578,6 +2631,33 @@ static void dcn10_set_cursor_attribute(struct pipe_ctx *pipe_ctx)
 		pipe_ctx->plane_res.dpp, attributes->color_format);
 }
 
+static void dcn10_set_cursor_sdr_white_level(struct pipe_ctx *pipe_ctx)
+{
+	uint32_t sdr_white_level = pipe_ctx->stream->cursor_attributes.sdr_white_level;
+	struct fixed31_32 multiplier;
+	struct dpp_cursor_attributes opt_attr = { 0 };
+	uint32_t hw_scale = 0x3c00; // 1.0 default multiplier
+	struct custom_float_format fmt;
+
+	if (!pipe_ctx->plane_res.dpp->funcs->set_optional_cursor_attributes)
+		return;
+
+	fmt.exponenta_bits = 5;
+	fmt.mantissa_bits = 10;
+	fmt.sign = true;
+
+	if (sdr_white_level > 80) {
+		multiplier = dc_fixpt_from_fraction(sdr_white_level, 80);
+		convert_to_custom_float_format(multiplier, &fmt, &hw_scale);
+	}
+
+	opt_attr.scale = hw_scale;
+	opt_attr.bias = 0;
+
+	pipe_ctx->plane_res.dpp->funcs->set_optional_cursor_attributes(
+			pipe_ctx->plane_res.dpp, &opt_attr);
+}
+
 static const struct hw_sequencer_funcs dcn10_funcs = {
 	.program_gamut_remap = program_gamut_remap,
 	.program_csc_matrix = program_csc_matrix,
@@ -2625,7 +2705,8 @@ static const struct hw_sequencer_funcs dcn10_funcs = {
 	.edp_power_control = hwss_edp_power_control,
 	.edp_wait_for_hpd_ready = hwss_edp_wait_for_hpd_ready,
 	.set_cursor_position = dcn10_set_cursor_position,
-	.set_cursor_attribute = dcn10_set_cursor_attribute
+	.set_cursor_attribute = dcn10_set_cursor_attribute,
+	.set_cursor_sdr_white_level = dcn10_set_cursor_sdr_white_level
 };
 
 

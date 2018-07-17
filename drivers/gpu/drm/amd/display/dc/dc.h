@@ -38,7 +38,7 @@
 #include "inc/compressor.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.1.55"
+#define DC_VER "3.1.56"
 
 #define MAX_SURFACES 3
 #define MAX_STREAMS 6
@@ -77,6 +77,7 @@ struct dc_caps {
 	bool is_apu;
 	bool dual_link_dvi;
 	bool post_blend_color_processing;
+	bool force_dp_tps4_for_cp2520;
 };
 
 struct dc_dcc_surface_param {
@@ -169,6 +170,12 @@ struct dc_config {
 	bool disable_disp_pll_sharing;
 };
 
+enum visual_confirm {
+	VISUAL_CONFIRM_DISABLE = 0,
+	VISUAL_CONFIRM_SURFACE = 1,
+	VISUAL_CONFIRM_HDR = 2,
+};
+
 enum dcc_option {
 	DCC_ENABLE = 0,
 	DCC_DISABLE = 1,
@@ -202,7 +209,7 @@ struct dc_clocks {
 };
 
 struct dc_debug {
-	bool surface_visual_confirm;
+	enum visual_confirm visual_confirm;
 	bool sanity_checks;
 	bool max_disp_clk;
 	bool surface_trace;
@@ -253,6 +260,11 @@ struct dc_debug {
 	bool scl_reset_length10;
 	bool hdmi20_disable;
 
+	struct {
+		uint32_t ltFailCount;
+		uint32_t i2cErrorCount;
+		uint32_t auxErrorCount;
+	} debug_data;
 };
 struct dc_state;
 struct resource_pool;
@@ -387,7 +399,8 @@ enum dc_transfer_func_predefined {
 	TRANSFER_FUNCTION_LINEAR,
 	TRANSFER_FUNCTION_UNITY,
 	TRANSFER_FUNCTION_HLG,
-	TRANSFER_FUNCTION_HLG12
+	TRANSFER_FUNCTION_HLG12,
+	TRANSFER_FUNCTION_GAMMA22
 };
 
 struct dc_transfer_func {
