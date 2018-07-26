@@ -1084,6 +1084,7 @@ void hubp1_cursor_set_position(
 {
 	struct dcn10_hubp *hubp1 = TO_DCN10_HUBP(hubp);
 	int src_x_offset = pos->x - pos->x_hotspot - param->viewport.x;
+	int src_y_offset = pos->y - pos->y_hotspot - param->viewport.y;
 	int x_hotspot = pos->x_hotspot;
 	int y_hotspot = pos->y_hotspot;
 	uint32_t dst_x_offset;
@@ -1126,6 +1127,12 @@ void hubp1_cursor_set_position(
 
 	if (src_x_offset + (int)hubp->curs_attr.width <= 0)
 		cur_en = 0;  /* not visible beyond left edge*/
+
+	if (src_y_offset >= (int)param->viewport.height)
+		cur_en = 0;  /* not visible beyond bottom edge*/
+
+	if (src_y_offset < 0) //+ (int)hubp->curs_attr.height
+		cur_en = 0;  /* not visible beyond top edge*/
 
 	if (cur_en && REG_READ(CURSOR_SURFACE_ADDRESS) == 0)
 		hubp->funcs->set_cursor_attributes(hubp, &hubp->curs_attr);
