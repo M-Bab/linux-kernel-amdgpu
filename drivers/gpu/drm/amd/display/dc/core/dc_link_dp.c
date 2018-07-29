@@ -1029,7 +1029,7 @@ enum link_training_result dc_link_dp_perform_link_training(
 			lt_settings.lane_settings[0].PRE_EMPHASIS);
 
 	if (status != LINK_TRAINING_SUCCESS)
-		link->ctx->dc->debug.debug_data.ltFailCount++;
+		link->ctx->dc->debug_data.ltFailCount++;
 
 	return status;
 }
@@ -1086,9 +1086,10 @@ static struct dc_link_settings get_max_link_cap(struct dc_link *link)
 	return max_link_cap;
 }
 
-bool dp_hbr_verify_link_cap(
+bool dp_verify_link_cap(
 	struct dc_link *link,
-	struct dc_link_settings *known_limit_link_setting)
+	struct dc_link_settings *known_limit_link_setting,
+	int *fail_count)
 {
 	struct dc_link_settings max_link_cap = {0};
 	struct dc_link_settings cur_link_setting = {0};
@@ -1100,6 +1101,11 @@ bool dp_hbr_verify_link_cap(
 	struct clock_source *dp_cs;
 	enum clock_source_id dp_cs_id = CLOCK_SOURCE_ID_EXTERNAL;
 	enum link_training_result status;
+
+	if (link->dc->debug.skip_detection_link_training) {
+		link->verified_link_cap = *known_limit_link_setting;
+		return true;
+	}
 
 	success = false;
 	skip_link_training = false;
@@ -1155,6 +1161,8 @@ bool dp_hbr_verify_link_cap(
 							skip_video_pattern);
 			if (status == LINK_TRAINING_SUCCESS)
 				success = true;
+			else
+				(*fail_count)++;
 		}
 
 		if (success)
