@@ -23,10 +23,11 @@
  *
  */
 
-#ifndef __DAL_ENGINE_H__
-#define __DAL_ENGINE_H__
+#ifndef __DAL_AUX_ENGINE_H__
+#define __DAL_AUX_ENGINE_H__
 
 #include "dc_ddc_types.h"
+#include "include/i2caux_interface.h"
 
 enum i2caux_transaction_operation {
 	I2CAUX_TRANSACTION_READ,
@@ -78,34 +79,102 @@ enum i2c_default_speed {
 	I2CAUX_DEFAULT_I2C_SW_SPEED = 50
 };
 
-struct engine;
+union aux_config;
 
-struct engine_funcs {
-	enum i2caux_engine_type (*get_engine_type)(
-		const struct engine *engine);
-	bool (*acquire)(
-		struct engine *engine,
-		struct ddc *ddc);
-	bool (*submit_request)(
-		struct engine *engine,
-		struct i2caux_transaction_request *request,
-		bool middle_of_transaction);
-	void (*release_engine)(
-		struct engine *engine);
-};
-
-struct engine {
-	const struct engine_funcs *funcs;
+struct aux_engine {
 	uint32_t inst;
 	struct ddc *ddc;
 	struct dc_context *ctx;
+	const struct aux_engine_funcs *funcs;
+	/* following values are expressed in milliseconds */
+	uint32_t delay;
+	uint32_t max_defer_write_retry;
+	bool acquire_reset;
 };
 
-void dal_i2caux_construct_engine(
-	struct engine *engine,
-	struct dc_context *ctx);
+struct read_command_context {
+	uint8_t *buffer;
+	uint32_t current_read_length;
+	uint32_t offset;
+	enum i2caux_transaction_status status;
 
-void dal_i2caux_destruct_engine(
-	struct engine *engine);
+	struct aux_request_transaction_data request;
+	struct aux_reply_transaction_data reply;
 
+	uint8_t returned_byte;
+
+	uint32_t timed_out_retry_aux;
+	uint32_t invalid_reply_retry_aux;
+	uint32_t defer_retry_aux;
+	uint32_t defer_retry_i2c;
+	uint32_t invalid_reply_retry_aux_on_ack;
+
+	bool transaction_complete;
+	bool operation_succeeded;
+};
+
+struct write_command_context {
+	bool mot;
+
+	uint8_t *buffer;
+	uint32_t current_write_length;
+	enum i2caux_transaction_status status;
+
+	struct aux_request_transaction_data request;
+	struct aux_reply_transaction_data reply;
+
+	uint8_t returned_byte;
+
+	uint32_t timed_out_retry_aux;
+	uint32_t invalid_reply_retry_aux;
+	uint32_t defer_retry_aux;
+	uint32_t defer_retry_i2c;
+	uint32_t max_defer_retry;
+	uint32_t ack_m_retry;
+
+	uint8_t reply_data[DEFAULT_AUX_MAX_DATA_SIZE];
+
+	bool transaction_complete;
+	bool operation_succeeded;
+};
+
+
+struct aux_engine_funcs {
+	void (*destroy)(
+		struct aux_engine **ptr);
+	bool (*acquire_engine)(
+		struct aux_engine *engine);
+	void (*configure)(
+		struct aux_engine *engine,
+		union aux_config cfg);
+	void (*submit_channel_request)(
+		struct aux_engine *engine,
+		struct aux_request_transaction_data *request);
+	void (*process_channel_reply)(
+		struct aux_engine *engine,
+		struct aux_reply_transaction_data *reply);
+	int (*read_channel_reply)(
+		struct aux_engine *engine,
+		uint32_t size,
+		uint8_t *buffer,
+		uint8_t *reply_result,
+		uint32_t *sw_status);
+	enum aux_channel_operation_result (*get_channel_status)(
+		struct aux_engine *engine,
+		uint8_t *returned_bytes);
+	bool (*is_engine_available)(struct aux_engine *engine);
+	enum i2caux_engine_type (*get_engine_type)(
+		const struct aux_engine *engine);
+	bool (*acquire)(
+		struct aux_engine *engine,
+		struct ddc *ddc);
+	bool (*submit_request)(
+		struct aux_engine *engine,
+		struct i2caux_transaction_request *request,
+		bool middle_of_transaction);
+	void (*release_engine)(
+		struct aux_engine *engine);
+	void (*destroy_engine)(
+		struct aux_engine **engine);
+};
 #endif
