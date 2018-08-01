@@ -407,12 +407,11 @@ void amdgpu_ctx_priority_override(struct amdgpu_ctx *ctx,
 	for (i = 0; i < adev->num_rings; i++) {
 		ring = adev->rings[i];
 		entity = &ctx->rings[i].entity;
-		rq = &ring->sched.sched_rq[ctx_prio];
 
 		if (ring->funcs->type == AMDGPU_RING_TYPE_KIQ)
 			continue;
 
-		drm_sched_entity_set_rq(entity, rq);
+		drm_sched_entity_set_priority(entity, ctx_prio);
 	}
 }
 
