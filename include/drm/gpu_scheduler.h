@@ -50,7 +50,10 @@ enum drm_sched_priority {
  *
  * @list: used to append this struct to the list of entities in the
  *        runqueue.
- * @rq: runqueue to which this entity belongs.
+ * @rq: runqueue on which this entity is currently scheduled.
+ * @rq_list: a list of run queues on which jobs from this entity can
+ *           be scheduled
+ * @num_rq_list: number of run queues in the rq_list
  * @rq_lock: lock to modify the runqueue to which this entity belongs.
  * @job_queue: the list of jobs of this entity.
  * @fence_seq: a linearly increasing seqno incremented with each
@@ -66,6 +69,7 @@ enum drm_sched_priority {
  * @guilty: points to ctx's guilty.
  * @fini_status: contains the exit status in case the process was signalled.
  * @last_scheduled: points to the finished fence of the last scheduled job.
+ * @last_user: last group leader pushing a job into the entity.
  *
  * Entities will emit jobs in order to their corresponding hardware
  * ring, and the scheduler will alternate between entities based on
@@ -74,6 +78,8 @@ enum drm_sched_priority {
 struct drm_sched_entity {
 	struct list_head		list;
 	struct drm_sched_rq		*rq;
+	struct drm_sched_rq		**rq_list;
+	unsigned int                    num_rq_list;
 	spinlock_t			rq_lock;
 
 	struct spsc_queue		job_queue;
@@ -85,6 +91,7 @@ struct drm_sched_entity {
 	struct dma_fence_cb		cb;
 	atomic_t			*guilty;
 	struct dma_fence                *last_scheduled;
+	struct task_struct		*last_user;
 };
 
 /**
@@ -255,6 +262,7 @@ struct drm_sched_backend_ops {
  * @job_list_lock: lock to protect the ring_mirror_list.
  * @hang_limit: once the hangs by a job crosses this limit then it is marked
  *              guilty and it will be considered for scheduling further.
+ * @num_jobs: the number of jobs in queue in the scheduler
  *
  * One scheduler is implemented for each hardware ring.
  */
@@ -272,6 +280,7 @@ struct drm_gpu_scheduler {
 	struct list_head		ring_mirror_list;
 	spinlock_t			job_list_lock;
 	int				hang_limit;
+	atomic_t                        num_jobs;
 };
 
 int drm_sched_init(struct drm_gpu_scheduler *sched,
