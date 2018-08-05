@@ -32,6 +32,7 @@
 #include "amdgpu.h"
 #include "amdgpu_trace.h"
 #include "amdgpu_gmc.h"
+#include "amdgpu_gem.h"
 
 static int amdgpu_cs_user_fence_chunk(struct amdgpu_cs_parser *p,
 				      struct drm_amdgpu_cs_chunk_fence *data,
@@ -561,27 +562,37 @@ static int amdgpu_cs_parser_bos(struct amdgpu_cs_parser *p,
 				union drm_amdgpu_cs *cs)
 {
 	struct amdgpu_fpriv *fpriv = p->filp->driver_priv;
+	struct amdgpu_vm *vm = &fpriv->vm;
 	struct amdgpu_bo_list_entry *e;
 	struct list_head duplicates;
-	unsigned i, tries = 10;
 	struct amdgpu_bo *gds;
 	struct amdgpu_bo *gws;
 	struct amdgpu_bo *oa;
+	unsigned tries = 10;
 	int r;
 
 	INIT_LIST_HEAD(&p->validated);
 
 	/* p->bo_list could already be assigned if AMDGPU_CHUNK_ID_BO_HANDLES is present */
-	if (!p->bo_list)
-		p->bo_list = amdgpu_bo_list_get(fpriv, cs->in.bo_list_handle);
-	else
-		mutex_lock(&p->bo_list->lock);
+	if (cs->in.bo_list_handle) {
+		if (p->bo_list)
+			return -EINVAL;
 
-	if (p->bo_list) {
-		amdgpu_bo_list_get_list(p->bo_list, &p->validated);
-		if (p->bo_list->first_userptr != p->bo_list->num_entries)
-			p->mn = amdgpu_mn_get(p->adev, AMDGPU_MN_TYPE_GFX);
+		r = amdgpu_bo_list_get(fpriv, cs->in.bo_list_handle,
+				       &p->bo_list);
+		if (r)
+			return r;
+	} else if (!p->bo_list) {
+		/* Create a empty bo_list when no handle is provided */
+		r = amdgpu_bo_list_create(p->adev, p->filp, NULL, 0,
+					  &p->bo_list);
+		if (r)
+			return r;
 	}
+
+	amdgpu_bo_list_get_list(p->bo_list, &p->validated);
+	if (p->bo_list->first_userptr != p->bo_list->num_entries)
+		p->mn = amdgpu_mn_get(p->adev, AMDGPU_MN_TYPE_GFX);
 
 	INIT_LIST_HEAD(&duplicates);
 	amdgpu_vm_get_pd_bo(&fpriv->vm, &p->validated, &p->vm_pd);
@@ -591,7 +602,6 @@ static int amdgpu_cs_parser_bos(struct amdgpu_cs_parser *p,
 
 	while (1) {
 		struct list_head need_pages;
-		unsigned i;
 
 		r = ttm_eu_reserve_buffers(&p->ticket, &p->validated, true,
 					   &duplicates);
@@ -601,17 +611,9 @@ static int amdgpu_cs_parser_bos(struct amdgpu_cs_parser *p,
 			goto error_free_pages;
 		}
 
-		/* Without a BO list we don't have userptr BOs */
-		if (!p->bo_list)
-			break;
-
 		INIT_LIST_HEAD(&need_pages);
-		for (i = p->bo_list->first_userptr;
-		     i < p->bo_list->num_entries; ++i) {
-			struct amdgpu_bo *bo;
-
-			e = &p->bo_list->array[i];
-			bo = e->robj;
+		amdgpu_bo_list_for_each_userptr_entry(e, p->bo_list) {
+			struct amdgpu_bo *bo = e->robj;
 
 			if (amdgpu_ttm_tt_userptr_invalidated(bo->tbo.ttm,
 				 &e->user_invalidated) && e->user_pages) {
@@ -703,23 +705,12 @@ static int amdgpu_cs_parser_bos(struct amdgpu_cs_parser *p,
 	amdgpu_cs_report_moved_bytes(p->adev, p->bytes_moved,
 				     p->bytes_moved_vis);
 
-	if (p->bo_list) {
-		struct amdgpu_vm *vm = &fpriv->vm;
-		unsigned i;
+	gds = p->bo_list->gds_obj;
+	gws = p->bo_list->gws_obj;
+	oa = p->bo_list->oa_obj;
 
-		gds = p->bo_list->gds_obj;
-		gws = p->bo_list->gws_obj;
-		oa = p->bo_list->oa_obj;
-		for (i = 0; i < p->bo_list->num_entries; i++) {
-			struct amdgpu_bo *bo = p->bo_list->array[i].robj;
-
-			p->bo_list->array[i].bo_va = amdgpu_vm_bo_find(vm, bo);
-		}
-	} else {
-		gds = p->adev->gds.gds_gfx_bo;
-		gws = p->adev->gds.gws_gfx_bo;
-		oa = p->adev->gds.oa_gfx_bo;
-	}
+	amdgpu_bo_list_for_each_entry(e, p->bo_list)
+		e->bo_va = amdgpu_vm_bo_find(vm, e->robj);
 
 	if (gds) {
 		p->job->gds_base = amdgpu_bo_gpu_offset(gds);
@@ -747,18 +738,13 @@ error_validate:
 
 error_free_pages:
 
-	if (p->bo_list) {
-		for (i = p->bo_list->first_userptr;
-		     i < p->bo_list->num_entries; ++i) {
-			e = &p->bo_list->array[i];
+	amdgpu_bo_list_for_each_userptr_entry(e, p->bo_list) {
+		if (!e->user_pages)
+			continue;
 
-			if (!e->user_pages)
-				continue;
-
-			release_pages(e->user_pages,
-				      e->robj->tbo.ttm->num_pages);
-			kvfree(e->user_pages);
-		}
+		release_pages(e->user_pages,
+			      e->robj->tbo.ttm->num_pages);
+		kvfree(e->user_pages);
 	}
 
 	return r;
@@ -820,12 +806,13 @@ static void amdgpu_cs_parser_fini(struct amdgpu_cs_parser *parser, int error,
 
 static int amdgpu_bo_vm_update_pte(struct amdgpu_cs_parser *p)
 {
-	struct amdgpu_device *adev = p->adev;
 	struct amdgpu_fpriv *fpriv = p->filp->driver_priv;
+	struct amdgpu_device *adev = p->adev;
 	struct amdgpu_vm *vm = &fpriv->vm;
+	struct amdgpu_bo_list_entry *e;
 	struct amdgpu_bo_va *bo_va;
 	struct amdgpu_bo *bo;
-	int i, r;
+	int r;
 
 	r = amdgpu_vm_clear_freed(adev, vm, NULL);
 	if (r)
@@ -855,29 +842,26 @@ static int amdgpu_bo_vm_update_pte(struct amdgpu_cs_parser *p)
 			return r;
 	}
 
-	if (p->bo_list) {
-		for (i = 0; i < p->bo_list->num_entries; i++) {
-			struct dma_fence *f;
+	amdgpu_bo_list_for_each_entry(e, p->bo_list) {
+		struct dma_fence *f;
 
-			/* ignore duplicates */
-			bo = p->bo_list->array[i].robj;
-			if (!bo)
-				continue;
+		/* ignore duplicates */
+		bo = e->robj;
+		if (!bo)
+			continue;
 
-			bo_va = p->bo_list->array[i].bo_va;
-			if (bo_va == NULL)
-				continue;
+		bo_va = e->bo_va;
+		if (bo_va == NULL)
+			continue;
 
-			r = amdgpu_vm_bo_update(adev, bo_va, false);
-			if (r)
-				return r;
+		r = amdgpu_vm_bo_update(adev, bo_va, false);
+		if (r)
+			return r;
 
-			f = bo_va->last_pt_update;
-			r = amdgpu_sync_fence(adev, &p->job->sync, f, false);
-			if (r)
-				return r;
-		}
-
+		f = bo_va->last_pt_update;
+		r = amdgpu_sync_fence(adev, &p->job->sync, f, false);
+		if (r)
+			return r;
 	}
 
 	r = amdgpu_vm_handle_moved(adev, vm);
@@ -892,15 +876,14 @@ static int amdgpu_bo_vm_update_pte(struct amdgpu_cs_parser *p)
 	if (r)
 		return r;
 
-	if (amdgpu_vm_debug && p->bo_list) {
+	if (amdgpu_vm_debug) {
 		/* Invalidate all BOs to test for userspace bugs */
-		for (i = 0; i < p->bo_list->num_entries; i++) {
+		amdgpu_bo_list_for_each_entry(e, p->bo_list) {
 			/* ignore duplicates */
-			bo = p->bo_list->array[i].robj;
-			if (!bo)
+			if (!e->robj)
 				continue;
 
-			amdgpu_vm_bo_invalidate(adev, bo, false);
+			amdgpu_vm_bo_invalidate(adev, e->robj, false);
 		}
 	}
 
@@ -1215,25 +1198,23 @@ static void amdgpu_cs_post_dependencies(struct amdgpu_cs_parser *p)
 static int amdgpu_cs_submit(struct amdgpu_cs_parser *p,
 			    union drm_amdgpu_cs *cs)
 {
+	struct amdgpu_fpriv *fpriv = p->filp->driver_priv;
 	struct amdgpu_ring *ring = p->ring;
 	struct drm_sched_entity *entity = &p->ctx->rings[ring->idx].entity;
 	enum drm_sched_priority priority;
+	struct amdgpu_bo_list_entry *e;
 	struct amdgpu_job *job;
-	unsigned i;
 	uint64_t seq;
 
 	int r;
 
 	amdgpu_mn_lock(p->mn);
-	if (p->bo_list) {
-		for (i = p->bo_list->first_userptr;
-		     i < p->bo_list->num_entries; ++i) {
-			struct amdgpu_bo *bo = p->bo_list->array[i].robj;
+	amdgpu_bo_list_for_each_userptr_entry(e, p->bo_list) {
+		struct amdgpu_bo *bo = e->robj;
 
-			if (amdgpu_ttm_tt_userptr_needs_pages(bo->tbo.ttm)) {
-				amdgpu_mn_unlock(p->mn);
-				return -ERESTARTSYS;
-			}
+		if (amdgpu_ttm_tt_userptr_needs_pages(bo->tbo.ttm)) {
+			amdgpu_mn_unlock(p->mn);
+			return -ERESTARTSYS;
 		}
 	}
 
@@ -1267,6 +1248,7 @@ static int amdgpu_cs_submit(struct amdgpu_cs_parser *p,
 	amdgpu_job_free_resources(job);
 
 	trace_amdgpu_cs_ioctl(job);
+	amdgpu_vm_bo_trace_cs(&fpriv->vm, &p->ticket);
 	priority = job->base.s_priority;
 	drm_sched_entity_push_job(&job->base, entity);
 

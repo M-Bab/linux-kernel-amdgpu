@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-16 Advanced Micro Devices, Inc.
+ * Copyright 2018 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,45 +19,26 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
- * Authors: AMD
- *
+ */
+#include <drm/drmP.h>
+#include "amdgpu.h"
+#include "amdgpu_sdma.h"
+
+/*
+ * GPU SDMA IP block helpers function.
  */
 
-#ifndef __DISPLAY_CLOCK_H__
-#define __DISPLAY_CLOCK_H__
+struct amdgpu_sdma_instance * amdgpu_get_sdma_instance(struct amdgpu_ring *ring)
+{
+	struct amdgpu_device *adev = ring->adev;
+	int i;
 
-#include "dm_services_types.h"
-#include "dc.h"
+	for (i = 0; i < adev->sdma.num_instances; i++)
+		if (&adev->sdma.instance[i].ring == ring)
+			break;
 
-/* Structure containing all state-dependent clocks
- * (dependent on "enum clocks_state") */
-struct state_dependent_clocks {
-	int display_clk_khz;
-	int pixel_clk_khz;
-};
-
-struct dccg {
-	struct dc_context *ctx;
-	const struct display_clock_funcs *funcs;
-
-	enum dm_pp_clocks_state max_clks_state;
-	enum dm_pp_clocks_state cur_min_clks_state;
-	struct dc_clocks clks;
-};
-
-struct display_clock_funcs {
-	void (*update_clocks)(struct dccg *dccg,
-			struct dc_clocks *new_clocks,
-			bool safe_to_lower);
-	int (*set_dispclk)(struct dccg *dccg,
-		int requested_clock_khz);
-
-	int (*get_dp_ref_clk_frequency)(struct dccg *dccg);
-
-	bool (*update_dfs_bypass)(struct dccg *dccg,
-		struct dc *dc,
-		struct dc_state *context,
-		int requested_clock_khz);
-};
-
-#endif /* __DISPLAY_CLOCK_H__ */
+	if (i < AMDGPU_MAX_SDMA_INSTANCES)
+		return &adev->sdma.instance[i];
+	else
+		return NULL;
+}

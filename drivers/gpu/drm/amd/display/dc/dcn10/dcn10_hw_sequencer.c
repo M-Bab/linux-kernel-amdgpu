@@ -1228,8 +1228,11 @@ static bool dcn10_set_input_transfer_func(struct pipe_ctx *pipe_ctx,
 	} else if (tf->type == TF_TYPE_BYPASS) {
 		dpp_base->funcs->dpp_set_degamma(dpp_base, IPP_DEGAMMA_MODE_BYPASS);
 	} else {
-		/*TF_TYPE_DISTRIBUTED_POINTS*/
-		result = false;
+		cm_helper_translate_curve_to_degamma_hw_format(tf,
+					&dpp_base->degamma_params);
+		dpp_base->funcs->dpp_program_degamma_pwl(dpp_base,
+				&dpp_base->degamma_params);
+		result = true;
 	}
 
 	return result;
@@ -2014,6 +2017,7 @@ static void update_dchubp_dpp(
 	struct dpp *dpp = pipe_ctx->plane_res.dpp;
 	struct dc_plane_state *plane_state = pipe_ctx->plane_state;
 	union plane_size size = plane_state->plane_size;
+	unsigned int compat_level = 0;
 
 	/* depends on DML calculation, DPP clock value may change dynamically */
 	/* If request max dpp clk is lower than current dispclk, no need to
@@ -2105,7 +2109,8 @@ static void update_dchubp_dpp(
 			&size,
 			plane_state->rotation,
 			&plane_state->dcc,
-			plane_state->horizontal_mirror);
+			plane_state->horizontal_mirror,
+			compat_level);
 	}
 
 	hubp->power_gated = false;
