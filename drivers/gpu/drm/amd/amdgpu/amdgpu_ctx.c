@@ -394,7 +394,6 @@ void amdgpu_ctx_priority_override(struct amdgpu_ctx *ctx,
 {
 	int i;
 	struct amdgpu_device *adev = ctx->adev;
-	struct drm_sched_rq *rq;
 	struct drm_sched_entity *entity;
 	struct amdgpu_ring *ring;
 	enum drm_sched_priority ctx_prio;
