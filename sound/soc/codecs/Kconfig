@@ -600,7 +600,8 @@ config SND_SOC_CS35L36
 	depends on I2C
 
 config SND_SOC_CS35L41
-	tristate
+        tristate "Cirrus Logic CS35L41 CODEC"
+        select SND_SOC_WM_ADSP
 
 config SND_SOC_CS35L41_SPI
 	tristate "Cirrus Logic CS35L41 CODEC (SPI)"
