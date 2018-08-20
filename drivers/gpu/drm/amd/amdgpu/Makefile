@@ -51,8 +51,7 @@ amdgpu-y += amdgpu_device.o amdgpu_kms.o \
 	amdgpu_prime.o amdgpu_vm.o amdgpu_ib.o amdgpu_pll.o \
 	amdgpu_ucode.o amdgpu_bo_list.o amdgpu_ctx.o amdgpu_sync.o \
 	amdgpu_gtt_mgr.o amdgpu_vram_mgr.o amdgpu_virt.o amdgpu_atomfirmware.o \
-	amdgpu_queue_mgr.o amdgpu_vf_error.o amdgpu_sched.o amdgpu_debugfs.o \
-	amdgpu_ids.o
+	amdgpu_vf_error.o amdgpu_sched.o amdgpu_debugfs.o amdgpu_ids.o
 
 # add asic specific block
 amdgpu-$(CONFIG_DRM_AMDGPU_CIK)+= cik.o cik_ih.o kv_smc.o kv_dpm.o \
@@ -62,7 +61,7 @@ amdgpu-$(CONFIG_DRM_AMDGPU_SI)+= si.o gmc_v6_0.o gfx_v6_0.o si_ih.o si_dma.o dce
 
 amdgpu-y += \
 	vi.o mxgpu_vi.o nbio_v6_1.o soc15.o emu_soc.o mxgpu_ai.o nbio_v7_0.o vega10_reg_init.o \
-	vega20_reg_init.o
+	vega20_reg_init.o nbio_v7_4.o
 
 # add DF block
 amdgpu-y += \
@@ -88,7 +87,8 @@ amdgpu-y += \
 amdgpu-y += \
 	amdgpu_psp.o \
 	psp_v3_1.o \
-	psp_v10_0.o
+	psp_v10_0.o \
+	psp_v11_0.o
 
 # add SMC block
 amdgpu-y += \

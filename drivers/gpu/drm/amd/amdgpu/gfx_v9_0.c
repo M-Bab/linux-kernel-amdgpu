@@ -82,7 +82,7 @@ MODULE_FIRMWARE("amdgpu/raven_rlc.bin");
 
 static const struct soc15_reg_golden golden_settings_gc_9_0[] =
 {
-	SOC15_REG_GOLDEN_VALUE(GC, 0, mmDB_DEBUG2, 0xf00fffff, 0x00000420),
+	SOC15_REG_GOLDEN_VALUE(GC, 0, mmDB_DEBUG2, 0xf00fffff, 0x00000400),
 	SOC15_REG_GOLDEN_VALUE(GC, 0, mmGB_GPU_ID, 0x0000000f, 0x00000000),
 	SOC15_REG_GOLDEN_VALUE(GC, 0, mmPA_SC_BINNER_EVENT_CNTL_3, 0x00000003, 0x82400024),
 	SOC15_REG_GOLDEN_VALUE(GC, 0, mmPA_SC_ENHANCE, 0x3fffffff, 0x00000001),
@@ -3242,9 +3242,6 @@ static int gfx_v9_0_hw_fini(void *handle)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	int i;
 
-	amdgpu_device_ip_set_powergating_state(adev, AMD_IP_BLOCK_TYPE_GFX,
-					       AMD_PG_STATE_UNGATE);
-
 	amdgpu_irq_put(adev, &adev->gfx.priv_reg_irq, 0);
 	amdgpu_irq_put(adev, &adev->gfx.priv_inst_irq, 0);
 
@@ -3763,6 +3760,10 @@ static int gfx_v9_0_set_powergating_state(void *handle,
 
 	switch (adev->asic_type) {
 	case CHIP_RAVEN:
+		if (!enable) {
+			amdgpu_gfx_off_ctrl(adev, false);
+			cancel_delayed_work_sync(&adev->gfx.gfx_off_delay_work);
+		}
 		if (adev->pg_flags & AMD_PG_SUPPORT_RLC_SMU_HS) {
 			gfx_v9_0_enable_sck_slow_down_on_power_up(adev, true);
 			gfx_v9_0_enable_sck_slow_down_on_power_down(adev, true);
@@ -3782,12 +3783,16 @@ static int gfx_v9_0_set_powergating_state(void *handle,
 		/* update mgcg state */
 		gfx_v9_0_update_gfx_mg_power_gating(adev, enable);
 
-		/* set gfx off through smu */
-		amdgpu_gfx_off_ctrl(adev, true);
+		if (enable)
+			amdgpu_gfx_off_ctrl(adev, true);
 		break;
 	case CHIP_VEGA12:
-		/* set gfx off through smu */
-		amdgpu_gfx_off_ctrl(adev, true);
+		if (!enable) {
+			amdgpu_gfx_off_ctrl(adev, false);
+			cancel_delayed_work_sync(&adev->gfx.gfx_off_delay_work);
+		} else {
+			amdgpu_gfx_off_ctrl(adev, true);
+		}
 		break;
 	default:
 		break;
