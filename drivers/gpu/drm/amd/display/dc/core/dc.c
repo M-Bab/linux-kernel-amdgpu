@@ -357,6 +357,23 @@ void dc_stream_set_dither_option(struct dc_stream_state *stream,
 		opp_program_bit_depth_reduction(pipes->stream_res.opp, &params);
 }
 
+bool dc_stream_set_gamut_remap(struct dc *dc, const struct dc_stream_state *stream)
+{
+	int i = 0;
+	bool ret = false;
+	struct pipe_ctx *pipes;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (dc->current_state->res_ctx.pipe_ctx[i].stream == stream) {
+			pipes = &dc->current_state->res_ctx.pipe_ctx[i];
+			dc->hwss.program_gamut_remap(pipes);
+			ret = true;
+		}
+	}
+
+	return ret;
+}
+
 void dc_stream_set_static_screen_events(struct dc *dc,
 		struct dc_stream_state **streams,
 		int num_streams,
@@ -1093,6 +1110,9 @@ static enum surface_update_type get_plane_info_update_type(const struct dc_surfa
 	if (u->plane_info->per_pixel_alpha != u->surface->per_pixel_alpha)
 		update_flags->bits.per_pixel_alpha_change = 1;
 
+	if (u->plane_info->global_alpha_value != u->surface->global_alpha_value)
+		update_flags->bits.global_alpha_change = 1;
+
 	if (u->plane_info->dcc.enable != u->surface->dcc.enable
 			|| u->plane_info->dcc.grph.independent_64b_blks != u->surface->dcc.grph.independent_64b_blks
 			|| u->plane_info->dcc.grph.meta_pitch != u->surface->dcc.grph.meta_pitch)
@@ -1349,6 +1369,9 @@ static void commit_planes_do_stream_update(struct dc *dc,
 				resource_build_info_frame(pipe_ctx);
 				dc->hwss.update_info_frame(pipe_ctx);
 			}
+
+			if (stream_update->gamut_remap)
+				dc_stream_set_gamut_remap(dc, stream);
 
 			/* Full fe update*/
 			if (update_type == UPDATE_TYPE_FAST)

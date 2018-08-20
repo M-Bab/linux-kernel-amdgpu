@@ -38,7 +38,7 @@
 #include "inc/compressor.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.1.60"
+#define DC_VER "3.1.62"
 
 #define MAX_SURFACES 3
 #define MAX_STREAMS 6
@@ -442,6 +442,7 @@ union surface_update_flags {
 		uint32_t color_space_change:1;
 		uint32_t horizontal_mirror_change:1;
 		uint32_t per_pixel_alpha_change:1;
+		uint32_t global_alpha_change:1;
 		uint32_t rotation_change:1;
 		uint32_t swizzle_change:1;
 		uint32_t scaling_change:1;
@@ -496,6 +497,8 @@ struct dc_plane_state {
 
 	bool is_tiling_rotated;
 	bool per_pixel_alpha;
+	bool global_alpha;
+	int  global_alpha_value;
 	bool visible;
 	bool flip_immediate;
 	bool horizontal_mirror;
@@ -522,6 +525,8 @@ struct dc_plane_info {
 	bool horizontal_mirror;
 	bool visible;
 	bool per_pixel_alpha;
+	bool global_alpha;
+	int  global_alpha_value;
 	bool input_csc_enabled;
 };
 

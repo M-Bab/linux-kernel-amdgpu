@@ -268,23 +268,29 @@ bool resource_construct(
 
 	return true;
 }
+static int find_matching_clock_source(
+		const struct resource_pool *pool,
+		struct clock_source *clock_source)
+{
 
+	int i;
+
+	for (i = 0; i < pool->clk_src_count; i++) {
+		if (pool->clock_sources[i] == clock_source)
+			return i;
+	}
+	return -1;
+}
 
 void resource_unreference_clock_source(
 		struct resource_context *res_ctx,
 		const struct resource_pool *pool,
 		struct clock_source *clock_source)
 {
-	int i;
+	int i = find_matching_clock_source(pool, clock_source);
 
-	for (i = 0; i < pool->clk_src_count; i++) {
-		if (pool->clock_sources[i] != clock_source)
-			continue;
-
+	if (i > -1)
 		res_ctx->clock_source_ref_count[i]--;
-
-		break;
-	}
 
 	if (pool->dp_clock_source == clock_source)
 		res_ctx->dp_clock_source_ref_count--;
@@ -295,17 +301,29 @@ void resource_reference_clock_source(
 		const struct resource_pool *pool,
 		struct clock_source *clock_source)
 {
-	int i;
-	for (i = 0; i < pool->clk_src_count; i++) {
-		if (pool->clock_sources[i] != clock_source)
-			continue;
+	int i = find_matching_clock_source(pool, clock_source);
 
+	if (i > -1)
 		res_ctx->clock_source_ref_count[i]++;
-		break;
-	}
 
 	if (pool->dp_clock_source == clock_source)
 		res_ctx->dp_clock_source_ref_count++;
+}
+
+int resource_get_clock_source_reference(
+		struct resource_context *res_ctx,
+		const struct resource_pool *pool,
+		struct clock_source *clock_source)
+{
+	int i = find_matching_clock_source(pool, clock_source);
+
+	if (i > -1)
+		return res_ctx->clock_source_ref_count[i];
+
+	if (pool->dp_clock_source == clock_source)
+		return res_ctx->dp_clock_source_ref_count;
+
+	return -1;
 }
 
 bool resource_are_streams_timing_synchronizable(
@@ -372,11 +390,11 @@ static bool is_sharable_clk_src(
 		return false;
 
 	if (dc_is_hdmi_signal(pipe_with_clk_src->stream->signal)
-			&& dc_is_dvi_signal(pipe->stream->signal))
+			&& dc_is_dual_link_signal(pipe->stream->signal))
 		return false;
 
 	if (dc_is_hdmi_signal(pipe->stream->signal)
-			&& dc_is_dvi_signal(pipe_with_clk_src->stream->signal))
+			&& dc_is_dual_link_signal(pipe_with_clk_src->stream->signal))
 		return false;
 
 	if (!resource_are_streams_timing_synchronizable(
@@ -571,8 +589,10 @@ static void calculate_viewport(struct pipe_ctx *pipe_ctx)
 		data->viewport.width = (data->viewport.width + 1) / 2;
 		data->viewport_c.width = (data->viewport_c.width + 1) / 2;
 	} else if (pri_split) {
-		data->viewport.width /= 2;
-		data->viewport_c.width /= 2;
+		if (data->viewport.width > 1)
+			data->viewport.width /= 2;
+		if (data->viewport_c.width > 1)
+			data->viewport_c.width /= 2;
 	}
 
 	if (plane_state->rotation == ROTATION_ANGLE_90 ||
@@ -652,7 +672,8 @@ static void calculate_recout(struct pipe_ctx *pipe_ctx, struct rect *recout_full
 			pipe_ctx->plane_res.scl_data.recout.width =
 					(pipe_ctx->plane_res.scl_data.recout.width + 1) / 2;
 		} else {
-			pipe_ctx->plane_res.scl_data.recout.width /= 2;
+			if (pipe_ctx->plane_res.scl_data.recout.width > 1)
+				pipe_ctx->plane_res.scl_data.recout.width /= 2;
 		}
 	}
 	/* Unclipped recout offset = stream dst offset + ((surf dst offset - stream surf_src offset)
