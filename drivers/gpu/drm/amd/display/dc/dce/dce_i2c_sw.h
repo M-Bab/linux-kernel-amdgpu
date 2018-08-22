@@ -1,5 +1,5 @@
 /*
-* Copyright 2016 Advanced Micro Devices, Inc.
+ * Copyright 2018 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,32 +23,35 @@
  *
  */
 
-#ifndef __DC_HWSS_DCN10_H__
-#define __DC_HWSS_DCN10_H__
+#ifndef __DCE_I2C_SW_H__
+#define __DCE_I2C_SW_H__
 
-#include "core_types.h"
+enum {
+	DCE_I2C_DEFAULT_I2C_SW_SPEED = 50,
+	I2C_SW_RETRIES = 10,
+	I2C_SW_TIMEOUT_DELAY = 3000,
+};
 
-struct dc;
+struct dce_i2c_sw {
+	struct ddc *ddc;
+	struct dc_context *ctx;
+	uint32_t clock_delay;
+	uint32_t speed;
+};
 
-void dcn10_hw_sequencer_construct(struct dc *dc);
-extern void fill_display_configs(
-	const struct dc_state *context,
-	struct dm_pp_display_configuration *pp_display_cfg);
+void dce_i2c_sw_construct(
+	struct dce_i2c_sw *dce_i2c_sw,
+	struct dc_context *ctx);
 
-bool is_rgb_cspace(enum dc_color_space output_color_space);
+bool dce_i2c_submit_command_sw(
+	struct resource_pool *pool,
+	struct ddc *ddc,
+	struct i2c_command *cmd,
+	struct dce_i2c_sw *dce_i2c_sw);
 
-void hwss1_plane_atomic_disconnect(struct dc *dc, struct pipe_ctx *pipe_ctx);
+struct dce_i2c_sw *dce_i2c_acquire_i2c_sw_engine(
+	struct resource_pool *pool,
+	struct ddc *ddc);
 
-void dcn10_verify_allow_pstate_change_high(struct dc *dc);
+#endif
 
-void dcn10_program_pipe(
-		struct dc *dc,
-		struct pipe_ctx *pipe_ctx,
-		struct dc_state *context);
-
-void dcn10_get_hw_state(
-		struct dc *dc,
-		char *pBuf, unsigned int bufSize,
-		unsigned int mask);
-
-#endif /* __DC_HWSS_DCN10_H__ */

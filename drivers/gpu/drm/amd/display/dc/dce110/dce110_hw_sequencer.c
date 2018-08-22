@@ -1250,7 +1250,7 @@ static void program_scaler(const struct dc *dc,
 {
 	struct tg_color color = {0};
 
-#ifdef CONFIG_X86
+#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 	/* TOFPGA */
 	if (pipe_ctx->plane_res.xfm->funcs->transform_set_pixel_storage_depth == NULL)
 		return;
@@ -1557,26 +1557,33 @@ static struct dc_link *get_link_for_edp_not_in_use(
  */
 void dce110_enable_accelerated_mode(struct dc *dc, struct dc_state *context)
 {
+	int i;
 	struct dc_link *edp_link_to_turnoff = NULL;
 	struct dc_link *edp_link = get_link_for_edp(dc);
-	bool can_eDP_fast_boot_optimize = false;
+	bool can_edp_fast_boot_optimize = false;
+	bool apply_edp_fast_boot_optimization = false;
 
-	if (edp_link) {
-		can_eDP_fast_boot_optimize =
-				edp_link->link_enc->funcs->is_dig_enabled(edp_link->link_enc);
-	}
+	if (edp_link)
+		can_edp_fast_boot_optimize =
+			edp_link->link_enc->funcs->is_dig_enabled(edp_link->link_enc);
 
-	if (can_eDP_fast_boot_optimize) {
+	if (can_edp_fast_boot_optimize)
 		edp_link_to_turnoff = get_link_for_edp_not_in_use(dc, context);
 
-		/* if OS doesn't light up eDP and eDP link is available, we want to disable
-		 * If resume from S4/S5, should optimization.
-		 */
-		if (!edp_link_to_turnoff)
-			dc->apply_edp_fast_boot_optimization = true;
+	/* if OS doesn't light up eDP and eDP link is available, we want to disable
+	 * If resume from S4/S5, should optimization.
+	 */
+	if (can_edp_fast_boot_optimize && !edp_link_to_turnoff) {
+		/* Find eDP stream and set optimization flag */
+		for (i = 0; i < context->stream_count; i++) {
+			if (context->streams[i]->signal == SIGNAL_TYPE_EDP) {
+				context->streams[i]->apply_edp_fast_boot_optimization = true;
+				apply_edp_fast_boot_optimization = true;
+			}
+		}
 	}
 
-	if (!dc->apply_edp_fast_boot_optimization) {
+	if (!apply_edp_fast_boot_optimization) {
 		if (edp_link_to_turnoff) {
 			/*turn off backlight before DP_blank and encoder powered down*/
 			dc->hwss.edp_backlight_control(edp_link_to_turnoff, false);

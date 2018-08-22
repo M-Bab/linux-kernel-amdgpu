@@ -1,5 +1,5 @@
 /*
-* Copyright 2016 Advanced Micro Devices, Inc.
+ * Copyright 2018 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -22,33 +22,39 @@
  * Authors: AMD
  *
  */
+#include "dce_i2c.h"
+#include "reg_helper.h"
 
-#ifndef __DC_HWSS_DCN10_H__
-#define __DC_HWSS_DCN10_H__
+bool dce_i2c_submit_command(
+	struct resource_pool *pool,
+	struct ddc *ddc,
+	struct i2c_command *cmd)
+{
+	struct dce_i2c_hw *dce_i2c_hw;
+	struct dce_i2c_sw *dce_i2c_sw;
 
-#include "core_types.h"
+	if (!ddc) {
+		BREAK_TO_DEBUGGER();
+		return false;
+	}
 
-struct dc;
+	if (!cmd) {
+		BREAK_TO_DEBUGGER();
+		return false;
+	}
 
-void dcn10_hw_sequencer_construct(struct dc *dc);
-extern void fill_display_configs(
-	const struct dc_state *context,
-	struct dm_pp_display_configuration *pp_display_cfg);
+	/* The software engine is only available on dce8 */
+	dce_i2c_sw = dce_i2c_acquire_i2c_sw_engine(pool, ddc);
 
-bool is_rgb_cspace(enum dc_color_space output_color_space);
+	if (!dce_i2c_sw) {
+		dce_i2c_hw = acquire_i2c_hw_engine(pool, ddc);
 
-void hwss1_plane_atomic_disconnect(struct dc *dc, struct pipe_ctx *pipe_ctx);
+		if (!dce_i2c_hw)
+			return false;
 
-void dcn10_verify_allow_pstate_change_high(struct dc *dc);
+		return dce_i2c_submit_command_hw(pool, ddc, cmd, dce_i2c_hw);
+	}
 
-void dcn10_program_pipe(
-		struct dc *dc,
-		struct pipe_ctx *pipe_ctx,
-		struct dc_state *context);
+	return dce_i2c_submit_command_sw(pool, ddc, cmd, dce_i2c_sw);
 
-void dcn10_get_hw_state(
-		struct dc *dc,
-		char *pBuf, unsigned int bufSize,
-		unsigned int mask);
-
-#endif /* __DC_HWSS_DCN10_H__ */
+}
