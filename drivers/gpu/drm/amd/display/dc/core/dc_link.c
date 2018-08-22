@@ -1042,15 +1042,15 @@ static bool construct(
 
 	link->link_id = bios->funcs->get_connector_id(bios, init_params->connector_index);
 
-	if (dc_ctx->dc_bios->integrated_info)
-		link->dp_ss_off = !!dc_ctx->dc_bios->integrated_info->dp_ss_control;
-
 	if (link->link_id.type != OBJECT_TYPE_CONNECTOR) {
 		dm_error("%s: Invalid Connector ObjectID from Adapter Service for connector index:%d! type %d expected %d\n",
 			 __func__, init_params->connector_index,
 			 link->link_id.type, OBJECT_TYPE_CONNECTOR);
 		goto create_fail;
 	}
+
+	if (link->dc->res_pool->funcs->link_init)
+		link->dc->res_pool->funcs->link_init(link);
 
 	hpd_gpio = get_hpd_gpio(link->ctx->dc_bios, link->link_id, link->ctx->gpio_service);
 
@@ -1530,8 +1530,8 @@ static bool i2c_write(struct pipe_ctx *pipe_ctx,
 	payload.write = true;
 	cmd.payloads = &payload;
 
-	if (dc_submit_i2c(pipe_ctx->stream->ctx->dc,
-			pipe_ctx->stream->sink->link->link_index, &cmd))
+	if (dm_helpers_submit_i2c(pipe_ctx->stream->ctx,
+			pipe_ctx->stream->sink->link, &cmd))
 		return true;
 
 	return false;
@@ -2497,8 +2497,8 @@ void core_link_enable_stream(
 
 	/* eDP lit up by bios already, no need to enable again. */
 	if (pipe_ctx->stream->signal == SIGNAL_TYPE_EDP &&
-		core_dc->apply_edp_fast_boot_optimization) {
-		core_dc->apply_edp_fast_boot_optimization = false;
+			pipe_ctx->stream->apply_edp_fast_boot_optimization) {
+		pipe_ctx->stream->apply_edp_fast_boot_optimization = false;
 		pipe_ctx->stream->dpms_off = false;
 		return;
 	}

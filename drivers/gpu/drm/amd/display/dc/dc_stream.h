@@ -102,6 +102,7 @@ struct dc_stream_state {
 	int phy_pix_clk;
 	enum signal_type signal;
 	bool dpms_off;
+	bool apply_edp_fast_boot_optimization;
 
 	struct dc_stream_status status;
 
@@ -136,6 +137,7 @@ struct dc_stream_update {
 	struct colorspace_transform *gamut_remap;
 	enum dc_color_space *output_color_space;
 
+	struct dc_csc_transform *output_csc_transform;
 
 };
 
@@ -305,6 +307,9 @@ void dc_stream_set_dither_option(struct dc_stream_state *stream,
 
 bool dc_stream_set_gamut_remap(struct dc *dc,
 			       const struct dc_stream_state *stream);
+
+bool dc_stream_program_csc_matrix(struct dc *dc,
+				  struct dc_stream_state *stream);
 
 bool dc_stream_get_crtc_position(struct dc *dc,
 				 struct dc_stream_state **stream,

@@ -1974,9 +1974,6 @@ static int amdgpu_device_ip_suspend_phase2(struct amdgpu_device *adev)
 {
 	int i, r;
 
-	if (amdgpu_sriov_vf(adev))
-		amdgpu_virt_request_full_gpu(adev, false);
-
 	for (i = adev->num_ip_blocks - 1; i >= 0; i--) {
 		if (!adev->ip_blocks[i].status.valid)
 			continue;
@@ -1991,9 +1988,6 @@ static int amdgpu_device_ip_suspend_phase2(struct amdgpu_device *adev)
 				  adev->ip_blocks[i].version->funcs->name, r);
 		}
 	}
-
-	if (amdgpu_sriov_vf(adev))
-		amdgpu_virt_release_full_gpu(adev, false);
 
 	return 0;
 }
@@ -2239,7 +2233,7 @@ bool amdgpu_device_asic_has_dc_support(enum amd_asic_type asic_type)
 	case CHIP_VEGA10:
 	case CHIP_VEGA12:
 	case CHIP_VEGA20:
-#ifdef CONFIG_X86
+#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 	case CHIP_RAVEN:
 #endif
 		return amdgpu_dc != 0;

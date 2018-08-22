@@ -52,6 +52,11 @@
 #include "dm_helpers.h"
 #include "mem_input.h"
 #include "hubp.h"
+
+#include "dc_link_dp.h"
+
+#include "dce/dce_i2c.h"
+
 #define DC_LOGGER \
 	dc->ctx->logger
 
@@ -374,6 +379,27 @@ bool dc_stream_set_gamut_remap(struct dc *dc, const struct dc_stream_state *stre
 	return ret;
 }
 
+bool dc_stream_program_csc_matrix(struct dc *dc, struct dc_stream_state *stream)
+{
+	int i = 0;
+	bool ret = false;
+	struct pipe_ctx *pipes;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (dc->current_state->res_ctx.pipe_ctx[i].stream
+				== stream) {
+
+			pipes = &dc->current_state->res_ctx.pipe_ctx[i];
+			dc->hwss.program_csc_matrix(pipes,
+			stream->output_color_space,
+			stream->csc_color_matrix.matrix);
+			ret = true;
+		}
+	}
+
+	return ret;
+}
+
 void dc_stream_set_static_screen_events(struct dc *dc,
 		struct dc_stream_state **streams,
 		int num_streams,
@@ -434,8 +460,17 @@ void dc_link_set_preferred_link_settings(struct dc *dc,
 					 struct dc_link_settings *link_setting,
 					 struct dc_link *link)
 {
-	link->preferred_link_setting = *link_setting;
-	dp_retrain_link_dp_test(link, link_setting, false);
+	struct dc_link_settings store_settings = *link_setting;
+	struct dc_stream_state *link_stream =
+		link->dc->current_state->res_ctx.pipe_ctx[0].stream;
+
+	link->preferred_link_setting = store_settings;
+	if (link_stream)
+		decide_link_settings(link_stream, &store_settings);
+
+	if ((store_settings.lane_count != LANE_COUNT_UNKNOWN) &&
+		(store_settings.link_rate != LINK_RATE_UNKNOWN))
+		dp_retrain_link_dp_test(link, &store_settings, false);
 }
 
 void dc_link_enable_hpd(const struct dc_link *link)
@@ -491,7 +526,7 @@ static void destruct(struct dc *dc)
 	kfree(dc->bw_dceip);
 	dc->bw_dceip = NULL;
 
-#ifdef CONFIG_X86
+#ifdef CONFIG_DRM_AMD_DC_DCN1_0
 	kfree(dc->dcn_soc);
 	dc->dcn_soc = NULL;
 
@@ -507,7 +542,7 @@ static bool construct(struct dc *dc,
 	struct dc_context *dc_ctx;
 	struct bw_calcs_dceip *dc_dceip;
 	struct bw_calcs_vbios *dc_vbios;
-#ifdef CONFIG_X86
+#ifdef CONFIG_DRM_AMD_DC_DCN1_0
 	struct dcn_soc_bounding_box *dcn_soc;
 	struct dcn_ip_params *dcn_ip;
 #endif
@@ -529,7 +564,7 @@ static bool construct(struct dc *dc,
 	}
 
 	dc->bw_vbios = dc_vbios;
-#ifdef CONFIG_X86
+#ifdef CONFIG_DRM_AMD_DC_DCN1_0
 	dcn_soc = kzalloc(sizeof(*dcn_soc), GFP_KERNEL);
 	if (!dcn_soc) {
 		dm_error("%s: failed to create dcn_soc\n", __func__);
@@ -1373,6 +1408,9 @@ static void commit_planes_do_stream_update(struct dc *dc,
 			if (stream_update->gamut_remap)
 				dc_stream_set_gamut_remap(dc, stream);
 
+			if (stream_update->output_csc_transform)
+				dc_stream_program_csc_matrix(dc, stream);
+
 			/* Full fe update*/
 			if (update_type == UPDATE_TYPE_FAST)
 				continue;
@@ -1662,9 +1700,8 @@ bool dc_submit_i2c(
 
 	struct dc_link *link = dc->links[link_index];
 	struct ddc_service *ddc = link->ddc;
-
-	return dal_i2caux_submit_i2c_command(
-		ddc->ctx->i2caux,
+	return dce_i2c_submit_command(
+		dc->res_pool,
 		ddc->ddc_pin,
 		cmd);
 }
