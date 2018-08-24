@@ -1563,9 +1563,16 @@ void dce110_enable_accelerated_mode(struct dc *dc, struct dc_state *context)
 	bool can_edp_fast_boot_optimize = false;
 	bool apply_edp_fast_boot_optimization = false;
 
-	if (edp_link)
-		can_edp_fast_boot_optimize =
-			edp_link->link_enc->funcs->is_dig_enabled(edp_link->link_enc);
+	if (edp_link) {
+		/* this seems to cause blank screens on DCE8 */
+		if ((dc->ctx->dce_version == DCE_VERSION_8_0) ||
+		    (dc->ctx->dce_version == DCE_VERSION_8_1) ||
+		    (dc->ctx->dce_version == DCE_VERSION_8_3))
+			can_edp_fast_boot_optimize = false;
+		else
+			can_edp_fast_boot_optimize =
+				edp_link->link_enc->funcs->is_dig_enabled(edp_link->link_enc);
+	}
 
 	if (can_edp_fast_boot_optimize)
 		edp_link_to_turnoff = get_link_for_edp_not_in_use(dc, context);
