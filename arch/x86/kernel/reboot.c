@@ -32,6 +32,7 @@
 #include <asm/realmode.h>
 #include <asm/x86_init.h>
 #include <asm/efi.h>
+#include <asm/nospec-branch.h>
 
 /*
  * Power off function, if any
@@ -114,11 +115,11 @@ void __noreturn machine_real_restart(unsigned int type)
 
 	/* Jump to the identity-mapped low memory code */
 #ifdef CONFIG_X86_32
-	asm volatile("jmpl *%0" : :
+	asm volatile(ANNOTATE_RETPOLINE_SAFE "jmpl *%0" : :
 		     "rm" (real_mode_header->machine_real_restart_asm),
 		     "a" (type));
 #else
-	asm volatile("ljmpl *%0" : :
+	asm volatile(ANNOTATE_RETPOLINE_SAFE "ljmpl *%0" : :
 		     "m" (real_mode_header->machine_real_restart_asm),
 		     "D" (type));
 #endif
@@ -457,7 +458,46 @@ static const struct dmi_system_id reboot_dmi_table[] __initconst = {
 			DMI_MATCH(DMI_PRODUCT_NAME, "VGN-Z540N"),
 		},
 	},
-
+	{	/* Handle problems with rebooting on the Latitude E6520. */
+		.callback = set_pci_reboot,
+		.ident = "Dell Latitude E6520",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Latitude E6520"),
+		},
+	},
+	{       /* Handle problems with rebooting on the OptiPlex 790. */
+		.callback = set_pci_reboot,
+		.ident = "Dell OptiPlex 790",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "OptiPlex 790"),
+		},
+	},
+	{	/* Handle problems with rebooting on the OptiPlex 990. */
+		.callback = set_pci_reboot,
+		.ident = "Dell OptiPlex 990",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "OptiPlex 990"),
+		},
+	},
+	{       /* Handle problems with rebooting on the Latitude E6220. */
+		.callback = set_pci_reboot,
+		.ident = "Dell Latitude E6220",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Latitude E6220"),
+		},
+	},
+	{	/* Handle problems with rebooting on the OptiPlex 390. */
+		.callback = set_pci_reboot,
+		.ident = "Dell OptiPlex 390",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "OptiPlex 390"),
+		},
+	},
 	{ }
 };
 
