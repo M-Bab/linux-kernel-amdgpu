@@ -866,12 +866,11 @@ EXPORT_SYMBOL(ttm_bo_mem_put);
 /**
  * Add the last move fence to the BO and reserve a new shared slot.
  */
-static int ttm_bo_add_move_fence(struct ttm_buffer_object *bo,
-				 struct ttm_mem_type_manager *man,
-				 struct ttm_mem_reg *mem)
+static void ttm_bo_add_move_fence(struct ttm_buffer_object *bo,
+				  struct ttm_mem_type_manager *man,
+				  struct ttm_mem_reg *mem)
 {
 	struct dma_fence *fence;
-	int ret;
 
 	spin_lock(&man->move_lock);
 	fence = dma_fence_get(man->move);
@@ -879,16 +878,9 @@ static int ttm_bo_add_move_fence(struct ttm_buffer_object *bo,
 
 	if (fence) {
 		reservation_object_add_shared_fence(bo->resv, fence);
-
-		ret = reservation_object_reserve_shared(bo->resv, 1);
-		if (unlikely(ret))
-			return ret;
-
 		dma_fence_put(bo->moving);
 		bo->moving = fence;
 	}
-
-	return 0;
 }
 
 /**
@@ -916,7 +908,8 @@ static int ttm_bo_mem_force_space(struct ttm_buffer_object *bo,
 			return ret;
 	} while (1);
 	mem->mem_type = mem_type;
-	return ttm_bo_add_move_fence(bo, man, mem);
+	ttm_bo_add_move_fence(bo, man, mem);
+	return 0;
 }
 
 static uint32_t ttm_bo_select_caching(struct ttm_mem_type_manager *man,
@@ -985,10 +978,6 @@ int ttm_bo_mem_space(struct ttm_buffer_object *bo,
 	bool has_erestartsys = false;
 	int i, ret;
 
-	ret = reservation_object_reserve_shared(bo->resv, 1);
-	if (unlikely(ret))
-		return ret;
-
 	mem->mm_node = NULL;
 	for (i = 0; i < placement->num_placement; ++i) {
 		const struct ttm_place *place = &placement->placement[i];
@@ -1024,11 +1013,7 @@ int ttm_bo_mem_space(struct ttm_buffer_object *bo,
 			return ret;
 
 		if (mem->mm_node) {
-			ret = ttm_bo_add_move_fence(bo, man, mem);
-			if (unlikely(ret)) {
-				(*man->func->put_node)(man, mem);
-				return ret;
-			}
+			ttm_bo_add_move_fence(bo, man, mem);
 			break;
 		}
 	}
