@@ -1,5 +1,5 @@
 /*
-* Copyright 2012-15 Advanced Micro Devices, Inc.
+ * Copyright 2018 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,23 +23,15 @@
  *
  */
 
-#ifndef __DC_HWSS_DCE100_H__
-#define __DC_HWSS_DCE100_H__
+#ifndef __DCN10_CLK_MGR_H__
+#define __DCN10_CLK_MGR_H__
 
-#include "core_types.h"
+#include "../dce/dce_clk_mgr.h"
 
-struct dc;
-struct dc_state;
+void dcn1_pplib_apply_display_requirements(
+	struct dc *dc,
+	struct dc_state *context);
 
-void dce100_hw_sequencer_construct(struct dc *dc);
+struct clk_mgr *dcn1_clk_mgr_create(struct dc_context *ctx);
 
-void dce100_prepare_bandwidth(
-		struct dc *dc,
-		struct dc_state *context);
-
-bool dce100_enable_display_power_gating(struct dc *dc, uint8_t controller_id,
-					struct dc_bios *dcb,
-					enum pipe_gating_control power_gating);
-
-#endif /* __DC_HWSS_DCE100_H__ */
-
+#endif //__DCN10_CLK_MGR_H__

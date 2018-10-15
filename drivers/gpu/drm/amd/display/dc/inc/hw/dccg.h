@@ -1,5 +1,5 @@
 /*
-* Copyright 2012-15 Advanced Micro Devices, Inc.
+ * Copyright 2018 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,23 +23,22 @@
  *
  */
 
-#ifndef __DC_HWSS_DCE100_H__
-#define __DC_HWSS_DCE100_H__
+#ifndef __DAL_DCCG_H__
+#define __DAL_DCCG_H__
 
-#include "core_types.h"
+#include "dc_types.h"
 
-struct dc;
-struct dc_state;
+struct dccg {
+	struct dc_context *ctx;
+	const struct dccg_funcs *funcs;
 
-void dce100_hw_sequencer_construct(struct dc *dc);
+	int ref_dppclk;
+};
 
-void dce100_prepare_bandwidth(
-		struct dc *dc,
-		struct dc_state *context);
+struct dccg_funcs {
+	void (*update_dpp_dto)(struct dccg *dccg,
+			int dpp_inst,
+			int req_dppclk);
+};
 
-bool dce100_enable_display_power_gating(struct dc *dc, uint8_t controller_id,
-					struct dc_bios *dcb,
-					enum pipe_gating_control power_gating);
-
-#endif /* __DC_HWSS_DCE100_H__ */
-
+#endif //__DAL_DCCG_H__
