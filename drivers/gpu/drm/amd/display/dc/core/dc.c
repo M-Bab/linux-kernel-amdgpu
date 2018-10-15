@@ -941,7 +941,7 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 	if (!dcb->funcs->is_accelerated_mode(dcb))
 		dc->hwss.enable_accelerated_mode(dc, context);
 
-	dc->hwss.set_bandwidth(dc, context, false);
+	dc->hwss.prepare_bandwidth(dc, context);
 
 	/* re-program planes for existing stream, in case we need to
 	 * free up plane resource for later use
@@ -957,8 +957,6 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 	}
 
 	/* Program hardware */
-	dc->hwss.ready_shared_resources(dc, context);
-
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
 		pipe = &context->res_ctx.pipe_ctx[i];
 		dc->hwss.wait_for_mpcc_disconnect(dc, dc->res_pool, pipe);
@@ -1012,15 +1010,13 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 	dc_enable_stereo(dc, context, dc_streams, context->stream_count);
 
 	/* pplib is notified if disp_num changed */
-	dc->hwss.set_bandwidth(dc, context, true);
+	dc->hwss.optimize_bandwidth(dc, context);
 
 	dc_release_state(dc->current_state);
 
 	dc->current_state = context;
 
 	dc_retain_state(dc->current_state);
-
-	dc->hwss.optimize_shared_resources(dc);
 
 	return result;
 }
@@ -1063,7 +1059,7 @@ bool dc_post_update_surfaces_to_stream(struct dc *dc)
 
 	dc->optimized_required = false;
 
-	dc->hwss.set_bandwidth(dc, context, true);
+	dc->hwss.optimize_bandwidth(dc, context);
 	return true;
 }
 
@@ -1369,35 +1365,6 @@ static struct dc_stream_status *stream_get_status(
 
 static const enum surface_update_type update_surface_trace_level = UPDATE_TYPE_FULL;
 
-static void notify_display_count_to_smu(
-		struct dc *dc,
-		struct dc_state *context)
-{
-	int i, display_count;
-	struct pp_smu_funcs_rv *pp_smu = dc->res_pool->pp_smu;
-
-	/*
-	 * if function pointer not set up, this message is
-	 * sent as part of pplib_apply_display_requirements.
-	 * So just return.
-	 */
-	if (!pp_smu || !pp_smu->set_display_count)
-		return;
-
-	display_count = 0;
-	for (i = 0; i < context->stream_count; i++) {
-		const struct dc_stream_state *stream = context->streams[i];
-
-		/* only notify active stream */
-		if (stream->dpms_off)
-			continue;
-
-		display_count++;
-	}
-
-	pp_smu->set_display_count(&pp_smu->pp_smu, display_count);
-}
-
 static void commit_planes_do_stream_update(struct dc *dc,
 		struct dc_stream_state *stream,
 		struct dc_stream_update *stream_update,
@@ -1448,18 +1415,12 @@ static void commit_planes_do_stream_update(struct dc *dc,
 			if (stream_update->dpms_off) {
 				if (*stream_update->dpms_off) {
 					core_link_disable_stream(pipe_ctx, KEEP_ACQUIRED_RESOURCE);
-					dc->hwss.pplib_apply_display_requirements(
-						dc, dc->current_state);
-					notify_display_count_to_smu(dc, dc->current_state);
+					dc->hwss.optimize_bandwidth(dc, dc->current_state);
 				} else {
-					dc->hwss.pplib_apply_display_requirements(
-						dc, dc->current_state);
-					notify_display_count_to_smu(dc, dc->current_state);
+					dc->hwss.prepare_bandwidth(dc, dc->current_state);
 					core_link_enable_stream(dc->current_state, pipe_ctx);
 				}
 			}
-
-
 
 			if (stream_update->abm_level && pipe_ctx->stream_res.abm) {
 				if (pipe_ctx->stream_res.tg->funcs->is_blanked) {
@@ -1487,7 +1448,7 @@ static void commit_planes_for_stream(struct dc *dc,
 	struct pipe_ctx *top_pipe_to_program = NULL;
 
 	if (update_type == UPDATE_TYPE_FULL) {
-		dc->hwss.set_bandwidth(dc, context, false);
+		dc->hwss.prepare_bandwidth(dc, context);
 		context_clock_trace(dc, context);
 	}
 
