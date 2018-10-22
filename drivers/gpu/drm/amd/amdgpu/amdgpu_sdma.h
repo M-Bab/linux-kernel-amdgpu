@@ -41,6 +41,7 @@ struct amdgpu_sdma_instance {
 	uint32_t		feature_version;
 
 	struct amdgpu_ring	ring;
+	struct amdgpu_ring	page;
 	bool			burst_nop;
 };
 
@@ -50,6 +51,7 @@ struct amdgpu_sdma {
 	struct amdgpu_irq_src	illegal_inst_irq;
 	int			num_instances;
 	uint32_t                    srbm_soft_reset;
+	bool			has_page_queue;
 };
 
 /*

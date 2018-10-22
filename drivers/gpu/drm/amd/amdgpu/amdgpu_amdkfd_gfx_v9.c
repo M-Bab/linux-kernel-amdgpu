@@ -46,6 +46,7 @@
 #include "v9_structs.h"
 #include "soc15.h"
 #include "soc15d.h"
+#include "gmc_v9_0.h"
 
 /* HACK: MMHUB and GC both have VM-related register with the same
  * names but different offsets. Define the MMHUB register we need here
@@ -58,21 +59,6 @@
 
 #define mmMMHUB_VM_INVALIDATE_ENG16_ACK				0x0705
 #define mmMMHUB_VM_INVALIDATE_ENG16_ACK_BASE_IDX		0
-
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_BASE_ADDR_LO32		0x072b
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_BASE_ADDR_LO32_BASE_IDX	0
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_BASE_ADDR_HI32		0x072c
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_BASE_ADDR_HI32_BASE_IDX	0
-
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_START_ADDR_LO32		0x074b
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_START_ADDR_LO32_BASE_IDX	0
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_START_ADDR_HI32		0x074c
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_START_ADDR_HI32_BASE_IDX	0
-
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_END_ADDR_LO32		0x076b
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_END_ADDR_LO32_BASE_IDX	0
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_END_ADDR_HI32		0x076c
-#define mmMMHUB_VM_CONTEXT0_PAGE_TABLE_END_ADDR_HI32_BASE_IDX	0
 
 #define mmMMHUB_VM_INVALIDATE_ENG16_ADDR_RANGE_LO32		0x0727
 #define mmMMHUB_VM_INVALIDATE_ENG16_ADDR_RANGE_LO32_BASE_IDX	0
@@ -167,13 +153,6 @@ static int amdgpu_amdkfd_get_tile_config(struct kgd_dev *kgd,
 }
 
 static const struct kfd2kgd_calls kfd2kgd = {
-	.init_gtt_mem_allocation = alloc_gtt_mem,
-	.free_gtt_mem = free_gtt_mem,
-	.get_local_mem_info = get_local_mem_info,
-	.get_gpu_clock_counter = get_gpu_clock_counter,
-	.get_max_engine_clock_in_mhz = get_max_engine_clock_in_mhz,
-	.alloc_pasid = amdgpu_pasid_alloc,
-	.free_pasid = amdgpu_pasid_free,
 	.program_sh_mem_settings = kgd_program_sh_mem_settings,
 	.set_pasid_vmid_mapping = kgd_set_pasid_vmid_mapping,
 	.init_interrupts = kgd_init_interrupts,
@@ -196,26 +175,9 @@ static const struct kfd2kgd_calls kfd2kgd = {
 	.get_fw_version = get_fw_version,
 	.set_scratch_backing_va = set_scratch_backing_va,
 	.get_tile_config = amdgpu_amdkfd_get_tile_config,
-	.get_cu_info = get_cu_info,
-	.get_vram_usage = amdgpu_amdkfd_get_vram_usage,
-	.create_process_vm = amdgpu_amdkfd_gpuvm_create_process_vm,
-	.acquire_process_vm = amdgpu_amdkfd_gpuvm_acquire_process_vm,
-	.destroy_process_vm = amdgpu_amdkfd_gpuvm_destroy_process_vm,
-	.release_process_vm = amdgpu_amdkfd_gpuvm_release_process_vm,
-	.get_process_page_dir = amdgpu_amdkfd_gpuvm_get_process_page_dir,
 	.set_vm_context_page_table_base = set_vm_context_page_table_base,
-	.alloc_memory_of_gpu = amdgpu_amdkfd_gpuvm_alloc_memory_of_gpu,
-	.free_memory_of_gpu = amdgpu_amdkfd_gpuvm_free_memory_of_gpu,
-	.map_memory_to_gpu = amdgpu_amdkfd_gpuvm_map_memory_to_gpu,
-	.unmap_memory_to_gpu = amdgpu_amdkfd_gpuvm_unmap_memory_from_gpu,
-	.sync_memory = amdgpu_amdkfd_gpuvm_sync_memory,
-	.map_gtt_bo_to_kernel = amdgpu_amdkfd_gpuvm_map_gtt_bo_to_kernel,
-	.restore_process_bos = amdgpu_amdkfd_gpuvm_restore_process_bos,
 	.invalidate_tlbs = invalidate_tlbs,
 	.invalidate_tlbs_vmid = invalidate_tlbs_vmid,
-	.submit_ib = amdgpu_amdkfd_submit_ib,
-	.gpu_recover = amdgpu_amdkfd_gpu_reset,
-	.set_compute_idle = amdgpu_amdkfd_set_compute_idle,
 	.get_hive_id = amdgpu_amdkfd_get_hive_id,
 };
 
@@ -1028,25 +990,7 @@ static void set_vm_context_page_table_base(struct kgd_dev *kgd, uint32_t vmid,
 	 * now, all processes share the same address space size, like
 	 * on GFX8 and older.
 	 */
-	WREG32(SOC15_REG_OFFSET(MMHUB, 0, mmMMHUB_VM_CONTEXT0_PAGE_TABLE_START_ADDR_LO32) + (vmid*2), 0);
-	WREG32(SOC15_REG_OFFSET(MMHUB, 0, mmMMHUB_VM_CONTEXT0_PAGE_TABLE_START_ADDR_HI32) + (vmid*2), 0);
+	mmhub_v1_0_setup_vm_pt_regs(adev, vmid, base);
 
-	WREG32(SOC15_REG_OFFSET(MMHUB, 0, mmMMHUB_VM_CONTEXT0_PAGE_TABLE_END_ADDR_LO32) + (vmid*2),
-			lower_32_bits(adev->vm_manager.max_pfn - 1));
-	WREG32(SOC15_REG_OFFSET(MMHUB, 0, mmMMHUB_VM_CONTEXT0_PAGE_TABLE_END_ADDR_HI32) + (vmid*2),
-			upper_32_bits(adev->vm_manager.max_pfn - 1));
-
-	WREG32(SOC15_REG_OFFSET(MMHUB, 0, mmMMHUB_VM_CONTEXT0_PAGE_TABLE_BASE_ADDR_LO32) + (vmid*2), lower_32_bits(base));
-	WREG32(SOC15_REG_OFFSET(MMHUB, 0, mmMMHUB_VM_CONTEXT0_PAGE_TABLE_BASE_ADDR_HI32) + (vmid*2), upper_32_bits(base));
-
-	WREG32(SOC15_REG_OFFSET(GC, 0, mmVM_CONTEXT0_PAGE_TABLE_START_ADDR_LO32) + (vmid*2), 0);
-	WREG32(SOC15_REG_OFFSET(GC, 0, mmVM_CONTEXT0_PAGE_TABLE_START_ADDR_HI32) + (vmid*2), 0);
-
-	WREG32(SOC15_REG_OFFSET(GC, 0, mmVM_CONTEXT0_PAGE_TABLE_END_ADDR_LO32) + (vmid*2),
-			lower_32_bits(adev->vm_manager.max_pfn - 1));
-	WREG32(SOC15_REG_OFFSET(GC, 0, mmVM_CONTEXT0_PAGE_TABLE_END_ADDR_HI32) + (vmid*2),
-			upper_32_bits(adev->vm_manager.max_pfn - 1));
-
-	WREG32(SOC15_REG_OFFSET(GC, 0, mmVM_CONTEXT0_PAGE_TABLE_BASE_ADDR_LO32) + (vmid*2), lower_32_bits(base));
-	WREG32(SOC15_REG_OFFSET(GC, 0, mmVM_CONTEXT0_PAGE_TABLE_BASE_ADDR_HI32) + (vmid*2), upper_32_bits(base));
+	gfxhub_v1_0_setup_vm_pt_regs(adev, vmid, base);
 }
