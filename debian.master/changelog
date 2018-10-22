@@ -1,3 +1,17 @@
+linux (4.19.0-3.4) cosmic; urgency=medium
+
+  * Support Edge Gateway's Bluetooth LED (LP: #1798332)
+    - SAUCE: Bluetooth: Support for LED on Edge Gateways
+
+  * Support Edge Gateway's WIFI LED (LP: #1798330)
+    - SAUCE: mwifiex: Switch WiFi LED state according to the device status
+
+  [ Upstream Kernel Changes ]
+
+  * Rebase to v4.19
+
+ -- Seth Forshee <seth.forshee@canonical.com>  Mon, 22 Oct 2018 09:13:39 -0500
+
 linux (4.19.0-2.3) cosmic; urgency=medium
 
   * fscache: bad refcounting in fscache_op_complete leads to OOPS (LP: #1797314)
