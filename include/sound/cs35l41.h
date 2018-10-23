@@ -67,10 +67,15 @@ struct cs35l41_private {
 	bool swire_mode;
 	bool halo_booted;
 	bool bus_spi;
+	bool fast_switch_en;
 	/* GPIO for /RST */
 	struct gpio_desc *reset_gpio;
 	struct completion global_pup_done;
 	struct completion global_pdn_done;
+	/* Run-time mixer */
+	unsigned int fast_switch_file_idx;
+	struct soc_enum fast_switch_enum;
+	const char **fast_switch_names;
 	struct mutex rate_lock;
 };
 
