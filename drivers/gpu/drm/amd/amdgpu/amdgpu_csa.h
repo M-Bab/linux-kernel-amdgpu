@@ -19,22 +19,21 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
+ * Author: Monk.liu@amd.com
  */
-#ifndef __MMHUB_V1_0_H__
-#define __MMHUB_V1_0_H__
 
-u64 mmhub_v1_0_get_fb_location(struct amdgpu_device *adev);
-int mmhub_v1_0_gart_enable(struct amdgpu_device *adev);
-void mmhub_v1_0_gart_disable(struct amdgpu_device *adev);
-void mmhub_v1_0_set_fault_enable_default(struct amdgpu_device *adev,
-					 bool value);
-void mmhub_v1_0_init(struct amdgpu_device *adev);
-int mmhub_v1_0_set_clockgating(struct amdgpu_device *adev,
-			       enum amd_clockgating_state state);
-void mmhub_v1_0_get_clockgating(struct amdgpu_device *adev, u32 *flags);
-void mmhub_v1_0_update_power_gating(struct amdgpu_device *adev,
-                                bool enable);
-void mmhub_v1_0_setup_vm_pt_regs(struct amdgpu_device *adev, uint32_t vmid,
-				uint64_t page_table_base);
+#ifndef AMDGPU_CSA_MANAGER_H
+#define AMDGPU_CSA_MANAGER_H
+
+#define AMDGPU_CSA_SIZE		(128 * 1024)
+
+uint32_t amdgpu_get_total_csa_size(struct amdgpu_device *adev);
+uint64_t amdgpu_csa_vaddr(struct amdgpu_device *adev);
+int amdgpu_allocate_static_csa(struct amdgpu_device *adev, struct amdgpu_bo **bo,
+				u32 domain, uint32_t size);
+int amdgpu_map_static_csa(struct amdgpu_device *adev, struct amdgpu_vm *vm,
+			  struct amdgpu_bo *bo, struct amdgpu_bo_va **bo_va,
+			  uint64_t csa_addr, uint32_t size);
+void amdgpu_free_static_csa(struct amdgpu_bo **bo);
 
 #endif

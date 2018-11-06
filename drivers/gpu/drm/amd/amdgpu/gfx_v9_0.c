@@ -396,18 +396,14 @@ static int gfx_v9_0_ring_test_ring(struct amdgpu_ring *ring)
 	int r;
 
 	r = amdgpu_gfx_scratch_get(adev, &scratch);
-	if (r) {
-		DRM_ERROR("amdgpu: cp failed to get scratch reg (%d).\n", r);
+	if (r)
 		return r;
-	}
+
 	WREG32(scratch, 0xCAFEDEAD);
 	r = amdgpu_ring_alloc(ring, 3);
-	if (r) {
-		DRM_ERROR("amdgpu: cp failed to lock ring %d (%d).\n",
-			  ring->idx, r);
-		amdgpu_gfx_scratch_free(adev, scratch);
-		return r;
-	}
+	if (r)
+		goto error_free_scratch;
+
 	amdgpu_ring_write(ring, PACKET3(PACKET3_SET_UCONFIG_REG, 1));
 	amdgpu_ring_write(ring, (scratch - PACKET3_SET_UCONFIG_REG_START));
 	amdgpu_ring_write(ring, 0xDEADBEEF);
@@ -419,14 +415,11 @@ static int gfx_v9_0_ring_test_ring(struct amdgpu_ring *ring)
 			break;
 		DRM_UDELAY(1);
 	}
-	if (i < adev->usec_timeout) {
-		DRM_DEBUG("ring test on %d succeeded in %d usecs\n",
-			 ring->idx, i);
-	} else {
-		DRM_ERROR("amdgpu: ring %d test failed (scratch(0x%04X)=0x%08X)\n",
-			  ring->idx, scratch, tmp);
-		r = -EINVAL;
-	}
+
+	if (i >= adev->usec_timeout)
+		r = -ETIMEDOUT;
+
+error_free_scratch:
 	amdgpu_gfx_scratch_free(adev, scratch);
 	return r;
 }
@@ -443,19 +436,16 @@ static int gfx_v9_0_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 	long r;
 
 	r = amdgpu_device_wb_get(adev, &index);
-	if (r) {
-		dev_err(adev->dev, "(%ld) failed to allocate wb slot\n", r);
+	if (r)
 		return r;
-	}
 
 	gpu_addr = adev->wb.gpu_addr + (index * 4);
 	adev->wb.wb[index] = cpu_to_le32(0xCAFEDEAD);
 	memset(&ib, 0, sizeof(ib));
 	r = amdgpu_ib_get(adev, NULL, 16, &ib);
-	if (r) {
-		DRM_ERROR("amdgpu: failed to get ib (%ld).\n", r);
+	if (r)
 		goto err1;
-	}
+
 	ib.ptr[0] = PACKET3(PACKET3_WRITE_DATA, 3);
 	ib.ptr[1] = WRITE_DATA_DST_SEL(5) | WR_CONFIRM;
 	ib.ptr[2] = lower_32_bits(gpu_addr);
@@ -469,22 +459,17 @@ static int gfx_v9_0_ring_test_ib(struct amdgpu_ring *ring, long timeout)
 
 	r = dma_fence_wait_timeout(f, false, timeout);
 	if (r == 0) {
-			DRM_ERROR("amdgpu: IB test timed out.\n");
-			r = -ETIMEDOUT;
-			goto err2;
+		r = -ETIMEDOUT;
+		goto err2;
 	} else if (r < 0) {
-			DRM_ERROR("amdgpu: fence wait failed (%ld).\n", r);
-			goto err2;
+		goto err2;
 	}
 
 	tmp = adev->wb.wb[index];
-	if (tmp == 0xDEADBEEF) {
-			DRM_DEBUG("ib test on ring %d succeeded\n", ring->idx);
-			r = 0;
-	} else {
-			DRM_ERROR("ib test on ring %d failed\n", ring->idx);
-			r = -EINVAL;
-	}
+	if (tmp == 0xDEADBEEF)
+		r = 0;
+	else
+		r = -EINVAL;
 
 err2:
 	amdgpu_ib_free(adev, &ib, NULL);
@@ -1635,8 +1620,8 @@ static int gfx_v9_0_ngg_en(struct amdgpu_device *adev)
 	/* Clear GDS reserved memory */
 	r = amdgpu_ring_alloc(ring, 17);
 	if (r) {
-		DRM_ERROR("amdgpu: NGG failed to lock ring %d (%d).\n",
-			  ring->idx, r);
+		DRM_ERROR("amdgpu: NGG failed to lock ring %s (%d).\n",
+			  ring->name, r);
 		return r;
 	}
 
@@ -2537,7 +2522,7 @@ static void gfx_v9_0_cp_gfx_enable(struct amdgpu_device *adev, bool enable)
 	tmp = REG_SET_FIELD(tmp, CP_ME_CNTL, CE_HALT, enable ? 0 : 1);
 	if (!enable) {
 		for (i = 0; i < adev->gfx.num_gfx_rings; i++)
-			adev->gfx.gfx_ring[i].ready = false;
+			adev->gfx.gfx_ring[i].sched.ready = false;
 	}
 	WREG32_SOC15(GC, 0, mmCP_ME_CNTL, tmp);
 	udelay(50);
@@ -2727,7 +2712,7 @@ static int gfx_v9_0_cp_gfx_resume(struct amdgpu_device *adev)
 
 	/* start the ring */
 	gfx_v9_0_cp_gfx_start(adev);
-	ring->ready = true;
+	ring->sched.ready = true;
 
 	return 0;
 }
@@ -2742,8 +2727,8 @@ static void gfx_v9_0_cp_compute_enable(struct amdgpu_device *adev, bool enable)
 		WREG32_SOC15(GC, 0, mmCP_MEC_CNTL,
 			(CP_MEC_CNTL__MEC_ME1_HALT_MASK | CP_MEC_CNTL__MEC_ME2_HALT_MASK));
 		for (i = 0; i < adev->gfx.num_compute_rings; i++)
-			adev->gfx.compute_ring[i].ready = false;
-		adev->gfx.kiq.ring.ready = false;
+			adev->gfx.compute_ring[i].sched.ready = false;
+		adev->gfx.kiq.ring.sched.ready = false;
 	}
 	udelay(50);
 }
@@ -2866,11 +2851,9 @@ static int gfx_v9_0_kiq_kcq_enable(struct amdgpu_device *adev)
 		amdgpu_ring_write(kiq_ring, upper_32_bits(wptr_addr));
 	}
 
-	r = amdgpu_ring_test_ring(kiq_ring);
-	if (r) {
+	r = amdgpu_ring_test_helper(kiq_ring);
+	if (r)
 		DRM_ERROR("KCQ enable failed\n");
-		kiq_ring->ready = false;
-	}
 
 	return r;
 }
@@ -3249,7 +3232,7 @@ static int gfx_v9_0_kiq_resume(struct amdgpu_device *adev)
 	amdgpu_bo_kunmap(ring->mqd_obj);
 	ring->mqd_ptr = NULL;
 	amdgpu_bo_unreserve(ring->mqd_obj);
-	ring->ready = true;
+	ring->sched.ready = true;
 	return 0;
 }
 
@@ -3314,19 +3297,13 @@ static int gfx_v9_0_cp_resume(struct amdgpu_device *adev)
 		return r;
 
 	ring = &adev->gfx.gfx_ring[0];
-	r = amdgpu_ring_test_ring(ring);
-	if (r) {
-		ring->ready = false;
+	r = amdgpu_ring_test_helper(ring);
+	if (r)
 		return r;
-	}
 
 	for (i = 0; i < adev->gfx.num_compute_rings; i++) {
 		ring = &adev->gfx.compute_ring[i];
-
-		ring->ready = true;
-		r = amdgpu_ring_test_ring(ring);
-		if (r)
-			ring->ready = false;
+		amdgpu_ring_test_helper(ring);
 	}
 
 	gfx_v9_0_enable_gui_idle_interrupt(adev, true);
@@ -3391,7 +3368,7 @@ static int gfx_v9_0_kcq_disable(struct amdgpu_device *adev)
 		amdgpu_ring_write(kiq_ring, 0);
 		amdgpu_ring_write(kiq_ring, 0);
 	}
-	r = amdgpu_ring_test_ring(kiq_ring);
+	r = amdgpu_ring_test_helper(kiq_ring);
 	if (r)
 		DRM_ERROR("KCQ disable failed\n");
 
@@ -4072,9 +4049,11 @@ static void gfx_v9_0_ring_emit_hdp_flush(struct amdgpu_ring *ring)
 }
 
 static void gfx_v9_0_ring_emit_ib_gfx(struct amdgpu_ring *ring,
-                                      struct amdgpu_ib *ib,
-                                      unsigned vmid, bool ctx_switch)
+					struct amdgpu_job *job,
+					struct amdgpu_ib *ib,
+					bool ctx_switch)
 {
+	unsigned vmid = AMDGPU_JOB_GET_VMID(job);
 	u32 header, control = 0;
 
 	if (ib->flags & AMDGPU_IB_FLAG_CE)
@@ -4103,20 +4082,22 @@ static void gfx_v9_0_ring_emit_ib_gfx(struct amdgpu_ring *ring,
 }
 
 static void gfx_v9_0_ring_emit_ib_compute(struct amdgpu_ring *ring,
-                                          struct amdgpu_ib *ib,
-                                          unsigned vmid, bool ctx_switch)
+					  struct amdgpu_job *job,
+					  struct amdgpu_ib *ib,
+					  bool ctx_switch)
 {
-        u32 control = INDIRECT_BUFFER_VALID | ib->length_dw | (vmid << 24);
+	unsigned vmid = AMDGPU_JOB_GET_VMID(job);
+	u32 control = INDIRECT_BUFFER_VALID | ib->length_dw | (vmid << 24);
 
-        amdgpu_ring_write(ring, PACKET3(PACKET3_INDIRECT_BUFFER, 2));
+	amdgpu_ring_write(ring, PACKET3(PACKET3_INDIRECT_BUFFER, 2));
 	BUG_ON(ib->gpu_addr & 0x3); /* Dword align */
-        amdgpu_ring_write(ring,
+	amdgpu_ring_write(ring,
 #ifdef __BIG_ENDIAN
-                                (2 << 0) |
+				(2 << 0) |
 #endif
-                                lower_32_bits(ib->gpu_addr));
-        amdgpu_ring_write(ring, upper_32_bits(ib->gpu_addr));
-        amdgpu_ring_write(ring, control);
+				lower_32_bits(ib->gpu_addr));
+	amdgpu_ring_write(ring, upper_32_bits(ib->gpu_addr));
+	amdgpu_ring_write(ring, control);
 }
 
 static void gfx_v9_0_ring_emit_fence(struct amdgpu_ring *ring, u64 addr,
@@ -4863,10 +4844,8 @@ static const struct amdgpu_ring_funcs gfx_v9_0_ring_funcs_kiq = {
 		2 + /* gfx_v9_0_ring_emit_vm_flush */
 		8 + 8 + 8, /* gfx_v9_0_ring_emit_fence_kiq x3 for user fence, vm fence */
 	.emit_ib_size =	4, /* gfx_v9_0_ring_emit_ib_compute */
-	.emit_ib = gfx_v9_0_ring_emit_ib_compute,
 	.emit_fence = gfx_v9_0_ring_emit_fence_kiq,
 	.test_ring = gfx_v9_0_ring_test_ring,
-	.test_ib = gfx_v9_0_ring_test_ib,
 	.insert_nop = amdgpu_ring_insert_nop,
 	.pad_ib = amdgpu_ring_generic_pad_ib,
 	.emit_rreg = gfx_v9_0_ring_emit_rreg,
