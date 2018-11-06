@@ -1493,8 +1493,6 @@ static int amdgpu_device_ip_early_init(struct amdgpu_device *adev)
 	}
 
 	adev->powerplay.pp_feature = amdgpu_pp_feature_mask;
-	if (amdgpu_sriov_vf(adev))
-		adev->powerplay.pp_feature &= ~PP_GFXOFF_MASK;
 
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if ((amdgpu_ip_block_mask & (1 << i)) == 0) {
@@ -1658,7 +1656,9 @@ static int amdgpu_device_ip_init(struct amdgpu_device *adev)
 
 			/* right after GMC hw init, we create CSA */
 			if (amdgpu_sriov_vf(adev)) {
-				r = amdgpu_allocate_static_csa(adev);
+				r = amdgpu_allocate_static_csa(adev, &adev->virt.csa_obj,
+								AMDGPU_GEM_DOMAIN_VRAM,
+								AMDGPU_CSA_SIZE);
 				if (r) {
 					DRM_ERROR("allocate CSA failed %d\n", r);
 					return r;
@@ -1683,7 +1683,8 @@ static int amdgpu_device_ip_init(struct amdgpu_device *adev)
 	if (r)
 		return r;
 
-	amdgpu_xgmi_add_device(adev);
+	if (adev->gmc.xgmi.num_physical_nodes > 1)
+		amdgpu_xgmi_add_device(adev);
 	amdgpu_amdkfd_device_init(adev);
 
 	if (amdgpu_sriov_vf(adev))
@@ -1892,7 +1893,7 @@ static int amdgpu_device_ip_fini(struct amdgpu_device *adev)
 
 		if (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_GMC) {
 			amdgpu_ucode_free_bo(adev);
-			amdgpu_free_static_csa(adev);
+			amdgpu_free_static_csa(&adev->virt.csa_obj);
 			amdgpu_device_wb_fini(adev);
 			amdgpu_device_vram_scratch_fini(adev);
 		}
@@ -3297,13 +3298,35 @@ bool amdgpu_device_should_recover_gpu(struct amdgpu_device *adev)
 		return false;
 	}
 
-	if (amdgpu_gpu_recovery == 0 || (amdgpu_gpu_recovery == -1  &&
-					 !amdgpu_sriov_vf(adev))) {
-		DRM_INFO("GPU recovery disabled.\n");
-		return false;
+	if (amdgpu_gpu_recovery == 0)
+		goto disabled;
+
+	if (amdgpu_sriov_vf(adev))
+		return true;
+
+	if (amdgpu_gpu_recovery == -1) {
+		switch (adev->asic_type) {
+		case CHIP_TOPAZ:
+		case CHIP_TONGA:
+		case CHIP_FIJI:
+		case CHIP_POLARIS10:
+		case CHIP_POLARIS11:
+		case CHIP_POLARIS12:
+		case CHIP_VEGAM:
+		case CHIP_VEGA20:
+		case CHIP_VEGA10:
+		case CHIP_VEGA12:
+			break;
+		default:
+			goto disabled;
+		}
 	}
 
 	return true;
+
+disabled:
+		DRM_INFO("GPU recovery disabled.\n");
+		return false;
 }
 
 /**
@@ -3341,7 +3364,7 @@ int amdgpu_device_gpu_recover(struct amdgpu_device *adev,
 
 		kthread_park(ring->sched.thread);
 
-		if (job && job->base.sched == &ring->sched)
+		if (job && job->base.sched != &ring->sched)
 			continue;
 
 		drm_sched_hw_job_reset(&ring->sched, job ? &job->base : NULL);
