@@ -739,6 +739,7 @@ efi_main(struct efi_config *c, struct boot_params *boot_params)
 	struct desc_struct *desc;
 	void *handle;
 	efi_system_table_t *_table;
+	unsigned long cmdline_paddr;
 
 	efi_early = c;
 
@@ -757,6 +758,15 @@ efi_main(struct efi_config *c, struct boot_params *boot_params)
 		setup_boot_services32(efi_early);
 
 	sanitize_boot_params(boot_params);
+
+	/*
+	 * make_boot_params() may have been called before efi_main(), in which
+	 * case this is the second time we parse the cmdline. This is ok,
+	 * parsing the cmdline multiple times does not have side-effects.
+	 */
+	cmdline_paddr = ((u64)hdr->cmd_line_ptr |
+			 ((u64)boot_params->ext_cmd_line_ptr << 32));
+	efi_parse_options((char *)cmdline_paddr);
 
 	/*
 	 * If the boot loader gave us a value for secure_boot then we use that,
