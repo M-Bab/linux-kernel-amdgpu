@@ -295,6 +295,7 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 			}
 			ret = cs35l41_set_cspl_mbox_cmd(cs35l41, mboxcmd);
 		}
+		cs35l41->enabled = true;
 		break;
 	default:
 		break;
@@ -770,6 +771,36 @@ static int cs35l41_fast_switch_file_get(struct snd_kcontrol *kcontrol,
 		snd_soc_component_get_drvdata(component);
 
 	ucontrol->value.enumerated.item[0] = cs35l41->fast_switch_file_idx;
+
+	return 0;
+}
+
+static int cs35l41_gpi_global_en_get(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = cs35l41->gpi_global_en;
+
+	return 0;
+}
+
+static int cs35l41_gpi_global_en_put(struct snd_kcontrol *kcontrol,
+				   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+
+	cs35l41->gpi_global_en = ucontrol->value.integer.value[0];
+
+	if (cs35l41->halo_booted && cs35l41->enabled)
+		regmap_write(cs35l41->regmap, CS35L41_DSP_VIRT1_MBOX_8,
+			     cs35l41->gpi_global_en);
 
 	return 0;
 }
@@ -1522,7 +1553,8 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 		    cs35l41_fast_switch_en_get, cs35l41_fast_switch_en_put),
 	SOC_SINGLE_EXT("Firmware Reload Tuning", SND_SOC_NOPM, 0, 1, 0,
 			cs35l41_reload_tuning_get, cs35l41_reload_tuning_put),
-	SOC_SINGLE("GLOBAL_EN from GPIO Control", CS35L41_PWR_CTRL1, 8, 1, 0),
+	SOC_SINGLE_EXT("GLOBAL_EN from GPIO Control", SND_SOC_NOPM, 0, 1, 0,
+			cs35l41_gpi_global_en_get, cs35l41_gpi_global_en_put),
 	SOC_SINGLE("Boost Converter Enable", CS35L41_PWR_CTRL2, 4, 3, 0),
 	SOC_SINGLE("Boost Class-H Tracking Enable",
 					CS35L41_BSTCVRT_VCTRL2, 0, 1, 0),
@@ -1978,6 +2010,14 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 					cs35l41_pup_patch,
 					ARRAY_SIZE(cs35l41_pup_patch));
 
+		if (cs35l41->halo_booted)
+			/*
+			 * Set GPIO-controlled GLOBAL_EN by firmware
+			 * according to mixer setting
+			 */
+			regmap_write(cs35l41->regmap, CS35L41_DSP_VIRT1_MBOX_8,
+				     cs35l41->gpi_global_en);
+
 		regmap_update_bits(cs35l41->regmap, CS35L41_PWR_CTRL1,
 				CS35L41_GLOBAL_EN_MASK,
 				1 << CS35L41_GLOBAL_EN_SHIFT);
@@ -2003,7 +2043,12 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 			} else {
 				mboxcmd = CSPL_MBOX_CMD_PAUSE;
 			}
+
 			ret = cs35l41_set_cspl_mbox_cmd(cs35l41, mboxcmd);
+
+			/* Disable GPIO-controlled GLOBAL_EN by firmware */
+			regmap_write(cs35l41->regmap,
+				     CS35L41_DSP_VIRT1_MBOX_8, 0);
 		}
 
 		regmap_read(cs35l41->regmap, CS35L41_PWR_CTRL1, &val);
@@ -2042,6 +2087,7 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 		    CS35L41_MAX_AUTO_RAMP_TIMEOUT)
 			/* Auto Receiver Timeout is used */
 			cs35l41->vol_ctl.dev_timestamp = ktime_get();
+		cs35l41->enabled = false;
 		break;
 	default:
 		dev_err(cs35l41->dev, "Invalid event = 0x%x\n", event);
@@ -3601,6 +3647,8 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	cs35l41->fast_switch_file_idx = 0;
 	cs35l41->reload_tuning = false;
 	cs35l41->speaker_open_short_status = SPK_STATUS_ALL_CLEAR;
+	cs35l41->gpi_global_en = 0;
+	cs35l41->enabled = false;
 
 	for (i = 0; i < ARRAY_SIZE(cs35l41_supplies); i++)
 		cs35l41->supplies[i].supply = cs35l41_supplies[i];
