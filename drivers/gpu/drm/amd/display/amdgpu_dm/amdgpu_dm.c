@@ -2013,7 +2013,6 @@ static void dm_bandwidth_update(struct amdgpu_device *adev)
 static int amdgpu_notify_freesync(struct drm_device *dev, void *data,
 				struct drm_file *filp)
 {
-	struct drm_amdgpu_freesync *args = data;
 	struct drm_atomic_state *state;
 	struct drm_modeset_acquire_ctx ctx;
 	struct drm_crtc *crtc;
@@ -2022,9 +2021,6 @@ static int amdgpu_notify_freesync(struct drm_device *dev, void *data,
 	int ret = 0;
 	uint8_t i;
 	bool enable = false;
-
-	if (args->op == AMDGPU_FREESYNC_FULLSCREEN_ENTER)
-		enable = true;
 
 	drm_modeset_acquire_init(&ctx, 0);
 
