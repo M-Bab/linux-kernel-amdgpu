@@ -425,22 +425,27 @@ static SOC_ENUM_SINGLE_DECL(pcm_sft_ramp,
 			    CS35L41_AMP_DIG_VOL_CTRL, 0,
 			    cs35l41_pcm_sftramp_text);
 
-static const char * const cs35l41_cspl_cmd_text[] = {
-	"CSPL_MBOX_CMD_PAUSE",
-	"CSPL_MBOX_CMD_RESUME",
-	"CSPL_MBOX_CMD_REINIT",
-	"CSPL_MBOX_CMD_STOP_PRE_REINIT",
-};
+static int cs35l41_reload_tuning_get(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 = snd_soc_component_get_drvdata(component);
 
-static const unsigned int cs35l41_cspl_cmd_val[] = {
-	(unsigned int)CSPL_MBOX_CMD_PAUSE,
-	(unsigned int)CSPL_MBOX_CMD_RESUME,
-	(unsigned int)CSPL_MBOX_CMD_REINIT,
-	(unsigned int)CSPL_MBOX_CMD_STOP_PRE_REINIT,
-};
+	ucontrol->value.integer.value[0] = cs35l41->reload_tuning;
 
-static SOC_VALUE_ENUM_SINGLE_DECL(cs35l41_cspl_cmd, SND_SOC_NOPM, 0, 0,
-				  cs35l41_cspl_cmd_text, cs35l41_cspl_cmd_val);
+	return 0;
+}
+
+static int cs35l41_reload_tuning_put(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 = snd_soc_component_get_drvdata(component);
+
+	cs35l41->reload_tuning = ucontrol->value.integer.value[0];
+
+	return 0;
+}
 
 static bool cs35l41_is_csplmboxsts_correct(enum cs35l41_cspl_mboxcmd cmd,
 					   enum cs35l41_cspl_mboxstate sts)
@@ -528,54 +533,6 @@ static int cs35l41_set_csplmboxcmd(struct cs35l41_private *cs35l41,
 			"Failed to set mailbox(cmd: %u, sts: %u)\n", cmd, sts);
 		ret = -ENOMSG;
 	}
-
-	return ret;
-}
-
-static int cs35l41_cspl_cmd_put(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
-	struct cs35l41_private *cs35l41 = snd_soc_component_get_drvdata(component);
-	struct soc_enum		*soc_enum;
-	unsigned int		i = ucontrol->value.enumerated.item[0];
-
-	soc_enum = (struct soc_enum *)kcontrol->private_value;
-
-	if (i >= soc_enum->items) {
-		dev_err(cs35l41->dev, "Invalid mixer input (%u)\n", i);
-		return -EINVAL;
-	}
-
-	cs35l41->cspl_cmd = soc_enum->values[i];
-
-	return 0;
-}
-
-static int cs35l41_cspl_cmd_get(struct snd_kcontrol *kcontrol,
-				struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_component *component = snd_soc_kcontrol_component(kcontrol);
-	struct cs35l41_private *cs35l41 = snd_soc_component_get_drvdata(component);
-	struct soc_enum		*soc_enum;
-	unsigned int		i;
-	int			ret = 0;
-
-	soc_enum = (struct soc_enum *)kcontrol->private_value;
-
-	for (i = 0; i < soc_enum->items; i++) {
-		if (cs35l41->cspl_cmd == soc_enum->values[i])
-			break;
-	}
-
-	if (i >= soc_enum->items) {
-		/* Cannot find value */
-		dev_err(cs35l41->dev, "Cannot find cspl cmd\n");
-		i = 0;
-		ret = -EINVAL;
-	}
-
-	ucontrol->value.enumerated.item[0] = i;
 
 	return ret;
 }
@@ -676,12 +633,12 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 	SOC_SINGLE_RANGE("ASPRX2 Slot Position", CS35L41_SP_FRAME_RX_SLOT, 8,
 			 0, 7, 0),
 	SOC_ENUM("PCM Soft Ramp", pcm_sft_ramp),
-	SOC_VALUE_ENUM_EXT("CSPL Command", cs35l41_cspl_cmd,
-			   cs35l41_cspl_cmd_get, cs35l41_cspl_cmd_put),
 	SOC_SINGLE_EXT("DSP Booted", SND_SOC_NOPM, 0, 1, 0,
 			cs35l41_halo_booted_get, cs35l41_halo_booted_put),
 	SOC_SINGLE_EXT("Fast Use Case Switch Enable", SND_SOC_NOPM, 0, 1, 0,
 		       cs35l41_fast_switch_en_get, cs35l41_fast_switch_en_put),
+	SOC_SINGLE_EXT("Firmware Reload Tuning", SND_SOC_NOPM, 0, 1, 0,
+			cs35l41_reload_tuning_get, cs35l41_reload_tuning_put),
 	SOC_SINGLE("GLOBAL_EN from GPIO Control", CS35L41_PWR_CTRL1, 8, 1, 0),
 	WM_ADSP2_PRELOAD_SWITCH("DSP1", 1),
 	WM_ADSP_FW_CONTROL("DSP1", 0),
@@ -973,7 +930,9 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 {
 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
 	struct cs35l41_private *cs35l41 = snd_soc_component_get_drvdata(component);
+	enum cs35l41_cspl_mboxcmd mboxcmd;
 	int ret = 0;
+	enum cs35l41_cspl_mboxstate fw_status = CSPL_MBOX_STS_RUNNING;
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
@@ -987,24 +946,45 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 
 		usleep_range(1000, 1100);
 
-		if (cs35l41->halo_booted) {
-			if (cs35l41->cspl_cmd == CSPL_MBOX_CMD_STOP_PRE_REINIT)
-				/* Send this command on power down event */
-				ret = cs35l41_set_csplmboxcmd(cs35l41,
-							CSPL_MBOX_CMD_RESUME);
-			else
-				ret = cs35l41_set_csplmboxcmd(cs35l41,
-							cs35l41->cspl_cmd);
+		if (cs35l41->dsp.running) {
+			regmap_read(cs35l41->regmap, CS35L41_DSP_MBOX_2,
+				    &fw_status);
+			switch(fw_status) {
+			case CSPL_MBOX_STS_RDY_FOR_REINIT:
+				mboxcmd = CSPL_MBOX_CMD_REINIT;
+				break;
+			case CSPL_MBOX_STS_PAUSED:
+				mboxcmd = CSPL_MBOX_CMD_RESUME;
+				break;
+			case CSPL_MBOX_STS_RUNNING:
+				/*
+				 * First time playing audio
+				 * means fw_status is running
+				 */
+				mboxcmd = CSPL_MBOX_CMD_RESUME;
+				break;
+			default:
+				dev_err(cs35l41->dev,
+					"Firmware status is invalid(%u)\n",
+					fw_status);
+				break;
+			}
+			ret = cs35l41_set_csplmboxcmd(cs35l41, mboxcmd);
 		}
 		break;
 	case SND_SOC_DAPM_POST_PMD:
-		if (cs35l41->halo_booted) {
-			if (cs35l41->cspl_cmd == CSPL_MBOX_CMD_STOP_PRE_REINIT)
-				ret = cs35l41_set_csplmboxcmd(cs35l41,
-							cs35l41->cspl_cmd);
-			else
-				ret = cs35l41_set_csplmboxcmd(cs35l41,
-							CSPL_MBOX_CMD_PAUSE);
+		if (cs35l41->dsp.running) {
+			if (cs35l41->reload_tuning) {
+				mboxcmd = CSPL_MBOX_CMD_STOP_PRE_REINIT;
+				/*
+				 * Reset reload_tuning, so driver does not
+				 * continuously reload tuning file
+				 */
+				cs35l41->reload_tuning = false;
+			} else {
+				mboxcmd = CSPL_MBOX_CMD_PAUSE;
+			}
+			ret = cs35l41_set_csplmboxcmd(cs35l41, mboxcmd);
 		}
 
 		regmap_update_bits(cs35l41->regmap, CS35L41_PWR_CTRL1,
@@ -2079,10 +2059,9 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	int timeout = 100;
 	int irq_pol = 0;
 
-	/* Default to RESUME cmd */
-	cs35l41->cspl_cmd = (unsigned int)CSPL_MBOX_CMD_RESUME;
 	cs35l41->fast_switch_en = false;
 	cs35l41->fast_switch_file_idx = 0;
+	cs35l41->reload_tuning = false;
 
 	for (i = 0; i < ARRAY_SIZE(cs35l41_supplies); i++)
 		cs35l41->supplies[i].supply = cs35l41_supplies[i];
