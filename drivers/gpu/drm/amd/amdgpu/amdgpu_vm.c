@@ -181,7 +181,7 @@ static unsigned amdgpu_vm_num_entries(struct amdgpu_device *adev,
 
 	if (level == adev->vm_manager.root_level)
 		/* For the root directory */
-		return round_up(adev->vm_manager.max_pfn, 1 << shift) >> shift;
+		return round_up(adev->vm_manager.max_pfn, 1ULL << shift) >> shift;
 	else if (level != AMDGPU_VM_PTB)
 		/* Everything in between */
 		return 512;
@@ -617,7 +617,8 @@ void amdgpu_vm_get_pd_bo(struct amdgpu_vm *vm,
 {
 	entry->priority = 0;
 	entry->tv.bo = &vm->root.base.bo->tbo;
-	entry->tv.shared = true;
+	/* One for the VM updates, one for TTM and one for the CS job */
+	entry->tv.num_shared = 3;
 	entry->user_pages = NULL;
 	list_add(&entry->tv.head, validated);
 }
@@ -772,10 +773,6 @@ static int amdgpu_vm_clear_bo(struct amdgpu_device *adev,
 	}
 
 	ring = container_of(vm->entity.rq->sched, struct amdgpu_ring, sched);
-
-	r = reservation_object_reserve_shared(bo->tbo.resv);
-	if (r)
-		return r;
 
 	r = ttm_bo_validate(&bo->tbo, &bo->placement, &ctx);
 	if (r)
@@ -1656,9 +1653,11 @@ static int amdgpu_vm_update_ptes(struct amdgpu_pte_update_params *params,
 			if (!amdgpu_vm_pt_descendant(adev, &cursor))
 				return -ENOENT;
 			continue;
-		} else if (frag >= parent_shift) {
+		} else if (frag >= parent_shift &&
+			   cursor.level - 1 != adev->vm_manager.root_level) {
 			/* If the fragment size is even larger than the parent
-			 * shift we should go up one level and check it again.
+			 * shift we should go up one level and check it again
+			 * unless one level up is the root level.
 			 */
 			if (!amdgpu_vm_pt_ancestor(&cursor))
 				return -ENOENT;
@@ -1666,10 +1665,10 @@ static int amdgpu_vm_update_ptes(struct amdgpu_pte_update_params *params,
 		}
 
 		/* Looks good so far, calculate parameters for the update */
-		incr = AMDGPU_GPU_PAGE_SIZE << shift;
+		incr = (uint64_t)AMDGPU_GPU_PAGE_SIZE << shift;
 		mask = amdgpu_vm_entries_mask(adev, cursor.level);
 		pe_start = ((cursor.pfn >> shift) & mask) * 8;
-		entry_end = (mask + 1) << shift;
+		entry_end = (uint64_t)(mask + 1) << shift;
 		entry_end += cursor.pfn & ~(entry_end - 1);
 		entry_end = min(entry_end, end);
 
@@ -1682,7 +1681,7 @@ static int amdgpu_vm_update_ptes(struct amdgpu_pte_update_params *params,
 					      flags | AMDGPU_PTE_FRAG(frag));
 
 			pe_start += nptes * 8;
-			dst += nptes * AMDGPU_GPU_PAGE_SIZE << shift;
+			dst += (uint64_t)nptes * AMDGPU_GPU_PAGE_SIZE << shift;
 
 			frag_start = upd_end;
 			if (frag_start >= frag_end) {
@@ -1839,10 +1838,6 @@ static int amdgpu_vm_bo_update_mapping(struct amdgpu_device *adev,
 
 	r = amdgpu_sync_resv(adev, &job->sync, vm->root.base.bo->tbo.resv,
 			     owner, false);
-	if (r)
-		goto error_free;
-
-	r = reservation_object_reserve_shared(vm->root.base.bo->tbo.resv);
 	if (r)
 		goto error_free;
 
@@ -3025,6 +3020,10 @@ int amdgpu_vm_init(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 	r = amdgpu_bo_reserve(root, true);
 	if (r)
 		goto error_free_root;
+
+	r = reservation_object_reserve_shared(root->tbo.resv, 1);
+	if (r)
+		goto error_unreserve;
 
 	r = amdgpu_vm_clear_bo(adev, vm, root,
 			       adev->vm_manager.root_level,

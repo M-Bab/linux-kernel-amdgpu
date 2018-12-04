@@ -73,9 +73,11 @@ void amdgpu_amdkfd_device_probe(struct amdgpu_device *adev)
 	case CHIP_FIJI:
 	case CHIP_POLARIS10:
 	case CHIP_POLARIS11:
+	case CHIP_POLARIS12:
 		kfd2kgd = amdgpu_amdkfd_gfx_8_0_get_functions();
 		break;
 	case CHIP_VEGA10:
+	case CHIP_VEGA12:
 	case CHIP_VEGA20:
 	case CHIP_RAVEN:
 		kfd2kgd = amdgpu_amdkfd_gfx_9_0_get_functions();
@@ -179,25 +181,14 @@ void amdgpu_amdkfd_device_init(struct amdgpu_device *adev)
 			 * process in case of 64-bit doorbells so we
 			 * can use each doorbell assignment twice.
 			 */
-			if (adev->asic_type == CHIP_VEGA10) {
-				gpu_resources.sdma_doorbell[0][i] =
-					AMDGPU_VEGA10_DOORBELL64_sDMA_ENGINE0 + (i >> 1);
-				gpu_resources.sdma_doorbell[0][i+1] =
-					AMDGPU_VEGA10_DOORBELL64_sDMA_ENGINE0 + 0x200 + (i >> 1);
-				gpu_resources.sdma_doorbell[1][i] =
-					AMDGPU_VEGA10_DOORBELL64_sDMA_ENGINE1 + (i >> 1);
-				gpu_resources.sdma_doorbell[1][i+1] =
-					AMDGPU_VEGA10_DOORBELL64_sDMA_ENGINE1 + 0x200 + (i >> 1);
-			} else {
-				gpu_resources.sdma_doorbell[0][i] =
-					AMDGPU_DOORBELL64_sDMA_ENGINE0 + (i >> 1);
-				gpu_resources.sdma_doorbell[0][i+1] =
-					AMDGPU_DOORBELL64_sDMA_ENGINE0 + 0x200 + (i >> 1);
-				gpu_resources.sdma_doorbell[1][i] =
-					AMDGPU_DOORBELL64_sDMA_ENGINE1 + (i >> 1);
-				gpu_resources.sdma_doorbell[1][i+1] =
-					AMDGPU_DOORBELL64_sDMA_ENGINE1 + 0x200 + (i >> 1);
-			}
+			gpu_resources.sdma_doorbell[0][i] =
+				adev->doorbell_index.sdma_engine0 + (i >> 1);
+			gpu_resources.sdma_doorbell[0][i+1] =
+				adev->doorbell_index.sdma_engine0 + 0x200 + (i >> 1);
+			gpu_resources.sdma_doorbell[1][i] =
+				adev->doorbell_index.sdma_engine1 + (i >> 1);
+			gpu_resources.sdma_doorbell[1][i+1] =
+				adev->doorbell_index.sdma_engine1 + 0x200 + (i >> 1);
 		}
 		/* Doorbells 0x0e0-0ff and 0x2e0-2ff are reserved for
 		 * SDMA, IH and VCN. So don't use them for the CP.
@@ -501,8 +492,11 @@ void amdgpu_amdkfd_set_compute_idle(struct kgd_dev *kgd, bool idle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)kgd;
 
-	amdgpu_dpm_switch_power_profile(adev,
-					PP_SMC_POWER_PROFILE_COMPUTE, !idle);
+	if (adev->powerplay.pp_funcs &&
+	    adev->powerplay.pp_funcs->switch_power_profile)
+		amdgpu_dpm_switch_power_profile(adev,
+						PP_SMC_POWER_PROFILE_COMPUTE,
+						!idle);
 }
 
 bool amdgpu_amdkfd_is_kfd_vmid(struct amdgpu_device *adev, u32 vmid)

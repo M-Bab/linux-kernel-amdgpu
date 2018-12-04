@@ -219,6 +219,9 @@ int drm_fb_helper_single_add_all_connectors(struct drm_fb_helper *fb_helper)
 	mutex_lock(&fb_helper->lock);
 	drm_connector_list_iter_begin(dev, &conn_iter);
 	drm_for_each_connector_iter(connector, &conn_iter) {
+		if (connector->connector_type == DRM_MODE_CONNECTOR_WRITEBACK)
+			continue;
+
 		ret = __drm_fb_helper_add_one_connector(fb_helper, connector);
 		if (ret)
 			goto fail;
@@ -1632,6 +1635,10 @@ int drm_fb_helper_check_var(struct fb_var_screeninfo *var,
 	if (var->pixclock != 0 || in_dbg_master())
 		return -EINVAL;
 
+	if ((drm_format_info_block_width(fb->format, 0) > 1) ||
+	    (drm_format_info_block_height(fb->format, 0) > 1))
+		return -EINVAL;
+
 	/*
 	 * Changes struct fb_var_screeninfo are currently not pushed back
 	 * to KMS, hence fail if different settings are requested.
@@ -1949,6 +1956,8 @@ void drm_fb_helper_fill_var(struct fb_info *info, struct drm_fb_helper *fb_helpe
 {
 	struct drm_framebuffer *fb = fb_helper->fb;
 
+	WARN_ON((drm_format_info_block_width(fb->format, 0) > 1) ||
+		(drm_format_info_block_height(fb->format, 0) > 1));
 	info->pseudo_palette = fb_helper->pseudo_palette;
 	info->var.xres_virtual = fb->width;
 	info->var.yres_virtual = fb->height;
