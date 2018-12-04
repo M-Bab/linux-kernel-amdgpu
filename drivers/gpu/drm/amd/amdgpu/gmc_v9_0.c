@@ -338,6 +338,9 @@ static void gmc_v9_0_flush_gpu_tlb(struct amdgpu_device *adev,
 		struct amdgpu_vmhub *hub = &adev->vmhub[i];
 		u32 tmp = gmc_v9_0_get_invalidate_req(vmid, flush_type);
 
+		/* This is necessary for a HW workaround under SRIOV as well
+		 * as GFXOFF under bare metal
+		 */
 		if (adev->gfx.kiq.ring.sched.ready &&
 		    (amdgpu_sriov_runtime(adev) || !amdgpu_sriov_vf(adev)) &&
 		    !adev->in_gpu_reset) {
@@ -899,6 +902,9 @@ static int gmc_v9_0_sw_init(void *handle)
 	/* This interrupt is VMC page fault.*/
 	r = amdgpu_irq_add_id(adev, SOC15_IH_CLIENTID_VMC, VMC_1_0__SRCID__VM_FAULT,
 				&adev->gmc.vm_fault);
+	if (r)
+		return r;
+
 	r = amdgpu_irq_add_id(adev, SOC15_IH_CLIENTID_UTCL2, UTCL2_1_0__SRCID__FAULT,
 				&adev->gmc.vm_fault);
 
@@ -931,7 +937,7 @@ static int gmc_v9_0_sw_init(void *handle)
 	}
 	adev->need_swiotlb = drm_get_max_iomem() > ((u64)1 << dma_bits);
 
-	if (adev->asic_type == CHIP_VEGA20) {
+	if (adev->gmc.xgmi.supported) {
 		r = gfxhub_v1_1_get_xgmi_info(adev);
 		if (r)
 			return r;
