@@ -1305,6 +1305,7 @@ extern void fasync_free(struct fasync_struct *);
 /* can be called from interrupts */
 extern void kill_fasync(struct fasync_struct **, int, int);
 
+extern int setfl(int fd, struct file * filp, unsigned long arg);
 extern void __f_setown(struct file *filp, struct pid *, enum pid_type, int force);
 extern int f_setown(struct file *filp, unsigned long arg, int force);
 extern void f_delown(struct file *filp);
@@ -1352,6 +1353,7 @@ extern int send_sigurg(struct fown_struct *fown);
 #define SB_I_NOEXEC	0x00000002	/* Ignore executables on this fs */
 #define SB_I_NODEV	0x00000004	/* Ignore devices on this fs */
 #define SB_I_MULTIROOT	0x00000008	/* Multiple roots to the dentry tree */
+#define SB_I_NOSUID	0x00000010	/* Ignore suid on this fs */
 
 /* sb->s_iflags to limit user namespace mounts */
 #define SB_I_USERNS_VISIBLE		0x00000010 /* fstype already mounted */
@@ -1797,6 +1799,7 @@ struct file_operations {
 	ssize_t (*sendpage) (struct file *, struct page *, int, size_t, loff_t *, int);
 	unsigned long (*get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
 	int (*check_flags)(int);
+	int (*setfl)(struct file *, unsigned long);
 	int (*flock) (struct file *, int, struct file_lock *);
 	ssize_t (*splice_write)(struct pipe_inode_info *, struct file *, loff_t *, size_t, unsigned int);
 	ssize_t (*splice_read)(struct file *, loff_t *, struct pipe_inode_info *, size_t, unsigned int);
@@ -1867,6 +1870,12 @@ ssize_t rw_copy_check_uvector(int type, const struct iovec __user * uvector,
 			      struct iovec *fast_pointer,
 			      struct iovec **ret_pointer);
 
+typedef ssize_t (*vfs_readf_t)(struct file *, char __user *, size_t, loff_t *);
+typedef ssize_t (*vfs_writef_t)(struct file *, const char __user *, size_t,
+				loff_t *);
+vfs_readf_t vfs_readf(struct file *file);
+vfs_writef_t vfs_writef(struct file *file);
+
 extern ssize_t __vfs_read(struct file *, char __user *, size_t, loff_t *);
 extern ssize_t vfs_read(struct file *, char __user *, size_t, loff_t *);
 extern ssize_t vfs_write(struct file *, const char __user *, size_t, loff_t *);
@@ -1923,6 +1932,10 @@ struct super_operations {
 				  struct shrink_control *);
 	long (*free_cached_objects)(struct super_block *,
 				    struct shrink_control *);
+#if defined(CONFIG_BLK_DEV_LOOP) ||  defined(CONFIG_BLK_DEV_LOOP_MODULE)
+	/* and aufs */
+	struct file *(*real_loop)(struct file *);
+#endif
 };
 
 /*
@@ -2292,6 +2305,7 @@ extern int current_umask(void);
 extern void ihold(struct inode * inode);
 extern void iput(struct inode *);
 extern int generic_update_time(struct inode *, struct timespec64 *, int);
+extern int update_time(struct inode *, struct timespec64 *, int);
 
 /* /sys/fs */
 extern struct kobject *fs_kobj;
@@ -2579,6 +2593,7 @@ static inline bool sb_is_blkdev_sb(struct super_block *sb)
 	return false;
 }
 #endif
+extern int __sync_filesystem(struct super_block *, int);
 extern int sync_filesystem(struct super_block *);
 extern const struct file_operations def_blk_fops;
 extern const struct file_operations def_chr_fops;
@@ -2649,7 +2664,7 @@ static inline void unregister_chrdev(unsigned int major, const char *name)
 #define BLKDEV_MAJOR_MAX	512
 extern const char *__bdevname(dev_t, char *buffer);
 extern const char *bdevname(struct block_device *bdev, char *buffer);
-extern struct block_device *lookup_bdev(const char *);
+extern struct block_device *lookup_bdev(const char *, int mask);
 extern void blkdev_show(struct seq_file *,off_t);
 
 #else
@@ -3499,6 +3514,7 @@ static inline bool dir_relax_shared(struct inode *inode)
 }
 
 extern bool path_noexec(const struct path *path);
+extern bool path_nosuid(const struct path *path);
 extern void inode_nohighmem(struct inode *inode);
 
 /* mm/fadvise.c */
