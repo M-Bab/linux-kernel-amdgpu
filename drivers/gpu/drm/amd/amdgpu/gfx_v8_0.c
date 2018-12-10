@@ -4068,7 +4068,7 @@ static void gfx_v8_0_rlc_start(struct amdgpu_device *adev)
 
 static int gfx_v8_0_rlc_resume(struct amdgpu_device *adev)
 {
-	if (amdgpu_sriov(adev)) {
+	if (amdgpu_sriov_vf(adev)) {
 		gfx_v8_0_init_csb(adev);
 		return 0;
 	}
