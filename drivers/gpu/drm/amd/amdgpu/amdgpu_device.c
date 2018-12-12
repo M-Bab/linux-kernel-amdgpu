@@ -3258,6 +3258,8 @@ bool amdgpu_device_should_recover_gpu(struct amdgpu_device *adev)
 
 	if (amdgpu_gpu_recovery == -1) {
 		switch (adev->asic_type) {
+		case CHIP_BONAIRE:
+		case CHIP_HAWAII:
 		case CHIP_TOPAZ:
 		case CHIP_TONGA:
 		case CHIP_FIJI:
@@ -3474,14 +3476,16 @@ static void amdgpu_device_lock_adev(struct amdgpu_device *adev)
 	mutex_lock(&adev->lock_reset);
 	atomic_inc(&adev->gpu_reset_counter);
 	adev->in_gpu_reset = 1;
-	/* Block kfd */
-	amdgpu_amdkfd_pre_reset(adev);
+	/* Block kfd: SRIOV would do it separately */
+	if (!amdgpu_sriov_vf(adev))
+                amdgpu_amdkfd_pre_reset(adev);
 }
 
 static void amdgpu_device_unlock_adev(struct amdgpu_device *adev)
 {
-	/*unlock kfd */
-	amdgpu_amdkfd_post_reset(adev);
+	/*unlock kfd: SRIOV would do it separately */
+	if (!amdgpu_sriov_vf(adev))
+                amdgpu_amdkfd_post_reset(adev);
 	amdgpu_vf_error_trans_all(adev);
 	adev->in_gpu_reset = 0;
 	mutex_unlock(&adev->lock_reset);
