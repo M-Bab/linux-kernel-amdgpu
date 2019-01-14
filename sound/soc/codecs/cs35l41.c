@@ -794,18 +794,6 @@ static irqreturn_t cs35l41_irq(int irq, void *data)
 		!(status[2] & ~masks[2]) && !(status[3] & ~masks[3]))
 		return IRQ_NONE;
 
-	if (status[0] & CS35L41_PUP_DONE_MASK) {
-		regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS1,
-			     CS35L41_PUP_DONE_MASK);
-		complete(&cs35l41->global_pup_done);
-	}
-
-	if (status[0] & CS35L41_PDN_DONE_MASK) {
-		regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS1,
-			     CS35L41_PDN_DONE_MASK);
-		complete(&cs35l41->global_pdn_done);
-	}
-
 	/*
 	 * The following interrupts require a
 	 * protection release cycle to get the
@@ -933,6 +921,9 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 	enum cs35l41_cspl_mboxcmd mboxcmd;
 	int ret = 0;
 	enum cs35l41_cspl_mboxstate fw_status = CSPL_MBOX_STS_RUNNING;
+	int i;
+	bool pdn;
+	unsigned int val;
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
@@ -990,7 +981,22 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 		regmap_update_bits(cs35l41->regmap, CS35L41_PWR_CTRL1,
 				CS35L41_GLOBAL_EN_MASK, 0);
 
-		usleep_range(1000, 1100);
+		pdn = false;
+		for (i = 0; i < 100; i++) {
+			regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS1,
+				    &val);
+			if (val & CS35L41_PDN_DONE_MASK) {
+				pdn = true;
+				break;
+			}
+			usleep_range(1000, 1010);
+		}
+
+		if (!pdn)
+			dev_warn(cs35l41->dev, "PDN failed\n");
+
+		regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS1,
+			     CS35L41_PDN_DONE_MASK);
 
 		regmap_multi_reg_write_bypassed(cs35l41->regmap,
 					cs35l41_pdn_patch,
@@ -2164,9 +2170,6 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	}
 
 	irq_pol = cs35l41_irq_gpio_config(cs35l41);
-
-	init_completion(&cs35l41->global_pdn_done);
-	init_completion(&cs35l41->global_pup_done);
 
 	ret = devm_request_threaded_irq(cs35l41->dev, cs35l41->irq, NULL,
 				cs35l41_irq, IRQF_ONESHOT | irq_pol,
