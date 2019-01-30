@@ -113,6 +113,7 @@ struct iram_table_v_2 {
 	uint8_t dummy8;							/* 0xfe       */
 	uint8_t dummy9;							/* 0xff       */
 };
+#pragma pack(pop)
 
 struct iram_table_v_2_2 {
 	/* flags                      */
