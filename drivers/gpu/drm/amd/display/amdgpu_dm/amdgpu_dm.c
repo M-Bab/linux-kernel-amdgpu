@@ -2383,11 +2383,14 @@ static bool fill_plane_dcc_attributes(struct amdgpu_device *adev,
 				      uint64_t info)
 {
 	struct dc *dc = adev->dm.dc;
-	struct dc_dcc_surface_param input = {0};
-	struct dc_surface_dcc_cap output = {0};
+	struct dc_dcc_surface_param input;
+	struct dc_surface_dcc_cap output;
 	uint32_t offset = AMDGPU_TILING_GET(info, DCC_OFFSET_256B);
 	uint32_t i64b = AMDGPU_TILING_GET(info, DCC_INDEPENDENT_64B) != 0;
 	uint64_t dcc_address;
+
+	memset(&input, 0, sizeof(input));
+	memset(&output, 0, sizeof(output));
 
 	if (!offset)
 		return false;
@@ -4249,7 +4252,8 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 	}
 
 	if (connector_type == DRM_MODE_CONNECTOR_HDMIA ||
-	    connector_type == DRM_MODE_CONNECTOR_DisplayPort) {
+	    connector_type == DRM_MODE_CONNECTOR_DisplayPort ||
+	    connector_type == DRM_MODE_CONNECTOR_eDP) {
 		drm_connector_attach_vrr_capable_property(
 			&aconnector->base);
 		drm_object_attach_property(&aconnector->base.base,
@@ -5197,9 +5201,12 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 		struct dm_connector_state *dm_new_con_state = to_dm_connector_state(new_con_state);
 		struct dm_connector_state *dm_old_con_state = to_dm_connector_state(old_con_state);
 		struct amdgpu_crtc *acrtc = to_amdgpu_crtc(dm_new_con_state->base.crtc);
-		struct dc_surface_update dummy_updates[MAX_SURFACES] = { 0 };
-		struct dc_stream_update stream_update = { 0 };
+		struct dc_surface_update dummy_updates[MAX_SURFACES];
+		struct dc_stream_update stream_update;
 		struct dc_stream_status *status = NULL;
+
+		memset(&dummy_updates, 0, sizeof(dummy_updates));
+		memset(&stream_update, 0, sizeof(stream_update));
 
 		if (acrtc) {
 			new_crtc_state = drm_atomic_get_new_crtc_state(state, &acrtc->base);

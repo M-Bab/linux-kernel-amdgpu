@@ -332,6 +332,7 @@ static void amdgpu_vm_bo_base_init(struct amdgpu_vm_bo_base *base,
 	if (bo->tbo.resv != vm->root.base.bo->tbo.resv)
 		return;
 
+	vm->bulk_moveable = false;
 	if (bo->tbo.type == ttm_bo_type_kernel)
 		amdgpu_vm_bo_relocated(base);
 	else
@@ -2772,6 +2773,9 @@ void amdgpu_vm_bo_rmv(struct amdgpu_device *adev,
 	struct amdgpu_vm_bo_base **base;
 
 	if (bo) {
+		if (bo->tbo.resv == vm->root.base.bo->tbo.resv)
+			vm->bulk_moveable = false;
+
 		for (base = &bo_va->base.bo->vm_bo; *base;
 		     base = &(*base)->next) {
 			if (*base != &bo_va->base)
@@ -3385,14 +3389,15 @@ void amdgpu_vm_get_task_info(struct amdgpu_device *adev, unsigned int pasid,
 			 struct amdgpu_task_info *task_info)
 {
 	struct amdgpu_vm *vm;
+	unsigned long flags;
 
-	spin_lock(&adev->vm_manager.pasid_lock);
+	spin_lock_irqsave(&adev->vm_manager.pasid_lock, flags);
 
 	vm = idr_find(&adev->vm_manager.pasid_idr, pasid);
 	if (vm)
 		*task_info = vm->task_info;
 
-	spin_unlock(&adev->vm_manager.pasid_lock);
+	spin_unlock_irqrestore(&adev->vm_manager.pasid_lock, flags);
 }
 
 /**
