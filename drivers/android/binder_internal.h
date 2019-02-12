@@ -50,7 +50,7 @@ static inline bool is_binderfs_device(const struct inode *inode)
 #if IS_ENABLED(CONFIG_ANDROID_BINDERFS)
 extern int __init init_binderfs(void);
 #else
-static inline int init_binderfs(void)
+static inline int __init init_binderfs(void)
 {
 	return 0;
 }

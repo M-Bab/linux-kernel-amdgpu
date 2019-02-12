@@ -16,12 +16,12 @@
 ##
 ##
 ifeq ($(ARCH),x86)
-#obj-y                         += vbox/
+obj-y                         += vbox/
 endif
 ##
 ##
 ##
-#obj-$(CONFIG_HIO)             += hio/
+obj-$(CONFIG_HIO)             += hio/
 ##
 ##
 ##
