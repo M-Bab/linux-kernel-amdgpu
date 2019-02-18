@@ -134,10 +134,14 @@ endif
 
 ifeq ($(uefi_signed),true)
 	install -d $(signingv)
-	# Check to see if this supports handoff, if not do not sign it.
-	# Check the identification area magic and version >= 0x020b
-	handoff=`dd if="$(pkgdir_bin)/boot/$(instfile)-$(abi_release)-$*" bs=1 skip=514 count=6 2>/dev/null | od -s | gawk '($$1 == 0 && $$2 == 25672 && $$3 == 21362 && $$4 >= 523) { print "GOOD" }'`; \
-	if [ "$$handoff" = "GOOD" ]; then \
+	# gzipped kernel images must be decompressed for signing
+	if [[ "$(kernfile)" =~ \.gz$$ ]]; then \
+		< $(pkgdir_bin)/boot/$(instfile)-$(abi_release)-$* \
+			gunzip -cv > $(signingv)/$(instfile)-$(abi_release)-$*.efi; \
+		cp -p --attributes-only $(pkgdir_bin)/boot/$(instfile)-$(abi_release)-$* \
+			$(signingv)/$(instfile)-$(abi_release)-$*.efi; \
+		echo "GZIP=1" >> $(signingv)/$(instfile)-$(abi_release)-$*.efi.vars; \
+	else \
 		cp -p $(pkgdir_bin)/boot/$(instfile)-$(abi_release)-$* \
 			$(signingv)/$(instfile)-$(abi_release)-$*.efi; \
 	fi

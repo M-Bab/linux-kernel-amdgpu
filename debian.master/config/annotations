@@ -480,7 +480,7 @@ CONFIG_ANDROID                                  policy<{'amd64': 'y', 'arm64': '
 # Menu: Device Drivers >> Android >> Android Binder IPC Driver
 CONFIG_ANDROID_BINDER_IPC                       policy<{'amd64': 'm', 'arm64': 'm', 'armhf': 'm', 'i386': 'm', 'ppc64el': 'm'}>
 CONFIG_ANDROID_BINDERFS                         policy<{'amd64': 'm', 'arm64': 'm', 'armhf': 'm', 'i386': 'm', 'ppc64el': 'm'}>
-CONFIG_ANDROID_BINDER_DEVICES                   policy<{'amd64': '', 'arm64': '', 'armhf': '', 'i386': '', 'ppc64el': ''}>
+CONFIG_ANDROID_BINDER_DEVICES                   policy<{'amd64': '""', 'arm64': '""', 'armhf': '""', 'i386': '""', 'ppc64el': '""'}>
 CONFIG_ANDROID_BINDER_IPC_SELFTEST              policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n'}>
 
 # Menu: Device Drivers >> Auxiliary Display support
@@ -4250,11 +4250,10 @@ CONFIG_MEDIA_ANALOG_TV_SUPPORT                  policy<{'amd64': 'y', 'arm64': '
 CONFIG_MEDIA_DIGITAL_TV_SUPPORT                 policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y'}>
 CONFIG_MEDIA_RADIO_SUPPORT                      policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y'}>
 CONFIG_MEDIA_CEC_SUPPORT                        policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y'}>
-CONFIG_MEDIA_CEC_RC                             policy<{'amd64': 'y', 'arm64-generic': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y'}>
 CONFIG_CEC_PIN_ERROR_INJ                        policy<{'amd64-lowlatency': 'n', 'arm64': 'n', 'i386-lowlatency': 'n'}>
 CONFIG_VIDEO_ADV_DEBUG                          policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n'}>
 CONFIG_VIDEO_FIXED_MINOR_RANGES                 policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n'}>
-CONFIG_VIDEO_PCI_SKELETON                       policy<{'amd64': 'm', 'arm64': 'm', 'armhf': 'm', 'i386': 'm', 'ppc64el': 'm'}>
+CONFIG_VIDEO_PCI_SKELETON                       policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n'}>
 CONFIG_DVB_MMAP                                 policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n'}>
 CONFIG_DVB_NET                                  policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y'}>
 CONFIG_DVB_MAX_ADAPTERS                         policy<{'amd64': '8', 'arm64': '8', 'armhf': '8', 'i386': '8', 'ppc64el': '8'}>
@@ -9434,16 +9433,11 @@ CONFIG_EXOFS_DEBUG                              policy<{'amd64': 'n', 'arm64': '
 CONFIG_ECRYPT_FS                                mark<ENFORCED> note<not autoloadable>
 
 # Menu: File systems >> Miscellaneous filesystems >> Aufs (Advanced multi layered unification filesystem) support
-CONFIG_AUFS_BRANCH_MAX_1023                     policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
-CONFIG_AUFS_BRANCH_MAX_127                      policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y', 's390x': 'y'}>
-CONFIG_AUFS_BRANCH_MAX_32767                    policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
-CONFIG_AUFS_BRANCH_MAX_511                      policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_AUFS_BR_FUSE                             policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_AUFS_BR_HFSPLUS                          policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y'}>
 CONFIG_AUFS_BR_RAMFS                            policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_AUFS_DEBUG                               policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_AUFS_DIRREN                              policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y', 's390x': 'y'}>
-CONFIG_AUFS_EXPORT                              note<LP:1121699>
 CONFIG_AUFS_EXPORT                              policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y', 's390x': 'y'}>
 CONFIG_AUFS_FHSM                                policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_AUFS_FS                                  policy<{'amd64': 'm', 'arm64': 'm', 'armhf': 'm', 'i386': 'm', 'ppc64el': 'm', 's390x': 'm'}>
@@ -9451,6 +9445,16 @@ CONFIG_AUFS_HNOTIFY                             policy<{'amd64': 'n', 'arm64': '
 CONFIG_AUFS_RDU                                 policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_AUFS_SHWH                                policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_AUFS_XATTR                               policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y', 's390x': 'y'}>
+#
+CONFIG_AUFS_EXPORT                              note<LP:1121699>
+
+# Menu: File systems >> Miscellaneous filesystems >> Aufs (Advanced multi layered unification filesystem) support >> Maximum number of branches
+CONFIG_AUFS_BRANCH_MAX_1023                     policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_AUFS_BRANCH_MAX_127                      policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y', 's390x': 'y'}>
+CONFIG_AUFS_BRANCH_MAX_32767                    policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_AUFS_BRANCH_MAX_511                      policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+
+# Menu: File systems >> Miscellaneous filesystems >> Aufs (Advanced multi layered unification filesystem) support >> method
 
 # Menu: File systems >> Miscellaneous filesystems >> Default pstore compression algorithm
 CONFIG_PSTORE_DEFLATE_COMPRESS_DEFAULT          policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y'}>
@@ -10339,7 +10343,7 @@ CONFIG_TEST_UDELAY                              policy<{'amd64': 'n', 'arm64': '
 CONFIG_TEST_STATIC_KEYS                         policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_TEST_KMOD                                policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_TEST_MEMCAT_P                            policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
-CONFIG_TEST_OBJAGG                              policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_TEST_OBJAGG                              policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n'}>
 #
 CONFIG_RUNTIME_TESTING_MENU                     flag<TESTING>
 CONFIG_LKDTM                                    flag<TESTING> flag<REVIEW>
@@ -10377,9 +10381,27 @@ CONFIG_TEST_KMOD                                flag<TESTING>
 CONFIG_TEST_MEMCAT_P                            flag<TESTING>
 CONFIG_TEST_OBJAGG                              flag<TESTING>
 
-
 # Menu: Kernel hacking >> Sample kernel code
-CONFIG_SAMPLES                                  policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLES                                  policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y', 's390x': 'y'}>
+CONFIG_SAMPLE_TRACE_EVENTS                      policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLE_TRACE_PRINTK                      policy<{'amd64': 'm', 'arm64': 'm', 'armhf': 'm', 'i386': 'm', 'ppc64el': 'm', 's390x': 'm'}>
+CONFIG_SAMPLE_KOBJECT                           policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLE_KPROBES                           policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLE_HW_BREAKPOINT                     policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n'}>
+CONFIG_SAMPLE_KFIFO                             policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLE_KDB                               policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n'}>
+CONFIG_SAMPLE_QMI_CLIENT                        policy<{'arm64': 'n', 'armhf': 'n'}>
+CONFIG_SAMPLE_RPMSG_CLIENT                      policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n'}>
+CONFIG_SAMPLE_LIVEPATCH                         policy<{'amd64': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLE_CONFIGFS                          policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLE_CONNECTOR                         policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLE_SECCOMP                           policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLE_VFIO_MDEV_MTTY                    policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLE_VFIO_MDEV_MDPY                    policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLE_VFIO_MDEV_MDPY_FB                 policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_SAMPLE_VFIO_MDEV_MBOCHS                  policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'i386': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+#
+CONFIG_SAMPLE_TRACE_PRINTK                      mark<ENFORCE> note<Required for ftrace selftests>
 
 # Menu: Kernel hacking >> Tracers
 CONFIG_FTRACE                                   policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'i386': 'y', 'ppc64el': 'y', 's390x': 'y'}>
@@ -12779,7 +12801,6 @@ CONFIG_APPLDATA_BASE                            policy<{'s390x': 'y'}>
 CONFIG_APPLDATA_MEM                             policy<{'s390x': 'm'}>
 CONFIG_APPLDATA_OS                              policy<{'s390x': 'm'}>
 CONFIG_APPLDATA_NET_SUM                         policy<{'s390x': 'm'}>
-
 
 # Menu: FOOTER
 

@@ -1209,7 +1209,7 @@ extern void efi_reboot(enum reboot_mode reboot_mode, const char *__unused);
 
 extern bool efi_is_table_address(unsigned long phys_addr);
 
-extern int efi_apply_persistent_mem_reservations(void);
+extern void __init efi_set_secure_boot(enum efi_secureboot_mode mode);
 
 extern void __init efi_set_secure_boot(enum efi_secureboot_mode mode);
 #else
