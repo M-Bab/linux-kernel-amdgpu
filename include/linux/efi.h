@@ -793,6 +793,7 @@ struct efi_fdt_params {
 	u32 mmap_size;
 	u32 desc_size;
 	u32 desc_ver;
+	u32 secure_boot;
 };
 
 typedef struct {
@@ -1208,8 +1209,6 @@ static inline bool efi_enabled(int feature)
 extern void efi_reboot(enum reboot_mode reboot_mode, const char *__unused);
 
 extern bool efi_is_table_address(unsigned long phys_addr);
-
-extern void __init efi_set_secure_boot(enum efi_secureboot_mode mode);
 
 extern void __init efi_set_secure_boot(enum efi_secureboot_mode mode);
 #else
