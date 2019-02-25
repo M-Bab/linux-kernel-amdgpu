@@ -48,6 +48,8 @@ struct amdgpu_doorbell_index {
 	uint32_t mec_ring5;
 	uint32_t mec_ring6;
 	uint32_t mec_ring7;
+	uint32_t userqueue_start;
+	uint32_t userqueue_end;
 	uint32_t gfx_ring0;
 	uint32_t sdma_engine[8];
 	uint32_t ih;
@@ -69,6 +71,8 @@ struct amdgpu_doorbell_index {
 			uint32_t vce_ring6_7;
 		} uvd_vce;
 	};
+	uint32_t first_non_cp;
+	uint32_t last_non_cp;
 	uint32_t max_assignment;
 	/* Per engine SDMA doorbell size in dword */
 	uint32_t sdma_doorbell_range;
@@ -109,6 +113,8 @@ typedef enum _AMDGPU_VEGA20_DOORBELL_ASSIGNMENT
 	AMDGPU_VEGA20_DOORBELL_MEC_RING5               = 0x008,
 	AMDGPU_VEGA20_DOORBELL_MEC_RING6               = 0x009,
 	AMDGPU_VEGA20_DOORBELL_MEC_RING7               = 0x00A,
+	AMDGPU_VEGA20_DOORBELL_USERQUEUE_START	       = 0x00B,
+	AMDGPU_VEGA20_DOORBELL_USERQUEUE_END	       = 0x08A,
 	AMDGPU_VEGA20_DOORBELL_GFX_RING0               = 0x08B,
 	/* SDMA:256~335*/
 	AMDGPU_VEGA20_DOORBELL_sDMA_ENGINE0            = 0x100,
@@ -139,6 +145,10 @@ typedef enum _AMDGPU_VEGA20_DOORBELL_ASSIGNMENT
 	AMDGPU_VEGA20_DOORBELL64_VCE_RING2_3             = 0x18D,
 	AMDGPU_VEGA20_DOORBELL64_VCE_RING4_5             = 0x18E,
 	AMDGPU_VEGA20_DOORBELL64_VCE_RING6_7             = 0x18F,
+
+	AMDGPU_VEGA20_DOORBELL64_FIRST_NON_CP            = AMDGPU_VEGA20_DOORBELL_sDMA_ENGINE0,
+	AMDGPU_VEGA20_DOORBELL64_LAST_NON_CP             = AMDGPU_VEGA20_DOORBELL64_VCE_RING6_7,
+
 	AMDGPU_VEGA20_DOORBELL_MAX_ASSIGNMENT            = 0x18F,
 	AMDGPU_VEGA20_DOORBELL_INVALID                   = 0xFFFF
 } AMDGPU_VEGA20_DOORBELL_ASSIGNMENT;
@@ -171,6 +181,10 @@ typedef enum _AMDGPU_DOORBELL64_ASSIGNMENT
 	AMDGPU_DOORBELL64_MEC_RING5               = 0x08,
 	AMDGPU_DOORBELL64_MEC_RING6               = 0x09,
 	AMDGPU_DOORBELL64_MEC_RING7               = 0x0a,
+
+	/* User queue doorbell range (128 doorbells) */
+	AMDGPU_DOORBELL64_USERQUEUE_START         = 0x0b,
+	AMDGPU_DOORBELL64_USERQUEUE_END           = 0x8a,
 
 	/* Graphics engine */
 	AMDGPU_DOORBELL64_GFX_RING0               = 0x8b,
@@ -213,6 +227,9 @@ typedef enum _AMDGPU_DOORBELL64_ASSIGNMENT
 	AMDGPU_DOORBELL64_VCE_RING2_3             = 0xFD,
 	AMDGPU_DOORBELL64_VCE_RING4_5             = 0xFE,
 	AMDGPU_DOORBELL64_VCE_RING6_7             = 0xFF,
+
+	AMDGPU_DOORBELL64_FIRST_NON_CP            = AMDGPU_DOORBELL64_sDMA_ENGINE0,
+	AMDGPU_DOORBELL64_LAST_NON_CP             = AMDGPU_DOORBELL64_VCE_RING6_7,
 
 	AMDGPU_DOORBELL64_MAX_ASSIGNMENT          = 0xFF,
 	AMDGPU_DOORBELL64_INVALID                 = 0xFFFF
