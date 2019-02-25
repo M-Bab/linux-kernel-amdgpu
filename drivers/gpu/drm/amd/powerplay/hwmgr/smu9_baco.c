@@ -1,5 +1,5 @@
 /*
- * Copyright 2017 Advanced Micro Devices, Inc.
+ * Copyright 2018 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,43 +19,48 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
- * Authors: Christian König
  */
-#ifndef __AMDGPU_MN_H__
-#define __AMDGPU_MN_H__
+#include "amdgpu.h"
+#include "soc15.h"
+#include "soc15_hw_ip.h"
+#include "vega10_ip_offset.h"
+#include "soc15_common.h"
+#include "vega10_inc.h"
+#include "smu9_baco.h"
 
-/*
- * HMM mirror
- */
-struct amdgpu_mn;
-struct hmm_range;
-
-enum amdgpu_mn_type {
-	AMDGPU_MN_TYPE_GFX,
-	AMDGPU_MN_TYPE_HSA,
-};
-
-#if defined(CONFIG_HMM_MIRROR)
-void amdgpu_mn_lock(struct amdgpu_mn *mn);
-void amdgpu_mn_unlock(struct amdgpu_mn *mn);
-struct amdgpu_mn *amdgpu_mn_get(struct amdgpu_device *adev,
-				enum amdgpu_mn_type type);
-int amdgpu_mn_register(struct amdgpu_bo *bo, unsigned long addr);
-void amdgpu_mn_unregister(struct amdgpu_bo *bo);
-void amdgpu_hmm_init_range(struct hmm_range *range);
-#else
-static inline void amdgpu_mn_lock(struct amdgpu_mn *mn) {}
-static inline void amdgpu_mn_unlock(struct amdgpu_mn *mn) {}
-static inline struct amdgpu_mn *amdgpu_mn_get(struct amdgpu_device *adev,
-					      enum amdgpu_mn_type type)
+int smu9_baco_get_capability(struct pp_hwmgr *hwmgr, bool *cap)
 {
-	return NULL;
-}
-static inline int amdgpu_mn_register(struct amdgpu_bo *bo, unsigned long addr)
-{
-	return -ENODEV;
-}
-static inline void amdgpu_mn_unregister(struct amdgpu_bo *bo) {}
-#endif
+	struct amdgpu_device *adev = (struct amdgpu_device *)(hwmgr->adev);
+	uint32_t reg, data;
 
-#endif
+	*cap = false;
+	if (!phm_cap_enabled(hwmgr->platform_descriptor.platformCaps, PHM_PlatformCaps_BACO))
+		return 0;
+
+	WREG32(0x12074, 0xFFF0003B);
+	data = RREG32(0x12075);
+
+	if (data == 0x1) {
+		reg = RREG32_SOC15(NBIF, 0, mmRCC_BIF_STRAP0);
+
+		if (reg & RCC_BIF_STRAP0__STRAP_PX_CAPABLE_MASK)
+			*cap = true;
+	}
+
+	return 0;
+}
+
+int smu9_baco_get_state(struct pp_hwmgr *hwmgr, enum BACO_STATE *state)
+{
+	struct amdgpu_device *adev = (struct amdgpu_device *)(hwmgr->adev);
+	uint32_t reg;
+
+	reg = RREG32_SOC15(NBIF, 0, mmBACO_CNTL);
+
+	if (reg & BACO_CNTL__BACO_MODE_MASK)
+		/* gfx has already entered BACO state */
+		*state = BACO_STATE_IN;
+	else
+		*state = BACO_STATE_OUT;
+	return 0;
+}

@@ -39,7 +39,7 @@
 #include "inc/hw/dmcu.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.2.17"
+#define DC_VER "3.2.19"
 
 #define MAX_SURFACES 3
 #define MAX_STREAMS 6
@@ -164,6 +164,7 @@ struct dc_config {
 	bool gpu_vm_support;
 	bool disable_disp_pll_sharing;
 	bool fbc_support;
+	bool optimize_edp_link_rate;
 };
 
 enum visual_confirm {
@@ -203,6 +204,7 @@ struct dc_clocks {
 	int fclk_khz;
 	int phyclk_khz;
 	int dramclk_khz;
+	bool p_state_change_support;
 };
 
 struct dc_debug_options {
@@ -257,12 +259,21 @@ struct dc_debug_options {
 	bool skip_detection_link_training;
 	unsigned int force_odm_combine; //bit vector based on otg inst
 	unsigned int force_fclk_khz;
+	bool disable_tri_buf;
 };
 
 struct dc_debug_data {
 	uint32_t ltFailCount;
 	uint32_t i2cErrorCount;
 	uint32_t auxErrorCount;
+};
+
+struct dc_bounding_box_overrides {
+	int sr_exit_time_ns;
+	int sr_enter_plus_exit_time_ns;
+	int urgent_latency_ns;
+	int percent_of_ideal_drambw;
+	int dram_clock_change_latency_ns;
 };
 
 struct dc_state;
@@ -274,6 +285,7 @@ struct dc {
 	struct dc_cap_funcs cap_funcs;
 	struct dc_config config;
 	struct dc_debug_options debug;
+	struct dc_bounding_box_overrides bb_overrides;
 	struct dc_context *ctx;
 
 	uint8_t link_count;
@@ -327,6 +339,7 @@ struct dc_init_data {
 	struct hw_asic_id asic_id;
 	void *driver; /* ctx */
 	struct cgs_device *cgs_device;
+	struct dc_bounding_box_overrides bb_overrides;
 
 	int num_virtual_links;
 	/*
@@ -646,6 +659,10 @@ struct dpcd_caps {
 	union max_lane_count max_ln_count;
 	union max_down_spread max_down_spread;
 
+	/* valid only for eDP v1.4 or higher*/
+	uint8_t edp_supported_link_rates_count;
+	enum dc_link_rate edp_supported_link_rates[8];
+
 	/* dongle type (DP converter, CV smart dongle) */
 	enum display_dongle_type dongle_type;
 	/* Dongle's downstream count. */
@@ -663,7 +680,6 @@ struct dpcd_caps {
 	int8_t branch_dev_name[6];
 	int8_t branch_hw_revision;
 	int8_t branch_fw_revision[2];
-	uint8_t link_rate_set;
 
 	bool allow_invalid_MSA_timing_param;
 	bool panel_mode_edp;

@@ -621,6 +621,8 @@ static bool construct(struct dc *dc,
 #endif
 
 	enum dce_version dc_version = DCE_VERSION_UNKNOWN;
+	memcpy(&dc->bb_overrides, &init_params->bb_overrides, sizeof(dc->bb_overrides));
+
 	dc_dceip = kzalloc(sizeof(*dc_dceip), GFP_KERNEL);
 	if (!dc_dceip) {
 		dm_error("%s: failed to create dceip\n", __func__);
@@ -1138,6 +1140,9 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 	/* pplib is notified if disp_num changed */
 	dc->hwss.optimize_bandwidth(dc, context);
 
+	for (i = 0; i < context->stream_count; i++)
+		context->streams[i]->mode_changed = false;
+
 	dc_release_state(dc->current_state);
 
 	dc->current_state = context;
@@ -1623,13 +1628,13 @@ static void commit_planes_do_stream_update(struct dc *dc,
 					stream_update->adjust->v_total_min,
 					stream_update->adjust->v_total_max);
 
-			if (stream_update->periodic_vsync_config && pipe_ctx->stream_res.tg->funcs->program_vline_interrupt)
-				pipe_ctx->stream_res.tg->funcs->program_vline_interrupt(
-					pipe_ctx->stream_res.tg, &pipe_ctx->stream->timing, VLINE0, &stream->periodic_vsync_config);
+			if (stream_update->periodic_interrupt0 &&
+					dc->hwss.setup_periodic_interrupt)
+				dc->hwss.setup_periodic_interrupt(pipe_ctx, VLINE0);
 
-			if (stream_update->enhanced_sync_config && pipe_ctx->stream_res.tg->funcs->program_vline_interrupt)
-				pipe_ctx->stream_res.tg->funcs->program_vline_interrupt(
-					pipe_ctx->stream_res.tg, &pipe_ctx->stream->timing, VLINE1, &stream->enhanced_sync_config);
+			if (stream_update->periodic_interrupt1 &&
+					dc->hwss.setup_periodic_interrupt)
+				dc->hwss.setup_periodic_interrupt(pipe_ctx, VLINE1);
 
 			if ((stream_update->hdr_static_metadata && !stream->use_dynamic_meta) ||
 					stream_update->vrr_infopacket ||
@@ -1723,6 +1728,9 @@ static void commit_planes_for_stream(struct dc *dc,
 
 			if (!pipe_ctx->plane_state)
 				continue;
+			/*make sure hw finished surface update*/
+			if (dc->hwss.wait_surface_safe_to_update)
+				dc->hwss.wait_surface_safe_to_update(dc, pipe_ctx);
 
 			/* Full fe update*/
 			if (update_type == UPDATE_TYPE_FAST)

@@ -88,6 +88,24 @@ static void log_mpc_crc(struct dc *dc,
 		REG_READ(DPP_TOP0_DPP_CRC_VAL_B_A), REG_READ(DPP_TOP0_DPP_CRC_VAL_R_G));
 }
 
+void dcn10_wait_for_surface_safe_to_use(struct dc *dc,
+	struct pipe_ctx *pipe_ctx)
+{
+	struct hubbub *hubbub = dc->res_pool->hubbub;
+
+	if (!pipe_ctx->plane_state)
+		return;
+	if (!pipe_ctx->stream)
+		return;
+
+	if (!pipe_ctx->plane_state->visible)
+		return;
+	if (hubbub->funcs->wait_for_surf_safe_update) {
+		hubbub->funcs->wait_for_surf_safe_update(dc->res_pool->hubbub,
+			pipe_ctx->plane_res.hubp->inst);
+	}
+}
+
 void dcn10_log_hubbub_state(struct dc *dc, struct dc_log_buffer_ctx *log_ctx)
 {
 	struct dc_context *dc_ctx = dc->ctx;
@@ -714,7 +732,7 @@ static enum dc_status dcn10_enable_stream_timing(
 	return DC_OK;
 }
 
-static void reset_back_end_for_pipe(
+static void dcn10_reset_back_end_for_pipe(
 		struct dc *dc,
 		struct pipe_ctx *pipe_ctx,
 		struct dc_state *context)
@@ -889,22 +907,23 @@ void hwss1_plane_atomic_disconnect(struct dc *dc, struct pipe_ctx *pipe_ctx)
 		dcn10_verify_allow_pstate_change_high(dc);
 }
 
-static void plane_atomic_power_down(struct dc *dc, struct pipe_ctx *pipe_ctx)
+static void plane_atomic_power_down(struct dc *dc,
+		struct dpp *dpp,
+		struct hubp *hubp)
 {
 	struct dce_hwseq *hws = dc->hwseq;
-	struct dpp *dpp = pipe_ctx->plane_res.dpp;
 	DC_LOGGER_INIT(dc->ctx->logger);
 
 	if (REG(DC_IP_REQUEST_CNTL)) {
 		REG_SET(DC_IP_REQUEST_CNTL, 0,
 				IP_REQUEST_EN, 1);
 		dpp_pg_control(hws, dpp->inst, false);
-		hubp_pg_control(hws, pipe_ctx->plane_res.hubp->inst, false);
+		hubp_pg_control(hws, hubp->inst, false);
 		dpp->funcs->dpp_reset(dpp);
 		REG_SET(DC_IP_REQUEST_CNTL, 0,
 				IP_REQUEST_EN, 0);
 		DC_LOG_DEBUG(
-				"Power gated front end %d\n", pipe_ctx->pipe_idx);
+				"Power gated front end %d\n", hubp->inst);
 	}
 }
 
@@ -931,7 +950,9 @@ static void plane_atomic_disable(struct dc *dc, struct pipe_ctx *pipe_ctx)
 	hubp->power_gated = true;
 	dc->optimized_required = false; /* We're powering off, no need to optimize */
 
-	plane_atomic_power_down(dc, pipe_ctx);
+	plane_atomic_power_down(dc,
+			pipe_ctx->plane_res.dpp,
+			pipe_ctx->plane_res.hubp);
 
 	pipe_ctx->stream = NULL;
 	memset(&pipe_ctx->stream_res, 0, sizeof(pipe_ctx->stream_res));
@@ -959,9 +980,25 @@ static void dcn10_disable_plane(struct dc *dc, struct pipe_ctx *pipe_ctx)
 static void dcn10_init_pipes(struct dc *dc, struct dc_state *context)
 {
 	int i;
+	bool can_apply_seamless_boot = false;
+
+	for (i = 0; i < context->stream_count; i++) {
+		if (context->streams[i]->apply_seamless_boot_optimization) {
+			can_apply_seamless_boot = true;
+			break;
+		}
+	}
 
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
 		struct timing_generator *tg = dc->res_pool->timing_generators[i];
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+
+		/* There is assumption that pipe_ctx is not mapping irregularly
+		 * to non-preferred front end. If pipe_ctx->stream is not NULL,
+		 * we will use the pipe, so don't disable
+		 */
+		if (pipe_ctx->stream != NULL)
+			continue;
 
 		if (tg->funcs->is_tg_enabled(tg))
 			tg->funcs->lock(tg);
@@ -975,13 +1012,27 @@ static void dcn10_init_pipes(struct dc *dc, struct dc_state *context)
 		}
 	}
 
-	dc->res_pool->mpc->funcs->mpc_init(dc->res_pool->mpc);
+	/* Cannot reset the MPC mux if seamless boot */
+	if (!can_apply_seamless_boot)
+		dc->res_pool->mpc->funcs->mpc_init(dc->res_pool->mpc);
 
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
 		struct timing_generator *tg = dc->res_pool->timing_generators[i];
 		struct hubp *hubp = dc->res_pool->hubps[i];
 		struct dpp *dpp = dc->res_pool->dpps[i];
 		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
+
+		/* There is assumption that pipe_ctx is not mapping irregularly
+		 * to non-preferred front end. If pipe_ctx->stream is not NULL,
+		 * we will use the pipe, so don't disable
+		 */
+		if (pipe_ctx->stream != NULL &&
+		    pipe_ctx->stream_res.tg->funcs->is_tg_enabled(
+			    pipe_ctx->stream_res.tg))
+			continue;
+
+		/* Disable on the current state so the new one isn't cleared. */
+		pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[i];
 
 		dpp->funcs->dpp_reset(dpp);
 
@@ -1080,6 +1131,22 @@ static void dcn10_init_hw(struct dc *dc)
 			link->link_status.link_active = true;
 	}
 
+	/* If taking control over from VBIOS, we may want to optimize our first
+	 * mode set, so we need to skip powering down pipes until we know which
+	 * pipes we want to use.
+	 * Otherwise, if taking control is not possible, we need to power
+	 * everything down.
+	 */
+	if (dcb->funcs->is_accelerated_mode(dcb)) {
+		for (i = 0; i < dc->res_pool->pipe_count; i++) {
+			struct hubp *hubp = dc->res_pool->hubps[i];
+			struct dpp *dpp = dc->res_pool->dpps[i];
+
+			dc->res_pool->opps[i]->mpc_tree_params.opp_id = dc->res_pool->opps[i]->inst;
+			plane_atomic_power_down(dc, dpp, hubp);
+		}
+	}
+
 	for (i = 0; i < dc->res_pool->audio_count; i++) {
 		struct audio *audio = dc->res_pool->audios[i];
 
@@ -1109,12 +1176,9 @@ static void dcn10_init_hw(struct dc *dc)
 	enable_power_gating_plane(dc->hwseq, true);
 
 	memset(&dc->res_pool->clk_mgr->clks, 0, sizeof(dc->res_pool->clk_mgr->clks));
-
-	if (dc->hwss.init_pipes)
-		dc->hwss.init_pipes(dc, dc->current_state);
 }
 
-static void reset_hw_ctx_wrap(
+static void dcn10_reset_hw_ctx_wrap(
 		struct dc *dc,
 		struct dc_state *context)
 {
@@ -1136,12 +1200,13 @@ static void reset_hw_ctx_wrap(
 				pipe_need_reprogram(pipe_ctx_old, pipe_ctx)) {
 			struct clock_source *old_clk = pipe_ctx_old->clock_source;
 
-			reset_back_end_for_pipe(dc, pipe_ctx_old, dc->current_state);
+			dcn10_reset_back_end_for_pipe(dc, pipe_ctx_old, dc->current_state);
+			if (dc->hwss.enable_stream_gating)
+				dc->hwss.enable_stream_gating(dc, pipe_ctx);
 			if (old_clk)
 				old_clk->funcs->cs_power_down(old_clk);
 		}
 	}
-
 }
 
 static bool patch_address_for_sbs_tb_stereo(
@@ -2162,8 +2227,10 @@ static void dcn10_blank_pixel_data(
 	if (!blank) {
 		if (stream_res->tg->funcs->set_blank)
 			stream_res->tg->funcs->set_blank(stream_res->tg, blank);
-		if (stream_res->abm)
+		if (stream_res->abm) {
+			stream_res->abm->funcs->set_pipe(stream_res->abm, stream_res->tg->inst + 1);
 			stream_res->abm->funcs->set_abm_level(stream_res->abm, stream->abm_level);
+		}
 	} else if (blank) {
 		if (stream_res->abm)
 			stream_res->abm->funcs->set_abm_immediate_disable(stream_res->abm);
@@ -2622,7 +2689,7 @@ static void dcn10_update_pending_status(struct pipe_ctx *pipe_ctx)
 	flip_pending = pipe_ctx->plane_res.hubp->funcs->hubp_is_flip_pending(
 					pipe_ctx->plane_res.hubp);
 
-	plane_state->status.is_flip_pending = flip_pending;
+	plane_state->status.is_flip_pending = plane_state->status.is_flip_pending || flip_pending;
 
 	if (!flip_pending)
 		plane_state->status.current_address = plane_state->status.requested_address;
@@ -2661,8 +2728,8 @@ static void dcn10_set_cursor_position(struct pipe_ctx *pipe_ctx)
 		.mirror = pipe_ctx->plane_state->horizontal_mirror
 	};
 
-	pos_cpy.x -= pipe_ctx->plane_state->dst_rect.x;
-	pos_cpy.y -= pipe_ctx->plane_state->dst_rect.y;
+	pos_cpy.x_hotspot += pipe_ctx->plane_state->dst_rect.x;
+	pos_cpy.y_hotspot += pipe_ctx->plane_state->dst_rect.y;
 
 	if (pipe_ctx->plane_state->address.type
 			== PLN_ADDR_TYPE_VIDEO_PROGRESSIVE)
@@ -2709,6 +2776,147 @@ static void dcn10_set_cursor_sdr_white_level(struct pipe_ctx *pipe_ctx)
 			pipe_ctx->plane_res.dpp, &opt_attr);
 }
 
+/**
+* apply_front_porch_workaround  TODO FPGA still need?
+*
+* This is a workaround for a bug that has existed since R5xx and has not been
+* fixed keep Front porch at minimum 2 for Interlaced mode or 1 for progressive.
+*/
+static void apply_front_porch_workaround(
+	struct dc_crtc_timing *timing)
+{
+	if (timing->flags.INTERLACE == 1) {
+		if (timing->v_front_porch < 2)
+			timing->v_front_porch = 2;
+	} else {
+		if (timing->v_front_porch < 1)
+			timing->v_front_porch = 1;
+	}
+}
+
+int get_vupdate_offset_from_vsync(struct pipe_ctx *pipe_ctx)
+{
+	struct timing_generator *optc = pipe_ctx->stream_res.tg;
+	const struct dc_crtc_timing *dc_crtc_timing = &pipe_ctx->stream->timing;
+	struct dc_crtc_timing patched_crtc_timing;
+	int vesa_sync_start;
+	int asic_blank_end;
+	int interlace_factor;
+	int vertical_line_start;
+
+	patched_crtc_timing = *dc_crtc_timing;
+	apply_front_porch_workaround(&patched_crtc_timing);
+
+	interlace_factor = patched_crtc_timing.flags.INTERLACE ? 2 : 1;
+
+	vesa_sync_start = patched_crtc_timing.v_addressable +
+			patched_crtc_timing.v_border_bottom +
+			patched_crtc_timing.v_front_porch;
+
+	asic_blank_end = (patched_crtc_timing.v_total -
+			vesa_sync_start -
+			patched_crtc_timing.v_border_top)
+			* interlace_factor;
+
+	vertical_line_start = asic_blank_end -
+			optc->dlg_otg_param.vstartup_start + 1;
+
+	return vertical_line_start;
+}
+
+static void calc_vupdate_position(
+		struct pipe_ctx *pipe_ctx,
+		uint32_t *start_line,
+		uint32_t *end_line)
+{
+	const struct dc_crtc_timing *dc_crtc_timing = &pipe_ctx->stream->timing;
+	int vline_int_offset_from_vupdate =
+			pipe_ctx->stream->periodic_interrupt0.lines_offset;
+	int vupdate_offset_from_vsync = get_vupdate_offset_from_vsync(pipe_ctx);
+	int start_position;
+
+	if (vline_int_offset_from_vupdate > 0)
+		vline_int_offset_from_vupdate--;
+	else if (vline_int_offset_from_vupdate < 0)
+		vline_int_offset_from_vupdate++;
+
+	start_position = vline_int_offset_from_vupdate + vupdate_offset_from_vsync;
+
+	if (start_position >= 0)
+		*start_line = start_position;
+	else
+		*start_line = dc_crtc_timing->v_total + start_position - 1;
+
+	*end_line = *start_line + 2;
+
+	if (*end_line >= dc_crtc_timing->v_total)
+		*end_line = 2;
+}
+
+static void cal_vline_position(
+		struct pipe_ctx *pipe_ctx,
+		enum vline_select vline,
+		uint32_t *start_line,
+		uint32_t *end_line)
+{
+	enum vertical_interrupt_ref_point ref_point = INVALID_POINT;
+
+	if (vline == VLINE0)
+		ref_point = pipe_ctx->stream->periodic_interrupt0.ref_point;
+	else if (vline == VLINE1)
+		ref_point = pipe_ctx->stream->periodic_interrupt1.ref_point;
+
+	switch (ref_point) {
+	case START_V_UPDATE:
+		calc_vupdate_position(
+				pipe_ctx,
+				start_line,
+				end_line);
+		break;
+	case START_V_SYNC:
+		// Suppose to do nothing because vsync is 0;
+		break;
+	default:
+		ASSERT(0);
+		break;
+	}
+}
+
+static void dcn10_setup_periodic_interrupt(
+		struct pipe_ctx *pipe_ctx,
+		enum vline_select vline)
+{
+	struct timing_generator *tg = pipe_ctx->stream_res.tg;
+
+	if (vline == VLINE0) {
+		uint32_t start_line = 0;
+		uint32_t end_line = 0;
+
+		cal_vline_position(pipe_ctx, vline, &start_line, &end_line);
+
+		tg->funcs->setup_vertical_interrupt0(tg, start_line, end_line);
+
+	} else if (vline == VLINE1) {
+		pipe_ctx->stream_res.tg->funcs->setup_vertical_interrupt1(
+				tg,
+				pipe_ctx->stream->periodic_interrupt1.lines_offset);
+	}
+}
+
+static void dcn10_setup_vupdate_interrupt(struct pipe_ctx *pipe_ctx)
+{
+	struct timing_generator *tg = pipe_ctx->stream_res.tg;
+	int start_line = get_vupdate_offset_from_vsync(pipe_ctx);
+
+	if (start_line < 0) {
+		ASSERT(0);
+		start_line = 0;
+	}
+
+	if (tg->funcs->setup_vertical_interrupt2)
+		tg->funcs->setup_vertical_interrupt2(tg, start_line);
+}
+
 static const struct hw_sequencer_funcs dcn10_funcs = {
 	.program_gamut_remap = program_gamut_remap,
 	.init_hw = dcn10_init_hw,
@@ -2740,7 +2948,7 @@ static const struct hw_sequencer_funcs dcn10_funcs = {
 	.pipe_control_lock = dcn10_pipe_control_lock,
 	.prepare_bandwidth = dcn10_prepare_bandwidth,
 	.optimize_bandwidth = dcn10_optimize_bandwidth,
-	.reset_hw_ctx_wrap = reset_hw_ctx_wrap,
+	.reset_hw_ctx_wrap = dcn10_reset_hw_ctx_wrap,
 	.enable_stream_timing = dcn10_enable_stream_timing,
 	.set_drr = set_drr,
 	.get_position = get_position,
@@ -2756,7 +2964,13 @@ static const struct hw_sequencer_funcs dcn10_funcs = {
 	.edp_wait_for_hpd_ready = hwss_edp_wait_for_hpd_ready,
 	.set_cursor_position = dcn10_set_cursor_position,
 	.set_cursor_attribute = dcn10_set_cursor_attribute,
-	.set_cursor_sdr_white_level = dcn10_set_cursor_sdr_white_level
+	.set_cursor_sdr_white_level = dcn10_set_cursor_sdr_white_level,
+	.disable_stream_gating = NULL,
+	.enable_stream_gating = NULL,
+	.setup_periodic_interrupt = dcn10_setup_periodic_interrupt,
+	.setup_vupdate_interrupt = dcn10_setup_vupdate_interrupt,
+	.wait_surface_safe_to_update = dcn10_wait_for_surface_safe_to_use,
+
 };
 
 
