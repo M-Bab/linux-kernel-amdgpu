@@ -1035,7 +1035,7 @@ void kfd_signal_reset_event(struct kfd_dev *dev)
 	hash_for_each_rcu(kfd_processes_table, temp, p, kfd_processes) {
 		mutex_lock(&p->event_mutex);
 		id = KFD_FIRST_NONSIGNAL_EVENT_ID;
-		idr_for_each_entry_continue(&p->event_idr, ev, id)
+		idr_for_each_entry_continue(&p->event_idr, ev, id) {
 			if (ev->type == KFD_EVENT_TYPE_HW_EXCEPTION) {
 				ev->hw_exception_data = hw_exception_data;
 				set_event(ev);
@@ -1045,6 +1045,7 @@ void kfd_signal_reset_event(struct kfd_dev *dev)
 				ev->memory_exception_data = memory_exception_data;
 				set_event(ev);
 			}
+		}
 		mutex_unlock(&p->event_mutex);
 	}
 	srcu_read_unlock(&kfd_processes_srcu, idx);
