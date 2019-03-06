@@ -2211,6 +2211,8 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		goto err;
 	}
 
+	regmap_write(cs35l41->regmap,
+			CS35L41_DSP1_CCM_CORE_CTRL, 0);
 	cs35l41_dsp_init(cs35l41);
 
 	ret =  snd_soc_register_component(cs35l41->dev, &soc_component_dev_cs35l41,
