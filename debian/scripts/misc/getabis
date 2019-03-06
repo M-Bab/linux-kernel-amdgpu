@@ -82,7 +82,7 @@ getall_set()
 					rc="$?"
 					# If this was not successful or a valid error
 					# return from the server all bets are off, bail.
-					[ "$rc" != 0 -a "$rc" != 8 ] && return 1
+					[ "$rc" != 0 -a "$rc" != 8 ] && return 2
 				fi
 				if [ -f $filename ]; then
 					echo -n "y"
