@@ -45,8 +45,6 @@
 #include "radeon_reg.h"
 #include "radeon.h"
 
-#define DRM_FILE_PAGE_OFFSET (0x100000000ULL >> PAGE_SHIFT)
-
 static int radeon_ttm_debugfs_init(struct radeon_device *rdev);
 static void radeon_ttm_debugfs_fini(struct radeon_device *rdev);
 
@@ -792,7 +790,6 @@ int radeon_ttm_init(struct radeon_device *rdev)
 	r = ttm_bo_device_init(&rdev->mman.bdev,
 			       &radeon_bo_driver,
 			       rdev->ddev->anon_inode->i_mapping,
-			       DRM_FILE_PAGE_OFFSET,
 			       rdev->need_dma32);
 	if (r) {
 		DRM_ERROR("failed initializing buffer object driver(%d).\n", r);
@@ -901,16 +898,10 @@ static vm_fault_t radeon_ttm_fault(struct vm_fault *vmf)
 
 int radeon_mmap(struct file *filp, struct vm_area_struct *vma)
 {
-	struct drm_file *file_priv;
-	struct radeon_device *rdev;
 	int r;
+	struct drm_file *file_priv = filp->private_data;
+	struct radeon_device *rdev = file_priv->minor->dev->dev_private;
 
-	if (unlikely(vma->vm_pgoff < DRM_FILE_PAGE_OFFSET)) {
-		return -EINVAL;
-	}
-
-	file_priv = filp->private_data;
-	rdev = file_priv->minor->dev->dev_private;
 	if (rdev == NULL) {
 		return -EINVAL;
 	}

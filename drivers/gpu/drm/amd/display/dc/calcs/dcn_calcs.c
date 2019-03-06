@@ -1348,11 +1348,11 @@ void dcn_bw_update_from_pplib(struct dc *dc)
 	struct dm_pp_clock_levels_with_voltage fclks = {0}, dcfclks = {0};
 	bool res;
 
-	kernel_fpu_begin();
-
 	/* TODO: This is not the proper way to obtain fabric_and_dram_bandwidth, should be min(fclk, memclk) */
 	res = dm_pp_get_clock_levels_by_type_with_voltage(
 			ctx, DM_PP_CLOCK_TYPE_FCLK, &fclks);
+
+	kernel_fpu_begin();
 
 	if (res)
 		res = verify_clock_values(&fclks);
@@ -1372,8 +1372,12 @@ void dcn_bw_update_from_pplib(struct dc *dc)
 	} else
 		BREAK_TO_DEBUGGER();
 
+	kernel_fpu_end();
+
 	res = dm_pp_get_clock_levels_by_type_with_voltage(
 			ctx, DM_PP_CLOCK_TYPE_DCFCLK, &dcfclks);
+
+	kernel_fpu_begin();
 
 	if (res)
 		res = verify_clock_values(&dcfclks);
@@ -1391,12 +1395,14 @@ void dcn_bw_update_from_pplib(struct dc *dc)
 
 void dcn_bw_notify_pplib_of_wm_ranges(struct dc *dc)
 {
-	struct pp_smu_funcs_rv *pp = &dc->res_pool->pp_smu->rv_funcs;
+	struct pp_smu_funcs_rv *pp = NULL;
 	struct pp_smu_wm_range_sets ranges = {0};
 	int min_fclk_khz, min_dcfclk_khz, socclk_khz;
 	const int overdrive = 5000000; /* 5 GHz to cover Overdrive */
 
-	if (!pp->set_wm_ranges)
+	if (dc->res_pool->pp_smu)
+		pp = &dc->res_pool->pp_smu->rv_funcs;
+	if (!pp || !pp->set_wm_ranges)
 		return;
 
 	kernel_fpu_begin();

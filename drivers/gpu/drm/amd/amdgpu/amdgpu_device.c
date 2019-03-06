@@ -60,6 +60,7 @@
 #include "amdgpu_pm.h"
 
 #include "amdgpu_xgmi.h"
+#include "amdgpu_ras.h"
 
 MODULE_FIRMWARE("amdgpu/vega10_gpu_info.bin");
 MODULE_FIRMWARE("amdgpu/vega12_gpu_info.bin");
@@ -1506,7 +1507,7 @@ static int amdgpu_device_ip_early_init(struct amdgpu_device *adev)
 			return -EAGAIN;
 	}
 
-	adev->powerplay.pp_feature = amdgpu_pp_feature_mask;
+	adev->pm.pp_feature = amdgpu_pp_feature_mask;
 
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if ((amdgpu_ip_block_mask & (1 << i)) == 0) {
@@ -1637,6 +1638,10 @@ static int amdgpu_device_fw_loading(struct amdgpu_device *adev)
 static int amdgpu_device_ip_init(struct amdgpu_device *adev)
 {
 	int i, r;
+
+	r = amdgpu_ras_init(adev);
+	if (r)
+		return r;
 
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if (!adev->ip_blocks[i].status.valid)
@@ -1869,6 +1874,8 @@ static int amdgpu_device_ip_fini(struct amdgpu_device *adev)
 {
 	int i, r;
 
+	amdgpu_ras_pre_fini(adev);
+
 	if (adev->gmc.xgmi.num_physical_nodes > 1)
 		amdgpu_xgmi_remove_device(adev);
 
@@ -1937,6 +1944,8 @@ static int amdgpu_device_ip_fini(struct amdgpu_device *adev)
 		adev->ip_blocks[i].status.late_initialized = false;
 	}
 
+	amdgpu_ras_fini(adev);
+
 	if (amdgpu_sriov_vf(adev))
 		if (amdgpu_virt_release_full_gpu(adev, false))
 			DRM_ERROR("failed to release exclusive mode on fini\n");
@@ -1999,6 +2008,9 @@ static void amdgpu_device_ip_late_init_func_handler(struct work_struct *work)
 	r = amdgpu_device_enable_mgpu_fan_boost();
 	if (r)
 		DRM_ERROR("enable mgpu fan boost failed (%d).\n", r);
+
+	/*set to low pstate by default */
+	amdgpu_xgmi_set_pstate(adev, 0);
 }
 
 static void amdgpu_device_delay_enable_gfx_off(struct work_struct *work)
@@ -3386,6 +3398,11 @@ static int amdgpu_do_asic_reset(struct amdgpu_hive_info *hive,
 					if (r)
 						break;
 				}
+			}
+
+			list_for_each_entry(tmp_adev, device_list_handle,
+					gmc.xgmi.head) {
+				amdgpu_ras_reserve_bad_pages(tmp_adev);
 			}
 		}
 	}

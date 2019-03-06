@@ -31,6 +31,8 @@
 #include "hw_sequencer.h"
 #include "dce/dce_hwseq.h"
 
+#include "reg_helper.h"
+
 #include "resource.h"
 
 #include "clock_source.h"
@@ -57,8 +59,12 @@
 
 #include "dce/dce_i2c.h"
 
+#define CTX \
+	dc->ctx
+
 #define DC_LOGGER \
-	dc->ctx->logger
+	CTX->logger
+
 
 const static char DC_BUILD_ID[] = "production-build";
 
@@ -668,6 +674,7 @@ static bool construct(struct dc *dc,
 	dc_ctx->asic_id = init_params->asic_id;
 	dc_ctx->dc_sink_id_count = 0;
 	dc_ctx->dc_stream_id_count = 0;
+
 	dc->ctx = dc_ctx;
 
 	dc->current_state = dc_create_state();
@@ -833,6 +840,11 @@ alloc_fail:
 void dc_init_callbacks(struct dc *dc,
 		const struct dc_callback_init *init_params)
 {
+
+#ifdef CONFIG_DRM_AMD_DC_DMUB
+	dc->ctx->dmub_if = init_params->dmub_if;
+	dc->ctx->reg_helper_offload = init_params->dmub_offload;
+#endif
 }
 
 void dc_destroy(struct dc **dc)
@@ -971,7 +983,7 @@ static bool context_changed(
 	return false;
 }
 
-bool dc_validate_seamless_boot_timing(struct dc *dc,
+bool dc_validate_seamless_boot_timing(const struct dc *dc,
 				const struct dc_sink *sink,
 				struct dc_crtc_timing *crtc_timing)
 {
@@ -1062,7 +1074,13 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 	if (!dcb->funcs->is_accelerated_mode(dcb))
 		dc->hwss.enable_accelerated_mode(dc, context);
 
-	dc->hwss.prepare_bandwidth(dc, context);
+	for (i = 0; i < context->stream_count; i++) {
+		if (context->streams[i]->apply_seamless_boot_optimization)
+			dc->optimize_seamless_boot = true;
+	}
+
+	if (!dc->optimize_seamless_boot)
+		dc->hwss.prepare_bandwidth(dc, context);
 
 	/* re-program planes for existing stream, in case we need to
 	 * free up plane resource for later use
@@ -1137,11 +1155,14 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 
 	dc_enable_stereo(dc, context, dc_streams, context->stream_count);
 
-	/* pplib is notified if disp_num changed */
-	dc->hwss.optimize_bandwidth(dc, context);
+	if (!dc->optimize_seamless_boot)
+		/* pplib is notified if disp_num changed */
+		dc->hwss.optimize_bandwidth(dc, context);
 
 	for (i = 0; i < context->stream_count; i++)
 		context->streams[i]->mode_changed = false;
+
+	memset(&context->commit_hints, 0, sizeof(context->commit_hints));
 
 	dc_release_state(dc->current_state);
 
@@ -1179,7 +1200,7 @@ bool dc_post_update_surfaces_to_stream(struct dc *dc)
 	int i;
 	struct dc_state *context = dc->current_state;
 
-	if (dc->optimized_required == false)
+	if (!dc->optimized_required || dc->optimize_seamless_boot)
 		return true;
 
 	post_surface_trace(dc);
@@ -1697,7 +1718,16 @@ static void commit_planes_for_stream(struct dc *dc,
 	int i, j;
 	struct pipe_ctx *top_pipe_to_program = NULL;
 
-	if (update_type == UPDATE_TYPE_FULL) {
+	if (dc->optimize_seamless_boot && surface_count > 0) {
+		/* Optimize seamless boot flag keeps clocks and watermarks high until
+		 * first flip. After first flip, optimization is required to lower
+		 * bandwidth.
+		 */
+		dc->optimize_seamless_boot = false;
+		dc->optimized_required = true;
+	}
+
+	if (update_type == UPDATE_TYPE_FULL && !dc->optimize_seamless_boot) {
 		dc->hwss.prepare_bandwidth(dc, context);
 		context_clock_trace(dc, context);
 	}
@@ -1728,9 +1758,6 @@ static void commit_planes_for_stream(struct dc *dc,
 
 			if (!pipe_ctx->plane_state)
 				continue;
-			/*make sure hw finished surface update*/
-			if (dc->hwss.wait_surface_safe_to_update)
-				dc->hwss.wait_surface_safe_to_update(dc, pipe_ctx);
 
 			/* Full fe update*/
 			if (update_type == UPDATE_TYPE_FAST)
@@ -1769,7 +1796,6 @@ static void commit_planes_for_stream(struct dc *dc,
 					dc->hwss.update_plane_addr(dc, pipe_ctx);
 			}
 		}
-
 		dc->hwss.pipe_control_lock(dc, top_pipe_to_program, false);
 	}
 }
