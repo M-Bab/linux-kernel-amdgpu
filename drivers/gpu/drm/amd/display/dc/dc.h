@@ -29,6 +29,9 @@
 #include "dc_types.h"
 #include "grph_object_defs.h"
 #include "logger_types.h"
+#ifdef CONFIG_DRM_AMD_DC_DMUB
+#include "dmub_dc.h"
+#endif
 #include "gpio_types.h"
 #include "link_service_types.h"
 #include "grph_object_ctrl_defs.h"
@@ -39,9 +42,10 @@
 #include "inc/hw/dmcu.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.2.19"
+#define DC_VER "3.2.20"
 
 #define MAX_SURFACES 3
+#define MAX_PLANES 6
 #define MAX_STREAMS 6
 #define MAX_SINKS_PER_LINK 4
 
@@ -51,6 +55,22 @@
 struct dc_versions {
 	const char *dc_ver;
 	struct dmcu_version dmcu_version;
+};
+
+enum dc_plane_type {
+	DC_PLANE_TYPE_INVALID,
+	DC_PLANE_TYPE_DCE_RGB,
+	DC_PLANE_TYPE_DCE_UNDERLAY,
+	DC_PLANE_TYPE_DCN_UNIVERSAL,
+};
+
+struct dc_plane_cap {
+	enum dc_plane_type type;
+	uint32_t blends_with_above : 1;
+	uint32_t blends_with_below : 1;
+	uint32_t per_pixel_alpha : 1;
+	uint32_t supports_argb8888 : 1;
+	uint32_t supports_nv12 : 1;
 };
 
 struct dc_caps {
@@ -73,6 +93,7 @@ struct dc_caps {
 	bool force_dp_tps4_for_cp2520;
 	bool disable_dp_clk_share;
 	bool psp_setup_panel_mode;
+	struct dc_plane_cap planes[MAX_PLANES];
 };
 
 struct dc_dcc_surface_param {
@@ -165,6 +186,7 @@ struct dc_config {
 	bool disable_disp_pll_sharing;
 	bool fbc_support;
 	bool optimize_edp_link_rate;
+	bool allow_seamless_boot_optimization;
 };
 
 enum visual_confirm {
@@ -310,7 +332,11 @@ struct dc {
 	struct hw_sequencer_funcs hwss;
 	struct dce_hwseq *hwseq;
 
+	/* Require to optimize clocks and bandwidth for added/removed planes */
 	bool optimized_required;
+
+	/* Require to maintain clocks and bandwidth for UEFI enabled HW */
+	bool optimize_seamless_boot;
 
 	/* FBC compressor */
 	struct compressor *fbc_compressor;
@@ -349,12 +375,23 @@ struct dc_init_data {
 	struct dc_bios *vbios_override;
 	enum dce_environment dce_environment;
 
+#ifdef CONFIG_DRM_AMD_DC_DMUB
+	struct dmub_offload_funcs *dmub_if;
+	struct dc_reg_helper_state *dmub_offload;
+#endif
 	struct dc_config flags;
 	uint32_t log_mask;
 };
 
 struct dc_callback_init {
+
+#ifdef CONFIG_DRM_AMD_DC_DMUB
+	struct dmub_offload_funcs *dmub_if;
+	struct dc_reg_helper_state *dmub_offload;
+#endif
+
 	uint8_t reserved;
+
 };
 
 struct dc *dc_create(const struct dc_init_data *init_params);
@@ -607,7 +644,7 @@ struct dc_validation_set {
 	uint8_t plane_count;
 };
 
-bool dc_validate_seamless_boot_timing(struct dc *dc,
+bool dc_validate_seamless_boot_timing(const struct dc *dc,
 				const struct dc_sink *sink,
 				struct dc_crtc_timing *crtc_timing);
 
