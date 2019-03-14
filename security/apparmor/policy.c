@@ -227,9 +227,6 @@ void aa_free_profile(struct aa_profile *profile)
 	for (i = 0; i < profile->xattr_count; i++)
 		kfree_sensitive(profile->xattrs[i]);
 	kfree_sensitive(profile->xattrs);
-	for (i = 0; i < profile->secmark_count; i++)
-		kfree_sensitive(profile->secmark[i].label);
-	kfree_sensitive(profile->secmark);
 	kfree_sensitive(profile->dirname);
 	aa_put_dfa(profile->xmatch);
 	aa_put_dfa(profile->policy.dfa);
