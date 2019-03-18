@@ -222,6 +222,7 @@ static const struct soc15_reg_golden golden_settings_gc_9_1_rv2[] =
 
 static const struct soc15_reg_golden golden_settings_gc_9_x_common[] =
 {
+	SOC15_REG_GOLDEN_VALUE(GC, 0, mmCP_SD_CNTL, 0xffffffff, 0x000001ff),
 	SOC15_REG_GOLDEN_VALUE(GC, 0, mmGRBM_CAM_INDEX, 0xffffffff, 0x00000000),
 	SOC15_REG_GOLDEN_VALUE(GC, 0, mmGRBM_CAM_DATA, 0xffffffff, 0x2544c382)
 };
@@ -3549,6 +3550,9 @@ static int gfx_v9_0_ecc_late_init(void *handle)
 		return 0;
 	}
 
+	if (*ras_if)
+		goto resume;
+
 	*ras_if = kmalloc(sizeof(**ras_if), GFP_KERNEL);
 	if (!*ras_if)
 		return -ENOMEM;
@@ -3573,7 +3577,7 @@ static int gfx_v9_0_ecc_late_init(void *handle)
 	r = amdgpu_ras_sysfs_create(adev, &fs_info);
 	if (r)
 		goto sysfs;
-
+resume:
 	r = amdgpu_irq_get(adev, &adev->gfx.cp_ecc_error_irq, 0);
 	if (r)
 		goto irq;

@@ -498,18 +498,18 @@ MODULE_PARM_DESC(emu_mode, "Emulation mode, (1 = enable, 0 = disable)");
 module_param_named(emu_mode, amdgpu_emu_mode, int, 0444);
 
 /**
- * DOC: amdgpu_ras_enable (int)
+ * DOC: ras_enable (int)
  * Enable RAS features on the GPU (0 = disable, 1 = enable, -1 = auto (default))
  */
-MODULE_PARM_DESC(amdgpu_ras_enable, "Enable RAS features on the GPU (0 = disable, 1 = enable, -1 = auto (default))");
+MODULE_PARM_DESC(ras_enable, "Enable RAS features on the GPU (0 = disable, 1 = enable, -1 = auto (default))");
 module_param_named(ras_enable, amdgpu_ras_enable, int, 0444);
 
 /**
- * DOC: amdgpu_ras_mask (uint)
+ * DOC: ras_mask (uint)
  * Mask of RAS features to enable (default 0xffffffff), only valid when ras_enable == 1
  * See the flags in drivers/gpu/drm/amd/amdgpu/amdgpu_ras.h
  */
-MODULE_PARM_DESC(amdgpu_ras_mask, "Mask of RAS features to enable (default 0xffffffff), only valid when ras_enable == 1");
+MODULE_PARM_DESC(ras_mask, "Mask of RAS features to enable (default 0xffffffff), only valid when ras_enable == 1");
 module_param_named(ras_mask, amdgpu_ras_mask, uint, 0444);
 
 /**
@@ -1176,12 +1176,13 @@ static int amdgpu_flush(struct file *f, fl_owner_t id)
 {
 	struct drm_file *file_priv = f->private_data;
 	struct amdgpu_fpriv *fpriv = file_priv->driver_priv;
+	long timeout = MAX_WAIT_SCHED_ENTITY_Q_EMPTY;
 
-	amdgpu_ctx_mgr_entity_flush(&fpriv->ctx_mgr);
+	timeout = amdgpu_ctx_mgr_entity_flush(&fpriv->ctx_mgr, timeout);
+	timeout = amdgpu_vm_wait_idle(&fpriv->vm, timeout);
 
-	return 0;
+	return timeout >= 0 ? 0 : timeout;
 }
-
 
 static const struct file_operations amdgpu_driver_kms_fops = {
 	.owner = THIS_MODULE,

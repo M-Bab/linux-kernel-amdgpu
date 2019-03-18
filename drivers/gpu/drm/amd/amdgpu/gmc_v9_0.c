@@ -86,121 +86,6 @@ static const struct soc15_reg_golden golden_settings_athub_1_0_0[] =
 	SOC15_REG_GOLDEN_VALUE(ATHUB, 0, mmRPB_ARB_CNTL2, 0x00ff00ff, 0x00080008)
 };
 
-/* Ecc related register addresses, (BASE + reg offset) */
-/* Universal Memory Controller caps (may be fused). */
-/* UMCCH:UmcLocalCap */
-#define UMCLOCALCAPS_ADDR0	(0x00014306 + 0x00000000)
-#define UMCLOCALCAPS_ADDR1	(0x00014306 + 0x00000800)
-#define UMCLOCALCAPS_ADDR2	(0x00014306 + 0x00001000)
-#define UMCLOCALCAPS_ADDR3	(0x00014306 + 0x00001800)
-#define UMCLOCALCAPS_ADDR4	(0x00054306 + 0x00000000)
-#define UMCLOCALCAPS_ADDR5	(0x00054306 + 0x00000800)
-#define UMCLOCALCAPS_ADDR6	(0x00054306 + 0x00001000)
-#define UMCLOCALCAPS_ADDR7	(0x00054306 + 0x00001800)
-#define UMCLOCALCAPS_ADDR8	(0x00094306 + 0x00000000)
-#define UMCLOCALCAPS_ADDR9	(0x00094306 + 0x00000800)
-#define UMCLOCALCAPS_ADDR10	(0x00094306 + 0x00001000)
-#define UMCLOCALCAPS_ADDR11	(0x00094306 + 0x00001800)
-#define UMCLOCALCAPS_ADDR12	(0x000d4306 + 0x00000000)
-#define UMCLOCALCAPS_ADDR13	(0x000d4306 + 0x00000800)
-#define UMCLOCALCAPS_ADDR14	(0x000d4306 + 0x00001000)
-#define UMCLOCALCAPS_ADDR15	(0x000d4306 + 0x00001800)
-
-/* Universal Memory Controller Channel config. */
-/* UMCCH:UMC_CONFIG */
-#define UMCCH_UMC_CONFIG_ADDR0	(0x00014040 + 0x00000000)
-#define UMCCH_UMC_CONFIG_ADDR1	(0x00014040 + 0x00000800)
-#define UMCCH_UMC_CONFIG_ADDR2	(0x00014040 + 0x00001000)
-#define UMCCH_UMC_CONFIG_ADDR3	(0x00014040 + 0x00001800)
-#define UMCCH_UMC_CONFIG_ADDR4	(0x00054040 + 0x00000000)
-#define UMCCH_UMC_CONFIG_ADDR5	(0x00054040 + 0x00000800)
-#define UMCCH_UMC_CONFIG_ADDR6	(0x00054040 + 0x00001000)
-#define UMCCH_UMC_CONFIG_ADDR7	(0x00054040 + 0x00001800)
-#define UMCCH_UMC_CONFIG_ADDR8	(0x00094040 + 0x00000000)
-#define UMCCH_UMC_CONFIG_ADDR9	(0x00094040 + 0x00000800)
-#define UMCCH_UMC_CONFIG_ADDR10	(0x00094040 + 0x00001000)
-#define UMCCH_UMC_CONFIG_ADDR11	(0x00094040 + 0x00001800)
-#define UMCCH_UMC_CONFIG_ADDR12	(0x000d4040 + 0x00000000)
-#define UMCCH_UMC_CONFIG_ADDR13	(0x000d4040 + 0x00000800)
-#define UMCCH_UMC_CONFIG_ADDR14	(0x000d4040 + 0x00001000)
-#define UMCCH_UMC_CONFIG_ADDR15	(0x000d4040 + 0x00001800)
-
-/* Universal Memory Controller Channel Ecc config. */
-/* UMCCH:EccCtrl */
-#define UMCCH_ECCCTRL_ADDR0	(0x00014053 + 0x00000000)
-#define UMCCH_ECCCTRL_ADDR1	(0x00014053 + 0x00000800)
-#define UMCCH_ECCCTRL_ADDR2	(0x00014053 + 0x00001000)
-#define UMCCH_ECCCTRL_ADDR3	(0x00014053 + 0x00001800)
-#define UMCCH_ECCCTRL_ADDR4	(0x00054053 + 0x00000000)
-#define UMCCH_ECCCTRL_ADDR5	(0x00054053 + 0x00000800)
-#define UMCCH_ECCCTRL_ADDR6	(0x00054053 + 0x00001000)
-#define UMCCH_ECCCTRL_ADDR7	(0x00054053 + 0x00001800)
-#define UMCCH_ECCCTRL_ADDR8	(0x00094053 + 0x00000000)
-#define UMCCH_ECCCTRL_ADDR9	(0x00094053 + 0x00000800)
-#define UMCCH_ECCCTRL_ADDR10	(0x00094053 + 0x00001000)
-#define UMCCH_ECCCTRL_ADDR11	(0x00094053 + 0x00001800)
-#define UMCCH_ECCCTRL_ADDR12	(0x000d4053 + 0x00000000)
-#define UMCCH_ECCCTRL_ADDR13	(0x000d4053 + 0x00000800)
-#define UMCCH_ECCCTRL_ADDR14	(0x000d4053 + 0x00001000)
-#define UMCCH_ECCCTRL_ADDR15	(0x000d4053 + 0x00001800)
-
-static const uint32_t ecc_umclocalcap_addrs[] = {
-	UMCLOCALCAPS_ADDR0,
-	UMCLOCALCAPS_ADDR1,
-	UMCLOCALCAPS_ADDR2,
-	UMCLOCALCAPS_ADDR3,
-	UMCLOCALCAPS_ADDR4,
-	UMCLOCALCAPS_ADDR5,
-	UMCLOCALCAPS_ADDR6,
-	UMCLOCALCAPS_ADDR7,
-	UMCLOCALCAPS_ADDR8,
-	UMCLOCALCAPS_ADDR9,
-	UMCLOCALCAPS_ADDR10,
-	UMCLOCALCAPS_ADDR11,
-	UMCLOCALCAPS_ADDR12,
-	UMCLOCALCAPS_ADDR13,
-	UMCLOCALCAPS_ADDR14,
-	UMCLOCALCAPS_ADDR15,
-};
-
-static const uint32_t ecc_umcch_umc_config_addrs[] = {
-	UMCCH_UMC_CONFIG_ADDR0,
-	UMCCH_UMC_CONFIG_ADDR1,
-	UMCCH_UMC_CONFIG_ADDR2,
-	UMCCH_UMC_CONFIG_ADDR3,
-	UMCCH_UMC_CONFIG_ADDR4,
-	UMCCH_UMC_CONFIG_ADDR5,
-	UMCCH_UMC_CONFIG_ADDR6,
-	UMCCH_UMC_CONFIG_ADDR7,
-	UMCCH_UMC_CONFIG_ADDR8,
-	UMCCH_UMC_CONFIG_ADDR9,
-	UMCCH_UMC_CONFIG_ADDR10,
-	UMCCH_UMC_CONFIG_ADDR11,
-	UMCCH_UMC_CONFIG_ADDR12,
-	UMCCH_UMC_CONFIG_ADDR13,
-	UMCCH_UMC_CONFIG_ADDR14,
-	UMCCH_UMC_CONFIG_ADDR15,
-};
-
-static const uint32_t ecc_umcch_eccctrl_addrs[] = {
-	UMCCH_ECCCTRL_ADDR0,
-	UMCCH_ECCCTRL_ADDR1,
-	UMCCH_ECCCTRL_ADDR2,
-	UMCCH_ECCCTRL_ADDR3,
-	UMCCH_ECCCTRL_ADDR4,
-	UMCCH_ECCCTRL_ADDR5,
-	UMCCH_ECCCTRL_ADDR6,
-	UMCCH_ECCCTRL_ADDR7,
-	UMCCH_ECCCTRL_ADDR8,
-	UMCCH_ECCCTRL_ADDR9,
-	UMCCH_ECCCTRL_ADDR10,
-	UMCCH_ECCCTRL_ADDR11,
-	UMCCH_ECCCTRL_ADDR12,
-	UMCCH_ECCCTRL_ADDR13,
-	UMCCH_ECCCTRL_ADDR14,
-	UMCCH_ECCCTRL_ADDR15,
-};
-
 static const uint32_t ecc_umc_mcumc_ctrl_addrs[] = {
 	(0x000143c0 + 0x00000000),
 	(0x000143c0 + 0x00000800),
@@ -416,62 +301,6 @@ static int gmc_v9_0_vm_fault_interrupt_state(struct amdgpu_device *adev,
 	return 0;
 }
 
-/**
- * vega10_ih_prescreen_iv - prescreen an interrupt vector
- *
- * @adev: amdgpu_device pointer
- *
- * Returns true if the interrupt vector should be further processed.
- */
-static bool gmc_v9_0_prescreen_iv(struct amdgpu_device *adev,
-				  struct amdgpu_iv_entry *entry,
-				  uint64_t addr)
-{
-	struct amdgpu_vm *vm;
-	u64 key;
-	int r;
-
-	/* No PASID, can't identify faulting process */
-	if (!entry->pasid)
-		return true;
-
-	/* Not a retry fault */
-	if (!(entry->src_data[1] & 0x80))
-		return true;
-
-	/* Track retry faults in per-VM fault FIFO. */
-	spin_lock(&adev->vm_manager.pasid_lock);
-	vm = idr_find(&adev->vm_manager.pasid_idr, entry->pasid);
-	if (!vm) {
-		/* VM not found, process it normally */
-		spin_unlock(&adev->vm_manager.pasid_lock);
-		return true;
-	}
-
-	key = AMDGPU_VM_FAULT(entry->pasid, addr);
-	r = amdgpu_vm_add_fault(vm->fault_hash, key);
-
-	/* Hash table is full or the fault is already being processed,
-	 * ignore further page faults
-	 */
-	if (r != 0) {
-		spin_unlock(&adev->vm_manager.pasid_lock);
-		return false;
-	}
-	/* No locking required with single writer and single reader */
-	r = kfifo_put(&vm->faults, key);
-	if (!r) {
-		/* FIFO is full. Ignore it until there is space */
-		amdgpu_vm_clear_fault(vm->fault_hash, key);
-		spin_unlock(&adev->vm_manager.pasid_lock);
-		return false;
-	}
-
-	spin_unlock(&adev->vm_manager.pasid_lock);
-	/* It's the first fault for this address, process it normally */
-	return true;
-}
-
 static int gmc_v9_0_process_interrupt(struct amdgpu_device *adev,
 				struct amdgpu_irq_src *source,
 				struct amdgpu_iv_entry *entry)
@@ -484,9 +313,11 @@ static int gmc_v9_0_process_interrupt(struct amdgpu_device *adev,
 	addr = (u64)entry->src_data[0] << 12;
 	addr |= ((u64)entry->src_data[1] & 0xf) << 44;
 
-	if (!gmc_v9_0_prescreen_iv(adev, entry, addr))
+	if (retry_fault && amdgpu_gmc_filter_faults(adev, addr, entry->pasid,
+						    entry->timestamp))
 		return 1; /* This also prevents sending it to KFD */
 
+	/* If it's the first fault for this address, process it normally */
 	if (!amdgpu_sriov_vf(adev)) {
 		status = RREG32(hub->vm_l2_pro_fault_status);
 		WREG32_P(hub->vm_l2_pro_fault_cntl, 1, ~1);
@@ -773,85 +604,6 @@ static int gmc_v9_0_early_init(void *handle)
 	return 0;
 }
 
-static int gmc_v9_0_ecc_available(struct amdgpu_device *adev)
-{
-	uint32_t reg_val;
-	uint32_t reg_addr;
-	uint32_t field_val;
-	size_t i;
-	uint32_t fv2;
-	size_t lost_sheep;
-
-	DRM_DEBUG("ecc: gmc_v9_0_ecc_available()\n");
-
-	lost_sheep = 0;
-	for (i = 0; i < ARRAY_SIZE(ecc_umclocalcap_addrs); ++i) {
-		reg_addr = ecc_umclocalcap_addrs[i];
-		DRM_DEBUG("ecc: "
-			  "UMCCH_UmcLocalCap[%zu]: reg_addr: 0x%08x\n",
-			  i, reg_addr);
-		reg_val = RREG32(reg_addr);
-		field_val = REG_GET_FIELD(reg_val, UMCCH0_0_UmcLocalCap,
-					  EccDis);
-		DRM_DEBUG("ecc: "
-			  "reg_val: 0x%08x, "
-			  "EccDis: 0x%08x, ",
-			  reg_val, field_val);
-		if (field_val) {
-			DRM_ERROR("ecc: UmcLocalCap:EccDis is set.\n");
-			++lost_sheep;
-		}
-	}
-
-	for (i = 0; i < ARRAY_SIZE(ecc_umcch_umc_config_addrs); ++i) {
-		reg_addr = ecc_umcch_umc_config_addrs[i];
-		DRM_DEBUG("ecc: "
-			  "UMCCH0_0_UMC_CONFIG[%zu]: reg_addr: 0x%08x",
-			  i, reg_addr);
-		reg_val = RREG32(reg_addr);
-		field_val = REG_GET_FIELD(reg_val, UMCCH0_0_UMC_CONFIG,
-					  DramReady);
-		DRM_DEBUG("ecc: "
-			  "reg_val: 0x%08x, "
-			  "DramReady: 0x%08x\n",
-			  reg_val, field_val);
-
-		if (!field_val) {
-			DRM_ERROR("ecc: UMC_CONFIG:DramReady is not set.\n");
-			++lost_sheep;
-		}
-	}
-
-	for (i = 0; i < ARRAY_SIZE(ecc_umcch_eccctrl_addrs); ++i) {
-		reg_addr = ecc_umcch_eccctrl_addrs[i];
-		DRM_DEBUG("ecc: "
-			  "UMCCH_EccCtrl[%zu]: reg_addr: 0x%08x, ",
-			  i, reg_addr);
-		reg_val = RREG32(reg_addr);
-		field_val = REG_GET_FIELD(reg_val, UMCCH0_0_EccCtrl,
-					  WrEccEn);
-		fv2 = REG_GET_FIELD(reg_val, UMCCH0_0_EccCtrl,
-				    RdEccEn);
-		DRM_DEBUG("ecc: "
-			  "reg_val: 0x%08x, "
-			  "WrEccEn: 0x%08x, "
-			  "RdEccEn: 0x%08x\n",
-			  reg_val, field_val, fv2);
-
-		if (!field_val) {
-			DRM_DEBUG("ecc: WrEccEn is not set\n");
-			++lost_sheep;
-		}
-		if (!fv2) {
-			DRM_DEBUG("ecc: RdEccEn is not set\n");
-			++lost_sheep;
-		}
-	}
-
-	DRM_DEBUG("ecc: lost_sheep: %zu\n", lost_sheep);
-	return lost_sheep == 0;
-}
-
 static bool gmc_v9_0_keep_stolen_memory(struct amdgpu_device *adev)
 {
 
@@ -927,6 +679,9 @@ static int gmc_v9_0_ecc_late_init(void *handle)
 		amdgpu_ras_feature_enable(adev, &ras_block, 0);
 		return 0;
 	}
+	/* handle resume path. */
+	if (*ras_if)
+		goto resume;
 
 	*ras_if = kmalloc(sizeof(**ras_if), GFP_KERNEL);
 	if (!*ras_if)
@@ -952,7 +707,7 @@ static int gmc_v9_0_ecc_late_init(void *handle)
 	r = amdgpu_ras_sysfs_create(adev, &fs_info);
 	if (r)
 		goto sysfs;
-
+resume:
 	r = amdgpu_irq_get(adev, &adev->gmc.ecc_irq, 0);
 	if (r)
 		goto irq;
@@ -976,7 +731,7 @@ feature:
 static int gmc_v9_0_late_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-	int r;
+	bool r;
 
 	if (!gmc_v9_0_keep_stolen_memory(adev))
 		amdgpu_bo_late_init(adev);
@@ -984,17 +739,29 @@ static int gmc_v9_0_late_init(void *handle)
 	r = gmc_v9_0_allocate_vm_inv_eng(adev);
 	if (r)
 		return r;
+	/* Check if ecc is available */
+	if (!amdgpu_sriov_vf(adev)) {
+		switch (adev->asic_type) {
+		case CHIP_VEGA10:
+		case CHIP_VEGA20:
+			r = amdgpu_atomfirmware_mem_ecc_supported(adev);
+			if (!r) {
+				DRM_INFO("ECC is not present.\n");
+				if (adev->df_funcs->enable_ecc_force_par_wr_rmw)
+					adev->df_funcs->enable_ecc_force_par_wr_rmw(adev, false);
+			} else {
+				DRM_INFO("ECC is active.\n");
+			}
 
-	if (adev->asic_type == CHIP_VEGA10 && !amdgpu_sriov_vf(adev)) {
-		r = gmc_v9_0_ecc_available(adev);
-		if (r == 1) {
-			DRM_INFO("ECC is active.\n");
-		} else if (r == 0) {
-			DRM_INFO("ECC is not present.\n");
-			adev->df_funcs->enable_ecc_force_par_wr_rmw(adev, false);
-		} else {
-			DRM_ERROR("gmc_v9_0_ecc_available() failed. r: %d\n", r);
-			return r;
+			r = amdgpu_atomfirmware_sram_ecc_supported(adev);
+			if (!r) {
+				DRM_INFO("SRAM ECC is not present.\n");
+			} else {
+				DRM_INFO("SRAM ECC is active.\n");
+			}
+			break;
+		default:
+			break;
 		}
 	}
 
@@ -1013,7 +780,7 @@ static void gmc_v9_0_vram_gtt_location(struct amdgpu_device *adev,
 		base = mmhub_v1_0_get_fb_location(adev);
 	/* add the xgmi offset of the physical node */
 	base += adev->gmc.xgmi.physical_node_id * adev->gmc.xgmi.node_segment_size;
-	amdgpu_gmc_vram_location(adev, &adev->gmc, base);
+	amdgpu_gmc_vram_location(adev, mc, base);
 	amdgpu_gmc_gart_location(adev, mc);
 	if (!amdgpu_sriov_vf(adev))
 		amdgpu_gmc_agp_location(adev, mc);

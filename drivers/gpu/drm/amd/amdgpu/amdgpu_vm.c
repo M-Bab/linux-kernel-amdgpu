@@ -695,6 +695,8 @@ int amdgpu_vm_validate_pt_bos(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 	struct amdgpu_vm_bo_base *bo_base, *tmp;
 	int r = 0;
 
+	vm->bulk_moveable &= list_empty(&vm->evicted);
+
 	list_for_each_entry_safe(bo_base, tmp, &vm->evicted, vm_status) {
 		struct amdgpu_bo *bo = bo_base->bo;
 
@@ -901,17 +903,17 @@ static void amdgpu_vm_bo_param(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 }
 
 /**
- * amdgpu_vm_alloc_pts - Allocate page tables.
+ * amdgpu_vm_alloc_pts - Allocate a specific page table
  *
  * @adev: amdgpu_device pointer
  * @vm: VM to allocate page tables for
- * @saddr: Start address which needs to be allocated
- * @size: Size from start address we need.
+ * @cursor: Which page table to allocate
  *
- * Make sure the page directories and page tables are allocated
+ * Make sure a specific page table or directory is allocated.
  *
  * Returns:
- * 0 on success, errno otherwise.
+ * 1 if page table needed to be allocated, 0 if page table was already
+ * allocated, negative errno if an error occurred.
  */
 static int amdgpu_vm_alloc_pts(struct amdgpu_device *adev,
 			       struct amdgpu_vm *vm,
@@ -958,7 +960,7 @@ static int amdgpu_vm_alloc_pts(struct amdgpu_device *adev,
 	if (r)
 		goto error_free_pt;
 
-	return 0;
+	return 1;
 
 error_free_pt:
 	amdgpu_bo_unref(&pt->shadow);
@@ -1623,10 +1625,12 @@ static int amdgpu_vm_update_ptes(struct amdgpu_pte_update_params *params,
 		unsigned shift, parent_shift, mask;
 		uint64_t incr, entry_end, pe_start;
 		struct amdgpu_bo *pt;
+		bool need_to_sync;
 
 		r = amdgpu_vm_alloc_pts(params->adev, params->vm, &cursor);
-		if (r)
+		if (r < 0)
 			return r;
+		need_to_sync = (r && params->vm->use_cpu_for_update);
 
 		pt = cursor.entry->base.bo;
 
@@ -1673,6 +1677,10 @@ static int amdgpu_vm_update_ptes(struct amdgpu_pte_update_params *params,
 		entry_end = (uint64_t)(mask + 1) << shift;
 		entry_end += cursor.pfn & ~(entry_end - 1);
 		entry_end = min(entry_end, end);
+
+		if (need_to_sync)
+			r = amdgpu_bo_sync_wait(params->vm->root.base.bo,
+						AMDGPU_FENCE_OWNER_VM, true);
 
 		do {
 			uint64_t upd_end = min(entry_end, frag_end);
@@ -2979,20 +2987,16 @@ void amdgpu_vm_adjust_size(struct amdgpu_device *adev, uint32_t min_vm_size,
 		 adev->vm_manager.fragment_size);
 }
 
-static struct amdgpu_retryfault_hashtable *init_fault_hash(void)
+/**
+ * amdgpu_vm_wait_idle - wait for the VM to become idle
+ *
+ * @vm: VM object to wait for
+ * @timeout: timeout to wait for VM to become idle
+ */
+long amdgpu_vm_wait_idle(struct amdgpu_vm *vm, long timeout)
 {
-	struct amdgpu_retryfault_hashtable *fault_hash;
-
-	fault_hash = kmalloc(sizeof(*fault_hash), GFP_KERNEL);
-	if (!fault_hash)
-		return fault_hash;
-
-	INIT_CHASH_TABLE(fault_hash->hash,
-			AMDGPU_PAGEFAULT_HASH_BITS, 8, 0);
-	spin_lock_init(&fault_hash->lock);
-	fault_hash->count = 0;
-
-	return fault_hash;
+	return reservation_object_wait_timeout_rcu(vm->root.base.bo->tbo.resv,
+						   true, true, timeout);
 }
 
 /**
@@ -3084,12 +3088,6 @@ int amdgpu_vm_init(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 			goto error_free_root;
 
 		vm->pasid = pasid;
-	}
-
-	vm->fault_hash = init_fault_hash();
-	if (!vm->fault_hash) {
-		r = -ENOMEM;
-		goto error_free_root;
 	}
 
 	INIT_KFIFO(vm->faults);
@@ -3245,14 +3243,9 @@ void amdgpu_vm_fini(struct amdgpu_device *adev, struct amdgpu_vm *vm)
 	struct amdgpu_bo_va_mapping *mapping, *tmp;
 	bool prt_fini_needed = !!adev->gmc.gmc_funcs->set_prt;
 	struct amdgpu_bo *root;
-	u64 fault;
 	int i, r;
 
 	amdgpu_amdkfd_gpuvm_destroy_cb(adev, vm);
-
-	/* Clear pending page faults from IH when the VM is destroyed */
-	while (kfifo_get(&vm->faults, &fault))
-		amdgpu_vm_clear_fault(vm->fault_hash, fault);
 
 	if (vm->pasid) {
 		unsigned long flags;
@@ -3261,9 +3254,6 @@ void amdgpu_vm_fini(struct amdgpu_device *adev, struct amdgpu_vm *vm)
 		idr_remove(&adev->vm_manager.pasid_idr, vm->pasid);
 		spin_unlock_irqrestore(&adev->vm_manager.pasid_lock, flags);
 	}
-
-	kfree(vm->fault_hash);
-	vm->fault_hash = NULL;
 
 	drm_sched_entity_destroy(&vm->entity);
 
@@ -3431,79 +3421,4 @@ void amdgpu_vm_set_task_info(struct amdgpu_vm *vm)
 			get_task_comm(vm->task_info.process_name, current->group_leader);
 		}
 	}
-}
-
-/**
- * amdgpu_vm_add_fault - Add a page fault record to fault hash table
- *
- * @fault_hash: fault hash table
- * @key: 64-bit encoding of PASID and address
- *
- * This should be called when a retry page fault interrupt is
- * received. If this is a new page fault, it will be added to a hash
- * table. The return value indicates whether this is a new fault, or
- * a fault that was already known and is already being handled.
- *
- * If there are too many pending page faults, this will fail. Retry
- * interrupts should be ignored in this case until there is enough
- * free space.
- *
- * Returns 0 if the fault was added, 1 if the fault was already known,
- * -ENOSPC if there are too many pending faults.
- */
-int amdgpu_vm_add_fault(struct amdgpu_retryfault_hashtable *fault_hash, u64 key)
-{
-	unsigned long flags;
-	int r = -ENOSPC;
-
-	if (WARN_ON_ONCE(!fault_hash))
-		/* Should be allocated in amdgpu_vm_init
-		 */
-		return r;
-
-	spin_lock_irqsave(&fault_hash->lock, flags);
-
-	/* Only let the hash table fill up to 50% for best performance */
-	if (fault_hash->count >= (1 << (AMDGPU_PAGEFAULT_HASH_BITS-1)))
-		goto unlock_out;
-
-	r = chash_table_copy_in(&fault_hash->hash, key, NULL);
-	if (!r)
-		fault_hash->count++;
-
-	/* chash_table_copy_in should never fail unless we're losing count */
-	WARN_ON_ONCE(r < 0);
-
-unlock_out:
-	spin_unlock_irqrestore(&fault_hash->lock, flags);
-	return r;
-}
-
-/**
- * amdgpu_vm_clear_fault - Remove a page fault record
- *
- * @fault_hash: fault hash table
- * @key: 64-bit encoding of PASID and address
- *
- * This should be called when a page fault has been handled. Any
- * future interrupt with this key will be processed as a new
- * page fault.
- */
-void amdgpu_vm_clear_fault(struct amdgpu_retryfault_hashtable *fault_hash, u64 key)
-{
-	unsigned long flags;
-	int r;
-
-	if (!fault_hash)
-		return;
-
-	spin_lock_irqsave(&fault_hash->lock, flags);
-
-	r = chash_table_remove(&fault_hash->hash, key, NULL);
-	if (!WARN_ON_ONCE(r < 0)) {
-		fault_hash->count--;
-		WARN_ON_ONCE(fault_hash->count < 0);
-	}
-
-	spin_unlock_irqrestore(&fault_hash->lock, flags);
 }
