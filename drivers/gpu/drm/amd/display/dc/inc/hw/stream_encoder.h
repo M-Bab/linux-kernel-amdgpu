@@ -63,11 +63,13 @@ struct encoder_info_frame {
 	struct dc_info_packet vsc;
 	/* HDR Static MetaData */
 	struct dc_info_packet hdrsmd;
+	/* custom sdp message */
+	struct dc_info_packet dpsdp;
 };
 
 struct encoder_unblank_param {
 	struct dc_link_settings link_settings;
-	unsigned int pixel_clk_khz;
+	struct dc_crtc_timing timing;
 };
 
 struct encoder_set_dp_phy_pattern_param {

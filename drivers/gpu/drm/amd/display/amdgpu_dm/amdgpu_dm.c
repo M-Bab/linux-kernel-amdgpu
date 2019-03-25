@@ -1629,16 +1629,15 @@ dm_atomic_duplicate_state(struct drm_private_obj *obj)
 
 	__drm_atomic_helper_private_obj_duplicate_state(obj, &new_state->base);
 
-	new_state->context = dc_create_state();
+	old_state = to_dm_atomic_state(obj->state);
+
+	if (old_state && old_state->context)
+		new_state->context = dc_copy_state(old_state->context);
+
 	if (!new_state->context) {
 		kfree(new_state);
 		return NULL;
 	}
-
-	old_state = to_dm_atomic_state(obj->state);
-	if (old_state && old_state->context)
-		dc_resource_state_copy_construct(old_state->context,
-						 new_state->context);
 
 	return &new_state->base;
 }
@@ -1683,7 +1682,7 @@ static int amdgpu_dm_mode_config_init(struct amdgpu_device *adev)
 	if (!state)
 		return -ENOMEM;
 
-	state->context = dc_create_state();
+	state->context = dc_create_state(adev->dm.dc);
 	if (!state->context) {
 		kfree(state);
 		return -ENOMEM;
@@ -1818,8 +1817,6 @@ static int initialize_plane(struct amdgpu_display_manager *dm,
 	int ret = 0;
 
 	plane = kzalloc(sizeof(struct drm_plane), GFP_KERNEL);
-	mode_info->planes[plane_id] = plane;
-
 	if (!plane) {
 		DRM_ERROR("KMS: Failed to allocate plane\n");
 		return -ENOMEM;
@@ -1836,12 +1833,16 @@ static int initialize_plane(struct amdgpu_display_manager *dm,
 	if (plane_id >= dm->dc->caps.max_streams)
 		possible_crtcs = 0xff;
 
-	ret = amdgpu_dm_plane_init(dm, mode_info->planes[plane_id], possible_crtcs);
+	ret = amdgpu_dm_plane_init(dm, plane, possible_crtcs);
 
 	if (ret) {
 		DRM_ERROR("KMS: Failed to initialize plane\n");
+		kfree(plane);
 		return ret;
 	}
+
+	if (mode_info)
+		mode_info->planes[plane_id] = plane;
 
 	return ret;
 }
@@ -1885,7 +1886,7 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 	struct amdgpu_encoder *aencoder = NULL;
 	struct amdgpu_mode_info *mode_info = &adev->mode_info;
 	uint32_t link_cnt;
-	int32_t overlay_planes, primary_planes, total_planes;
+	int32_t overlay_planes, primary_planes;
 	enum dc_connection_type new_connection_type = dc_connection_none;
 
 	link_cnt = dm->dc->caps.max_links;
@@ -1914,9 +1915,7 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 
 	/* There is one primary plane per CRTC */
 	primary_planes = dm->dc->caps.max_streams;
-
-	total_planes = primary_planes + overlay_planes;
-	ASSERT(total_planes <= AMDGPU_MAX_PLANES);
+	ASSERT(primary_planes <= AMDGPU_MAX_PLANES);
 
 	/*
 	 * Initialize primary planes, implicit planes for legacy IOCTLS.
@@ -1937,7 +1936,7 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 	 * Order is reversed to match iteration order in atomic check.
 	 */
 	for (i = (overlay_planes - 1); i >= 0; i--) {
-		if (initialize_plane(dm, mode_info, primary_planes + i,
+		if (initialize_plane(dm, NULL, primary_planes + i,
 				     DRM_PLANE_TYPE_OVERLAY)) {
 			DRM_ERROR("KMS: Failed to initialize overlay plane\n");
 			goto fail;
@@ -2041,8 +2040,7 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 fail:
 	kfree(aencoder);
 	kfree(aconnector);
-	for (i = 0; i < primary_planes; i++)
-		kfree(mode_info->planes[i]);
+
 	return -EINVAL;
 }
 
@@ -2465,8 +2463,7 @@ fill_plane_tiling_attributes(struct amdgpu_device *adev,
 		address->grph.addr.high_part = upper_32_bits(afb->address);
 	} else {
 		const struct drm_framebuffer *fb = &afb->base;
-		uint64_t awidth = ALIGN(fb->width, 64);
-		uint64_t chroma_addr = afb->address + awidth * fb->height;
+		uint64_t chroma_addr = afb->address + fb->offsets[1];
 
 		address->type = PLN_ADDR_TYPE_VIDEO_PROGRESSIVE;
 		address->video_progressive.luma_addr.low_part =
@@ -2542,7 +2539,6 @@ static int fill_plane_attributes_from_fb(struct amdgpu_device *adev,
 					 const struct amdgpu_framebuffer *amdgpu_fb)
 {
 	uint64_t tiling_flags;
-	unsigned int awidth;
 	const struct drm_framebuffer *fb = &amdgpu_fb->base;
 	int ret = 0;
 	struct drm_format_name_buf format_name;
@@ -2602,20 +2598,21 @@ static int fill_plane_attributes_from_fb(struct amdgpu_device *adev,
 		plane_state->color_space = COLOR_SPACE_SRGB;
 
 	} else {
-		awidth = ALIGN(fb->width, 64);
-
 		plane_state->plane_size.video.luma_size.x = 0;
 		plane_state->plane_size.video.luma_size.y = 0;
-		plane_state->plane_size.video.luma_size.width = awidth;
+		plane_state->plane_size.video.luma_size.width = fb->width;
 		plane_state->plane_size.video.luma_size.height = fb->height;
-		/* TODO: unhardcode */
-		plane_state->plane_size.video.luma_pitch = awidth;
+		plane_state->plane_size.video.luma_pitch =
+			fb->pitches[0] / fb->format->cpp[0];
 
 		plane_state->plane_size.video.chroma_size.x = 0;
 		plane_state->plane_size.video.chroma_size.y = 0;
-		plane_state->plane_size.video.chroma_size.width = awidth;
-		plane_state->plane_size.video.chroma_size.height = fb->height;
-		plane_state->plane_size.video.chroma_pitch = awidth / 2;
+		/* TODO: set these based on surface format */
+		plane_state->plane_size.video.chroma_size.width = fb->width / 2;
+		plane_state->plane_size.video.chroma_size.height = fb->height / 2;
+
+		plane_state->plane_size.video.chroma_pitch =
+			fb->pitches[1] / fb->format->cpp[1];
 
 		/* TODO: unhardcode */
 		plane_state->color_space = COLOR_SPACE_YCBCR709;
@@ -3745,11 +3742,8 @@ static void dm_drm_plane_reset(struct drm_plane *plane)
 	amdgpu_state = kzalloc(sizeof(*amdgpu_state), GFP_KERNEL);
 	WARN_ON(amdgpu_state == NULL);
 
-	if (amdgpu_state) {
-		plane->state = &amdgpu_state->base;
-		plane->state->plane = plane;
-		plane->state->rotation = DRM_MODE_ROTATE_0;
-	}
+	if (amdgpu_state)
+		__drm_atomic_helper_plane_reset(plane, &amdgpu_state->base);
 }
 
 static struct drm_plane_state *
@@ -4490,6 +4484,8 @@ static int amdgpu_dm_connector_init(struct amdgpu_display_manager *dm,
 		DRM_ERROR("Failed to create debugfs for connector");
 		goto out_free;
 	}
+	aconnector->debugfs_dpcd_address = 0;
+	aconnector->debugfs_dpcd_size = 0;
 #endif
 
 	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort
@@ -5158,7 +5154,7 @@ static void amdgpu_dm_atomic_commit_tail(struct drm_atomic_state *state)
 		dc_state = dm_state->context;
 	} else {
 		/* No state changes, retain current state. */
-		dc_state_temp = dc_create_state();
+		dc_state_temp = dc_create_state(dm->dc);
 		ASSERT(dc_state_temp);
 		dc_state = dc_state_temp;
 		dc_resource_state_copy_construct_current(dm->dc, dc_state);
@@ -5555,9 +5551,11 @@ static void get_freesync_config_for_crtc(
 	struct amdgpu_dm_connector *aconnector =
 			to_amdgpu_dm_connector(new_con_state->base.connector);
 	struct drm_display_mode *mode = &new_crtc_state->base.mode;
+	int vrefresh = drm_mode_vrefresh(mode);
 
 	new_crtc_state->vrr_supported = new_con_state->freesync_capable &&
-		aconnector->min_vfreq <= drm_mode_vrefresh(mode);
+					vrefresh >= aconnector->min_vfreq &&
+					vrefresh <= aconnector->max_vfreq;
 
 	if (new_crtc_state->vrr_supported) {
 		new_crtc_state->stream->ignore_msa_timing_param = true;
@@ -5783,6 +5781,9 @@ skip_modeset:
 	if (is_scaling_state_different(dm_old_conn_state, dm_new_conn_state))
 		update_stream_scaling_settings(
 			&new_crtc_state->mode, dm_new_conn_state, dm_new_crtc_state->stream);
+
+	/* ABM settings */
+	dm_new_crtc_state->abm_level = dm_new_conn_state->abm_level;
 
 	/*
 	 * Color management settings. We also update color properties

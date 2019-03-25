@@ -132,7 +132,8 @@ static int vega20_message_map[SMU_MSG_MAX_COUNT] = {
 static int vega20_get_smu_msg_index(struct smu_context *smc, uint32_t index)
 {
 	int val;
-	if (index > SMU_MSG_MAX_COUNT)
+
+	if (index >= SMU_MSG_MAX_COUNT)
 		return -EINVAL;
 
 	val = vega20_message_map[index];
@@ -443,7 +444,7 @@ vega20_set_single_dpm_table(struct smu_context *smu,
 			    PPCLK_e clk_id)
 {
 	int ret = 0;
-	uint32_t i, num_of_levels, clk;
+	uint32_t i, num_of_levels = 0, clk;
 
 	ret = smu_send_smc_msg_with_param(smu,
 			SMU_MSG_GetDpmFreqByIndex,

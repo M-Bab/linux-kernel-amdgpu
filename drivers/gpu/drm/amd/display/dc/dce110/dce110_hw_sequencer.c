@@ -974,9 +974,8 @@ void dce110_enable_audio_stream(struct pipe_ctx *pipe_ctx)
 			set_pme_wa_enable_by_version(core_dc);
 		/* un-mute audio */
 		/* TODO: audio should be per stream rather than per link */
-		if (dc_is_hdmi_tmds_signal(pipe_ctx->stream->signal))
-			pipe_ctx->stream_res.stream_enc->funcs->audio_mute_control(
-				pipe_ctx->stream_res.stream_enc, false);
+		pipe_ctx->stream_res.stream_enc->funcs->audio_mute_control(
+					pipe_ctx->stream_res.stream_enc, false);
 	}
 }
 
@@ -1052,7 +1051,7 @@ void dce110_unblank_stream(struct pipe_ctx *pipe_ctx,
 	struct dc_link *link = stream->link;
 
 	/* only 3 items below are used by unblank */
-	params.pixel_clk_khz = pipe_ctx->stream->timing.pix_clk_100hz / 10;
+	params.timing = pipe_ctx->stream->timing;
 	params.link_settings.link_rate = link_settings->link_rate;
 
 	if (dc_is_dp_signal(pipe_ctx->stream->signal))
@@ -1378,7 +1377,7 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 			pipe_ctx->stream_res.opp,
 			COLOR_SPACE_YCBCR601,
 			stream->timing.display_color_depth,
-			pipe_ctx->stream->signal);
+			stream->signal);
 
 	pipe_ctx->stream_res.opp->funcs->opp_program_fmt(
 		pipe_ctx->stream_res.opp,
@@ -1631,18 +1630,18 @@ static void dce110_set_displaymarks(
 			dc->bw_vbios->blackout_duration, pipe_ctx->stream);
 		pipe_ctx->plane_res.mi->funcs->mem_input_program_display_marks(
 			pipe_ctx->plane_res.mi,
-			context->bw.dce.nbp_state_change_wm_ns[num_pipes],
-			context->bw.dce.stutter_exit_wm_ns[num_pipes],
-			context->bw.dce.stutter_entry_wm_ns[num_pipes],
-			context->bw.dce.urgent_wm_ns[num_pipes],
+			context->bw_ctx.bw.dce.nbp_state_change_wm_ns[num_pipes],
+			context->bw_ctx.bw.dce.stutter_exit_wm_ns[num_pipes],
+			context->bw_ctx.bw.dce.stutter_entry_wm_ns[num_pipes],
+			context->bw_ctx.bw.dce.urgent_wm_ns[num_pipes],
 			total_dest_line_time_ns);
 		if (i == underlay_idx) {
 			num_pipes++;
 			pipe_ctx->plane_res.mi->funcs->mem_input_program_chroma_display_marks(
 				pipe_ctx->plane_res.mi,
-				context->bw.dce.nbp_state_change_wm_ns[num_pipes],
-				context->bw.dce.stutter_exit_wm_ns[num_pipes],
-				context->bw.dce.urgent_wm_ns[num_pipes],
+				context->bw_ctx.bw.dce.nbp_state_change_wm_ns[num_pipes],
+				context->bw_ctx.bw.dce.stutter_exit_wm_ns[num_pipes],
+				context->bw_ctx.bw.dce.urgent_wm_ns[num_pipes],
 				total_dest_line_time_ns);
 		}
 		num_pipes++;
