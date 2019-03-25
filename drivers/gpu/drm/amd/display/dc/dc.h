@@ -42,7 +42,7 @@
 #include "inc/hw/dmcu.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.2.21"
+#define DC_VER "3.2.23"
 
 #define MAX_SURFACES 3
 #define MAX_PLANES 6
@@ -683,7 +683,8 @@ void dc_resource_state_destruct(struct dc_state *context);
 bool dc_commit_state(struct dc *dc, struct dc_state *context);
 
 
-struct dc_state *dc_create_state(void);
+struct dc_state *dc_create_state(struct dc *dc);
+struct dc_state *dc_copy_state(struct dc_state *src_ctx);
 void dc_retain_state(struct dc_state *context);
 void dc_release_state(struct dc_state *context);
 
@@ -695,6 +696,7 @@ struct dpcd_caps {
 	union dpcd_rev dpcd_rev;
 	union max_lane_count max_ln_count;
 	union max_down_spread max_down_spread;
+	union dprx_feature dprx_feature;
 
 	/* valid only for eDP v1.4 or higher*/
 	uint8_t edp_supported_link_rates_count;
@@ -721,6 +723,7 @@ struct dpcd_caps {
 	bool allow_invalid_MSA_timing_param;
 	bool panel_mode_edp;
 	bool dpcd_display_control_capable;
+	bool ext_receiver_cap_field_present;
 };
 
 #include "dc_link.h"

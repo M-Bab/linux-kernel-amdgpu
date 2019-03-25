@@ -1251,6 +1251,40 @@ bool dc_add_plane_to_context(
 	return true;
 }
 
+struct pipe_ctx *dc_res_get_odm_bottom_pipe(struct pipe_ctx *pipe_ctx)
+{
+	struct pipe_ctx *bottom_pipe = pipe_ctx->bottom_pipe;
+
+	/* ODM should only be updated once per otg */
+	if (pipe_ctx->top_pipe)
+		return NULL;
+
+	while (bottom_pipe) {
+		if (bottom_pipe->stream_res.opp != pipe_ctx->stream_res.opp)
+			break;
+		bottom_pipe = bottom_pipe->bottom_pipe;
+	}
+
+	return bottom_pipe;
+}
+
+static bool dc_res_is_odm_bottom_pipe(struct pipe_ctx *pipe_ctx)
+{
+	struct pipe_ctx *top_pipe = pipe_ctx->top_pipe;
+	bool result = false;
+
+	if (top_pipe && top_pipe->stream_res.opp == pipe_ctx->stream_res.opp)
+		return false;
+
+	while (top_pipe) {
+		if (!top_pipe->top_pipe && top_pipe->stream_res.opp != pipe_ctx->stream_res.opp)
+			result = true;
+		top_pipe = top_pipe->top_pipe;
+	}
+
+	return result;
+}
+
 bool dc_remove_plane_from_context(
 		const struct dc *dc,
 		struct dc_stream_state *stream,
@@ -1274,10 +1308,14 @@ bool dc_remove_plane_from_context(
 
 	/* release pipe for plane*/
 	for (i = pool->pipe_count - 1; i >= 0; i--) {
-		struct pipe_ctx *pipe_ctx;
+		struct pipe_ctx *pipe_ctx = &context->res_ctx.pipe_ctx[i];
 
-		if (context->res_ctx.pipe_ctx[i].plane_state == plane_state) {
-			pipe_ctx = &context->res_ctx.pipe_ctx[i];
+		if (pipe_ctx->plane_state == plane_state) {
+			if (dc_res_is_odm_bottom_pipe(pipe_ctx)) {
+				pipe_ctx->plane_state = NULL;
+				pipe_ctx->bottom_pipe = NULL;
+				continue;
+			}
 
 			if (pipe_ctx->top_pipe)
 				pipe_ctx->top_pipe->bottom_pipe = pipe_ctx->bottom_pipe;
@@ -1295,8 +1333,9 @@ bool dc_remove_plane_from_context(
 			 */
 			if (!pipe_ctx->top_pipe) {
 				pipe_ctx->plane_state = NULL;
-				pipe_ctx->bottom_pipe = NULL;
-			} else  {
+				if (!dc_res_get_odm_bottom_pipe(pipe_ctx))
+					pipe_ctx->bottom_pipe = NULL;
+			} else {
 				memset(pipe_ctx, 0, sizeof(*pipe_ctx));
 			}
 		}
@@ -1701,6 +1740,9 @@ enum dc_status dc_remove_stream_from_ctx(
 	for (i = 0; i < MAX_PIPES; i++) {
 		if (new_ctx->res_ctx.pipe_ctx[i].stream == stream &&
 				!new_ctx->res_ctx.pipe_ctx[i].top_pipe) {
+			struct pipe_ctx *odm_pipe =
+					dc_res_get_odm_bottom_pipe(&new_ctx->res_ctx.pipe_ctx[i]);
+
 			del_pipe = &new_ctx->res_ctx.pipe_ctx[i];
 
 			ASSERT(del_pipe->stream_res.stream_enc);
@@ -1725,6 +1767,8 @@ enum dc_status dc_remove_stream_from_ctx(
 				dc->res_pool->funcs->remove_stream_from_ctx(dc, new_ctx, stream);
 
 			memset(del_pipe, 0, sizeof(*del_pipe));
+			if (odm_pipe)
+				memset(odm_pipe, 0, sizeof(*odm_pipe));
 
 			break;
 		}
@@ -2350,6 +2394,21 @@ static void set_spd_info_packet(
 	*info_packet = stream->vrr_infopacket;
 }
 
+static void set_dp_sdp_info_packet(
+		struct dc_info_packet *info_packet,
+		struct dc_stream_state *stream)
+{
+	/* SPD info packet for custom sdp message */
+
+	/* Return if false. If true,
+	 * set the corresponding bit in the info packet
+	 */
+	if (!stream->dpsdp_infopacket.valid)
+		return;
+
+	*info_packet = stream->dpsdp_infopacket;
+}
+
 static void set_hdr_static_info_packet(
 		struct dc_info_packet *info_packet,
 		struct dc_stream_state *stream)
@@ -2446,6 +2505,7 @@ void resource_build_info_frame(struct pipe_ctx *pipe_ctx)
 	info->spd.valid = false;
 	info->hdrsmd.valid = false;
 	info->vsc.valid = false;
+	info->dpsdp.valid = false;
 
 	signal = pipe_ctx->stream->signal;
 
@@ -2465,6 +2525,8 @@ void resource_build_info_frame(struct pipe_ctx *pipe_ctx)
 		set_spd_info_packet(&info->spd, pipe_ctx->stream);
 
 		set_hdr_static_info_packet(&info->hdrsmd, pipe_ctx->stream);
+
+		set_dp_sdp_info_packet(&info->dpsdp, pipe_ctx->stream);
 	}
 
 	patch_gamut_packet_checksum(&info->gamut);

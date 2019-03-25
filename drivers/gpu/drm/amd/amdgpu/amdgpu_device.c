@@ -1508,6 +1508,8 @@ static int amdgpu_device_ip_early_init(struct amdgpu_device *adev)
 	}
 
 	adev->pm.pp_feature = amdgpu_pp_feature_mask;
+	if (amdgpu_sriov_vf(adev))
+		adev->pm.pp_feature &= ~PP_GFXOFF_MASK;
 
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if ((amdgpu_ip_block_mask & (1 << i)) == 0) {
@@ -2016,9 +2018,6 @@ static void amdgpu_device_ip_late_init_func_handler(struct work_struct *work)
 	r = amdgpu_device_enable_mgpu_fan_boost();
 	if (r)
 		DRM_ERROR("enable mgpu fan boost failed (%d).\n", r);
-
-	/*set to low pstate by default */
-	amdgpu_xgmi_set_pstate(adev, 0);
 }
 
 static void amdgpu_device_delay_enable_gfx_off(struct work_struct *work)
@@ -3234,6 +3233,8 @@ static int amdgpu_device_reset_sriov(struct amdgpu_device *adev,
 	if (r)
 		return r;
 
+	amdgpu_amdkfd_pre_reset(adev);
+
 	/* Resume IP prior to SMC */
 	r = amdgpu_device_ip_reinit_early_sriov(adev);
 	if (r)
@@ -3253,6 +3254,7 @@ static int amdgpu_device_reset_sriov(struct amdgpu_device *adev,
 
 	amdgpu_irq_gpu_reset_resume_helper(adev);
 	r = amdgpu_ib_ring_tests(adev);
+	amdgpu_amdkfd_post_reset(adev);
 
 error:
 	amdgpu_virt_init_data_exchange(adev);
