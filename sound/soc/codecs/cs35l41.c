@@ -228,8 +228,8 @@ static int cs35l41_do_fast_switch(struct cs35l41_private *cs35l41)
 	const struct firmware	*fw;
 	int			ret;
 	unsigned int		i, j, k;
-	s32			*data_ctl_buf, data_ctl_len, cmd_ctl, st_ctl,
-				val;
+	s32			data_ctl_len, val;
+	__be32			*data_ctl_buf, cmd_ctl, st_ctl;
 	bool			fw_running	= false;
 
 	data_ctl_buf	= NULL;
@@ -948,7 +948,7 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 
 		if (cs35l41->dsp.running) {
 			regmap_read(cs35l41->regmap, CS35L41_DSP_MBOX_2,
-				    &fw_status);
+				    (unsigned int *)&fw_status);
 			switch(fw_status) {
 			case CSPL_MBOX_STS_RDY_FOR_REINIT:
 				mboxcmd = CSPL_MBOX_CMD_REINIT;
