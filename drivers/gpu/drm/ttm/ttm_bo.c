@@ -49,8 +49,9 @@ static void ttm_bo_global_kobj_release(struct kobject *kobj);
  * ttm_global_mutex - protecting the global BO state
  */
 DEFINE_MUTEX(ttm_global_mutex);
-unsigned ttm_bo_glob_use_count;
-struct ttm_bo_global ttm_bo_glob;
+struct ttm_bo_global ttm_bo_glob = {
+	.use_count = 0
+};
 
 static struct attribute ttm_bo_count = {
 	.name = "bo_count",
@@ -1530,13 +1531,12 @@ static void ttm_bo_global_release(void)
 	struct ttm_bo_global *glob = &ttm_bo_glob;
 
 	mutex_lock(&ttm_global_mutex);
-	if (--ttm_bo_glob_use_count > 0)
+	if (--glob->use_count > 0)
 		goto out;
 
 	kobject_del(&glob->kobj);
 	kobject_put(&glob->kobj);
 	ttm_mem_global_release(&ttm_mem_glob);
-	memset(glob, 0, sizeof(*glob));
 out:
 	mutex_unlock(&ttm_global_mutex);
 }
@@ -1548,7 +1548,7 @@ static int ttm_bo_global_init(void)
 	unsigned i;
 
 	mutex_lock(&ttm_global_mutex);
-	if (++ttm_bo_glob_use_count > 1)
+	if (++glob->use_count > 1)
 		goto out;
 
 	ret = ttm_mem_global_init(&ttm_mem_glob);
