@@ -2018,6 +2018,10 @@ static void amdgpu_device_ip_late_init_func_handler(struct work_struct *work)
 	r = amdgpu_device_enable_mgpu_fan_boost();
 	if (r)
 		DRM_ERROR("enable mgpu fan boost failed (%d).\n", r);
+
+	/*set to low pstate by default */
+	amdgpu_xgmi_set_pstate(adev, 0);
+
 }
 
 static void amdgpu_device_delay_enable_gfx_off(struct work_struct *work)
@@ -2388,7 +2392,7 @@ static void amdgpu_device_xgmi_reset_func(struct work_struct *__work)
 
 	adev->asic_reset_res =  amdgpu_asic_reset(adev);
 	if (adev->asic_reset_res)
-		DRM_WARN("ASIC reset failed with err r, %d for drm dev, %s",
+		DRM_WARN("ASIC reset failed with error, %d for drm dev, %s",
 			 adev->asic_reset_res, adev->ddev->unique);
 }
 
@@ -2467,6 +2471,7 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	mutex_init(&adev->virt.vf_errors.lock);
 	hash_init(adev->mn_hash);
 	mutex_init(&adev->lock_reset);
+	mutex_init(&adev->virt.dpm_mutex);
 
 	amdgpu_device_check_arguments(adev);
 
@@ -3179,6 +3184,7 @@ static int amdgpu_device_recover_vram(struct amdgpu_device *adev)
 
 		/* No need to recover an evicted BO */
 		if (shadow->tbo.mem.mem_type != TTM_PL_TT ||
+		    shadow->tbo.mem.start == AMDGPU_BO_INVALID_OFFSET ||
 		    shadow->parent->tbo.mem.mem_type != TTM_PL_VRAM)
 			continue;
 
@@ -3187,11 +3193,16 @@ static int amdgpu_device_recover_vram(struct amdgpu_device *adev)
 			break;
 
 		if (fence) {
-			r = dma_fence_wait_timeout(fence, false, tmo);
+			tmo = dma_fence_wait_timeout(fence, false, tmo);
 			dma_fence_put(fence);
 			fence = next;
-			if (r <= 0)
+			if (tmo == 0) {
+				r = -ETIMEDOUT;
 				break;
+			} else if (tmo < 0) {
+				r = tmo;
+				break;
+			}
 		} else {
 			fence = next;
 		}
@@ -3202,8 +3213,8 @@ static int amdgpu_device_recover_vram(struct amdgpu_device *adev)
 		tmo = dma_fence_wait_timeout(fence, false, tmo);
 	dma_fence_put(fence);
 
-	if (r <= 0 || tmo <= 0) {
-		DRM_ERROR("recover vram bo from shadow failed\n");
+	if (r < 0 || tmo <= 0) {
+		DRM_ERROR("recover vram bo from shadow failed, r is %ld, tmo is %ld\n", r, tmo);
 		return -EIO;
 	}
 
@@ -3387,7 +3398,7 @@ static int amdgpu_do_asic_reset(struct amdgpu_hive_info *hive,
 				r = amdgpu_asic_reset(tmp_adev);
 
 			if (r) {
-				DRM_ERROR("ASIC reset failed with err r, %d for drm dev, %s",
+				DRM_ERROR("ASIC reset failed with error, %d for drm dev, %s",
 					 r, tmp_adev->ddev->unique);
 				break;
 			}
@@ -3640,38 +3651,6 @@ retry:	/* Rest of adevs pre asic reset from XGMI hive. */
 	return r;
 }
 
-static void amdgpu_device_get_min_pci_speed_width(struct amdgpu_device *adev,
-						  enum pci_bus_speed *speed,
-						  enum pcie_link_width *width)
-{
-	struct pci_dev *pdev = adev->pdev;
-	enum pci_bus_speed cur_speed;
-	enum pcie_link_width cur_width;
-
-	*speed = PCI_SPEED_UNKNOWN;
-	*width = PCIE_LNK_WIDTH_UNKNOWN;
-
-	while (pdev) {
-		cur_speed = pcie_get_speed_cap(pdev);
-		cur_width = pcie_get_width_cap(pdev);
-
-		if (cur_speed != PCI_SPEED_UNKNOWN) {
-			if (*speed == PCI_SPEED_UNKNOWN)
-				*speed = cur_speed;
-			else if (cur_speed < *speed)
-				*speed = cur_speed;
-		}
-
-		if (cur_width != PCIE_LNK_WIDTH_UNKNOWN) {
-			if (*width == PCIE_LNK_WIDTH_UNKNOWN)
-				*width = cur_width;
-			else if (cur_width < *width)
-				*width = cur_width;
-		}
-		pdev = pci_upstream_bridge(pdev);
-	}
-}
-
 /**
  * amdgpu_device_get_pcie_info - fence pcie info about the PCIE slot
  *
@@ -3705,8 +3684,8 @@ static void amdgpu_device_get_pcie_info(struct amdgpu_device *adev)
 	if (adev->pm.pcie_gen_mask && adev->pm.pcie_mlw_mask)
 		return;
 
-	amdgpu_device_get_min_pci_speed_width(adev, &platform_speed_cap,
-					      &platform_link_width);
+	pcie_bandwidth_available(adev->pdev, NULL,
+				 &platform_speed_cap, &platform_link_width);
 
 	if (adev->pm.pcie_gen_mask == 0) {
 		/* asic caps */

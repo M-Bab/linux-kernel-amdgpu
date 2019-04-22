@@ -247,6 +247,53 @@ static enum dcn_bw_defs tl_pixel_format_to_bw_defs(enum surface_pixel_format for
 	}
 }
 
+enum source_macro_tile_size swizzle_mode_to_macro_tile_size(enum swizzle_mode_values sw_mode)
+{
+	switch (sw_mode) {
+	/* for 4/8/16 high tiles */
+	case DC_SW_LINEAR:
+		return dm_4k_tile;
+	case DC_SW_4KB_S:
+	case DC_SW_4KB_S_X:
+		return dm_4k_tile;
+	case DC_SW_64KB_S:
+	case DC_SW_64KB_S_X:
+	case DC_SW_64KB_S_T:
+		return dm_64k_tile;
+	case DC_SW_VAR_S:
+	case DC_SW_VAR_S_X:
+		return dm_256k_tile;
+
+	/* For 64bpp 2 high tiles */
+	case DC_SW_4KB_D:
+	case DC_SW_4KB_D_X:
+		return dm_4k_tile;
+	case DC_SW_64KB_D:
+	case DC_SW_64KB_D_X:
+	case DC_SW_64KB_D_T:
+		return dm_64k_tile;
+	case DC_SW_VAR_D:
+	case DC_SW_VAR_D_X:
+		return dm_256k_tile;
+
+	case DC_SW_4KB_R:
+	case DC_SW_4KB_R_X:
+		return dm_4k_tile;
+	case DC_SW_64KB_R:
+	case DC_SW_64KB_R_X:
+		return dm_64k_tile;
+	case DC_SW_VAR_R:
+	case DC_SW_VAR_R_X:
+		return dm_256k_tile;
+
+	/* Unsupported swizzle modes for dcn */
+	case DC_SW_256B_S:
+	default:
+		ASSERT(0); /* Not supported */
+		return 0;
+	}
+}
+
 static void pipe_ctx_to_e2e_pipe_params (
 		const struct pipe_ctx *pipe,
 		struct _vcs_dpi_display_pipe_params_st *input)
@@ -287,46 +334,7 @@ static void pipe_ctx_to_e2e_pipe_params (
 	input->src.cur0_src_width      = 128; /* TODO: Cursor calcs, not curently stored */
 	input->src.cur0_bpp            = 32;
 
-	switch (pipe->plane_state->tiling_info.gfx9.swizzle) {
-	/* for 4/8/16 high tiles */
-	case DC_SW_LINEAR:
-		input->src.macro_tile_size = dm_4k_tile;
-		break;
-	case DC_SW_4KB_S:
-	case DC_SW_4KB_S_X:
-		input->src.macro_tile_size = dm_4k_tile;
-		break;
-	case DC_SW_64KB_S:
-	case DC_SW_64KB_S_X:
-	case DC_SW_64KB_S_T:
-		input->src.macro_tile_size = dm_64k_tile;
-		break;
-	case DC_SW_VAR_S:
-	case DC_SW_VAR_S_X:
-		input->src.macro_tile_size = dm_256k_tile;
-		break;
-
-	/* For 64bpp 2 high tiles */
-	case DC_SW_4KB_D:
-	case DC_SW_4KB_D_X:
-		input->src.macro_tile_size = dm_4k_tile;
-		break;
-	case DC_SW_64KB_D:
-	case DC_SW_64KB_D_X:
-	case DC_SW_64KB_D_T:
-		input->src.macro_tile_size = dm_64k_tile;
-		break;
-	case DC_SW_VAR_D:
-	case DC_SW_VAR_D_X:
-		input->src.macro_tile_size = dm_256k_tile;
-		break;
-
-	/* Unsupported swizzle modes for dcn */
-	case DC_SW_256B_S:
-	default:
-		ASSERT(0); /* Not supported */
-		break;
-	}
+	input->src.macro_tile_size = swizzle_mode_to_macro_tile_size(pipe->plane_state->tiling_info.gfx9.swizzle);
 
 	switch (pipe->plane_state->rotation) {
 	case ROTATION_ANGLE_0:
@@ -693,8 +701,15 @@ static void hack_bounding_box(struct dcn_bw_internal_vars *v,
 
 bool dcn_validate_bandwidth(
 		struct dc *dc,
-		struct dc_state *context)
+		struct dc_state *context,
+		bool fast_validate)
 {
+	/*
+	 * we want a breakdown of the various stages of validation, which the
+	 * perf_trace macro doesn't support
+	 */
+	BW_VAL_TRACE_SETUP();
+
 	const struct resource_pool *pool = dc->res_pool;
 	struct dcn_bw_internal_vars *v = &context->dcn_bw_vars;
 	int i, input_idx;
@@ -703,6 +718,9 @@ bool dcn_validate_bandwidth(
 	float bw_limit;
 
 	PERFORMANCE_TRACE_START();
+
+	BW_VAL_TRACE_COUNT();
+
 	if (dcn_bw_apply_registry_override(dc))
 		dcn_bw_sync_calcs_and_dml(dc);
 
@@ -1005,8 +1023,11 @@ bool dcn_validate_bandwidth(
 		mode_support_and_system_configuration(v);
 	}
 
-	if (v->voltage_level != 5) {
+	BW_VAL_TRACE_END_VOLTAGE_LEVEL();
+
+	if (v->voltage_level != number_of_states_plus_one && !fast_validate) {
 		float bw_consumed = v->total_bandwidth_consumed_gbyte_per_second;
+
 		if (bw_consumed < v->fabric_and_dram_bandwidth_vmin0p65)
 			bw_consumed = v->fabric_and_dram_bandwidth_vmin0p65;
 		else if (bw_consumed < v->fabric_and_dram_bandwidth_vmid0p72)
@@ -1079,6 +1100,8 @@ bool dcn_validate_bandwidth(
 			break;
 		}
 
+		BW_VAL_TRACE_END_WATERMARKS();
+
 		for (i = 0, input_idx = 0; i < pool->pipe_count; i++) {
 			struct pipe_ctx *pipe = &context->res_ctx.pipe_ctx[i];
 
@@ -1141,7 +1164,7 @@ bool dcn_validate_bandwidth(
 						hsplit_pipe->pipe_dlg_param.vblank_end = pipe->pipe_dlg_param.vblank_end;
 					} else {
 						/* pipe not split previously needs split */
-						hsplit_pipe = find_idle_secondary_pipe(&context->res_ctx, pool);
+						hsplit_pipe = find_idle_secondary_pipe(&context->res_ctx, pool, pipe);
 						ASSERT(hsplit_pipe);
 						split_stream_across_pipes(
 							&context->res_ctx, pool,
@@ -1169,6 +1192,10 @@ bool dcn_validate_bandwidth(
 
 			input_idx++;
 		}
+	} else if (v->voltage_level == number_of_states_plus_one) {
+		BW_VAL_TRACE_SKIP(fail);
+	} else if (fast_validate) {
+		BW_VAL_TRACE_SKIP(fast);
 	}
 
 	if (v->voltage_level == 0) {
@@ -1188,6 +1215,7 @@ bool dcn_validate_bandwidth(
 	kernel_fpu_end();
 
 	PERFORMANCE_TRACE_END();
+	BW_VAL_TRACE_FINISH();
 
 	if (bw_limit_pass && v->voltage_level != 5)
 		return true;
