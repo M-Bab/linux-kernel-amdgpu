@@ -521,8 +521,24 @@ static const struct dc_plane_cap plane_cap = {
 	.blends_with_above = true,
 	.blends_with_below = true,
 	.per_pixel_alpha = true,
-	.supports_argb8888 = true,
-	.supports_nv12 = true
+
+	.pixel_format_support = {
+			.argb8888 = true,
+			.nv12 = true,
+			.fp16 = true
+	},
+
+	.max_upscale_factor = {
+			.argb8888 = 16000,
+			.nv12 = 16000,
+			.fp16 = 1
+	},
+
+	.max_downscale_factor = {
+			.argb8888 = 250,
+			.nv12 = 250,
+			.fp16 = 1
+	}
 };
 
 static const struct dc_debug_options debug_defaults_drv = {
@@ -1081,7 +1097,7 @@ static struct pipe_ctx *dcn10_acquire_idle_pipe_for_layer(
 {
 	struct resource_context *res_ctx = &context->res_ctx;
 	struct pipe_ctx *head_pipe = resource_get_head_pipe_for_stream(res_ctx, stream);
-	struct pipe_ctx *idle_pipe = find_idle_secondary_pipe(res_ctx, pool);
+	struct pipe_ctx *idle_pipe = find_idle_secondary_pipe(res_ctx, pool, head_pipe);
 
 	if (!head_pipe) {
 		ASSERT(0);
@@ -1146,7 +1162,7 @@ static enum dc_status dcn10_validate_global(struct dc *dc, struct dc_state *cont
 			continue;
 
 		if (context->stream_status[i].plane_count > 2)
-			return false;
+			return DC_FAIL_UNSUPPORTED_1;
 
 		for (j = 0; j < context->stream_status[i].plane_count; j++) {
 			struct dc_plane_state *plane =
@@ -1528,7 +1544,7 @@ fail:
 }
 
 struct resource_pool *dcn10_create_resource_pool(
-		uint8_t num_virtual_links,
+		const struct dc_init_data *init_data,
 		struct dc *dc)
 {
 	struct dcn10_resource_pool *pool =
@@ -1537,7 +1553,7 @@ struct resource_pool *dcn10_create_resource_pool(
 	if (!pool)
 		return NULL;
 
-	if (construct(num_virtual_links, dc, pool))
+	if (construct(init_data->num_virtual_links, dc, pool))
 		return &pool->base;
 
 	BREAK_TO_DEBUGGER();

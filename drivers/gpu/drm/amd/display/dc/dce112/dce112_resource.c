@@ -399,7 +399,24 @@ static const struct resource_caps polaris_11_resource_cap = {
 
 static const struct dc_plane_cap plane_cap = {
 	.type = DC_PLANE_TYPE_DCE_RGB,
-	.supports_argb8888 = true,
+
+	.pixel_format_support = {
+			.argb8888 = true,
+			.nv12 = false,
+			.fp16 = false
+	},
+
+	.max_upscale_factor = {
+			.argb8888 = 16000,
+			.nv12 = 1,
+			.fp16 = 1
+	},
+
+	.max_downscale_factor = {
+			.argb8888 = 250,
+			.nv12 = 1,
+			.fp16 = 1
+	}
 };
 
 #define CTX  ctx
@@ -809,7 +826,8 @@ static enum dc_status build_mapped_resource(
 
 bool dce112_validate_bandwidth(
 	struct dc *dc,
-	struct dc_state *context)
+	struct dc_state *context,
+	bool fast_validate)
 {
 	bool result = false;
 
@@ -892,7 +910,7 @@ enum dc_status resource_map_phy_clock_resources(
 		return DC_ERROR_UNEXPECTED;
 
 	if (dc_is_dp_signal(pipe_ctx->stream->signal)
-		|| pipe_ctx->stream->signal == SIGNAL_TYPE_VIRTUAL)
+		|| dc_is_virtual_signal(pipe_ctx->stream->signal))
 		pipe_ctx->clock_source =
 				dc->res_pool->dp_clock_source;
 	else
