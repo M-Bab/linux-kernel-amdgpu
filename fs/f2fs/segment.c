@@ -191,8 +191,7 @@ void f2fs_register_inmem_page(struct inode *inode, struct page *page)
 
 	f2fs_trace_pid(page);
 
-	set_page_private(page, (unsigned long)ATOMIC_WRITTEN_PAGE);
-	SetPagePrivate(page);
+	f2fs_set_page_private(page, (unsigned long)ATOMIC_WRITTEN_PAGE);
 
 	new = f2fs_kmem_cache_alloc(inmem_entry_slab, GFP_NOFS);
 
@@ -215,7 +214,8 @@ void f2fs_register_inmem_page(struct inode *inode, struct page *page)
 }
 
 static int __revoke_inmem_pages(struct inode *inode,
-				struct list_head *head, bool drop, bool recover)
+				struct list_head *head, bool drop, bool recover,
+				bool trylock)
 {
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	struct inmem_pages *cur, *tmp;
@@ -227,7 +227,16 @@ static int __revoke_inmem_pages(struct inode *inode,
 		if (drop)
 			trace_f2fs_commit_inmem_page(page, INMEM_DROP);
 
-		lock_page(page);
+		if (trylock) {
+			/*
+			 * to avoid deadlock in between page lock and
+			 * inmem_lock.
+			 */
+			if (!trylock_page(page))
+				continue;
+		} else {
+			lock_page(page);
+		}
 
 		f2fs_wait_on_page_writeback(page, DATA, true, true);
 
@@ -270,8 +279,7 @@ next:
 			ClearPageUptodate(page);
 			clear_cold_data(page);
 		}
-		set_page_private(page, 0);
-		ClearPagePrivate(page);
+		f2fs_clear_page_private(page);
 		f2fs_put_page(page, 1);
 
 		list_del(&cur->list);
@@ -318,13 +326,19 @@ void f2fs_drop_inmem_pages(struct inode *inode)
 	struct f2fs_sb_info *sbi = F2FS_I_SB(inode);
 	struct f2fs_inode_info *fi = F2FS_I(inode);
 
-	mutex_lock(&fi->inmem_lock);
-	__revoke_inmem_pages(inode, &fi->inmem_pages, true, false);
-	spin_lock(&sbi->inode_lock[ATOMIC_FILE]);
-	if (!list_empty(&fi->inmem_ilist))
-		list_del_init(&fi->inmem_ilist);
-	spin_unlock(&sbi->inode_lock[ATOMIC_FILE]);
-	mutex_unlock(&fi->inmem_lock);
+	while (!list_empty(&fi->inmem_pages)) {
+		mutex_lock(&fi->inmem_lock);
+		__revoke_inmem_pages(inode, &fi->inmem_pages,
+						true, false, true);
+
+		if (list_empty(&fi->inmem_pages)) {
+			spin_lock(&sbi->inode_lock[ATOMIC_FILE]);
+			if (!list_empty(&fi->inmem_ilist))
+				list_del_init(&fi->inmem_ilist);
+			spin_unlock(&sbi->inode_lock[ATOMIC_FILE]);
+		}
+		mutex_unlock(&fi->inmem_lock);
+	}
 
 	clear_inode_flag(inode, FI_ATOMIC_FILE);
 	fi->i_gc_failures[GC_FAILURE_ATOMIC] = 0;
@@ -354,8 +368,7 @@ void f2fs_drop_inmem_page(struct inode *inode, struct page *page)
 	kmem_cache_free(inmem_entry_slab, cur);
 
 	ClearPageUptodate(page);
-	set_page_private(page, 0);
-	ClearPagePrivate(page);
+	f2fs_clear_page_private(page);
 	f2fs_put_page(page, 0);
 
 	trace_f2fs_commit_inmem_page(page, INMEM_INVALIDATE);
@@ -429,12 +442,15 @@ retry:
 		 * recovery or rewrite & commit last transaction. For other
 		 * error number, revoking was done by filesystem itself.
 		 */
-		err = __revoke_inmem_pages(inode, &revoke_list, false, true);
+		err = __revoke_inmem_pages(inode, &revoke_list,
+						false, true, false);
 
 		/* drop all uncommitted pages */
-		__revoke_inmem_pages(inode, &fi->inmem_pages, true, false);
+		__revoke_inmem_pages(inode, &fi->inmem_pages,
+						true, false, false);
 	} else {
-		__revoke_inmem_pages(inode, &revoke_list, false, false);
+		__revoke_inmem_pages(inode, &revoke_list,
+						false, false, false);
 	}
 
 	return err;

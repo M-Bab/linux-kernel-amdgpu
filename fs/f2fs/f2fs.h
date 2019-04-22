@@ -456,7 +456,6 @@ struct f2fs_flush_device {
 
 /* for inline stuff */
 #define DEF_INLINE_RESERVED_SIZE	1
-#define DEF_MIN_INLINE_SIZE		1
 static inline int get_extra_isize(struct inode *inode);
 static inline int get_inline_xattr_addrs(struct inode *inode);
 #define MAX_INLINE_DATA(inode)	(sizeof(__le32) *			\
@@ -2824,6 +2823,27 @@ static inline bool is_valid_data_blkaddr(struct f2fs_sb_info *sbi,
 		return false;
 	verify_blkaddr(sbi, blkaddr, DATA_GENERIC);
 	return true;
+}
+
+static inline void f2fs_set_page_private(struct page *page,
+						unsigned long data)
+{
+	if (PagePrivate(page))
+		return;
+
+	get_page(page);
+	SetPagePrivate(page);
+	set_page_private(page, data);
+}
+
+static inline void f2fs_clear_page_private(struct page *page)
+{
+	if (!PagePrivate(page))
+		return;
+
+	set_page_private(page, 0);
+	ClearPagePrivate(page);
+	f2fs_put_page(page, 0);
 }
 
 /*
