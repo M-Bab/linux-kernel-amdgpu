@@ -1198,6 +1198,9 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 
 	memset(&context->commit_hints, 0, sizeof(context->commit_hints));
 
+	for (i = 0; i < context->stream_count; i++)
+		context->streams[i]->mode_changed = false;
+
 	dc_release_state(dc->current_state);
 
 	dc->current_state = context;
