@@ -2734,6 +2734,20 @@ static const struct reg_sequence cs35l41_revb0_errata_patch[] = {
 	{0x00000040,			0x00003333},
 };
 
+static const struct reg_sequence cs35l41_revb2_errata_patch[] = {
+	{0x00000040,			0x00005555},
+	{0x00000040,			0x0000AAAA},
+	{CS35L41_VIMON_SPKMON_RESYNC,	0x00000000},
+	{0x00004310,			0x00000000},
+	{CS35L41_VPVBST_FS_SEL,		0x00000000},
+	{CS35L41_BSTCVRT_DCM_CTRL,	0x00000051},
+	{CS35L41_DSP1_YM_ACCEL_PL0_PRI,	0x00000000},
+	{CS35L41_DSP1_XM_ACCEL_PL0_PRI,	0x00000000},
+	{CS35L41_ASP_CONTROL4,		0x01010000},
+	{0x00000040,			0x0000CCCC},
+	{0x00000040,			0x00003333},
+};
+
 static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 {
 	struct wm_adsp *dsp;
@@ -2942,6 +2956,16 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		if (ret < 0) {
 			dev_err(cs35l41->dev,
 				"Failed to apply B0 errata patch %d\n", ret);
+			goto err;
+		}
+		break;
+	case CS35L41_REVID_B2:
+		ret = regmap_multi_reg_write(cs35l41->regmap,
+				cs35l41_revb2_errata_patch,
+				ARRAY_SIZE(cs35l41_revb2_errata_patch));
+		if (ret < 0) {
+			dev_err(cs35l41->dev,
+				"Failed to apply B2 errata patch %d\n", ret);
 			goto err;
 		}
 		break;
