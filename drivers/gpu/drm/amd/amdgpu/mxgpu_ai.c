@@ -343,7 +343,7 @@ flr_done:
 
 	/* Trigger recovery for world switch failure if no TDR */
 	if (amdgpu_device_should_recover_gpu(adev)
-		&& amdgpu_lockup_timeout == MAX_SCHEDULE_TIMEOUT)
+		&& adev->sdma_timeout == MAX_SCHEDULE_TIMEOUT)
 		amdgpu_device_gpu_recover(adev, NULL);
 }
 
@@ -372,6 +372,9 @@ static int xgpu_ai_mailbox_rcv_irq(struct amdgpu_device *adev,
 		if (amdgpu_sriov_runtime(adev))
 			schedule_work(&adev->virt.flr_work);
 		break;
+		case IDH_QUERY_ALIVE:
+			xgpu_ai_mailbox_send_ack(adev);
+			break;
 		/* READY_TO_ACCESS_GPU is fetched by kernel polling, IRQ can ignore
 		 * it byfar since that polling thread will handle it,
 		 * other msg like flr complete is not handled here.

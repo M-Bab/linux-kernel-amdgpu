@@ -44,6 +44,7 @@
 #include "smuio/smuio_9_0_offset.h"
 #include "smuio/smuio_9_0_sh_mask.h"
 #include "nbio/nbio_7_0_default.h"
+#include "nbio/nbio_7_0_offset.h"
 #include "nbio/nbio_7_0_sh_mask.h"
 #include "nbio/nbio_7_0_smn.h"
 #include "mp/mp_9_0_offset.h"
@@ -64,6 +65,7 @@
 #include "dce_virtual.h"
 #include "mxgpu_ai.h"
 #include "amdgpu_smu.h"
+#include <uapi/linux/kfd_ioctl.h>
 
 #define mmMP0_MISC_CGTT_CTRL0                                                                   0x01b9
 #define mmMP0_MISC_CGTT_CTRL0_BASE_IDX                                                          0
@@ -743,6 +745,18 @@ static bool soc15_need_reset_on_init(struct amdgpu_device *adev)
 	return false;
 }
 
+static uint64_t soc15_get_pcie_replay_count(struct amdgpu_device *adev)
+{
+	uint64_t nak_r, nak_g;
+
+	/* Get the number of NAKs received and generated */
+	nak_r = RREG32_PCIE(smnPCIE_RX_NUM_NAK);
+	nak_g = RREG32_PCIE(smnPCIE_RX_NUM_NAK_GENERATED);
+
+	/* Add the total number of NAKs, i.e the number of replays */
+	return (nak_r + nak_g);
+}
+
 static const struct amdgpu_asic_funcs soc15_asic_funcs =
 {
 	.read_disabled_bios = &soc15_read_disabled_bios,
@@ -760,6 +774,7 @@ static const struct amdgpu_asic_funcs soc15_asic_funcs =
 	.init_doorbell_index = &vega10_doorbell_index_init,
 	.get_pcie_usage = &soc15_get_pcie_usage,
 	.need_reset_on_init = &soc15_need_reset_on_init,
+	.get_pcie_replay_count = &soc15_get_pcie_replay_count,
 };
 
 static const struct amdgpu_asic_funcs vega20_asic_funcs =
@@ -779,12 +794,16 @@ static const struct amdgpu_asic_funcs vega20_asic_funcs =
 	.init_doorbell_index = &vega20_doorbell_index_init,
 	.get_pcie_usage = &soc15_get_pcie_usage,
 	.need_reset_on_init = &soc15_need_reset_on_init,
+	.get_pcie_replay_count = &soc15_get_pcie_replay_count,
 };
 
 static int soc15_common_early_init(void *handle)
 {
+#define MMIO_REG_HOLE_OFFSET (0x80000 - PAGE_SIZE)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
+	adev->rmmio_remap.reg_offset = MMIO_REG_HOLE_OFFSET;
+	adev->rmmio_remap.bus_addr = adev->rmmio_base + MMIO_REG_HOLE_OFFSET;
 	adev->smc_rreg = NULL;
 	adev->smc_wreg = NULL;
 	adev->pcie_rreg = &soc15_pcie_rreg;
@@ -1014,6 +1033,12 @@ static int soc15_common_hw_init(void *handle)
 	soc15_program_aspm(adev);
 	/* setup nbio registers */
 	adev->nbio_funcs->init_registers(adev);
+	/* remap HDP registers to a hole in mmio space,
+	 * for the purpose of expose those registers
+	 * to process space
+	 */
+	if (adev->nbio_funcs->remap_hdp_registers)
+		adev->nbio_funcs->remap_hdp_registers(adev);
 	/* enable the doorbell aperture */
 	soc15_enable_doorbell_aperture(adev, true);
 	/* HW doorbell routing policy: doorbell writing not

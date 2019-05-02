@@ -188,6 +188,7 @@ struct kfd_device_info {
 	bool needs_iommu_device;
 	bool needs_pci_atomics;
 	unsigned int num_sdma_engines;
+	unsigned int num_xgmi_sdma_engines;
 	unsigned int num_sdma_queues_per_engine;
 };
 
@@ -258,7 +259,7 @@ struct kfd_dev {
 	bool interrupts_active;
 
 	/* Debug manager */
-	struct kfd_dbgmgr           *dbgmgr;
+	struct kfd_dbgmgr *dbgmgr;
 
 	/* Firmware versions */
 	uint16_t mec_fw_version;
@@ -279,6 +280,9 @@ struct kfd_dev {
 
 	/* SRAM ECC flag */
 	atomic_t sram_ecc_flag;
+
+	/* Compute Profile ref. count */
+	atomic_t compute_profile;
 };
 
 enum kfd_mempool {
@@ -326,7 +330,8 @@ enum kfd_queue_type  {
 	KFD_QUEUE_TYPE_COMPUTE,
 	KFD_QUEUE_TYPE_SDMA,
 	KFD_QUEUE_TYPE_HIQ,
-	KFD_QUEUE_TYPE_DIQ
+	KFD_QUEUE_TYPE_DIQ,
+	KFD_QUEUE_TYPE_SDMA_XGMI
 };
 
 enum kfd_queue_format {
@@ -472,6 +477,7 @@ enum KFD_MQD_TYPE {
 	KFD_MQD_TYPE_HIQ,		/* for hiq */
 	KFD_MQD_TYPE_CP,		/* for cp queues and diq */
 	KFD_MQD_TYPE_SDMA,		/* for sdma queues */
+	KFD_MQD_TYPE_DIQ,		/* for diq */
 	KFD_MQD_TYPE_MAX
 };
 
@@ -816,8 +822,6 @@ void uninit_queue(struct queue *q);
 void print_queue_properties(struct queue_properties *q);
 void print_queue(struct queue *q);
 
-struct mqd_manager *mqd_manager_init(enum KFD_MQD_TYPE type,
-					struct kfd_dev *dev);
 struct mqd_manager *mqd_manager_init_cik(enum KFD_MQD_TYPE type,
 		struct kfd_dev *dev);
 struct mqd_manager *mqd_manager_init_cik_hawaii(enum KFD_MQD_TYPE type,
@@ -977,6 +981,10 @@ void kfd_flush_tlb(struct kfd_process_device *pdd);
 int dbgdev_wave_reset_wavefronts(struct kfd_dev *dev, struct kfd_process *p);
 
 bool kfd_is_locked(void);
+
+/* Compute profile */
+void kfd_inc_compute_active(struct kfd_dev *dev);
+void kfd_dec_compute_active(struct kfd_dev *dev);
 
 /* Debugfs */
 #if defined(CONFIG_DEBUG_FS)

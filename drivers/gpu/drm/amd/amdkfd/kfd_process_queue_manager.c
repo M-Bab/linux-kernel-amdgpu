@@ -186,8 +186,13 @@ int pqm_create_queue(struct process_queue_manager *pqm,
 
 	switch (type) {
 	case KFD_QUEUE_TYPE_SDMA:
-		if (dev->dqm->queue_count >= get_num_sdma_queues(dev->dqm)) {
-			pr_err("Over-subscription is not allowed for SDMA.\n");
+	case KFD_QUEUE_TYPE_SDMA_XGMI:
+		if ((type == KFD_QUEUE_TYPE_SDMA && dev->dqm->sdma_queue_count
+			>= get_num_sdma_queues(dev->dqm)) ||
+			(type == KFD_QUEUE_TYPE_SDMA_XGMI &&
+			dev->dqm->xgmi_sdma_queue_count
+			>= get_num_xgmi_sdma_queues(dev->dqm))) {
+			pr_debug("Over-subscription is not allowed for SDMA.\n");
 			retval = -EPERM;
 			goto err_create_queue;
 		}
@@ -446,6 +451,7 @@ int pqm_debugfs_mqds(struct seq_file *m, void *data)
 			q = pqn->q;
 			switch (q->properties.type) {
 			case KFD_QUEUE_TYPE_SDMA:
+			case KFD_QUEUE_TYPE_SDMA_XGMI:
 				seq_printf(m, "  SDMA queue on device %x\n",
 					   q->device->id);
 				mqd_type = KFD_MQD_TYPE_SDMA;
@@ -461,8 +467,7 @@ int pqm_debugfs_mqds(struct seq_file *m, void *data)
 					   q->properties.type, q->device->id);
 				continue;
 			}
-			mqd_mgr = q->device->dqm->ops.get_mqd_manager(
-				q->device->dqm, mqd_type);
+			mqd_mgr = q->device->dqm->mqd_mgrs[mqd_type];
 		} else if (pqn->kq) {
 			q = pqn->kq->queue;
 			mqd_mgr = pqn->kq->mqd_mgr;
@@ -470,7 +475,6 @@ int pqm_debugfs_mqds(struct seq_file *m, void *data)
 			case KFD_QUEUE_TYPE_DIQ:
 				seq_printf(m, "  DIQ on device %x\n",
 					   pqn->kq->dev->id);
-				mqd_type = KFD_MQD_TYPE_HIQ;
 				break;
 			default:
 				seq_printf(m,
