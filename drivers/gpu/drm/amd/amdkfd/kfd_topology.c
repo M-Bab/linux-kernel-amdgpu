@@ -476,6 +476,10 @@ static ssize_t node_show(struct kobject *kobj, struct attribute *attr,
 			dev->node_props.drm_render_minor);
 	sysfs_show_64bit_prop(buffer, "hive_id",
 			dev->node_props.hive_id);
+	sysfs_show_32bit_prop(buffer, "num_sdma_engines",
+			dev->node_props.num_sdma_engines);
+	sysfs_show_32bit_prop(buffer, "num_sdma_xgmi_engines",
+			dev->node_props.num_sdma_xgmi_engines);
 
 	if (dev->gpu) {
 		log_max_watch_addr =
@@ -1078,8 +1082,9 @@ static uint32_t kfd_generate_gpu_id(struct kfd_dev *gpu)
 			local_mem_info.local_mem_size_public;
 
 	buf[0] = gpu->pdev->devfn;
-	buf[1] = gpu->pdev->subsystem_vendor;
-	buf[2] = gpu->pdev->subsystem_device;
+	buf[1] = gpu->pdev->subsystem_vendor |
+		(gpu->pdev->subsystem_device << 16);
+	buf[2] = pci_domain_nr(gpu->pdev->bus);
 	buf[3] = gpu->pdev->device;
 	buf[4] = gpu->pdev->bus->number;
 	buf[5] = lower_32_bits(local_mem_size);
@@ -1282,6 +1287,9 @@ int kfd_topology_add_device(struct kfd_dev *gpu)
 		gpu->shared_resources.drm_render_minor;
 
 	dev->node_props.hive_id = gpu->hive_id;
+	dev->node_props.num_sdma_engines = gpu->device_info->num_sdma_engines;
+	dev->node_props.num_sdma_xgmi_engines =
+				gpu->device_info->num_xgmi_sdma_engines;
 
 	kfd_fill_mem_clk_max_info(dev);
 	kfd_fill_iolink_non_crat_info(dev);
@@ -1299,6 +1307,7 @@ int kfd_topology_add_device(struct kfd_dev *gpu)
 	case CHIP_POLARIS10:
 	case CHIP_POLARIS11:
 	case CHIP_POLARIS12:
+	case CHIP_VEGAM:
 		pr_debug("Adding doorbell packet type capability\n");
 		dev->node_props.capability |= ((HSA_CAP_DOORBELL_TYPE_1_0 <<
 			HSA_CAP_DOORBELL_TYPE_TOTALBITS_SHIFT) &

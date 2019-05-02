@@ -118,7 +118,6 @@ extern int amdgpu_disp_priority;
 extern int amdgpu_hw_i2c;
 extern int amdgpu_pcie_gen2;
 extern int amdgpu_msi;
-extern int amdgpu_lockup_timeout;
 extern int amdgpu_dpm;
 extern int amdgpu_fw_load_type;
 extern int amdgpu_aspm;
@@ -415,6 +414,7 @@ struct amdgpu_fpriv {
 };
 
 int amdgpu_file_to_fpriv(struct file *filp, struct amdgpu_fpriv **fpriv);
+int amdgpu_device_get_job_timeout_settings(struct amdgpu_device *adev);
 
 int amdgpu_ib_get(struct amdgpu_device *adev, struct amdgpu_vm *vm,
 		  unsigned size, struct amdgpu_ib *ib);
@@ -558,6 +558,8 @@ struct amdgpu_asic_funcs {
 			       uint64_t *count1);
 	/* do we need to reset the asic at init time (e.g., kexec) */
 	bool (*need_reset_on_init)(struct amdgpu_device *adev);
+	/* PCIe replay counter */
+	uint64_t (*get_pcie_replay_count)(struct amdgpu_device *adev);
 };
 
 /*
@@ -642,6 +644,11 @@ struct nbio_hdp_flush_reg {
 	u32 ref_and_mask_sdma1;
 };
 
+struct amdgpu_mmio_remap {
+	u32 reg_offset;
+	resource_size_t bus_addr;
+};
+
 struct amdgpu_nbio_funcs {
 	const struct nbio_hdp_flush_reg *hdp_flush_reg;
 	u32 (*get_hdp_flush_req_offset)(struct amdgpu_device *adev);
@@ -669,6 +676,7 @@ struct amdgpu_nbio_funcs {
 	void (*ih_control)(struct amdgpu_device *adev);
 	void (*init_registers)(struct amdgpu_device *adev);
 	void (*detect_hw_virt)(struct amdgpu_device *adev);
+	void (*remap_hdp_registers)(struct amdgpu_device *adev);
 };
 
 struct amdgpu_df_funcs {
@@ -767,6 +775,7 @@ struct amdgpu_device {
 	void __iomem			*rmmio;
 	/* protects concurrent MM_INDEX/DATA based register access */
 	spinlock_t mmio_idx_lock;
+	struct amdgpu_mmio_remap        rmmio_remap;
 	/* protects concurrent SMC based register access */
 	spinlock_t smc_idx_lock;
 	amdgpu_rreg_t			smc_rreg;
@@ -939,6 +948,11 @@ struct amdgpu_device {
 	struct work_struct		xgmi_reset_work;
 
 	bool                            in_baco_reset;
+
+	long				gfx_timeout;
+	long				sdma_timeout;
+	long				video_timeout;
+	long				compute_timeout;
 };
 
 static inline struct amdgpu_device *amdgpu_ttm_adev(struct ttm_bo_device *bdev)
@@ -1068,6 +1082,7 @@ int emu_soc_asic_init(struct amdgpu_device *adev);
 #define amdgpu_asic_init_doorbell_index(adev) (adev)->asic_funcs->init_doorbell_index((adev))
 #define amdgpu_asic_get_pcie_usage(adev, cnt0, cnt1) ((adev)->asic_funcs->get_pcie_usage((adev), (cnt0), (cnt1)))
 #define amdgpu_asic_need_reset_on_init(adev) (adev)->asic_funcs->need_reset_on_init((adev))
+#define amdgpu_asic_get_pcie_replay_count(adev) ((adev)->asic_funcs->get_pcie_replay_count((adev)))
 
 /* Common functions */
 bool amdgpu_device_should_recover_gpu(struct amdgpu_device *adev);

@@ -213,6 +213,8 @@ static int set_queue_properties_from_user(struct queue_properties *q_properties,
 		q_properties->type = KFD_QUEUE_TYPE_COMPUTE;
 	else if (args->queue_type == KFD_IOC_QUEUE_TYPE_SDMA)
 		q_properties->type = KFD_QUEUE_TYPE_SDMA;
+	else if (args->queue_type == KFD_IOC_QUEUE_TYPE_SDMA_XGMI)
+		q_properties->type = KFD_QUEUE_TYPE_SDMA_XGMI;
 	else
 		return -ENOTSUPP;
 
@@ -522,7 +524,7 @@ static int kfd_ioctl_set_trap_handler(struct file *filep,
 	struct kfd_process_device *pdd;
 
 	dev = kfd_device_by_id(args->gpu_id);
-	if (dev == NULL)
+	if (!dev)
 		return -EINVAL;
 
 	mutex_lock(&p->mutex);
@@ -1272,6 +1274,12 @@ static int kfd_ioctl_alloc_memory_of_gpu(struct file *filep,
 		if (args->size != kfd_doorbell_process_slice(dev))
 			return -EINVAL;
 		offset = kfd_get_process_doorbells(dev, p);
+	} else if (flags & KFD_IOC_ALLOC_MEM_FLAGS_MMIO_REMAP) {
+		if (args->size != PAGE_SIZE)
+			return -EINVAL;
+		offset = amdgpu_amdkfd_get_mmio_remap_phys_addr(dev->kgd);
+		if (!offset)
+			return -ENOMEM;
 	}
 
 	mutex_lock(&p->mutex);
