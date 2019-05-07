@@ -175,9 +175,14 @@ static bool create_links(
 		link = link_create(&link_init_params);
 
 		if (link) {
-			dc->links[dc->link_count] = link;
-			link->dc = dc;
-			++dc->link_count;
+			if (dc->config.edp_not_connected &&
+					link->connector_signal == SIGNAL_TYPE_EDP) {
+				link_destroy(&link);
+			} else {
+				dc->links[dc->link_count] = link;
+				link->dc = dc;
+				++dc->link_count;
+			}
 		}
 	}
 
@@ -1150,9 +1155,6 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 		const struct dc_link *link = context->streams[i]->link;
 		struct dc_stream_status *status;
 
-		if (context->streams[i]->apply_seamless_boot_optimization)
-			context->streams[i]->apply_seamless_boot_optimization = false;
-
 		if (!context->streams[i]->mode_changed)
 			continue;
 
@@ -1807,10 +1809,15 @@ static void commit_planes_for_stream(struct dc *dc,
 	if (dc->optimize_seamless_boot && surface_count > 0) {
 		/* Optimize seamless boot flag keeps clocks and watermarks high until
 		 * first flip. After first flip, optimization is required to lower
-		 * bandwidth.
+		 * bandwidth. Important to note that it is expected UEFI will
+		 * only light up a single display on POST, therefore we only expect
+		 * one stream with seamless boot flag set.
 		 */
-		dc->optimize_seamless_boot = false;
-		dc->optimized_required = true;
+		if (stream->apply_seamless_boot_optimization) {
+			stream->apply_seamless_boot_optimization = false;
+			dc->optimize_seamless_boot = false;
+			dc->optimized_required = true;
+		}
 	}
 
 	if (update_type == UPDATE_TYPE_FULL && !dc->optimize_seamless_boot) {
