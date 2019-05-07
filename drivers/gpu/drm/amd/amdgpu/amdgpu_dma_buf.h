@@ -1,5 +1,5 @@
 /*
- * Copyright 2012-16 Advanced Micro Devices, Inc.
+ * Copyright 2019 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,37 +19,28 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
- * Authors: AMD
- *
  */
+#ifndef __AMDGPU_DMA_BUF_H__
+#define __AMDGPU_DMA_BUF_H__
 
-#ifndef __DAL_CLK_MGR_H__
-#define __DAL_CLK_MGR_H__
+#include <drm/drm_gem.h>
 
-#include "dm_services_types.h"
-#include "dc.h"
+struct sg_table *amdgpu_gem_prime_get_sg_table(struct drm_gem_object *obj);
+struct drm_gem_object *
+amdgpu_gem_prime_import_sg_table(struct drm_device *dev,
+				 struct dma_buf_attachment *attach,
+				 struct sg_table *sg);
+struct dma_buf *amdgpu_gem_prime_export(struct drm_device *dev,
+					struct drm_gem_object *gobj,
+					int flags);
+struct drm_gem_object *amdgpu_gem_prime_import(struct drm_device *dev,
+					    struct dma_buf *dma_buf);
+struct reservation_object *amdgpu_gem_prime_res_obj(struct drm_gem_object *);
+void *amdgpu_gem_prime_vmap(struct drm_gem_object *obj);
+void amdgpu_gem_prime_vunmap(struct drm_gem_object *obj, void *vaddr);
+int amdgpu_gem_prime_mmap(struct drm_gem_object *obj,
+			  struct vm_area_struct *vma);
 
-struct clk_mgr {
-	struct dc_context *ctx;
-	struct clk_mgr_funcs *funcs;
+extern const struct dma_buf_ops amdgpu_dmabuf_ops;
 
-	struct dc_clocks clks;
-};
-
-struct clk_mgr_funcs {
-	void (*update_clocks)(struct clk_mgr *clk_mgr,
-			struct dc_state *context,
-			bool safe_to_lower);
-
-	int (*get_dp_ref_clk_frequency)(struct clk_mgr *clk_mgr);
-
-	void (*init_clocks)(struct clk_mgr *clk_mgr);
-
-	/* Returns actual clk that's set */
-	int (*set_dispclk)(struct clk_mgr *clk_mgr, int requested_dispclk_khz);
-	int (*set_dprefclk)(struct clk_mgr *clk_mgr);
-};
-
-
-
-#endif /* __DAL_CLK_MGR_H__ */
+#endif

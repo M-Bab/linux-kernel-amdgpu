@@ -658,16 +658,15 @@ static enum dc_status dcn10_enable_stream_timing(
 		BREAK_TO_DEBUGGER();
 		return DC_ERROR_UNEXPECTED;
 	}
-	pipe_ctx->stream_res.tg->dlg_otg_param.vready_offset = pipe_ctx->pipe_dlg_param.vready_offset;
-	pipe_ctx->stream_res.tg->dlg_otg_param.vstartup_start = pipe_ctx->pipe_dlg_param.vstartup_start;
-	pipe_ctx->stream_res.tg->dlg_otg_param.vupdate_offset = pipe_ctx->pipe_dlg_param.vupdate_offset;
-	pipe_ctx->stream_res.tg->dlg_otg_param.vupdate_width = pipe_ctx->pipe_dlg_param.vupdate_width;
-
-	pipe_ctx->stream_res.tg->dlg_otg_param.signal =  pipe_ctx->stream->signal;
 
 	pipe_ctx->stream_res.tg->funcs->program_timing(
 			pipe_ctx->stream_res.tg,
 			&stream->timing,
+			pipe_ctx->pipe_dlg_param.vready_offset,
+			pipe_ctx->pipe_dlg_param.vstartup_start,
+			pipe_ctx->pipe_dlg_param.vupdate_offset,
+			pipe_ctx->pipe_dlg_param.vupdate_width,
+			pipe_ctx->stream->signal,
 			true);
 
 #if 0 /* move to after enable_crtc */
@@ -2279,14 +2278,12 @@ static void program_all_pipe_in_tree(
 	if (pipe_ctx->top_pipe == NULL) {
 		bool blank = !is_pipe_tree_visible(pipe_ctx);
 
-		pipe_ctx->stream_res.tg->dlg_otg_param.vready_offset = pipe_ctx->pipe_dlg_param.vready_offset;
-		pipe_ctx->stream_res.tg->dlg_otg_param.vstartup_start = pipe_ctx->pipe_dlg_param.vstartup_start;
-		pipe_ctx->stream_res.tg->dlg_otg_param.vupdate_offset = pipe_ctx->pipe_dlg_param.vupdate_offset;
-		pipe_ctx->stream_res.tg->dlg_otg_param.vupdate_width = pipe_ctx->pipe_dlg_param.vupdate_width;
-		pipe_ctx->stream_res.tg->dlg_otg_param.signal =  pipe_ctx->stream->signal;
-
 		pipe_ctx->stream_res.tg->funcs->program_global_sync(
-				pipe_ctx->stream_res.tg);
+				pipe_ctx->stream_res.tg,
+				pipe_ctx->pipe_dlg_param.vready_offset,
+				pipe_ctx->pipe_dlg_param.vstartup_start,
+				pipe_ctx->pipe_dlg_param.vupdate_offset,
+				pipe_ctx->pipe_dlg_param.vupdate_width);
 
 		dc->hwss.blank_pixel_data(dc, pipe_ctx, blank);
 
@@ -2790,7 +2787,6 @@ static void apply_front_porch_workaround(
 
 int get_vupdate_offset_from_vsync(struct pipe_ctx *pipe_ctx)
 {
-	struct timing_generator *optc = pipe_ctx->stream_res.tg;
 	const struct dc_crtc_timing *dc_crtc_timing = &pipe_ctx->stream->timing;
 	struct dc_crtc_timing patched_crtc_timing;
 	int vesa_sync_start;
@@ -2813,7 +2809,7 @@ int get_vupdate_offset_from_vsync(struct pipe_ctx *pipe_ctx)
 			* interlace_factor;
 
 	vertical_line_start = asic_blank_end -
-			optc->dlg_otg_param.vstartup_start + 1;
+			pipe_ctx->pipe_dlg_param.vstartup_start + 1;
 
 	return vertical_line_start;
 }
@@ -2961,6 +2957,18 @@ static void dcn10_unblank_stream(struct pipe_ctx *pipe_ctx,
 	}
 }
 
+static void dcn10_send_immediate_sdp_message(struct pipe_ctx *pipe_ctx,
+				const uint8_t *custom_sdp_message,
+				unsigned int sdp_message_size)
+{
+	if (dc_is_dp_signal(pipe_ctx->stream->signal)) {
+		pipe_ctx->stream_res.stream_enc->funcs->send_immediate_sdp_message(
+				pipe_ctx->stream_res.stream_enc,
+				custom_sdp_message,
+				sdp_message_size);
+	}
+}
+
 static const struct hw_sequencer_funcs dcn10_funcs = {
 	.program_gamut_remap = program_gamut_remap,
 	.init_hw = dcn10_init_hw,
@@ -2980,6 +2988,7 @@ static const struct hw_sequencer_funcs dcn10_funcs = {
 	.enable_timing_synchronization = dcn10_enable_timing_synchronization,
 	.enable_per_frame_crtc_position_reset = dcn10_enable_per_frame_crtc_position_reset,
 	.update_info_frame = dce110_update_info_frame,
+	.send_immediate_sdp_message = dcn10_send_immediate_sdp_message,
 	.enable_stream = dce110_enable_stream,
 	.disable_stream = dce110_disable_stream,
 	.unblank_stream = dcn10_unblank_stream,
