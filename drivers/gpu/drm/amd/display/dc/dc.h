@@ -42,7 +42,7 @@
 #include "inc/hw/dmcu.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.2.29"
+#define DC_VER "3.2.31"
 
 #define MAX_SURFACES 3
 #define MAX_PLANES 6
@@ -555,12 +555,14 @@ struct dc_plane_status {
 union surface_update_flags {
 
 	struct {
+		uint32_t addr_update:1;
 		/* Medium updates */
 		uint32_t dcc_change:1;
 		uint32_t color_space_change:1;
 		uint32_t horizontal_mirror_change:1;
 		uint32_t per_pixel_alpha_change:1;
 		uint32_t global_alpha_change:1;
+		uint32_t sdr_white_level:1;
 		uint32_t rotation_change:1;
 		uint32_t swizzle_change:1;
 		uint32_t scaling_change:1;

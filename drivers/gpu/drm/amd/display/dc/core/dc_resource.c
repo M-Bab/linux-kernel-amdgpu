@@ -93,10 +93,8 @@ enum dce_version resource_parse_asic_id(struct hw_asic_id asic_id)
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 	case FAMILY_RV:
 		dc_version = DCN_VERSION_1_0;
-#if defined(CONFIG_DRM_AMD_DC_DCN1_01)
 		if (ASICREV_IS_RAVEN2(asic_id.hw_internal_rev))
 			dc_version = DCN_VERSION_1_01;
-#endif
 		break;
 #endif
 	default:
@@ -147,9 +145,7 @@ struct resource_pool *dc_create_resource_pool(struct dc  *dc,
 
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 	case DCN_VERSION_1_0:
-#if defined(CONFIG_DRM_AMD_DC_DCN1_01)
 	case DCN_VERSION_1_01:
-#endif
 		res_pool = dcn10_create_resource_pool(init_data, dc);
 		break;
 #endif
@@ -1650,46 +1646,6 @@ static int acquire_first_free_pipe(
 	return -1;
 }
 
-static struct stream_encoder *find_first_free_match_stream_enc_for_link(
-		struct resource_context *res_ctx,
-		const struct resource_pool *pool,
-		struct dc_stream_state *stream)
-{
-	int i;
-	int j = -1;
-	struct dc_link *link = stream->link;
-
-	for (i = 0; i < pool->stream_enc_count; i++) {
-		if (!res_ctx->is_stream_enc_acquired[i] &&
-				pool->stream_enc[i]) {
-			/* Store first available for MST second display
-			 * in daisy chain use case */
-			j = i;
-			if (pool->stream_enc[i]->id ==
-					link->link_enc->preferred_engine)
-				return pool->stream_enc[i];
-		}
-	}
-
-	/*
-	 * below can happen in cases when stream encoder is acquired:
-	 * 1) for second MST display in chain, so preferred engine already
-	 * acquired;
-	 * 2) for another link, which preferred engine already acquired by any
-	 * MST configuration.
-	 *
-	 * If signal is of DP type and preferred engine not found, return last available
-	 *
-	 * TODO - This is just a patch up and a generic solution is
-	 * required for non DP connectors.
-	 */
-
-	if (j >= 0 && link->connector_signal == SIGNAL_TYPE_DISPLAY_PORT)
-		return pool->stream_enc[j];
-
-	return NULL;
-}
-
 static struct audio *find_first_free_audio(
 		struct resource_context *res_ctx,
 		const struct resource_pool *pool,
@@ -2001,7 +1957,7 @@ enum dc_status resource_map_pool_resources(
 	pipe_ctx = &context->res_ctx.pipe_ctx[pipe_idx];
 
 	pipe_ctx->stream_res.stream_enc =
-		find_first_free_match_stream_enc_for_link(
+		dc->res_pool->funcs->find_first_free_match_stream_enc_for_link(
 			&context->res_ctx, pool, stream);
 
 	if (!pipe_ctx->stream_res.stream_enc)
@@ -2501,7 +2457,6 @@ void dc_resource_state_copy_construct(
 
 		if (cur_pipe->bottom_pipe)
 			cur_pipe->bottom_pipe = &dst_ctx->res_ctx.pipe_ctx[cur_pipe->bottom_pipe->pipe_idx];
-
 	}
 
 	for (i = 0; i < dst_ctx->stream_count; i++) {
@@ -2645,6 +2600,10 @@ bool pipe_need_reprogram(
 		return true;
 
 	if (is_vsc_info_packet_changed(pipe_ctx_old->stream, pipe_ctx->stream))
+		return true;
+
+	if (false == pipe_ctx_old->stream->link->link_state_valid &&
+		false == pipe_ctx_old->stream->dpms_off)
 		return true;
 
 	return false;

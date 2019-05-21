@@ -704,6 +704,7 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 
 	if (new_connection_type != dc_connection_none) {
 		link->type = new_connection_type;
+		link->link_state_valid = false;
 
 		/* From Disconnected-to-Connected. */
 		switch (link->connector_signal) {
@@ -906,10 +907,10 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 			sink->sink_signal = SIGNAL_TYPE_DVI_SINGLE_LINK;
 
 		/* Connectivity log: detection */
-		for (i = 0; i < sink->dc_edid.length / EDID_BLOCK_SIZE; i++) {
+		for (i = 0; i < sink->dc_edid.length / DC_EDID_BLOCK_SIZE; i++) {
 			CONN_DATA_DETECT(link,
-					&sink->dc_edid.raw_edid[i * EDID_BLOCK_SIZE],
-					EDID_BLOCK_SIZE,
+					&sink->dc_edid.raw_edid[i * DC_EDID_BLOCK_SIZE],
+					DC_EDID_BLOCK_SIZE,
 					"%s: [Block %d] ", sink->edid_caps.display_name, i);
 		}
 
@@ -2630,6 +2631,8 @@ void core_link_enable_stream(
 			&stream->timing,
 			stream->phy_pix_clk,
 			pipe_ctx->stream_res.audio != NULL);
+
+	pipe_ctx->stream->link->link_state_valid = true;
 
 	if (dc_is_dvi_signal(pipe_ctx->stream->signal))
 		pipe_ctx->stream_res.stream_enc->funcs->dvi_set_stream_attribute(

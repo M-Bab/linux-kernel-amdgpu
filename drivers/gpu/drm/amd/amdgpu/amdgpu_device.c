@@ -1532,6 +1532,9 @@ static int amdgpu_device_ip_early_init(struct amdgpu_device *adev)
 		r = amdgpu_virt_request_full_gpu(adev, true);
 		if (r)
 			return -EAGAIN;
+
+		/* query the reg access mode at the very beginning */
+		amdgpu_virt_init_reg_access_mode(adev);
 	}
 
 	adev->pm.pp_feature = amdgpu_pp_feature_mask;
@@ -1577,6 +1580,7 @@ static int amdgpu_device_ip_hw_init_phase1(struct amdgpu_device *adev)
 		if (adev->ip_blocks[i].status.hw)
 			continue;
 		if (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_COMMON ||
+		    (amdgpu_sriov_vf(adev) && (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_PSP)) ||
 		    adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_IH) {
 			r = adev->ip_blocks[i].version->funcs->hw_init(adev);
 			if (r) {
@@ -2701,6 +2705,10 @@ fence_driver_init:
 	if (r)
 		DRM_ERROR("registering pm debugfs failed (%d).\n", r);
 
+	r = amdgpu_ucode_sysfs_init(adev);
+	if (r)
+		DRM_ERROR("Creating firmware sysfs failed (%d).\n", r);
+
 	r = amdgpu_debugfs_gem_init(adev);
 	if (r)
 		DRM_ERROR("registering gem debugfs failed (%d).\n", r);
@@ -2741,7 +2749,7 @@ fence_driver_init:
 	}
 
 	/* must succeed. */
-	amdgpu_ras_post_init(adev);
+	amdgpu_ras_resume(adev);
 
 	r = device_create_file(adev->dev, &dev_attr_pcie_replay_count);
 	if (r) {
@@ -2813,6 +2821,7 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
 	amdgpu_device_doorbell_fini(adev);
 	amdgpu_debugfs_regs_cleanup(adev);
 	device_remove_file(adev->dev, &dev_attr_pcie_replay_count);
+	amdgpu_ucode_sysfs_fini(adev);
 }
 
 
@@ -2892,6 +2901,8 @@ int amdgpu_device_suspend(struct drm_device *dev, bool suspend, bool fbcon)
 	}
 
 	amdgpu_amdkfd_suspend(adev);
+
+	amdgpu_ras_suspend(adev);
 
 	r = amdgpu_device_ip_suspend_phase1(adev);
 
@@ -3012,6 +3023,8 @@ int amdgpu_device_resume(struct drm_device *dev, bool resume, bool fbcon)
 	}
 
 	drm_kms_helper_poll_enable(dev);
+
+	amdgpu_ras_resume(adev);
 
 	/*
 	 * Most of the connector probing functions try to acquire runtime pm
@@ -3491,6 +3504,13 @@ static int amdgpu_do_asic_reset(struct amdgpu_hive_info *hive,
 				if (vram_lost)
 					amdgpu_device_fill_reset_magic(tmp_adev);
 
+				r = amdgpu_device_ip_late_init(tmp_adev);
+				if (r)
+					goto out;
+
+				/* must succeed. */
+				amdgpu_ras_resume(tmp_adev);
+
 				/* Update PSP FW topology after reset */
 				if (hive && tmp_adev->gmc.xgmi.num_physical_nodes > 1)
 					r = amdgpu_xgmi_update_topology(hive, tmp_adev);
@@ -3574,6 +3594,8 @@ int amdgpu_device_gpu_recover(struct amdgpu_device *adev,
 	INIT_LIST_HEAD(&device_list);
 
 	dev_info(adev->dev, "GPU reset begin!\n");
+
+	cancel_delayed_work_sync(&adev->late_init_work);
 
 	hive = amdgpu_get_xgmi_hive(adev, false);
 

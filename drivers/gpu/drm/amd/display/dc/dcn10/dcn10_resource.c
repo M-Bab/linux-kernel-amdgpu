@@ -152,9 +152,7 @@ enum dcn10_clk_src_array_id {
 	DCN10_CLK_SRC_PLL2,
 	DCN10_CLK_SRC_PLL3,
 	DCN10_CLK_SRC_TOTAL,
-#if defined(CONFIG_DRM_AMD_DC_DCN1_01)
 	DCN101_CLK_SRC_TOTAL = DCN10_CLK_SRC_PLL3
-#endif
 };
 
 /* begin *********************
@@ -522,7 +520,6 @@ static const struct resource_caps res_cap = {
 		.num_ddc = 4,
 };
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_01)
 static const struct resource_caps rv2_res_cap = {
 		.num_timing_generator = 3,
 		.num_opp = 3,
@@ -532,7 +529,6 @@ static const struct resource_caps rv2_res_cap = {
 		.num_pll = 3,
 		.num_ddc = 3,
 };
-#endif
 
 static const struct dc_plane_cap plane_cap = {
 	.type = DC_PLANE_TYPE_DCN_UNIVERSAL,
@@ -1235,6 +1231,38 @@ static enum dc_status dcn10_get_default_swizzle_mode(struct dc_plane_state *plan
 	return result;
 }
 
+struct stream_encoder *dcn10_find_first_free_match_stream_enc_for_link(
+		struct resource_context *res_ctx,
+		const struct resource_pool *pool,
+		struct dc_stream_state *stream)
+{
+	int i;
+	int j = -1;
+	struct dc_link *link = stream->link;
+
+	for (i = 0; i < pool->stream_enc_count; i++) {
+		if (!res_ctx->is_stream_enc_acquired[i] &&
+				pool->stream_enc[i]) {
+			/* Store first available for MST second display
+			 * in daisy chain use case
+			 */
+			j = i;
+			if (pool->stream_enc[i]->id ==
+					link->link_enc->preferred_engine)
+				return pool->stream_enc[i];
+		}
+	}
+
+	/*
+	 * For CZ and later, we can allow DIG FE and BE to differ for all display types
+	 */
+
+	if (j >= 0)
+		return pool->stream_enc[j];
+
+	return NULL;
+}
+
 static const struct dc_cap_funcs cap_funcs = {
 	.get_dcc_compression_cap = dcn10_get_dcc_compression_cap
 };
@@ -1247,7 +1275,8 @@ static const struct resource_funcs dcn10_res_pool_funcs = {
 	.validate_plane = dcn10_validate_plane,
 	.validate_global = dcn10_validate_global,
 	.add_stream_to_ctx = dcn10_add_stream_to_ctx,
-	.get_default_swizzle_mode = dcn10_get_default_swizzle_mode
+	.get_default_swizzle_mode = dcn10_get_default_swizzle_mode,
+	.find_first_free_match_stream_enc_for_link = dcn10_find_first_free_match_stream_enc_for_link
 };
 
 static uint32_t read_pipe_fuses(struct dc_context *ctx)
@@ -1270,11 +1299,9 @@ static bool construct(
 
 	ctx->dc_bios->regs = &bios_regs;
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_01)
 	if (ctx->dce_version == DCN_VERSION_1_01)
 		pool->base.res_cap = &rv2_res_cap;
 	else
-#endif
 		pool->base.res_cap = &res_cap;
 	pool->base.funcs = &dcn10_res_pool_funcs;
 
@@ -1291,10 +1318,8 @@ static bool construct(
 	/* max pipe num for ASIC before check pipe fuses */
 	pool->base.pipe_count = pool->base.res_cap->num_timing_generator;
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_01)
 	if (dc->ctx->dce_version == DCN_VERSION_1_01)
 		pool->base.pipe_count = 3;
-#endif
 	dc->caps.max_video_width = 3840;
 	dc->caps.max_downscale_ratio = 200;
 	dc->caps.i2c_speed_in_khz = 100;
@@ -1327,26 +1352,17 @@ static bool construct(
 				CLOCK_SOURCE_COMBO_PHY_PLL2,
 				&clk_src_regs[2], false);
 
-#ifdef CONFIG_DRM_AMD_DC_DCN1_01
 	if (dc->ctx->dce_version == DCN_VERSION_1_0) {
 		pool->base.clock_sources[DCN10_CLK_SRC_PLL3] =
 				dcn10_clock_source_create(ctx, ctx->dc_bios,
 					CLOCK_SOURCE_COMBO_PHY_PLL3,
 					&clk_src_regs[3], false);
 	}
-#else
-	pool->base.clock_sources[DCN10_CLK_SRC_PLL3] =
-			dcn10_clock_source_create(ctx, ctx->dc_bios,
-				CLOCK_SOURCE_COMBO_PHY_PLL3,
-				&clk_src_regs[3], false);
-#endif
 
 	pool->base.clk_src_count = DCN10_CLK_SRC_TOTAL;
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_01)
 	if (dc->ctx->dce_version == DCN_VERSION_1_01)
 		pool->base.clk_src_count = DCN101_CLK_SRC_TOTAL;
-#endif
 
 	pool->base.dp_clock_source =
 			dcn10_clock_source_create(ctx, ctx->dc_bios,
@@ -1386,7 +1402,6 @@ static bool construct(
 	memcpy(dc->dcn_ip, &dcn10_ip_defaults, sizeof(dcn10_ip_defaults));
 	memcpy(dc->dcn_soc, &dcn10_soc_defaults, sizeof(dcn10_soc_defaults));
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_01)
 	if (dc->ctx->dce_version == DCN_VERSION_1_01) {
 		struct dcn_soc_bounding_box *dcn_soc = dc->dcn_soc;
 		struct dcn_ip_params *dcn_ip = dc->dcn_ip;
@@ -1397,7 +1412,6 @@ static bool construct(
 		dcn_soc->dram_clock_change_latency = 23;
 		dcn_ip->max_num_dpp = 3;
 	}
-#endif
 	if (ASICREV_IS_RV1_F0(dc->ctx->asic_id.hw_internal_rev)) {
 		dc->dcn_soc->urgent_latency = 3;
 		dc->debug.disable_dmcu = true;
