@@ -2338,14 +2338,16 @@ static int handle_alloc_dm_sw_icm(struct ib_ucontext *ctx,
 				  int type)
 {
 	struct mlx5_dm *dm_db = &to_mdev(ctx->device)->dm;
-	u64 act_size;
+	size_t act_size = attr->length;
 	int err;
 
 	/* Allocation size must a multiple of the basic block size
 	 * and a power of 2.
 	 */
-	act_size = roundup(attr->length, MLX5_SW_ICM_BLOCK_SIZE(dm_db->dev));
+	act_size = roundup(act_size, MLX5_SW_ICM_BLOCK_SIZE(dm_db->dev));
 	act_size = roundup_pow_of_two(act_size);
+	if (act_size < attr->length)
+		return -ENOMEM;
 
 	dm->size = act_size;
 	err = mlx5_cmd_alloc_sw_icm(dm_db, type, act_size,
