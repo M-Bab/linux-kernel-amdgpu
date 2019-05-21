@@ -6356,8 +6356,11 @@ static void __vmx_vcpu_run(struct kvm_vcpu *vcpu, struct vcpu_vmx *vmx)
 	evmcs_rsp = static_branch_unlikely(&enable_evmcs) ?
 		(unsigned long)&current_evmcs->host_rsp : 0;
 
+	/* L1D Flush includes CPU buffer clear to mitigate MDS */
 	if (static_branch_unlikely(&vmx_l1d_should_flush))
 		vmx_l1d_flush(vcpu);
+	else if (static_branch_unlikely(&mds_user_clear))
+		mds_clear_cpu_buffers();
 
 	asm(
 		/* Store host registers */
@@ -6465,7 +6468,7 @@ static void __vmx_vcpu_run(struct kvm_vcpu *vcpu, struct vcpu_vmx *vmx)
 		"xor %%edi, %%edi \n\t"
 		"xor %%ebp, %%ebp \n\t"
 		"pop  %%" _ASM_BP "; pop  %%" _ASM_DX " \n\t"
-	      : ASM_CALL_CONSTRAINT
+	      : ASM_CALL_CONSTRAINT, "=S"((int){0})
 	      : "c"(vmx), "d"((unsigned long)HOST_RSP), "S"(evmcs_rsp),
 		[launched]"i"(offsetof(struct vcpu_vmx, __launched)),
 		[fail]"i"(offsetof(struct vcpu_vmx, fail)),
@@ -6797,8 +6800,8 @@ free_partial_vcpu:
 	return ERR_PTR(err);
 }
 
-#define L1TF_MSG_SMT "L1TF CPU bug present and SMT on, data leak possible. See CVE-2018-3646 and https://www.kernel.org/doc/html/latest/admin-guide/l1tf.html for details.\n"
-#define L1TF_MSG_L1D "L1TF CPU bug present and virtualization mitigation disabled, data leak possible. See CVE-2018-3646 and https://www.kernel.org/doc/html/latest/admin-guide/l1tf.html for details.\n"
+#define L1TF_MSG_SMT "L1TF CPU bug present and SMT on, data leak possible. See CVE-2018-3646 and https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/l1tf.html for details.\n"
+#define L1TF_MSG_L1D "L1TF CPU bug present and virtualization mitigation disabled, data leak possible. See CVE-2018-3646 and https://www.kernel.org/doc/html/latest/admin-guide/hw-vuln/l1tf.html for details.\n"
 
 static int vmx_vm_init(struct kvm *kvm)
 {
@@ -7133,6 +7136,7 @@ static int vmx_set_hv_timer(struct kvm_vcpu *vcpu, u64 guest_deadline_tsc)
 {
 	struct vcpu_vmx *vmx;
 	u64 tscl, guest_tscl, delta_tsc, lapic_timer_advance_cycles;
+	struct kvm_timer *ktimer = &vcpu->arch.apic->lapic_timer;
 
 	if (kvm_mwait_in_guest(vcpu->kvm))
 		return -EOPNOTSUPP;
@@ -7141,7 +7145,8 @@ static int vmx_set_hv_timer(struct kvm_vcpu *vcpu, u64 guest_deadline_tsc)
 	tscl = rdtsc();
 	guest_tscl = kvm_read_l1_tsc(vcpu, tscl);
 	delta_tsc = max(guest_deadline_tsc, guest_tscl) - guest_tscl;
-	lapic_timer_advance_cycles = nsec_to_cycles(vcpu, lapic_timer_advance_ns);
+	lapic_timer_advance_cycles = nsec_to_cycles(vcpu,
+						    ktimer->timer_advance_ns);
 
 	if (delta_tsc > lapic_timer_advance_cycles)
 		delta_tsc -= lapic_timer_advance_cycles;
