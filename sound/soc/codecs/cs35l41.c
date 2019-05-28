@@ -659,7 +659,7 @@ static const struct cs35l41_otp_map_element_t *cs35l41_find_otp_map(u32 otp_id)
 static int cs35l41_otp_unpack(void *data)
 {
 	struct cs35l41_private *cs35l41 = data;
-	u32 otp_mem[32];
+	u32 *otp_mem;
 	int i;
 	int bit_offset, word_offset;
 	unsigned int bit_sum = 8;
@@ -670,10 +670,15 @@ static int cs35l41_otp_unpack(void *data)
 	struct spi_device *spi;
 	u32 orig_spi_freq;
 
+	otp_mem = kmalloc_array(32, sizeof(*otp_mem), GFP_KERNEL);
+	if (!otp_mem)
+		return -ENOMEM;
+
 	ret = regmap_read(cs35l41->regmap, CS35L41_OTPID, &otp_id_reg);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "Read OTP ID failed\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_otp_unpack;
 	}
 
 	otp_map_match = cs35l41_find_otp_map(otp_id_reg);
@@ -695,7 +700,8 @@ static int cs35l41_otp_unpack(void *data)
 						CS35L41_OTP_SIZE_WORDS);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "Read OTP Mem failed\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_otp_unpack;
 	}
 
 	if (cs35l41->bus_spi) {
@@ -711,12 +717,14 @@ static int cs35l41_otp_unpack(void *data)
 	ret = regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x00000055);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "Write Unlock key failed 1/2\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_otp_unpack;
 	}
 	ret = regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x000000AA);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "Write Unlock key failed 2/2\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_otp_unpack;
 	}
 
 	for (i = 0; i < otp_map_match->num_elements; i++) {
@@ -754,7 +762,8 @@ static int cs35l41_otp_unpack(void *data)
 						otp_val << otp_map[i].shift);
 			if (ret < 0) {
 				dev_err(cs35l41->dev, "Write OTP val failed\n");
-				return -EINVAL;
+				ret = -EINVAL;
+				goto err_otp_unpack;
 			}
 		}
 	}
@@ -762,15 +771,20 @@ static int cs35l41_otp_unpack(void *data)
 	ret = regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x000000CC);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "Write Lock key failed 1/2\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_otp_unpack;
 	}
 	ret = regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x00000033);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "Write Lock key failed 2/2\n");
-		return -EINVAL;
+		ret = -EINVAL;
+		goto err_otp_unpack;
 	}
+	ret = 0;
 
-	return 0;
+err_otp_unpack:
+	kfree(otp_mem);
+	return ret;
 }
 
 static irqreturn_t cs35l41_irq(int irq, void *data)
