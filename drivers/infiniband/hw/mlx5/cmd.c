@@ -157,7 +157,7 @@ int mlx5_cmd_alloc_memic(struct mlx5_dm *dm, phys_addr_t *addr,
 	return -ENOMEM;
 }
 
-int mlx5_cmd_dealloc_memic(struct mlx5_dm *dm, phys_addr_t addr, u64 length)
+int mlx5_cmd_dealloc_memic(struct mlx5_dm *dm, phys_addr_t addr, size_t length)
 {
 	struct mlx5_core_dev *dev = dm->dev;
 	u64 hw_start_addr = MLX5_CAP64_DEV_MEM(dev, memic_bar_start_addr);
@@ -186,7 +186,7 @@ int mlx5_cmd_dealloc_memic(struct mlx5_dm *dm, phys_addr_t addr, u64 length)
 	return err;
 }
 
-int mlx5_cmd_alloc_sw_icm(struct mlx5_dm *dm, int type, u64 length,
+int mlx5_cmd_alloc_sw_icm(struct mlx5_dm *dm, int type, size_t length,
 			  u16 uid, phys_addr_t *addr, u32 *obj_id)
 {
 	struct mlx5_core_dev *dev = dm->dev;
@@ -262,7 +262,7 @@ int mlx5_cmd_alloc_sw_icm(struct mlx5_dm *dm, int type, u64 length,
 	return 0;
 }
 
-int mlx5_cmd_dealloc_sw_icm(struct mlx5_dm *dm, int type, u64 length,
+int mlx5_cmd_dealloc_sw_icm(struct mlx5_dm *dm, int type, size_t length,
 			    u16 uid, phys_addr_t addr, u32 obj_id)
 {
 	struct mlx5_core_dev *dev = dm->dev;
