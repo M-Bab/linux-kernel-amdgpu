@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: GPL-2.0-only */
 .text
 #include <linux/linkage.h>
 #include <asm/segment.h>
@@ -8,7 +9,7 @@
 #include <asm/frame.h>
 #include <asm/nospec-branch.h>
 
-# Copyright 2003 Pavel Machek <pavel@suse.cz>, distribute under GPLv2
+# Copyright 2003 Pavel Machek <pavel@suse.cz
 
 .code64
 	/*
