@@ -91,11 +91,7 @@ static int cs35l41_i2c_remove(struct i2c_client *client)
 {
 	struct cs35l41_private *cs35l41 = i2c_get_clientdata(client);
 
-	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
-	wm_adsp2_remove(&cs35l41->dsp);
-	regulator_bulk_disable(cs35l41->num_supplies, cs35l41->supplies);
-	snd_soc_unregister_component(cs35l41->dev);
-	return 0;
+	return cs35l41_remove(cs35l41);
 }
 
 static const struct of_device_id cs35l41_of_match[] = {

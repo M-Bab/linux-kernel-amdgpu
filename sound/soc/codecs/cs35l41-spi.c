@@ -87,11 +87,7 @@ static int cs35l41_spi_remove(struct spi_device *spi)
 {
 	struct cs35l41_private *cs35l41 = spi_get_drvdata(spi);
 
-	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
-	wm_adsp2_remove(&cs35l41->dsp);
-	regulator_bulk_disable(cs35l41->num_supplies, cs35l41->supplies);
-	snd_soc_unregister_component(cs35l41->dev);
-	return 0;
+	return cs35l41_remove(cs35l41);
 }
 
 static const struct of_device_id cs35l41_of_match[] = {
