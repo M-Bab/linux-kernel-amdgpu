@@ -1,3 +1,22 @@
+linux (5.2.0-5.6) eoan; urgency=medium
+
+  * QCA9377 isn't being recognized sometimes (LP: #1757218)
+    - SAUCE: USB: Disable USB2 LPM at shutdown
+
+  * shiftfs: allow changing ro/rw for subvolumes (LP: #1832316)
+    - SAUCE: shiftfs: allow changing ro/rw for subvolumes
+
+  * Miscellaneous Ubuntu changes
+    - update dkms package versions
+    - [Packaging] replace nvidia-418 dkms build with nvidia-430
+    - SAUCE: import aufs driver
+
+  [ Upstream Kernel Changes ]
+
+  * Rebase to v5.2-rc5
+
+ -- Seth Forshee <seth.forshee@canonical.com>  Mon, 17 Jun 2019 15:04:12 -0500
+
 linux (5.2.0-4.5) eoan; urgency=medium
 
   * arm64: cma_alloc errors at boot (LP: #1823753)

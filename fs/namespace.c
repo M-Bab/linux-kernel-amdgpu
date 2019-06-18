@@ -1840,6 +1840,7 @@ struct vfsmount *collect_mounts(const struct path *path)
 		return ERR_CAST(tree);
 	return &tree->mnt;
 }
+EXPORT_SYMBOL_GPL(iterate_mounts);
 
 static void free_mnt_ns(struct mnt_namespace *);
 static struct mnt_namespace *alloc_mnt_ns(struct user_namespace *, bool);
