@@ -665,13 +665,11 @@ static int load_dmcu_fw(struct amdgpu_device *adev)
 	case CHIP_VEGA20:
 		return 0;
 	case CHIP_RAVEN:
-#if defined(CONFIG_DRM_AMD_DC_DCN1_01)
 		if (ASICREV_IS_PICASSO(adev->external_rev_id))
 			fw_name_dmcu = FIRMWARE_RAVEN_DMCU;
 		else if (ASICREV_IS_RAVEN2(adev->external_rev_id))
 			fw_name_dmcu = FIRMWARE_RAVEN_DMCU;
 		else
-#endif
 			return 0;
 		break;
 	default:
@@ -2932,6 +2930,7 @@ static int fill_dc_plane_attributes(struct amdgpu_device *adev,
 				    struct drm_plane_state *plane_state,
 				    struct drm_crtc_state *crtc_state)
 {
+	struct dm_crtc_state *dm_crtc_state = to_dm_crtc_state(crtc_state);
 	const struct amdgpu_framebuffer *amdgpu_fb =
 		to_amdgpu_framebuffer(plane_state->fb);
 	struct dc_scaling_info scaling_info;
@@ -2976,13 +2975,11 @@ static int fill_dc_plane_attributes(struct amdgpu_device *adev,
 	 * Always set input transfer function, since plane state is refreshed
 	 * every time.
 	 */
-	ret = amdgpu_dm_set_degamma_lut(crtc_state, dc_plane_state);
-	if (ret) {
-		dc_transfer_func_release(dc_plane_state->in_transfer_func);
-		dc_plane_state->in_transfer_func = NULL;
-	}
+	ret = amdgpu_dm_update_plane_color_mgmt(dm_crtc_state, dc_plane_state);
+	if (ret)
+		return ret;
 
-	return ret;
+	return 0;
 }
 
 static void update_stream_scaling_settings(const struct drm_display_mode *mode,
@@ -3045,6 +3042,9 @@ convert_color_depth_from_display_info(const struct drm_connector *connector,
 				      const struct drm_connector_state *state)
 {
 	uint32_t bpc = connector->display_info.bpc;
+
+	if (!state)
+		state = connector->state;
 
 	if (state) {
 		bpc = state->max_bpc;
@@ -3554,6 +3554,8 @@ dm_crtc_duplicate_state(struct drm_crtc *crtc)
 	state->vrr_supported = cur->vrr_supported;
 	state->freesync_config = cur->freesync_config;
 	state->crc_enabled = cur->crc_enabled;
+	state->cm_has_degamma = cur->cm_has_degamma;
+	state->cm_is_degamma_srgb = cur->cm_is_degamma_srgb;
 
 	/* TODO Duplicate dc_stream after objects are stream object is flattened */
 
@@ -3820,6 +3822,10 @@ void amdgpu_dm_connector_funcs_reset(struct drm_connector *connector)
 		state->underscan_enable = false;
 		state->underscan_hborder = 0;
 		state->underscan_vborder = 0;
+		state->base.max_requested_bpc = 8;
+
+		if (connector->connector_type == DRM_MODE_CONNECTOR_eDP)
+			state->abm_level = amdgpu_dm_abm_level;
 
 		__drm_atomic_helper_connector_reset(connector, &state->base);
 	}
@@ -4742,6 +4748,13 @@ void amdgpu_dm_connector_init_helper(struct amdgpu_display_manager *dm,
 {
 	struct amdgpu_device *adev = dm->ddev->dev_private;
 
+	/*
+	 * Some of the properties below require access to state, like bpc.
+	 * Allocate some default initial connector state with our reset helper.
+	 */
+	if (aconnector->base.funcs->reset)
+		aconnector->base.funcs->reset(&aconnector->base);
+
 	aconnector->connector_id = link_index;
 	aconnector->dc_link = link;
 	aconnector->base.interlace_allowed = false;
@@ -4931,9 +4944,6 @@ static int amdgpu_dm_connector_init(struct amdgpu_display_manager *dm,
 			&aconnector->base,
 			&amdgpu_dm_connector_helper_funcs);
 
-	if (aconnector->base.funcs->reset)
-		aconnector->base.funcs->reset(&aconnector->base);
-
 	amdgpu_dm_connector_init_helper(
 		dm,
 		aconnector,
@@ -4946,11 +4956,7 @@ static int amdgpu_dm_connector_init(struct amdgpu_display_manager *dm,
 
 	drm_connector_register(&aconnector->base);
 #if defined(CONFIG_DEBUG_FS)
-	res = connector_debugfs_init(aconnector);
-	if (res) {
-		DRM_ERROR("Failed to create debugfs for connector");
-		goto out_free;
-	}
+	connector_debugfs_init(aconnector);
 	aconnector->debugfs_dpcd_address = 0;
 	aconnector->debugfs_dpcd_size = 0;
 #endif
@@ -5596,8 +5602,18 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			bundle->stream_update.dst = acrtc_state->stream->dst;
 		}
 
-		if (new_pcrtc_state->color_mgmt_changed)
-			bundle->stream_update.out_transfer_func = acrtc_state->stream->out_transfer_func;
+		if (new_pcrtc_state->color_mgmt_changed) {
+			/*
+			 * TODO: This isn't fully correct since we've actually
+			 * already modified the stream in place.
+			 */
+			bundle->stream_update.gamut_remap =
+				&acrtc_state->stream->gamut_remap_matrix;
+			bundle->stream_update.output_csc_transform =
+				&acrtc_state->stream->csc_color_matrix;
+			bundle->stream_update.out_transfer_func =
+				acrtc_state->stream->out_transfer_func;
+		}
 
 		acrtc_state->stream->abm_level = acrtc_state->abm_level;
 		if (acrtc_state->abm_level != dm_old_crtc_state->abm_level)
@@ -6288,7 +6304,17 @@ static int dm_update_crtc_state(struct amdgpu_display_manager *dm,
 
 		dm_new_crtc_state->abm_level = dm_new_conn_state->abm_level;
 
-		if (dc_is_stream_unchanged(new_stream, dm_old_crtc_state->stream) &&
+		/*
+		 * If we already removed the old stream from the context
+		 * (and set the new stream to NULL) then we can't reuse
+		 * the old stream even if the stream and scaling are unchanged.
+		 * We'll hit the BUG_ON and black screen.
+		 *
+		 * TODO: Refactor this function to allow this check to work
+		 * in all conditions.
+		 */
+		if (dm_new_crtc_state->stream &&
+		    dc_is_stream_unchanged(new_stream, dm_old_crtc_state->stream) &&
 		    dc_is_stream_scaling_unchanged(new_stream, dm_old_crtc_state->stream)) {
 			new_crtc_state->mode_changed = false;
 			DRM_DEBUG_DRIVER("Mode change not required, setting mode_changed to %d",
@@ -6417,10 +6443,9 @@ skip_modeset:
 	 */
 	if (dm_new_crtc_state->base.color_mgmt_changed ||
 	    drm_atomic_crtc_needs_modeset(new_crtc_state)) {
-		ret = amdgpu_dm_set_regamma_lut(dm_new_crtc_state);
+		ret = amdgpu_dm_update_crtc_color_mgmt(dm_new_crtc_state);
 		if (ret)
 			goto fail;
-		amdgpu_dm_set_ctm(dm_new_crtc_state);
 	}
 
 	/* Update Freesync settings. */
@@ -6444,14 +6469,6 @@ static bool should_reset_plane(struct drm_atomic_state *state,
 	struct drm_plane_state *old_other_state, *new_other_state;
 	struct drm_crtc_state *new_crtc_state;
 	int i;
-
-	/*
-	 * TODO: Remove this hack once the checks below are sufficient
-	 * enough to determine when we need to reset all the planes on
-	 * the stream.
-	 */
-	if (state->allow_modeset)
-		return true;
 
 	/* Exit early if we know that we're adding or removing the plane. */
 	if (old_plane_state->crtc != new_plane_state->crtc)
@@ -6723,6 +6740,8 @@ dm_determine_update_type_for_commit(struct amdgpu_display_manager *dm,
 						new_dm_plane_state->dc_state->in_transfer_func;
 				stream_update.gamut_remap =
 						&new_dm_crtc_state->stream->gamut_remap_matrix;
+				stream_update.output_csc_transform =
+						&new_dm_crtc_state->stream->csc_color_matrix;
 				stream_update.out_transfer_func =
 						new_dm_crtc_state->stream->out_transfer_func;
 			}

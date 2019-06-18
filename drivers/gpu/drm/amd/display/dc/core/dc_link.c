@@ -217,8 +217,11 @@ bool dc_link_detect_sink(struct dc_link *link, enum dc_connection_type *type)
 		return true;
 	}
 
-	if (link->connector_signal == SIGNAL_TYPE_EDP)
+	if (link->connector_signal == SIGNAL_TYPE_EDP) {
+		/*in case it is not on*/
+		link->dc->hwss.edp_power_control(link, true);
 		link->dc->hwss.edp_wait_for_hpd_ready(link, true);
+	}
 
 	/* todo: may need to lock gpio access */
 	hpd_pin = get_hpd_gpio(link->ctx->dc_bios, link->link_id, link->ctx->gpio_service);
@@ -520,11 +523,31 @@ static void read_edp_current_link_settings_on_detect(struct dc_link *link)
 	union lane_count_set lane_count_set = { {0} };
 	uint8_t link_bw_set;
 	uint8_t link_rate_set;
+	uint32_t read_dpcd_retry_cnt = 10;
+	enum dc_status status = DC_ERROR_UNEXPECTED;
+	int i;
 
 	// Read DPCD 00101h to find out the number of lanes currently set
-	core_link_read_dpcd(link, DP_LANE_COUNT_SET,
-			&lane_count_set.raw, sizeof(lane_count_set));
-	link->cur_link_settings.lane_count = lane_count_set.bits.LANE_COUNT_SET;
+	for (i = 0; i < read_dpcd_retry_cnt; i++) {
+		status = core_link_read_dpcd(
+				link,
+				DP_LANE_COUNT_SET,
+				&lane_count_set.raw,
+				sizeof(lane_count_set));
+		/* First DPCD read after VDD ON can fail if the particular board
+		 * does not have HPD pin wired correctly. So if DPCD read fails,
+		 * which it should never happen, retry a few times. Target worst
+		 * case scenario of 80 ms.
+		 */
+		if (status == DC_OK) {
+			link->cur_link_settings.lane_count = lane_count_set.bits.LANE_COUNT_SET;
+			break;
+		}
+
+		udelay(8000);
+	}
+
+	ASSERT(status == DC_OK);
 
 	// Read DPCD 00100h to find if standard link rates are set
 	core_link_read_dpcd(link, DP_LINK_BW_SET,
@@ -678,6 +701,11 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 	if (dc_is_virtual_signal(link->connector_signal))
 		return false;
 
+	if ((link->connector_signal == SIGNAL_TYPE_LVDS ||
+			link->connector_signal == SIGNAL_TYPE_EDP) &&
+			link->local_sink)
+		return true;
+
 	if (false == dc_link_detect_sink(link, &new_connection_type)) {
 		BREAK_TO_DEBUGGER();
 		return false;
@@ -688,13 +716,7 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 		 * up to date, especially if link was powered on by GOP.
 		 */
 		read_edp_current_link_settings_on_detect(link);
-		if (link->local_sink)
-			return true;
 	}
-
-	if (link->connector_signal == SIGNAL_TYPE_LVDS &&
-			link->local_sink)
-		return true;
 
 	prev_sink = link->local_sink;
 	if (prev_sink != NULL) {
@@ -962,6 +984,12 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 
 		link->type = dc_connection_none;
 		sink_caps.signal = SIGNAL_TYPE_NONE;
+		/* When we unplug a passive DP-HDMI dongle connection, dongle_max_pix_clk
+		 *  is not cleared. If we emulate a DP signal on this connection, it thinks
+		 *  the dongle is still there and limits the number of modes we can emulate.
+		 *  Clear dongle_max_pix_clk on disconnect to fix this
+		 */
+		link->dongle_max_pix_clk = 0;
 	}
 
 	LINK_INFO("link=%d, dc_sink_in=%p is now %s prev_sink=%p dpcd same=%d edid same=%d\n",
@@ -1158,7 +1186,7 @@ static bool construct(
 	link->link_id = bios->funcs->get_connector_id(bios, init_params->connector_index);
 
 	if (link->link_id.type != OBJECT_TYPE_CONNECTOR) {
-		dm_error("%s: Invalid Connector ObjectID from Adapter Service for connector index:%d! type %d expected %d\n",
+		dm_output_to_console("%s: Invalid Connector ObjectID from Adapter Service for connector index:%d! type %d expected %d\n",
 			 __func__, init_params->connector_index,
 			 link->link_id.type, OBJECT_TYPE_CONNECTOR);
 		goto create_fail;
@@ -2982,4 +3010,3 @@ const struct dc_link_settings *dc_link_get_link_cap(
 		return &link->preferred_link_setting;
 	return &link->verified_link_cap;
 }
-
