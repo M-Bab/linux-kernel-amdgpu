@@ -973,13 +973,6 @@ static int amdgpu_device_check_arguments(struct amdgpu_device *adev)
 
 	amdgpu_device_check_block_size(adev);
 
-	if (amdgpu_vram_page_split != -1 && (amdgpu_vram_page_split < 16 ||
-	    !is_power_of_2(amdgpu_vram_page_split))) {
-		dev_warn(adev->dev, "invalid VRAM page split (%d)\n",
-			 amdgpu_vram_page_split);
-		amdgpu_vram_page_split = 1024;
-	}
-
 	ret = amdgpu_device_get_job_timeout_settings(adev);
 	if (ret) {
 		dev_err(adev->dev, "invalid lockup_timeout parameter syntax\n");
@@ -1541,17 +1534,6 @@ static int amdgpu_device_ip_early_init(struct amdgpu_device *adev)
 	if (amdgpu_sriov_vf(adev))
 		adev->pm.pp_feature &= ~PP_GFXOFF_MASK;
 
-	/* Read BIOS */
-	if (!amdgpu_get_bios(adev))
-		return -EINVAL;
-
-	r = amdgpu_atombios_init(adev);
-	if (r) {
-		dev_err(adev->dev, "amdgpu_atombios_init failed\n");
-		amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_ATOMBIOS_INIT_FAIL, 0, 0);
-		return r;
-	}
-
 	for (i = 0; i < adev->num_ip_blocks; i++) {
 		if ((amdgpu_ip_block_mask & (1 << i)) == 0) {
 			DRM_ERROR("disabled ip block: %d <%s>\n",
@@ -1571,6 +1553,19 @@ static int amdgpu_device_ip_early_init(struct amdgpu_device *adev)
 				}
 			} else {
 				adev->ip_blocks[i].status.valid = true;
+			}
+		}
+		/* get the vbios after the asic_funcs are set up */
+		if (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_COMMON) {
+			/* Read BIOS */
+			if (!amdgpu_get_bios(adev))
+				return -EINVAL;
+
+			r = amdgpu_atombios_init(adev);
+			if (r) {
+				dev_err(adev->dev, "amdgpu_atombios_init failed\n");
+				amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_ATOMBIOS_INIT_FAIL, 0, 0);
+				return r;
 			}
 		}
 	}
@@ -2689,6 +2684,9 @@ fence_driver_init:
 
 	amdgpu_fbdev_init(adev);
 
+	if (amdgpu_sriov_vf(adev) && amdgim_is_hwperf(adev))
+		amdgpu_pm_virt_sysfs_init(adev);
+
 	r = amdgpu_pm_sysfs_init(adev);
 	if (r)
 		DRM_ERROR("registering pm debugfs failed (%d).\n", r);
@@ -2810,6 +2808,9 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
 	iounmap(adev->rmmio);
 	adev->rmmio = NULL;
 	amdgpu_device_doorbell_fini(adev);
+	if (amdgpu_sriov_vf(adev) && amdgim_is_hwperf(adev))
+		amdgpu_pm_virt_sysfs_fini(adev);
+
 	amdgpu_debugfs_regs_cleanup(adev);
 	device_remove_file(adev->dev, &dev_attr_pcie_replay_count);
 	amdgpu_ucode_sysfs_fini(adev);

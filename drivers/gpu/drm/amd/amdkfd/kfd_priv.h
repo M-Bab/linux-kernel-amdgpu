@@ -348,6 +348,11 @@ enum kfd_queue_format {
 	KFD_QUEUE_FORMAT_AQL
 };
 
+enum KFD_QUEUE_PRIORITY {
+	KFD_QUEUE_PRIORITY_MINIMUM = 0,
+	KFD_QUEUE_PRIORITY_MAXIMUM = 15
+};
+
 /**
  * struct queue_properties
  *
@@ -430,6 +435,11 @@ struct queue_properties {
 	uint32_t *cu_mask;
 };
 
+#define QUEUE_IS_ACTIVE(q) ((q).queue_size > 0 &&	\
+			    (q).queue_address != 0 &&	\
+			    (q).queue_percent > 0 &&	\
+			    !(q).is_evicted)
+
 /**
  * struct queue
  *
@@ -492,6 +502,12 @@ enum KFD_MQD_TYPE {
 	KFD_MQD_TYPE_SDMA,		/* for sdma queues */
 	KFD_MQD_TYPE_DIQ,		/* for diq */
 	KFD_MQD_TYPE_MAX
+};
+
+enum KFD_PIPE_PRIORITY {
+	KFD_PIPE_PRIORITY_CS_LOW = 0,
+	KFD_PIPE_PRIORITY_CS_MEDIUM,
+	KFD_PIPE_PRIORITY_CS_HIGH
 };
 
 struct scheduling_resources {

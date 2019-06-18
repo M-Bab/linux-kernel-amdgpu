@@ -305,6 +305,7 @@ static int gfx_v9_0_get_cu_info(struct amdgpu_device *adev,
 static uint64_t gfx_v9_0_get_gpu_clock_counter(struct amdgpu_device *adev);
 static void gfx_v9_0_select_se_sh(struct amdgpu_device *adev, u32 se_num, u32 sh_num, u32 instance);
 static void gfx_v9_0_ring_emit_de_meta(struct amdgpu_ring *ring);
+static u64 gfx_v9_0_ring_get_rptr_compute(struct amdgpu_ring *ring);
 
 static void gfx_v9_0_init_golden_registers(struct amdgpu_device *adev)
 {
@@ -3596,45 +3597,89 @@ static const struct soc15_reg_entry sgpr_init_regs[] = {
 };
 
 static const struct soc15_reg_entry sec_ded_counter_registers[] = {
-   { SOC15_REG_ENTRY(GC, 0, mmCPC_EDC_SCRATCH_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmCPC_EDC_UCODE_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmCPF_EDC_ROQ_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmCPF_EDC_TAG_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmCPG_EDC_DMA_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmCPG_EDC_TAG_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmDC_EDC_CSINVOC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmDC_EDC_RESTORE_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmDC_EDC_STATE_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmGDS_EDC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmGDS_EDC_GRBM_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmGDS_EDC_OA_DED) },
-   { SOC15_REG_ENTRY(GC, 0, mmSPI_EDC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmSQC_EDC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmSQ_EDC_DED_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmSQ_EDC_INFO) },
-   { SOC15_REG_ENTRY(GC, 0, mmSQ_EDC_SEC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmTCC_EDC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmTCP_ATC_EDC_GATCL1_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmTCP_EDC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmTD_EDC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmSQC_EDC_CNT2) },
-   { SOC15_REG_ENTRY(GC, 0, mmSQ_EDC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmTA_EDC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmGDS_EDC_OA_PHY_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmGDS_EDC_OA_PIPE_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmGCEA_EDC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmGCEA_EDC_CNT2) },
-   { SOC15_REG_ENTRY(GC, 0, mmTCI_EDC_CNT) },
-   { SOC15_REG_ENTRY(GC, 0, mmTCC_EDC_CNT2) },
-   { SOC15_REG_ENTRY(GC, 0, mmTCA_EDC_CNT) },
+   { SOC15_REG_ENTRY(GC, 0, mmCPC_EDC_SCRATCH_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmCPC_EDC_UCODE_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmCPF_EDC_ROQ_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmCPF_EDC_TAG_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmCPG_EDC_DMA_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmCPG_EDC_TAG_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmDC_EDC_CSINVOC_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmDC_EDC_RESTORE_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmDC_EDC_STATE_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmGDS_EDC_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmGDS_EDC_GRBM_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmGDS_EDC_OA_DED), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmSPI_EDC_CNT), 0, 4, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmSQC_EDC_CNT), 0, 4, 6},
+   { SOC15_REG_ENTRY(GC, 0, mmSQ_EDC_DED_CNT), 0, 4, 16},
+   { SOC15_REG_ENTRY(GC, 0, mmSQ_EDC_INFO), 0, 4, 16},
+   { SOC15_REG_ENTRY(GC, 0, mmSQ_EDC_SEC_CNT), 0, 4, 16},
+   { SOC15_REG_ENTRY(GC, 0, mmTCC_EDC_CNT), 0, 1, 16},
+   { SOC15_REG_ENTRY(GC, 0, mmTCP_ATC_EDC_GATCL1_CNT), 0, 4, 16},
+   { SOC15_REG_ENTRY(GC, 0, mmTCP_EDC_CNT), 0, 4, 16},
+   { SOC15_REG_ENTRY(GC, 0, mmTD_EDC_CNT), 0, 4, 16},
+   { SOC15_REG_ENTRY(GC, 0, mmSQC_EDC_CNT2), 0, 4, 6},
+   { SOC15_REG_ENTRY(GC, 0, mmSQ_EDC_CNT), 0, 4, 16},
+   { SOC15_REG_ENTRY(GC, 0, mmTA_EDC_CNT), 0, 4, 16},
+   { SOC15_REG_ENTRY(GC, 0, mmGDS_EDC_OA_PHY_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmGDS_EDC_OA_PIPE_CNT), 0, 1, 1},
+   { SOC15_REG_ENTRY(GC, 0, mmGCEA_EDC_CNT), 0, 1, 32},
+   { SOC15_REG_ENTRY(GC, 0, mmGCEA_EDC_CNT2), 0, 1, 32},
+   { SOC15_REG_ENTRY(GC, 0, mmTCI_EDC_CNT), 0, 1, 72},
+   { SOC15_REG_ENTRY(GC, 0, mmTCC_EDC_CNT2), 0, 1, 16},
+   { SOC15_REG_ENTRY(GC, 0, mmTCA_EDC_CNT), 0, 1, 2},
+   { SOC15_REG_ENTRY(GC, 0, mmSQC_EDC_CNT3), 0, 4, 6},
 };
+
+static int gfx_v9_0_do_edc_gds_workarounds(struct amdgpu_device *adev)
+{
+	struct amdgpu_ring *ring = &adev->gfx.compute_ring[0];
+	int i, r;
+
+	r = amdgpu_ring_alloc(ring, 7);
+	if (r) {
+		DRM_ERROR("amdgpu: GDS workarounds failed to lock ring %s (%d).\n",
+			ring->name, r);
+		return r;
+	}
+
+	WREG32_SOC15(GC, 0, mmGDS_VMID0_BASE, 0x00000000);
+	WREG32_SOC15(GC, 0, mmGDS_VMID0_SIZE, adev->gds.gds_size);
+
+	amdgpu_ring_write(ring, PACKET3(PACKET3_DMA_DATA, 5));
+	amdgpu_ring_write(ring, (PACKET3_DMA_DATA_CP_SYNC |
+				PACKET3_DMA_DATA_DST_SEL(1) |
+				PACKET3_DMA_DATA_SRC_SEL(2) |
+				PACKET3_DMA_DATA_ENGINE(0)));
+	amdgpu_ring_write(ring, 0);
+	amdgpu_ring_write(ring, 0);
+	amdgpu_ring_write(ring, 0);
+	amdgpu_ring_write(ring, 0);
+	amdgpu_ring_write(ring, PACKET3_DMA_DATA_CMD_RAW_WAIT |
+				adev->gds.gds_size);
+
+	amdgpu_ring_commit(ring);
+
+	for (i = 0; i < adev->usec_timeout; i++) {
+		if (ring->wptr == gfx_v9_0_ring_get_rptr_compute(ring))
+			break;
+		udelay(1);
+	}
+
+	if (i >= adev->usec_timeout)
+		r = -ETIMEDOUT;
+
+	WREG32_SOC15(GC, 0, mmGDS_VMID0_SIZE, 0x00000000);
+
+	return r;
+}
 
 static int gfx_v9_0_do_edc_gpr_workarounds(struct amdgpu_device *adev)
 {
 	struct amdgpu_ring *ring = &adev->gfx.compute_ring[0];
 	struct amdgpu_ib ib;
 	struct dma_fence *f = NULL;
-	int r, i, j;
+	int r, i, j, k;
 	unsigned total_size, vgpr_offset, sgpr_offset;
 	u64 gpu_addr;
 
@@ -3746,19 +3791,13 @@ static int gfx_v9_0_do_edc_gpr_workarounds(struct amdgpu_device *adev)
 
 	/* read back registers to clear the counters */
 	mutex_lock(&adev->grbm_idx_mutex);
-	for (j = 0; j < 16; j++) {
-		gfx_v9_0_select_se_sh(adev, 0x01, 0x0, j);
-		for (i = 0; i < ARRAY_SIZE(sec_ded_counter_registers); i++)
-			RREG32(SOC15_REG_ENTRY_OFFSET(sec_ded_counter_registers[i]));
-		gfx_v9_0_select_se_sh(adev, 0x02, 0x0, j);
-		for (i = 0; i < ARRAY_SIZE(sec_ded_counter_registers); i++)
-			RREG32(SOC15_REG_ENTRY_OFFSET(sec_ded_counter_registers[i]));
-		gfx_v9_0_select_se_sh(adev, 0x03, 0x0, j);
-		for (i = 0; i < ARRAY_SIZE(sec_ded_counter_registers); i++)
-			RREG32(SOC15_REG_ENTRY_OFFSET(sec_ded_counter_registers[i]));
-		gfx_v9_0_select_se_sh(adev, 0x04, 0x0, j);
-		for (i = 0; i < ARRAY_SIZE(sec_ded_counter_registers); i++)
-			RREG32(SOC15_REG_ENTRY_OFFSET(sec_ded_counter_registers[i]));
+	for (i = 0; i < ARRAY_SIZE(sec_ded_counter_registers); i++) {
+		for (j = 0; j < sec_ded_counter_registers[i].se_num; j++) {
+			for (k = 0; k < sec_ded_counter_registers[i].instance; k++) {
+				gfx_v9_0_select_se_sh(adev, j, 0x0, k);
+				RREG32(SOC15_REG_ENTRY_OFFSET(sec_ded_counter_registers[i]));
+			}
+		}
 	}
 	WREG32_SOC15(GC, 0, mmGRBM_GFX_INDEX, 0xe0000000);
 	mutex_unlock(&adev->grbm_idx_mutex);
@@ -3811,6 +3850,10 @@ static int gfx_v9_0_ecc_late_init(void *handle)
 		return 0;
 	}
 
+	r = gfx_v9_0_do_edc_gds_workarounds(adev);
+	if (r)
+		return r;
+
 	/* requires IBs so do in late init after IB pool is initialized */
 	r = gfx_v9_0_do_edc_gpr_workarounds(adev);
 	if (r)
@@ -3860,9 +3903,7 @@ static int gfx_v9_0_ecc_late_init(void *handle)
 	if (r)
 		goto interrupt;
 
-	r = amdgpu_ras_debugfs_create(adev, &fs_info);
-	if (r)
-		goto debugfs;
+	amdgpu_ras_debugfs_create(adev, &fs_info);
 
 	r = amdgpu_ras_sysfs_create(adev, &fs_info);
 	if (r)
@@ -3877,7 +3918,6 @@ irq:
 	amdgpu_ras_sysfs_remove(adev, *ras_if);
 sysfs:
 	amdgpu_ras_debugfs_remove(adev, *ras_if);
-debugfs:
 	amdgpu_ras_interrupt_remove_handler(adev, &ih_info);
 interrupt:
 	amdgpu_ras_feature_enable(adev, *ras_if, 0);
