@@ -4,7 +4,7 @@
  *
  * This file contains AppArmor security identifier (secid) manipulation fns
  *
- * Copyright 2009-2017 Canonical Ltd.
+ * Copyright 2009-2010 Canonical Ltd.
  *
  * AppArmor allocates a unique secid for every profile loaded.  If a profile
  * is replaced it receives the secid of the profile it is replacing.
