@@ -65,7 +65,7 @@
 #include <drm/drm_edid.h>
 
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
-#include "ivsrcid/irqsrcs_dcn_1_0.h"
+#include "ivsrcid/dcn/irqsrcs_dcn_1_0.h"
 
 #include "dcn/dcn_1_0_offset.h"
 #include "dcn/dcn_1_0_sh_mask.h"
@@ -558,6 +558,10 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 
 	init_data.flags.power_down_display_on_boot = true;
 
+#ifdef CONFIG_DRM_AMD_DC_DCN2_0
+	init_data.soc_bounding_box = adev->dm.soc_bounding_box;
+#endif
+
 	/* Display Core create. */
 	adev->dm.dc = dc_create(&init_data);
 
@@ -663,6 +667,7 @@ static int load_dmcu_fw(struct amdgpu_device *adev)
 	case CHIP_VEGA10:
 	case CHIP_VEGA12:
 	case CHIP_VEGA20:
+	case CHIP_NAVI10:
 		return 0;
 	case CHIP_RAVEN:
 		if (ASICREV_IS_PICASSO(adev->external_rev_id))
@@ -777,7 +782,7 @@ static int dm_late_init(void *handle)
 	unsigned int linear_lut[16];
 	int i;
 	struct dmcu *dmcu = adev->dm.dc->res_pool->dmcu;
-	bool ret;
+	bool ret = false;
 
 	for (i = 0; i < 16; i++)
 		linear_lut[i] = 0xFFFF * i / 15;
@@ -788,10 +793,13 @@ static int dm_late_init(void *handle)
 	params.backlight_lut_array_size = 16;
 	params.backlight_lut_array = linear_lut;
 
-	ret = dmcu_load_iram(dmcu, params);
+	/* todo will enable for navi10 */
+	if (adev->asic_type <= CHIP_RAVEN) {
+		ret = dmcu_load_iram(dmcu, params);
 
-	if (!ret)
-		return -EINVAL;
+		if (!ret)
+			return -EINVAL;
+	}
 
 	return detect_mst_link_for_all_connectors(adev->ddev);
 }
@@ -2207,6 +2215,9 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 		break;
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 	case CHIP_RAVEN:
+#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
+	case CHIP_NAVI10:
+#endif
 		if (dcn10_register_irq_handlers(dm->adev)) {
 			DRM_ERROR("DM: Failed to initialize IRQ\n");
 			goto fail;
@@ -2431,6 +2442,13 @@ static int dm_early_init(void *handle)
 		adev->mode_info.num_crtc = 4;
 		adev->mode_info.num_hpd = 4;
 		adev->mode_info.num_dig = 4;
+		break;
+#endif
+#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
+	case CHIP_NAVI10:
+		adev->mode_info.num_crtc = 6;
+		adev->mode_info.num_hpd = 6;
+		adev->mode_info.num_dig = 6;
 		break;
 #endif
 	default:
@@ -2725,6 +2743,9 @@ fill_plane_buffer_attributes(struct amdgpu_device *adev,
 	if (adev->asic_type == CHIP_VEGA10 ||
 	    adev->asic_type == CHIP_VEGA12 ||
 	    adev->asic_type == CHIP_VEGA20 ||
+#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
+	    adev->asic_type == CHIP_NAVI10 ||
+#endif
 	    adev->asic_type == CHIP_RAVEN) {
 		/* Fill GFX9 params */
 		tiling_info->gfx9.num_pipes =
@@ -3471,6 +3492,20 @@ create_stream_for_sink(struct amdgpu_dm_connector *aconnector,
 	else
 		fill_stream_properties_from_drm_display_mode(stream,
 			&mode, &aconnector->base, con_state, old_stream);
+
+#ifdef CONFIG_DRM_AMD_DC_DSC_SUPPORT
+	/* stream->timing.flags.DSC = 0; */
+        /*  */
+	/* if (aconnector->dc_link && */
+	/* 		aconnector->dc_link->connector_signal == SIGNAL_TYPE_DISPLAY_PORT #<{(|&& */
+	/* 		aconnector->dc_link->dpcd_caps.dsc_caps.dsc_basic_caps.is_dsc_supported|)}>#) */
+	/* 	if (dc_dsc_compute_config(aconnector->dc_link->ctx->dc, */
+	/* 			&aconnector->dc_link->dpcd_caps.dsc_caps, */
+	/* 			dc_link_bandwidth_kbps(aconnector->dc_link, dc_link_get_link_cap(aconnector->dc_link)), */
+	/* 			&stream->timing, */
+	/* 			&stream->timing.dsc_cfg)) */
+	/* 		stream->timing.flags.DSC = 1; */
+#endif
 
 	update_stream_scaling_settings(&mode, dm_state, stream);
 
@@ -5596,7 +5631,8 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 	}
 
 	/* Update the planes if changed or disable if we don't have any. */
-	if (planes_count || acrtc_state->active_planes == 0) {
+	if ((planes_count || acrtc_state->active_planes == 0) &&
+		acrtc_state->stream) {
 		if (new_pcrtc_state->mode_changed) {
 			bundle->stream_update.src = acrtc_state->stream->src;
 			bundle->stream_update.dst = acrtc_state->stream->dst;
@@ -6469,6 +6505,14 @@ static bool should_reset_plane(struct drm_atomic_state *state,
 	struct drm_plane_state *old_other_state, *new_other_state;
 	struct drm_crtc_state *new_crtc_state;
 	int i;
+
+	/*
+	 * TODO: Remove this hack once the checks below are sufficient
+	 * enough to determine when we need to reset all the planes on
+	 * the stream.
+	 */
+	if (state->allow_modeset)
+		return true;
 
 	/* Exit early if we know that we're adding or removing the plane. */
 	if (old_plane_state->crtc != new_plane_state->crtc)

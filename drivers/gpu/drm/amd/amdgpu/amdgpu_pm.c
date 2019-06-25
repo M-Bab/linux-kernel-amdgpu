@@ -64,6 +64,9 @@ static const struct cg_flag_name clocks[] = {
 	{AMD_CG_SUPPORT_DRM_LS, "Digital Right Management Light Sleep"},
 	{AMD_CG_SUPPORT_ROM_MGCG, "Rom Medium Grain Clock Gating"},
 	{AMD_CG_SUPPORT_DF_MGCG, "Data Fabric Medium Grain Clock Gating"},
+
+	{AMD_CG_SUPPORT_ATHUB_MGCG, "Address Translation Hub Medium Grain Clock Gating"},
+	{AMD_CG_SUPPORT_ATHUB_LS, "Address Translation Hub Light Sleep"},
 	{0, NULL},
 };
 
@@ -367,18 +370,9 @@ static ssize_t amdgpu_set_dpm_forced_performance_level(struct device *dev,
 	}
 
 	if (is_support_sw_smu(adev)) {
-		mutex_lock(&adev->pm.mutex);
-		if (adev->pm.dpm.thermal_active) {
-			count = -EINVAL;
-			mutex_unlock(&adev->pm.mutex);
-			goto fail;
-		}
 		ret = smu_force_performance_level(&adev->smu, level);
 		if (ret)
 			count = -EINVAL;
-		else
-			adev->pm.dpm.forced_level = level;
-		mutex_unlock(&adev->pm.mutex);
 	} else if (adev->powerplay.pp_funcs->force_performance_level) {
 		mutex_lock(&adev->pm.mutex);
 		if (adev->pm.dpm.thermal_active) {
@@ -692,12 +686,12 @@ static ssize_t amdgpu_set_pp_od_clk_voltage(struct device *dev,
 		if (ret)
 			return -EINVAL;
 	} else {
-		if (adev->powerplay.pp_funcs->odn_edit_dpm_table)
+		if (adev->powerplay.pp_funcs->odn_edit_dpm_table) {
 			ret = amdgpu_dpm_odn_edit_dpm_table(adev, type,
 						parameter, parameter_size);
-
-		if (ret)
-			return -EINVAL;
+			if (ret)
+				return -EINVAL;
+		}
 
 		if (type == PP_OD_COMMIT_DPM_TABLE) {
 			if (adev->powerplay.pp_funcs->dispatch_tasks) {
@@ -723,10 +717,10 @@ static ssize_t amdgpu_get_pp_od_clk_voltage(struct device *dev,
 	uint32_t size = 0;
 
 	if (is_support_sw_smu(adev)) {
-		size = smu_print_clk_levels(&adev->smu, OD_SCLK, buf);
-		size += smu_print_clk_levels(&adev->smu, OD_MCLK, buf+size);
-		size += smu_print_clk_levels(&adev->smu, OD_VDDC_CURVE, buf+size);
-		size += smu_print_clk_levels(&adev->smu, OD_RANGE, buf+size);
+		size = smu_print_clk_levels(&adev->smu, SMU_OD_SCLK, buf);
+		size += smu_print_clk_levels(&adev->smu, SMU_OD_MCLK, buf+size);
+		size += smu_print_clk_levels(&adev->smu, SMU_OD_VDDC_CURVE, buf+size);
+		size += smu_print_clk_levels(&adev->smu, SMU_OD_RANGE, buf+size);
 		return size;
 	} else if (adev->powerplay.pp_funcs->print_clock_levels) {
 		size = amdgpu_dpm_print_clock_levels(adev, OD_SCLK, buf);
@@ -837,7 +831,7 @@ static ssize_t amdgpu_get_pp_dpm_sclk(struct device *dev,
 		return adev->virt.ops->get_pp_clk(adev, PP_SCLK, buf);
 
 	if (is_support_sw_smu(adev))
-		return smu_print_clk_levels(&adev->smu, PP_SCLK, buf);
+		return smu_print_clk_levels(&adev->smu, SMU_SCLK, buf);
 	else if (adev->powerplay.pp_funcs->print_clock_levels)
 		return amdgpu_dpm_print_clock_levels(adev, PP_SCLK, buf);
 	else
@@ -898,7 +892,7 @@ static ssize_t amdgpu_set_pp_dpm_sclk(struct device *dev,
 		return ret;
 
 	if (is_support_sw_smu(adev))
-		ret = smu_force_clk_levels(&adev->smu, PP_SCLK, mask);
+		ret = smu_force_clk_levels(&adev->smu, SMU_SCLK, mask);
 	else if (adev->powerplay.pp_funcs->force_clock_level)
 		ret = amdgpu_dpm_force_clock_level(adev, PP_SCLK, mask);
 
@@ -920,7 +914,7 @@ static ssize_t amdgpu_get_pp_dpm_mclk(struct device *dev,
 		return adev->virt.ops->get_pp_clk(adev,PP_MCLK,buf);
 
 	if (is_support_sw_smu(adev))
-		return smu_print_clk_levels(&adev->smu, PP_MCLK, buf);
+		return smu_print_clk_levels(&adev->smu, SMU_MCLK, buf);
 	else if (adev->powerplay.pp_funcs->print_clock_levels)
 		return amdgpu_dpm_print_clock_levels(adev, PP_MCLK, buf);
 	else
@@ -945,7 +939,7 @@ static ssize_t amdgpu_set_pp_dpm_mclk(struct device *dev,
 		return ret;
 
 	if (is_support_sw_smu(adev))
-		ret = smu_force_clk_levels(&adev->smu, PP_MCLK, mask);
+		ret = smu_force_clk_levels(&adev->smu, SMU_MCLK, mask);
 	else if (adev->powerplay.pp_funcs->force_clock_level)
 		ret = amdgpu_dpm_force_clock_level(adev, PP_MCLK, mask);
 
@@ -963,7 +957,7 @@ static ssize_t amdgpu_get_pp_dpm_socclk(struct device *dev,
 	struct amdgpu_device *adev = ddev->dev_private;
 
 	if (is_support_sw_smu(adev))
-		return smu_print_clk_levels(&adev->smu, PP_SOCCLK, buf);
+		return smu_print_clk_levels(&adev->smu, SMU_SOCCLK, buf);
 	else if (adev->powerplay.pp_funcs->print_clock_levels)
 		return amdgpu_dpm_print_clock_levels(adev, PP_SOCCLK, buf);
 	else
@@ -985,7 +979,7 @@ static ssize_t amdgpu_set_pp_dpm_socclk(struct device *dev,
 		return ret;
 
 	if (is_support_sw_smu(adev))
-		ret = smu_force_clk_levels(&adev->smu, PP_SOCCLK, mask);
+		ret = smu_force_clk_levels(&adev->smu, SMU_SOCCLK, mask);
 	else if (adev->powerplay.pp_funcs->force_clock_level)
 		ret = amdgpu_dpm_force_clock_level(adev, PP_SOCCLK, mask);
 
@@ -1003,7 +997,7 @@ static ssize_t amdgpu_get_pp_dpm_fclk(struct device *dev,
 	struct amdgpu_device *adev = ddev->dev_private;
 
 	if (is_support_sw_smu(adev))
-		return smu_print_clk_levels(&adev->smu, PP_FCLK, buf);
+		return smu_print_clk_levels(&adev->smu, SMU_FCLK, buf);
 	else if (adev->powerplay.pp_funcs->print_clock_levels)
 		return amdgpu_dpm_print_clock_levels(adev, PP_FCLK, buf);
 	else
@@ -1025,7 +1019,7 @@ static ssize_t amdgpu_set_pp_dpm_fclk(struct device *dev,
 		return ret;
 
 	if (is_support_sw_smu(adev))
-		ret = smu_force_clk_levels(&adev->smu, PP_FCLK, mask);
+		ret = smu_force_clk_levels(&adev->smu, SMU_FCLK, mask);
 	else if (adev->powerplay.pp_funcs->force_clock_level)
 		ret = amdgpu_dpm_force_clock_level(adev, PP_FCLK, mask);
 
@@ -1043,7 +1037,7 @@ static ssize_t amdgpu_get_pp_dpm_dcefclk(struct device *dev,
 	struct amdgpu_device *adev = ddev->dev_private;
 
 	if (is_support_sw_smu(adev))
-		return smu_print_clk_levels(&adev->smu, PP_DCEFCLK, buf);
+		return smu_print_clk_levels(&adev->smu, SMU_DCEFCLK, buf);
 	else if (adev->powerplay.pp_funcs->print_clock_levels)
 		return amdgpu_dpm_print_clock_levels(adev, PP_DCEFCLK, buf);
 	else
@@ -1065,7 +1059,7 @@ static ssize_t amdgpu_set_pp_dpm_dcefclk(struct device *dev,
 		return ret;
 
 	if (is_support_sw_smu(adev))
-		ret = smu_force_clk_levels(&adev->smu, PP_DCEFCLK, mask);
+		ret = smu_force_clk_levels(&adev->smu, SMU_DCEFCLK, mask);
 	else if (adev->powerplay.pp_funcs->force_clock_level)
 		ret = amdgpu_dpm_force_clock_level(adev, PP_DCEFCLK, mask);
 
@@ -1083,7 +1077,7 @@ static ssize_t amdgpu_get_pp_dpm_pcie(struct device *dev,
 	struct amdgpu_device *adev = ddev->dev_private;
 
 	if (is_support_sw_smu(adev))
-		return smu_print_clk_levels(&adev->smu, PP_PCIE, buf);
+		return smu_print_clk_levels(&adev->smu, SMU_PCIE, buf);
 	else if (adev->powerplay.pp_funcs->print_clock_levels)
 		return amdgpu_dpm_print_clock_levels(adev, PP_PCIE, buf);
 	else
@@ -1105,7 +1099,7 @@ static ssize_t amdgpu_set_pp_dpm_pcie(struct device *dev,
 		return ret;
 
 	if (is_support_sw_smu(adev))
-		ret = smu_force_clk_levels(&adev->smu, PP_PCIE, mask);
+		ret = smu_force_clk_levels(&adev->smu, SMU_PCIE, mask);
 	else if (adev->powerplay.pp_funcs->force_clock_level)
 		ret = amdgpu_dpm_force_clock_level(adev, PP_PCIE, mask);
 
@@ -1124,7 +1118,7 @@ static ssize_t amdgpu_get_pp_sclk_od(struct device *dev,
 	uint32_t value = 0;
 
 	if (is_support_sw_smu(adev))
-		value = smu_get_od_percentage(&(adev->smu), OD_SCLK);
+		value = smu_get_od_percentage(&(adev->smu), SMU_OD_SCLK);
 	else if (adev->powerplay.pp_funcs->get_sclk_od)
 		value = amdgpu_dpm_get_sclk_od(adev);
 
@@ -1149,7 +1143,7 @@ static ssize_t amdgpu_set_pp_sclk_od(struct device *dev,
 	}
 
 	if (is_support_sw_smu(adev)) {
-		value = smu_set_od_percentage(&(adev->smu), OD_SCLK, (uint32_t)value);
+		value = smu_set_od_percentage(&(adev->smu), SMU_OD_SCLK, (uint32_t)value);
 	} else {
 		if (adev->powerplay.pp_funcs->set_sclk_od)
 			amdgpu_dpm_set_sclk_od(adev, (uint32_t)value);
@@ -1175,7 +1169,7 @@ static ssize_t amdgpu_get_pp_mclk_od(struct device *dev,
 	uint32_t value = 0;
 
 	if (is_support_sw_smu(adev))
-		value = smu_get_od_percentage(&(adev->smu), OD_MCLK);
+		value = smu_get_od_percentage(&(adev->smu), SMU_OD_MCLK);
 	else if (adev->powerplay.pp_funcs->get_mclk_od)
 		value = amdgpu_dpm_get_mclk_od(adev);
 
@@ -1200,7 +1194,7 @@ static ssize_t amdgpu_set_pp_mclk_od(struct device *dev,
 	}
 
 	if (is_support_sw_smu(adev)) {
-		value = smu_set_od_percentage(&(adev->smu), OD_MCLK, (uint32_t)value);
+		value = smu_set_od_percentage(&(adev->smu), SMU_OD_MCLK, (uint32_t)value);
 	} else {
 		if (adev->powerplay.pp_funcs->set_mclk_od)
 			amdgpu_dpm_set_mclk_od(adev, (uint32_t)value);
@@ -1465,7 +1459,7 @@ static ssize_t amdgpu_hwmon_show_temp(struct device *dev,
 	struct amdgpu_device *adev = dev_get_drvdata(dev);
 	struct drm_device *ddev = adev->ddev;
 	int channel = to_sensor_dev_attr(attr)->index;
-	int r, temp, size = sizeof(temp);
+	int r, temp = 0, size = sizeof(temp);
 
 	/* Can't get temperature when the card is off */
 	if  ((adev->flags & AMD_IS_PX) &&
@@ -2755,8 +2749,6 @@ int amdgpu_pm_load_smu_firmware(struct amdgpu_device *adev, uint32_t *smu_versio
 {
 	int r;
 
-	if (amdgpu_sriov_vf(adev))
-		return 0;
 
 	if (adev->powerplay.pp_funcs && adev->powerplay.pp_funcs->load_firmware) {
 		r = adev->powerplay.pp_funcs->load_firmware(adev->powerplay.pp_handle);
