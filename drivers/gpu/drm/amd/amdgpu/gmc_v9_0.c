@@ -626,7 +626,6 @@ static bool gmc_v9_0_keep_stolen_memory(struct amdgpu_device *adev)
 	case CHIP_VEGA10:
 	case CHIP_RAVEN:
 		return true;
-		return (adev->pdev->device == 0x15d8);
 	case CHIP_VEGA12:
 	case CHIP_VEGA20:
 	default:
