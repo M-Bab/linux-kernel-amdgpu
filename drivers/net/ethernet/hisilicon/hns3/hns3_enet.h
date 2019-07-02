@@ -145,7 +145,7 @@ enum hns3_nic_state {
 #define HNS3_RXD_TSIND_M			(0x7 << HNS3_RXD_TSIND_S)
 #define HNS3_RXD_LKBK_B				15
 #define HNS3_RXD_GRO_SIZE_S			16
-#define HNS3_RXD_GRO_SIZE_M			(0x3ff << HNS3_RXD_GRO_SIZE_S)
+#define HNS3_RXD_GRO_SIZE_M			(0x3fff << HNS3_RXD_GRO_SIZE_S)
 
 #define HNS3_TXD_L3T_S				0
 #define HNS3_TXD_L3T_M				(0x3 << HNS3_TXD_L3T_S)
@@ -417,7 +417,7 @@ struct hns3_enet_ring {
 	 */
 	int next_to_clean;
 
-	int pull_len; /* head length for current packet */
+	u32 pull_len; /* head length for current packet */
 	u32 frag_num;
 	unsigned char *va; /* first buffer address for current packet */
 
@@ -550,7 +550,6 @@ struct hns3_nic_priv {
 	struct notifier_block notifier_block;
 	/* Vxlan/Geneve information */
 	struct hns3_udp_tunnel udp_tnl[HNS3_UDP_TNL_MAX];
-	unsigned long active_vlans[BITS_TO_LONGS(VLAN_N_VID)];
 	struct hns3_enet_coalesce tx_coal;
 	struct hns3_enet_coalesce rx_coal;
 };

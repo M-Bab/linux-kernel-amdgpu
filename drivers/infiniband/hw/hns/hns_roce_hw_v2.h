@@ -54,7 +54,7 @@
 #define HNS_ROCE_V2_MAX_CQ_NUM			0x100000
 #define HNS_ROCE_V2_MAX_CQC_TIMER_NUM		0x100
 #define HNS_ROCE_V2_MAX_SRQ_NUM			0x100000
-#define HNS_ROCE_V2_MAX_CQE_NUM			0x10000
+#define HNS_ROCE_V2_MAX_CQE_NUM			0x400000
 #define HNS_ROCE_V2_MAX_SRQWQE_NUM		0x8000
 #define HNS_ROCE_V2_MAX_RQ_SGE_NUM		0x100
 #define HNS_ROCE_V2_MAX_SQ_SGE_NUM		0xff
@@ -885,6 +885,10 @@ struct hns_roce_v2_qp_context {
 
 #define	V2_QPC_BYTE_256_SQ_FLUSH_IDX_S 16
 #define V2_QPC_BYTE_256_SQ_FLUSH_IDX_M GENMASK(31, 16)
+
+#define	V2_QP_RWE_S 1 /* rdma write enable */
+#define	V2_QP_RRE_S 2 /* rdma read enable */
+#define	V2_QP_ATE_S 3 /* rdma atomic enable */
 
 struct hns_roce_v2_cqe {
 	__le32	byte_4;

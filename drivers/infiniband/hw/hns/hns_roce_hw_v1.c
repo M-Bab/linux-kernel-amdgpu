@@ -818,7 +818,7 @@ static int hns_roce_v1_rsv_lp_qp(struct hns_roce_dev *hr_dev)
 		attr.dest_qp_num	= hr_qp->qpn;
 		memcpy(rdma_ah_retrieve_dmac(&attr.ah_attr),
 		       hr_dev->dev_addr[port],
-		       MAC_ADDR_OCTET_NUM);
+		       ETH_ALEN);
 
 		memcpy(&dgid.raw, &subnet_prefix, sizeof(u64));
 		memcpy(&dgid.raw[8], hr_dev->dev_addr[port], 3);
@@ -966,8 +966,7 @@ static int hns_roce_v1_recreate_lp_qp(struct hns_roce_dev *hr_dev)
 	struct hns_roce_free_mr *free_mr;
 	struct hns_roce_v1_priv *priv;
 	struct completion comp;
-	unsigned long end =
-	  msecs_to_jiffies(HNS_ROCE_V1_RECREATE_LP_QP_TIMEOUT_MSECS) + jiffies;
+	unsigned long end = HNS_ROCE_V1_RECREATE_LP_QP_TIMEOUT_MSECS;
 
 	priv = (struct hns_roce_v1_priv *)hr_dev->priv;
 	free_mr = &priv->free_mr;
@@ -987,10 +986,11 @@ static int hns_roce_v1_recreate_lp_qp(struct hns_roce_dev *hr_dev)
 
 	queue_work(free_mr->free_mr_wq, &(lp_qp_work->work));
 
-	while (time_before_eq(jiffies, end)) {
+	while (end) {
 		if (try_wait_for_completion(&comp))
 			return 0;
 		msleep(HNS_ROCE_V1_RECREATE_LP_QP_WAIT_VALUE);
+		end -= HNS_ROCE_V1_RECREATE_LP_QP_WAIT_VALUE;
 	}
 
 	lp_qp_work->comp_flag = 0;
@@ -1104,8 +1104,7 @@ static int hns_roce_v1_dereg_mr(struct hns_roce_dev *hr_dev,
 	struct hns_roce_free_mr *free_mr;
 	struct hns_roce_v1_priv *priv;
 	struct completion comp;
-	unsigned long end =
-		msecs_to_jiffies(HNS_ROCE_V1_FREE_MR_TIMEOUT_MSECS) + jiffies;
+	unsigned long end = HNS_ROCE_V1_FREE_MR_TIMEOUT_MSECS;
 	unsigned long start = jiffies;
 	int npages;
 	int ret = 0;
@@ -1135,10 +1134,11 @@ static int hns_roce_v1_dereg_mr(struct hns_roce_dev *hr_dev,
 
 	queue_work(free_mr->free_mr_wq, &(mr_work->work));
 
-	while (time_before_eq(jiffies, end)) {
+	while (end) {
 		if (try_wait_for_completion(&comp))
 			goto free_mr;
 		msleep(HNS_ROCE_V1_FREE_MR_WAIT_VALUE);
+		end -= HNS_ROCE_V1_FREE_MR_WAIT_VALUE;
 	}
 
 	mr_work->comp_flag = 0;
@@ -1742,10 +1742,13 @@ static int hns_roce_v1_set_gid(struct hns_roce_dev *hr_dev, u8 port,
 			       int gid_index, const union ib_gid *gid,
 			       const struct ib_gid_attr *attr)
 {
+	unsigned long flags;
 	u32 *p = NULL;
 	u8 gid_idx = 0;
 
 	gid_idx = hns_get_gid_index(hr_dev, port, gid_index);
+
+	spin_lock_irqsave(&hr_dev->iboe.lock, flags);
 
 	p = (u32 *)&gid->raw[0];
 	roce_raw_write(*p, hr_dev->reg_base + ROCEE_PORT_GID_L_0_REG +
@@ -1762,6 +1765,8 @@ static int hns_roce_v1_set_gid(struct hns_roce_dev *hr_dev, u8 port,
 	p = (u32 *)&gid->raw[0xc];
 	roce_raw_write(*p, hr_dev->reg_base + ROCEE_PORT_GID_H_0_REG +
 		       (HNS_ROCE_V1_GID_NUM * gid_idx));
+
+	spin_unlock_irqrestore(&hr_dev->iboe.lock, flags);
 
 	return 0;
 }
@@ -2458,10 +2463,10 @@ static int hns_roce_v1_clear_hem(struct hns_roce_dev *hr_dev,
 
 	bt_cmd = hr_dev->reg_base + ROCEE_BT_CMD_H_REG;
 
-	end = msecs_to_jiffies(HW_SYNC_TIMEOUT_MSECS) + jiffies;
+	end = HW_SYNC_TIMEOUT_MSECS;
 	while (1) {
 		if (readl(bt_cmd) >> BT_CMD_SYNC_SHIFT) {
-			if (!(time_before(jiffies, end))) {
+			if (!end) {
 				dev_err(dev, "Write bt_cmd err,hw_sync is not zero.\n");
 				spin_unlock_irqrestore(&hr_dev->bt_cmd_lock,
 					flags);
@@ -2470,7 +2475,8 @@ static int hns_roce_v1_clear_hem(struct hns_roce_dev *hr_dev,
 		} else {
 			break;
 		}
-		msleep(HW_SYNC_SLEEP_TIME_INTERVAL);
+		mdelay(HW_SYNC_SLEEP_TIME_INTERVAL);
+		end -= HW_SYNC_SLEEP_TIME_INTERVAL;
 	}
 
 	bt_cmd_val[0] = (__le32)bt_ba;
