@@ -2178,6 +2178,12 @@ static int cs35l41_pcm_hw_params(struct snd_pcm_substream *substream,
 			break;
 	}
 
+	if (i >= ARRAY_SIZE(cs35l41_fs_rates)) {
+		dev_err(cs35l41->dev, "%s: Unsupported rate: %u\n",
+						__func__, rate);
+		return -EINVAL;
+	}
+
 	asp_wl = params_width(params);
 	asp_width = params_physical_width(params);
 
@@ -2191,7 +2197,8 @@ static int cs35l41_pcm_hw_params(struct snd_pcm_substream *substream,
 	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
 		return 0;
 
-	regmap_update_bits(cs35l41->regmap, CS35L41_GLOBAL_CLK_CTRL,
+	if (i < ARRAY_SIZE(cs35l41_fs_rates))
+		regmap_update_bits(cs35l41->regmap, CS35L41_GLOBAL_CLK_CTRL,
 			CS35L41_GLOBAL_FS_MASK,
 			cs35l41_fs_rates[i].fs_cfg << CS35L41_GLOBAL_FS_SHIFT);
 
