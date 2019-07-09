@@ -2731,6 +2731,9 @@ static int cs35l41_handle_of_data(struct device *dev,
 	pdata->invert_pcm = of_property_read_bool(np,
 					"cirrus,invert-pcm");
 
+	pdata->fwname_use_revid = of_property_read_bool(np,
+					"cirrus,fwname-use-revid");
+
 	if (of_property_read_u32(np, "cirrus,temp-warn_threshold", &val) >= 0)
 		pdata->temp_warn_thld = val | CS35L41_VALID_PDATA;
 
@@ -2912,12 +2915,14 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 	int ret, i;
 
 	dsp = &cs35l41->dsp;
-	dsp->part = "cs35l41";
 	dsp->num = 1;
 	dsp->type = WMFW_HALO;
 	dsp->rev = 0;
 	dsp->dev = cs35l41->dev;
 	dsp->regmap = cs35l41->regmap;
+
+	if (!cs35l41->pdata.fwname_use_revid)
+		dsp->part = "cs35l41";
 
 	dsp->base = CS35L41_DSP1_CTRL_BASE;
 	dsp->base_sysinfo = CS35L41_DSP1_SYS_ID;
@@ -3423,6 +3428,8 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	switch (reg_revid) {
 	case CS35L41_REVID_A0:
 		cs35l41->amp_hibernate = CS35L41_HIBERNATE_INCOMPATIBLE;
+		if (cs35l41->pdata.fwname_use_revid)
+			cs35l41->dsp.part = "cs35l41-revA";
 		ret = regmap_multi_reg_write(cs35l41->regmap,
 				cs35l41_reva0_errata_patch,
 				ARRAY_SIZE(cs35l41_reva0_errata_patch));
@@ -3434,6 +3441,8 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		break;
 	case CS35L41_REVID_B0:
 		cs35l41->amp_hibernate = CS35L41_HIBERNATE_INCOMPATIBLE;
+		if (cs35l41->pdata.fwname_use_revid)
+			cs35l41->dsp.part = "cs35l41-revB0";
 		ret = regmap_multi_reg_write(cs35l41->regmap,
 				cs35l41_revb0_errata_patch,
 				ARRAY_SIZE(cs35l41_revb0_errata_patch));
@@ -3444,6 +3453,8 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		}
 		break;
 	case CS35L41_REVID_B2:
+		if (cs35l41->pdata.fwname_use_revid)
+			cs35l41->dsp.part = "cs35l41-revB2";
 		ret = regmap_multi_reg_write(cs35l41->regmap,
 				cs35l41_revb2_errata_patch,
 				ARRAY_SIZE(cs35l41_revb2_errata_patch));
