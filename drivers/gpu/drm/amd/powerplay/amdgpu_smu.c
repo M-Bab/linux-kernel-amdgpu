@@ -136,6 +136,7 @@ int smu_get_dpm_freq_range(struct smu_context *smu, enum smu_clk_type clk_type,
 		return -EINVAL;
 
 	switch (clk_type) {
+	case SMU_MCLK:
 	case SMU_UCLK:
 		if (!smu_feature_is_enabled(smu, SMU_FEATURE_DPM_UCLK_BIT)) {
 			pr_warn("uclk dpm is not enabled\n");
@@ -1386,8 +1387,8 @@ int smu_adjust_power_state_dynamic(struct smu_context *smu,
 							 &soc_mask);
 			if (ret)
 				return ret;
-			smu_force_clk_levels(smu, PP_SCLK, 1 << sclk_mask);
-			smu_force_clk_levels(smu, PP_MCLK, 1 << mclk_mask);
+			smu_force_clk_levels(smu, SMU_SCLK, 1 << sclk_mask);
+			smu_force_clk_levels(smu, SMU_MCLK, 1 << mclk_mask);
 			break;
 
 		case AMD_DPM_FORCED_LEVEL_MANUAL:
