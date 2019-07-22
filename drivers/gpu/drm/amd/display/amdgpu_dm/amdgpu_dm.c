@@ -2743,7 +2743,7 @@ fill_plane_dcc_attributes(struct amdgpu_device *adev,
 			  const struct amdgpu_framebuffer *afb,
 			  const enum surface_pixel_format format,
 			  const enum dc_rotation_angle rotation,
-			  const union plane_size *plane_size,
+			  const struct plane_size *plane_size,
 			  const union dc_tiling_info *tiling_info,
 			  const uint64_t info,
 			  struct dc_plane_dcc_param *dcc,
@@ -2769,8 +2769,8 @@ fill_plane_dcc_attributes(struct amdgpu_device *adev,
 		return -EINVAL;
 
 	input.format = format;
-	input.surface_size.width = plane_size->grph.surface_size.width;
-	input.surface_size.height = plane_size->grph.surface_size.height;
+	input.surface_size.width = plane_size->surface_size.width;
+	input.surface_size.height = plane_size->surface_size.height;
 	input.swizzle_mode = tiling_info->gfx9.swizzle;
 
 	if (rotation == ROTATION_ANGLE_0 || rotation == ROTATION_ANGLE_180)
@@ -2788,9 +2788,9 @@ fill_plane_dcc_attributes(struct amdgpu_device *adev,
 		return -EINVAL;
 
 	dcc->enable = 1;
-	dcc->grph.meta_pitch =
+	dcc->meta_pitch =
 		AMDGPU_TILING_GET(info, DCC_PITCH_MAX) + 1;
-	dcc->grph.independent_64b_blks = i64b;
+	dcc->independent_64b_blks = i64b;
 
 	dcc_address = get_dcc_address(afb->address, info);
 	address->grph.meta_addr.low_part = lower_32_bits(dcc_address);
@@ -2806,7 +2806,7 @@ fill_plane_buffer_attributes(struct amdgpu_device *adev,
 			     const enum dc_rotation_angle rotation,
 			     const uint64_t tiling_flags,
 			     union dc_tiling_info *tiling_info,
-			     union plane_size *plane_size,
+			     struct plane_size *plane_size,
 			     struct dc_plane_dcc_param *dcc,
 			     struct dc_plane_address *address)
 {
@@ -2819,11 +2819,11 @@ fill_plane_buffer_attributes(struct amdgpu_device *adev,
 	memset(address, 0, sizeof(*address));
 
 	if (format < SURFACE_PIXEL_FORMAT_VIDEO_BEGIN) {
-		plane_size->grph.surface_size.x = 0;
-		plane_size->grph.surface_size.y = 0;
-		plane_size->grph.surface_size.width = fb->width;
-		plane_size->grph.surface_size.height = fb->height;
-		plane_size->grph.surface_pitch =
+		plane_size->surface_size.x = 0;
+		plane_size->surface_size.y = 0;
+		plane_size->surface_size.width = fb->width;
+		plane_size->surface_size.height = fb->height;
+		plane_size->surface_pitch =
 			fb->pitches[0] / fb->format->cpp[0];
 
 		address->type = PLN_ADDR_TYPE_GRAPHICS;
@@ -2832,20 +2832,20 @@ fill_plane_buffer_attributes(struct amdgpu_device *adev,
 	} else if (format < SURFACE_PIXEL_FORMAT_INVALID) {
 		uint64_t chroma_addr = afb->address + fb->offsets[1];
 
-		plane_size->video.luma_size.x = 0;
-		plane_size->video.luma_size.y = 0;
-		plane_size->video.luma_size.width = fb->width;
-		plane_size->video.luma_size.height = fb->height;
-		plane_size->video.luma_pitch =
+		plane_size->surface_size.x = 0;
+		plane_size->surface_size.y = 0;
+		plane_size->surface_size.width = fb->width;
+		plane_size->surface_size.height = fb->height;
+		plane_size->surface_pitch =
 			fb->pitches[0] / fb->format->cpp[0];
 
-		plane_size->video.chroma_size.x = 0;
-		plane_size->video.chroma_size.y = 0;
+		plane_size->chroma_size.x = 0;
+		plane_size->chroma_size.y = 0;
 		/* TODO: set these based on surface format */
-		plane_size->video.chroma_size.width = fb->width / 2;
-		plane_size->video.chroma_size.height = fb->height / 2;
+		plane_size->chroma_size.width = fb->width / 2;
+		plane_size->chroma_size.height = fb->height / 2;
 
-		plane_size->video.chroma_pitch =
+		plane_size->chroma_pitch =
 			fb->pitches[1] / fb->format->cpp[1];
 
 		address->type = PLN_ADDR_TYPE_VIDEO_PROGRESSIVE;
@@ -3736,7 +3736,7 @@ dm_crtc_duplicate_state(struct drm_crtc *crtc)
 	state->abm_level = cur->abm_level;
 	state->vrr_supported = cur->vrr_supported;
 	state->freesync_config = cur->freesync_config;
-	state->crc_enabled = cur->crc_enabled;
+	state->crc_src = cur->crc_src;
 	state->cm_has_degamma = cur->cm_has_degamma;
 	state->cm_is_degamma_srgb = cur->cm_is_degamma_srgb;
 
@@ -3806,6 +3806,7 @@ static const struct drm_crtc_funcs amdgpu_dm_crtc_funcs = {
 	.atomic_destroy_state = dm_crtc_destroy_state,
 	.set_crc_source = amdgpu_dm_crtc_set_crc_source,
 	.verify_crc_source = amdgpu_dm_crtc_verify_crc_source,
+	.get_crc_sources = amdgpu_dm_crtc_get_crc_sources,
 	.enable_vblank = dm_enable_vblank,
 	.disable_vblank = dm_disable_vblank,
 };
@@ -5936,6 +5937,7 @@ static void amdgpu_dm_enable_crtc_interrupts(struct drm_device *dev,
 	struct drm_crtc *crtc;
 	struct drm_crtc_state *old_crtc_state, *new_crtc_state;
 	int i;
+	enum amdgpu_dm_pipe_crc_source source;
 
 	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_state,
 				      new_crtc_state, i) {
@@ -5961,9 +5963,13 @@ static void amdgpu_dm_enable_crtc_interrupts(struct drm_device *dev,
 
 #ifdef CONFIG_DEBUG_FS
 		/* The stream has changed so CRC capture needs to re-enabled. */
-		if (dm_new_crtc_state->crc_enabled) {
-			dm_new_crtc_state->crc_enabled = false;
-			amdgpu_dm_crtc_set_crc_source(crtc, "auto");
+		source = dm_new_crtc_state->crc_src;
+		if (amdgpu_dm_is_valid_crc_source(source)) {
+			dm_new_crtc_state->crc_src = AMDGPU_DM_PIPE_CRC_SOURCE_NONE;
+			if (source == AMDGPU_DM_PIPE_CRC_SOURCE_CRTC)
+				amdgpu_dm_crtc_set_crc_source(crtc, "crtc");
+			else if (source == AMDGPU_DM_PIPE_CRC_SOURCE_DPRX)
+				amdgpu_dm_crtc_set_crc_source(crtc, "dprx");
 		}
 #endif
 	}
@@ -6019,7 +6025,7 @@ static int amdgpu_dm_atomic_commit(struct drm_device *dev,
 			 * Drop the extra vblank reference added by CRC
 			 * capture if applicable.
 			 */
-			if (dm_new_crtc_state->crc_enabled)
+			if (amdgpu_dm_is_valid_crc_source(dm_new_crtc_state->crc_src))
 				drm_crtc_vblank_put(crtc);
 
 			/*
@@ -6027,7 +6033,7 @@ static int amdgpu_dm_atomic_commit(struct drm_device *dev,
 			 * still a stream for the CRTC.
 			 */
 			if (!dm_new_crtc_state->stream)
-				dm_new_crtc_state->crc_enabled = false;
+				dm_new_crtc_state->crc_src = AMDGPU_DM_PIPE_CRC_SOURCE_NONE;
 
 			manage_dm_interrupts(adev, acrtc, false);
 		}

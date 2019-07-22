@@ -1731,7 +1731,7 @@ static ssize_t amdgpu_hwmon_get_fan1_input(struct device *dev,
 		return -EINVAL;
 
 	if (is_support_sw_smu(adev)) {
-		err = smu_get_current_rpm(&adev->smu, &speed);
+		err = smu_get_fan_speed_rpm(&adev->smu, &speed);
 		if (err)
 			return err;
 	} else if (adev->powerplay.pp_funcs->get_fan_speed_rpm) {
@@ -1791,7 +1791,7 @@ static ssize_t amdgpu_hwmon_get_fan1_target(struct device *dev,
 		return -EINVAL;
 
 	if (is_support_sw_smu(adev)) {
-		err = smu_get_current_rpm(&adev->smu, &rpm);
+		err = smu_get_fan_speed_rpm(&adev->smu, &rpm);
 		if (err)
 			return err;
 	} else if (adev->powerplay.pp_funcs->get_fan_speed_rpm) {
@@ -2074,11 +2074,6 @@ static ssize_t amdgpu_hwmon_show_sclk(struct device *dev,
 	     (ddev->switch_power_state != DRM_SWITCH_POWER_ON))
 		return -EINVAL;
 
-	/* sanity check PP is enabled */
-	if (!(adev->powerplay.pp_funcs &&
-	      adev->powerplay.pp_funcs->read_sensor))
-	      return -EINVAL;
-
 	/* get the sclk */
 	r = amdgpu_dpm_read_sensor(adev, AMDGPU_PP_SENSOR_GFX_SCLK,
 				   (void *)&sclk, &size);
@@ -2108,11 +2103,6 @@ static ssize_t amdgpu_hwmon_show_mclk(struct device *dev,
 	if  ((adev->flags & AMD_IS_PX) &&
 	     (ddev->switch_power_state != DRM_SWITCH_POWER_ON))
 		return -EINVAL;
-
-	/* sanity check PP is enabled */
-	if (!(adev->powerplay.pp_funcs &&
-	      adev->powerplay.pp_funcs->read_sensor))
-	      return -EINVAL;
 
 	/* get the sclk */
 	r = amdgpu_dpm_read_sensor(adev, AMDGPU_PP_SENSOR_GFX_MCLK,
@@ -2994,13 +2984,10 @@ void amdgpu_pm_compute_clocks(struct amdgpu_device *adev)
 	}
 
 	if (is_support_sw_smu(adev)) {
-		struct smu_context *smu = &adev->smu;
 		struct smu_dpm_context *smu_dpm = &adev->smu.smu_dpm;
-		mutex_lock(&(smu->mutex));
 		smu_handle_task(&adev->smu,
 				smu_dpm->dpm_level,
 				AMD_PP_TASK_DISPLAY_CONFIG_CHANGE);
-		mutex_unlock(&(smu->mutex));
 	} else {
 		if (adev->powerplay.pp_funcs->dispatch_tasks) {
 			if (!amdgpu_device_has_dc_support(adev)) {

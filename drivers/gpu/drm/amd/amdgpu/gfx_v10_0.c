@@ -164,6 +164,13 @@ static const struct soc15_reg_golden golden_settings_gc_10_1_nv14[] =
 	/* Pending on emulation bring up */
 };
 
+#define DEFAULT_SH_MEM_CONFIG \
+	((SH_MEM_ADDRESS_MODE_64 << SH_MEM_CONFIG__ADDRESS_MODE__SHIFT) | \
+	 (SH_MEM_ALIGNMENT_MODE_UNALIGNED << SH_MEM_CONFIG__ALIGNMENT_MODE__SHIFT) | \
+	 (SH_MEM_RETRY_MODE_ALL << SH_MEM_CONFIG__RETRY_MODE__SHIFT) | \
+	 (3 << SH_MEM_CONFIG__INITIAL_INST_PREFETCH__SHIFT))
+
+
 static void gfx_v10_0_set_ring_funcs(struct amdgpu_device *adev);
 static void gfx_v10_0_set_irq_funcs(struct amdgpu_device *adev);
 static void gfx_v10_0_set_gds_init(struct amdgpu_device *adev);
@@ -1061,6 +1068,12 @@ static void gfx_v10_0_read_wave_vgprs(struct amdgpu_device *adev, uint32_t simd,
 		start + SQIND_WAVE_VGPRS_OFFSET, size, dst);
 }
 
+static void gfx_v10_0_select_me_pipe_q(struct amdgpu_device *adev,
+									  u32 me, u32 pipe, u32 q, u32 vm)
+ {
+       nv_grbm_select(adev, me, pipe, q, vm);
+ }
+
 
 static const struct amdgpu_gfx_funcs gfx_v10_0_gfx_funcs = {
 	.get_gpu_clock_counter = &gfx_v10_0_get_gpu_clock_counter,
@@ -1068,6 +1081,7 @@ static const struct amdgpu_gfx_funcs gfx_v10_0_gfx_funcs = {
 	.read_wave_data = &gfx_v10_0_read_wave_data,
 	.read_wave_sgprs = &gfx_v10_0_read_wave_sgprs,
 	.read_wave_vgprs = &gfx_v10_0_read_wave_vgprs,
+	.select_me_pipe_q = &gfx_v10_0_select_me_pipe_q,
 };
 
 static void gfx_v10_0_gpu_early_init(struct amdgpu_device *adev)
@@ -1483,7 +1497,6 @@ static u32 gfx_v10_0_init_pa_sc_tile_steering_override(struct amdgpu_device *ade
 static void gfx_v10_0_init_compute_vmid(struct amdgpu_device *adev)
 {
 	int i;
-	uint32_t sh_mem_config;
 	uint32_t sh_mem_bases;
 
 	/*
@@ -1494,19 +1507,24 @@ static void gfx_v10_0_init_compute_vmid(struct amdgpu_device *adev)
 	 */
 	sh_mem_bases = DEFAULT_SH_MEM_BASES | (DEFAULT_SH_MEM_BASES << 16);
 
-	sh_mem_config = SH_MEM_ADDRESS_MODE_64 |
-			SH_MEM_ALIGNMENT_MODE_UNALIGNED <<
-			SH_MEM_CONFIG__ALIGNMENT_MODE__SHIFT;
-
 	mutex_lock(&adev->srbm_mutex);
 	for (i = FIRST_COMPUTE_VMID; i < LAST_COMPUTE_VMID; i++) {
 		nv_grbm_select(adev, 0, 0, 0, i);
 		/* CP and shaders */
-		WREG32_SOC15(GC, 0, mmSH_MEM_CONFIG, sh_mem_config);
+		WREG32_SOC15(GC, 0, mmSH_MEM_CONFIG, DEFAULT_SH_MEM_CONFIG);
 		WREG32_SOC15(GC, 0, mmSH_MEM_BASES, sh_mem_bases);
 	}
 	nv_grbm_select(adev, 0, 0, 0, 0);
 	mutex_unlock(&adev->srbm_mutex);
+
+	/* Initialize all compute VMIDs to have no GDS, GWS, or OA
+	   acccess. These should be enabled by FW for target VMIDs. */
+	for (i = FIRST_COMPUTE_VMID; i < LAST_COMPUTE_VMID; i++) {
+		WREG32_SOC15_OFFSET(GC, 0, mmGDS_VMID0_BASE, 2 * i, 0);
+		WREG32_SOC15_OFFSET(GC, 0, mmGDS_VMID0_SIZE, 2 * i, 0);
+		WREG32_SOC15_OFFSET(GC, 0, mmGDS_GWS_VMID0, i, 0);
+		WREG32_SOC15_OFFSET(GC, 0, mmGDS_OA_VMID0, i, 0);
+	}
 }
 
 static void gfx_v10_0_tcp_harvest(struct amdgpu_device *adev)
@@ -1594,20 +1612,11 @@ static void gfx_v10_0_constants_init(struct amdgpu_device *adev)
 	/* XXX SH_MEM regs */
 	/* where to put LDS, scratch, GPUVM in FSA64 space */
 	mutex_lock(&adev->srbm_mutex);
-	for (i = 0; i < adev->vm_manager.id_mgr[AMDGPU_GFXHUB].num_ids; i++) {
+	for (i = 0; i < adev->vm_manager.id_mgr[AMDGPU_GFXHUB_0].num_ids; i++) {
 		nv_grbm_select(adev, 0, 0, 0, i);
 		/* CP and shaders */
-		if (i == 0) {
-			tmp = REG_SET_FIELD(0, SH_MEM_CONFIG, ALIGNMENT_MODE,
-					    SH_MEM_ALIGNMENT_MODE_UNALIGNED);
-			tmp = REG_SET_FIELD(tmp, SH_MEM_CONFIG, RETRY_MODE, 0);
-			WREG32_SOC15(GC, 0, mmSH_MEM_CONFIG, tmp);
-			WREG32_SOC15(GC, 0, mmSH_MEM_BASES, 0);
-		} else {
-			tmp = REG_SET_FIELD(0, SH_MEM_CONFIG, ALIGNMENT_MODE,
-					    SH_MEM_ALIGNMENT_MODE_UNALIGNED);
-			tmp = REG_SET_FIELD(tmp, SH_MEM_CONFIG, RETRY_MODE, 0);
-			WREG32_SOC15(GC, 0, mmSH_MEM_CONFIG, tmp);
+		WREG32_SOC15(GC, 0, mmSH_MEM_CONFIG, DEFAULT_SH_MEM_CONFIG);
+		if (i != 0) {
 			tmp = REG_SET_FIELD(0, SH_MEM_BASES, PRIVATE_BASE,
 				(adev->gmc.private_aperture_start >> 48));
 			tmp = REG_SET_FIELD(tmp, SH_MEM_BASES, SHARED_BASE,
@@ -4690,6 +4699,7 @@ gfx_v10_0_set_gfx_eop_interrupt_state(struct amdgpu_device *adev,
 		cp_int_cntl = REG_SET_FIELD(cp_int_cntl, CP_INT_CNTL_RING0,
 					    TIME_STAMP_INT_ENABLE, 0);
 		WREG32(cp_int_cntl_reg, cp_int_cntl);
+		break;
 	case AMDGPU_IRQ_STATE_ENABLE:
 		cp_int_cntl = RREG32(cp_int_cntl_reg);
 		cp_int_cntl = REG_SET_FIELD(cp_int_cntl, CP_INT_CNTL_RING0,
@@ -5005,7 +5015,7 @@ static const struct amdgpu_ring_funcs gfx_v10_0_ring_funcs_gfx = {
 	.align_mask = 0xff,
 	.nop = PACKET3(PACKET3_NOP, 0x3FFF),
 	.support_64bit_ptrs = true,
-	.vmhub = AMDGPU_GFXHUB,
+	.vmhub = AMDGPU_GFXHUB_0,
 	.get_rptr = gfx_v10_0_ring_get_rptr_gfx,
 	.get_wptr = gfx_v10_0_ring_get_wptr_gfx,
 	.set_wptr = gfx_v10_0_ring_set_wptr_gfx,
@@ -5056,7 +5066,7 @@ static const struct amdgpu_ring_funcs gfx_v10_0_ring_funcs_compute = {
 	.align_mask = 0xff,
 	.nop = PACKET3(PACKET3_NOP, 0x3FFF),
 	.support_64bit_ptrs = true,
-	.vmhub = AMDGPU_GFXHUB,
+	.vmhub = AMDGPU_GFXHUB_0,
 	.get_rptr = gfx_v10_0_ring_get_rptr_compute,
 	.get_wptr = gfx_v10_0_ring_get_wptr_compute,
 	.set_wptr = gfx_v10_0_ring_set_wptr_compute,
@@ -5089,7 +5099,7 @@ static const struct amdgpu_ring_funcs gfx_v10_0_ring_funcs_kiq = {
 	.align_mask = 0xff,
 	.nop = PACKET3(PACKET3_NOP, 0x3FFF),
 	.support_64bit_ptrs = true,
-	.vmhub = AMDGPU_GFXHUB,
+	.vmhub = AMDGPU_GFXHUB_0,
 	.get_rptr = gfx_v10_0_ring_get_rptr_compute,
 	.get_wptr = gfx_v10_0_ring_get_wptr_compute,
 	.set_wptr = gfx_v10_0_ring_set_wptr_compute,
