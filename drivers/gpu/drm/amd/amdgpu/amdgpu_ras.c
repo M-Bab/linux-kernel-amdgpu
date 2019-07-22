@@ -134,11 +134,6 @@ static int amdgpu_ras_reserve_vram(struct amdgpu_device *adev,
 static int amdgpu_ras_release_vram(struct amdgpu_device *adev,
 		struct amdgpu_bo **bo_ptr);
 
-static void amdgpu_ras_self_test(struct amdgpu_device *adev)
-{
-	/* TODO */
-}
-
 static ssize_t amdgpu_ras_debugfs_read(struct file *f, char __user *buf,
 					size_t size, loff_t *pos)
 {
@@ -686,6 +681,12 @@ int amdgpu_ras_error_inject(struct amdgpu_device *adev,
 
 	if (!obj)
 		return -EINVAL;
+
+	if (block_info.block_id != TA_RAS_BLOCK__UMC) {
+		DRM_INFO("%s error injection is not supported yet\n",
+			 ras_block_str(info->head.block));
+		return -EINVAL;
+	}
 
 	ret = psp_ras_trigger_error(&adev->psp, &block_info);
 	if (ret)
@@ -1555,6 +1556,12 @@ int amdgpu_ras_init(struct amdgpu_device *adev)
 
 	amdgpu_ras_check_supported(adev, &con->hw_supported,
 			&con->supported);
+	if (!con->hw_supported) {
+		amdgpu_ras_set_context(adev, NULL);
+		kfree(con);
+		return 0;
+	}
+
 	con->features = 0;
 	INIT_LIST_HEAD(&con->head);
 	/* Might need get this flag from vbios. */
@@ -1567,8 +1574,6 @@ int amdgpu_ras_init(struct amdgpu_device *adev)
 
 	if (amdgpu_ras_fs_init(adev))
 		goto fs_out;
-
-	amdgpu_ras_self_test(adev);
 
 	DRM_INFO("RAS INFO: ras initialized successfully, "
 			"hardware ability[%x] ras_mask[%x]\n",

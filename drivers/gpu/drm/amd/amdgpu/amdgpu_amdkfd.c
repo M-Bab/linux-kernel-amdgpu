@@ -87,6 +87,9 @@ void amdgpu_amdkfd_device_probe(struct amdgpu_device *adev)
 	case CHIP_RAVEN:
 		kfd2kgd = amdgpu_amdkfd_gfx_9_0_get_functions();
 		break;
+	case CHIP_ARCTURUS:
+		kfd2kgd = amdgpu_amdkfd_arcturus_get_functions();
+		break;
 	case CHIP_NAVI10:
 		kfd2kgd = amdgpu_amdkfd_gfx_10_0_get_functions();
 		break;
@@ -711,6 +714,11 @@ struct kfd2kgd_calls *amdgpu_amdkfd_gfx_8_0_get_functions(void)
 }
 
 struct kfd2kgd_calls *amdgpu_amdkfd_gfx_9_0_get_functions(void)
+{
+	return NULL;
+}
+
+struct kfd2kgd_calls *amdgpu_amdkfd_arcturus_get_functions(void)
 {
 	return NULL;
 }

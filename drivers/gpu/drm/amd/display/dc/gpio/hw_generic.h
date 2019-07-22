@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Advanced Micro Devices, Inc.
+ * Copyright 2012-15 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,14 +19,28 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
+ * Authors: AMD
+ *
  */
 
-#ifndef __VI_DPM_H__
-#define __VI_DPM_H__
+#ifndef __DAL_HW_generic_H__
+#define __DAL_HW_generic_H__
 
-extern const struct amd_ip_funcs cz_dpm_ip_funcs;
-int cz_smu_init(struct amdgpu_device *adev);
-int cz_smu_start(struct amdgpu_device *adev);
-int cz_smu_fini(struct amdgpu_device *adev);
+#include "generic_regs.h"
+
+struct hw_generic {
+	struct hw_gpio base;
+	const struct generic_registers *regs;
+	const struct generic_sh_mask *shifts;
+	const struct generic_sh_mask *masks;
+};
+
+#define HW_GENERIC_FROM_BASE(hw_gpio) \
+	container_of((HW_GPIO_FROM_BASE(hw_gpio)), struct hw_generic, base)
+
+struct hw_gpio_pin *dal_hw_generic_create(
+	struct dc_context *ctx,
+	enum gpio_id id,
+	uint32_t en);
 
 #endif
