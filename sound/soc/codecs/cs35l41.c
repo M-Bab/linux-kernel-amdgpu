@@ -971,6 +971,9 @@ static int cs35l41_get_output_dev(struct snd_kcontrol *kcontrol,
 	return ret;
 }
 
+static const struct snd_kcontrol_new amp_enable_ctrl =
+	SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
+
 static const char * const cs35l41_pcm_source_texts[] = {"ASP", "DSP"};
 static const unsigned int cs35l41_pcm_source_values[] = {0x08, 0x32};
 static SOC_VALUE_ENUM_SINGLE_DECL(cs35l41_pcm_source_enum,
@@ -2050,6 +2053,7 @@ static const struct snd_soc_dapm_widget cs35l41_dapm_widgets[] = {
 	SND_SOC_DAPM_SWITCH("DRE", SND_SOC_NOPM, 0, 0, &dre_ctrl),
 	SND_SOC_DAPM_SWITCH("VBSTMON Output", SND_SOC_NOPM, 0, 0,
 						&vbstmon_out_ctrl),
+	SND_SOC_DAPM_SWITCH("AMP Enable", SND_SOC_NOPM, 0, 1, &amp_enable_ctrl),
 };
 
 static const struct snd_soc_dapm_route cs35l41_audio_map[] = {
@@ -2134,8 +2138,9 @@ static const struct snd_soc_dapm_route cs35l41_audio_map[] = {
 	{"DSP1", NULL, "VPMON ADC"},
 	{"DSP1", NULL, "TEMPMON ADC"},
 
-	{"ASPRX1", NULL, "AMP Playback"},
-	{"ASPRX2", NULL, "AMP Playback"},
+	{"AMP Enable", "Switch", "AMP Playback"},
+	{"ASPRX1", NULL, "AMP Enable"},
+	{"ASPRX2", NULL, "AMP Enable"},
 	{"DRE", "Switch", "CLASS H"},
 	{"Main AMP", NULL, "CLASS H"},
 	{"Main AMP", NULL, "DRE"},
