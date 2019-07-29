@@ -68,6 +68,7 @@ struct cs35l41_private {
 	bool halo_booted;
 	bool bus_spi;
 	bool fast_switch_en;
+	bool force_int;
 	/* GPIO for /RST */
 	struct gpio_desc *reset_gpio;
 	/* Run-time mixer */
@@ -75,6 +76,7 @@ struct cs35l41_private {
 	struct soc_enum fast_switch_enum;
 	const char **fast_switch_names;
 	struct mutex rate_lock;
+	struct mutex force_int_lock;
 };
 
 int cs35l41_probe(struct cs35l41_private *cs35l41,

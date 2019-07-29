@@ -210,6 +210,53 @@ static int cs35l41_halo_booted_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int cs35l41_force_int_get(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = cs35l41->force_int;
+
+	return 0;
+}
+
+static int cs35l41_force_int_put(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+	bool force_int_changed = (cs35l41->force_int !=
+		(bool)ucontrol->value.integer.value[0]);
+
+	mutex_lock(&cs35l41->force_int_lock);
+
+	cs35l41->force_int = ucontrol->value.integer.value[0];
+
+	if (force_int_changed) {
+		if (cs35l41->force_int) {
+			disable_irq(cs35l41->irq);
+			regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1,
+					CS35L41_INT1_MASK_FORCE);
+			regmap_write(cs35l41->regmap, CS35L41_IRQ1_FRC1, 1);
+		} else {
+			regmap_write(cs35l41->regmap, CS35L41_IRQ1_FRC1, 0);
+			regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1,
+					CS35L41_INT1_MASK_DEFAULT);
+			regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS1, 1);
+			enable_irq(cs35l41->irq);
+		}
+	}
+
+	mutex_unlock(&cs35l41->force_int_lock);
+
+	return 0;
+}
+
 static int cs35l41_ccm_reset_get(struct snd_kcontrol *kcontrol,
 			   struct snd_ctl_elem_value *ucontrol)
 {
@@ -691,6 +738,8 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 			cs35l41_halo_booted_get, cs35l41_halo_booted_put),
 	SOC_SINGLE_EXT("CCM Reset", CS35L41_DSP1_CCM_CORE_CTRL, 0, 1, 0,
 			cs35l41_ccm_reset_get, cs35l41_ccm_reset_put),
+	SOC_SINGLE_EXT("Force Interrupt", SND_SOC_NOPM, 0, 1, 0,
+			cs35l41_force_int_get, cs35l41_force_int_put),
 	SOC_SINGLE_EXT("Fast Use Case Switch Enable", SND_SOC_NOPM, 0, 1, 0,
 		    cs35l41_fast_switch_en_get, cs35l41_fast_switch_en_put),
 	SOC_SINGLE_EXT("Firmware Reload Tuning", SND_SOC_NOPM, 0, 1, 0,
@@ -2270,6 +2319,8 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1,
 			CS35L41_INT1_MASK_DEFAULT);
 
+	mutex_init(&cs35l41->force_int_lock);
+
 	switch (reg_revid) {
 	case CS35L41_REVID_A0:
 		ret = regmap_multi_reg_write(cs35l41->regmap,
@@ -2322,6 +2373,7 @@ err:
 int cs35l41_remove(struct cs35l41_private *cs35l41)
 {
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
+	mutex_destroy(&cs35l41->force_int_lock);
 	wm_adsp2_remove(&cs35l41->dsp);
 	regulator_bulk_disable(cs35l41->num_supplies, cs35l41->supplies);
 	snd_soc_unregister_component(cs35l41->dev);
