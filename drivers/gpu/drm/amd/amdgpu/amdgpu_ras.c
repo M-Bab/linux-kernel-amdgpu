@@ -28,74 +28,6 @@
 #include "amdgpu_ras.h"
 #include "amdgpu_atomfirmware.h"
 
-struct ras_ih_data {
-	/* interrupt bottom half */
-	struct work_struct ih_work;
-	int inuse;
-	/* IP callback */
-	ras_ih_cb cb;
-	/* full of entries */
-	unsigned char *ring;
-	unsigned int ring_size;
-	unsigned int element_size;
-	unsigned int aligned_element_size;
-	unsigned int rptr;
-	unsigned int wptr;
-};
-
-struct ras_fs_data {
-	char sysfs_name[32];
-	char debugfs_name[32];
-};
-
-struct ras_err_data {
-	unsigned long ue_count;
-	unsigned long ce_count;
-};
-
-struct ras_err_handler_data {
-	/* point to bad pages array */
-	struct {
-		unsigned long bp;
-		struct amdgpu_bo *bo;
-	} *bps;
-	/* the count of entries */
-	int count;
-	/* the space can place new entries */
-	int space_left;
-	/* last reserved entry's index + 1 */
-	int last_reserved;
-};
-
-struct ras_manager {
-	struct ras_common_if head;
-	/* reference count */
-	int use;
-	/* ras block link */
-	struct list_head node;
-	/* the device */
-	struct amdgpu_device *adev;
-	/* debugfs */
-	struct dentry *ent;
-	/* sysfs */
-	struct device_attribute sysfs_attr;
-	int attr_inuse;
-
-	/* fs node name */
-	struct ras_fs_data fs_data;
-
-	/* IH data */
-	struct ras_ih_data ih_data;
-
-	struct ras_err_data err_data;
-};
-
-struct ras_badpage {
-	unsigned int bp;
-	unsigned int size;
-	unsigned int flags;
-};
-
 const char *ras_error_string[] = {
 	"none",
 	"parity",
@@ -127,6 +59,9 @@ const char *ras_block_string[] = {
 #define AMDGPU_RAS_FLAG_INIT_BY_VBIOS		1
 #define AMDGPU_RAS_FLAG_INIT_NEED_RESET		2
 #define RAS_DEFAULT_FLAGS (AMDGPU_RAS_FLAG_INIT_BY_VBIOS)
+
+/* inject address is 52 bits */
+#define	RAS_UMC_INJECT_ADDR_LIMIT	(0x1ULL << 52)
 
 static int amdgpu_ras_reserve_vram(struct amdgpu_device *adev,
 		uint64_t offset, uint64_t size,
@@ -221,9 +156,14 @@ static int amdgpu_ras_debugfs_ctrl_parse_data(struct file *f,
 			return -EINVAL;
 
 		data->head.block = block_id;
-		data->head.type = memcmp("ue", err, 2) == 0 ?
-			AMDGPU_RAS_ERROR__MULTI_UNCORRECTABLE :
-			AMDGPU_RAS_ERROR__SINGLE_CORRECTABLE;
+		/* only ue and ce errors are supported */
+		if (!memcmp("ue", err, 2))
+			data->head.type = AMDGPU_RAS_ERROR__MULTI_UNCORRECTABLE;
+		else if (!memcmp("ce", err, 2))
+			data->head.type = AMDGPU_RAS_ERROR__SINGLE_CORRECTABLE;
+		else
+			return -EINVAL;
+
 		data->op = op;
 
 		if (op == 2) {
@@ -308,7 +248,6 @@ static ssize_t amdgpu_ras_debugfs_ctrl_write(struct file *f, const char __user *
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)file_inode(f)->i_private;
 	struct ras_debug_if data;
-	struct amdgpu_bo *bo;
 	int ret = 0;
 
 	ret = amdgpu_ras_debugfs_ctrl_parse_data(f, buf, size, pos, &data);
@@ -326,17 +265,14 @@ static ssize_t amdgpu_ras_debugfs_ctrl_write(struct file *f, const char __user *
 		ret = amdgpu_ras_feature_enable(adev, &data.head, 1);
 		break;
 	case 2:
-		ret = amdgpu_ras_reserve_vram(adev,
-				data.inject.address, PAGE_SIZE, &bo);
-		if (ret) {
-			/* address was offset, now it is absolute.*/
-			data.inject.address += adev->gmc.vram_start;
-			if (data.inject.address > adev->gmc.vram_end)
-				break;
-		} else
-			data.inject.address = amdgpu_bo_gpu_offset(bo);
+		if ((data.inject.address >= adev->gmc.mc_vram_size) ||
+		    (data.inject.address >= RAS_UMC_INJECT_ADDR_LIMIT)) {
+			ret = -EINVAL;
+			break;
+		}
+
+		/* data.inject.address is offset instead of absolute gpu address */
 		ret = amdgpu_ras_error_inject(adev, &data.inject);
-		amdgpu_ras_release_vram(adev, &bo);
 		break;
 	default:
 		ret = -EINVAL;
@@ -654,13 +590,36 @@ int amdgpu_ras_error_query(struct amdgpu_device *adev,
 		struct ras_query_if *info)
 {
 	struct ras_manager *obj = amdgpu_ras_find_obj(adev, &info->head);
+	struct ras_err_data err_data = {0, 0, 0, NULL};
 
 	if (!obj)
 		return -EINVAL;
-	/* TODO might read the register to read the count */
+
+	switch (info->head.block) {
+	case AMDGPU_RAS_BLOCK__UMC:
+		if (adev->umc.funcs->query_ras_error_count)
+			adev->umc.funcs->query_ras_error_count(adev, &err_data);
+		break;
+	case AMDGPU_RAS_BLOCK__GFX:
+		if (adev->gfx.funcs->query_ras_error_count)
+			adev->gfx.funcs->query_ras_error_count(adev, &err_data);
+		break;
+	default:
+		break;
+	}
+
+	obj->err_data.ue_count += err_data.ue_count;
+	obj->err_data.ce_count += err_data.ce_count;
 
 	info->ue_count = obj->err_data.ue_count;
 	info->ce_count = obj->err_data.ce_count;
+
+	if (err_data.ce_count)
+		dev_info(adev->dev, "%ld correctable errors detected in %s block\n",
+			 obj->err_data.ce_count, ras_block_str(info->head.block));
+	if (err_data.ue_count)
+		dev_info(adev->dev, "%ld uncorrectable errors detected in %s block\n",
+			 obj->err_data.ue_count, ras_block_str(info->head.block));
 
 	return 0;
 }
@@ -682,13 +641,22 @@ int amdgpu_ras_error_inject(struct amdgpu_device *adev,
 	if (!obj)
 		return -EINVAL;
 
-	if (block_info.block_id != TA_RAS_BLOCK__UMC) {
+	switch (info->head.block) {
+	case AMDGPU_RAS_BLOCK__GFX:
+		if (adev->gfx.funcs->ras_error_inject)
+			ret = adev->gfx.funcs->ras_error_inject(adev, info);
+		else
+			ret = -EINVAL;
+		break;
+	case AMDGPU_RAS_BLOCK__UMC:
+		ret = psp_ras_trigger_error(&adev->psp, &block_info);
+		break;
+	default:
 		DRM_INFO("%s error injection is not supported yet\n",
 			 ras_block_str(info->head.block));
-		return -EINVAL;
+		ret = -EINVAL;
 	}
 
-	ret = psp_ras_trigger_error(&adev->psp, &block_info);
 	if (ret)
 		DRM_ERROR("RAS ERROR: inject %s error failed ret %d\n",
 				ras_block_str(info->head.block),
@@ -1052,6 +1020,7 @@ static void amdgpu_ras_interrupt_handler(struct ras_manager *obj)
 	struct ras_ih_data *data = &obj->ih_data;
 	struct amdgpu_iv_entry entry;
 	int ret;
+	struct ras_err_data err_data = {0, 0, 0, NULL};
 
 	while (data->rptr != data->wptr) {
 		rmb();
@@ -1066,14 +1035,14 @@ static void amdgpu_ras_interrupt_handler(struct ras_manager *obj)
 		 * from the callback to udpate the error type/count, etc
 		 */
 		if (data->cb) {
-			ret = data->cb(obj->adev, &entry);
+			ret = data->cb(obj->adev, &err_data, &entry);
 			/* ue will trigger an interrupt, and in that case
 			 * we need do a reset to recovery the whole system.
 			 * But leave IP do that recovery, here we just dispatch
 			 * the error.
 			 */
 			if (ret == AMDGPU_RAS_UE) {
-				obj->err_data.ue_count++;
+				obj->err_data.ue_count += err_data.ue_count;
 			}
 			/* Might need get ce count by register, but not all IP
 			 * saves ce count, some IP just use one bit or two bits

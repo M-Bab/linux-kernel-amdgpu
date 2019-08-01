@@ -261,6 +261,43 @@ void amdgpu_mm_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v,
 }
 
 /**
+ * amdgpu_mm_rreg64 - read a 64 bit memory mapped IO register
+ *
+ * @adev: amdgpu_device pointer
+ * @reg: dword aligned register offset
+ *
+ * Returns the 64 bit value from the offset specified.
+ */
+uint64_t amdgpu_mm_rreg64(struct amdgpu_device *adev, uint32_t reg)
+{
+	uint64_t ret;
+
+	if ((reg * 4) < adev->rmmio_size)
+		ret = readq(((void __iomem *)adev->rmmio) + (reg * 4));
+	else
+		BUG();
+
+	return ret;
+}
+
+/**
+ * amdgpu_mm_wreg64 - write to a 64 bit memory mapped IO register
+ *
+ * @adev: amdgpu_device pointer
+ * @reg: dword aligned register offset
+ * @v: 64 bit value to write to the register
+ *
+ * Writes the value specified to the offset specified.
+ */
+void amdgpu_mm_wreg64(struct amdgpu_device *adev, uint32_t reg, uint64_t v)
+{
+	if ((reg * 4) < adev->rmmio_size)
+		writeq(v, ((void __iomem *)adev->rmmio) + (reg * 4));
+	else
+		BUG();
+}
+
+/**
  * amdgpu_io_rreg - read an IO register
  *
  * @adev: amdgpu_device pointer
@@ -411,6 +448,40 @@ static uint32_t amdgpu_invalid_rreg(struct amdgpu_device *adev, uint32_t reg)
 static void amdgpu_invalid_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v)
 {
 	DRM_ERROR("Invalid callback to write register 0x%04X with 0x%08X\n",
+		  reg, v);
+	BUG();
+}
+
+/**
+ * amdgpu_invalid_rreg64 - dummy 64 bit reg read function
+ *
+ * @adev: amdgpu device pointer
+ * @reg: offset of register
+ *
+ * Dummy register read function.  Used for register blocks
+ * that certain asics don't have (all asics).
+ * Returns the value in the register.
+ */
+static uint64_t amdgpu_invalid_rreg64(struct amdgpu_device *adev, uint32_t reg)
+{
+	DRM_ERROR("Invalid callback to read 64 bit register 0x%04X\n", reg);
+	BUG();
+	return 0;
+}
+
+/**
+ * amdgpu_invalid_wreg64 - dummy reg write function
+ *
+ * @adev: amdgpu device pointer
+ * @reg: offset of register
+ * @v: value to write to the register
+ *
+ * Dummy register read function.  Used for register blocks
+ * that certain asics don't have (all asics).
+ */
+static void amdgpu_invalid_wreg64(struct amdgpu_device *adev, uint32_t reg, uint64_t v)
+{
+	DRM_ERROR("Invalid callback to write 64 bit register 0x%04X with 0x%08llX\n",
 		  reg, v);
 	BUG();
 }
@@ -2174,6 +2245,21 @@ static int amdgpu_device_ip_suspend_phase2(struct amdgpu_device *adev)
 			DRM_ERROR("suspend of IP block <%s> failed %d\n",
 				  adev->ip_blocks[i].version->funcs->name, r);
 		}
+		/* handle putting the SMC in the appropriate state */
+		if (adev->ip_blocks[i].version->type == AMD_IP_BLOCK_TYPE_SMC) {
+			if (is_support_sw_smu(adev)) {
+				/* todo */
+			} else if (adev->powerplay.pp_funcs &&
+				   adev->powerplay.pp_funcs->set_mp1_state) {
+				r = adev->powerplay.pp_funcs->set_mp1_state(
+					adev->powerplay.pp_handle,
+					adev->mp1_state);
+				if (r) {
+					DRM_ERROR("SMC failed to set mp1 state %d, %d\n",
+						  adev->mp1_state, r);
+				}
+			}
+		}
 	}
 
 	return 0;
@@ -2521,6 +2607,8 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 	adev->pcie_wreg = &amdgpu_invalid_wreg;
 	adev->pciep_rreg = &amdgpu_invalid_rreg;
 	adev->pciep_wreg = &amdgpu_invalid_wreg;
+	adev->pcie_rreg64 = &amdgpu_invalid_rreg64;
+	adev->pcie_wreg64 = &amdgpu_invalid_wreg64;
 	adev->uvd_ctx_rreg = &amdgpu_invalid_rreg;
 	adev->uvd_ctx_wreg = &amdgpu_invalid_wreg;
 	adev->didt_rreg = &amdgpu_invalid_rreg;
@@ -3639,6 +3727,17 @@ static bool amdgpu_device_lock_adev(struct amdgpu_device *adev, bool trylock)
 
 	atomic_inc(&adev->gpu_reset_counter);
 	adev->in_gpu_reset = 1;
+	switch (amdgpu_asic_reset_method(adev)) {
+	case AMD_RESET_METHOD_MODE1:
+		adev->mp1_state = PP_MP1_STATE_SHUTDOWN;
+		break;
+	case AMD_RESET_METHOD_MODE2:
+		adev->mp1_state = PP_MP1_STATE_RESET;
+		break;
+	default:
+		adev->mp1_state = PP_MP1_STATE_NONE;
+		break;
+	}
 	/* Block kfd: SRIOV would do it separately */
 	if (!amdgpu_sriov_vf(adev))
                 amdgpu_amdkfd_pre_reset(adev);
@@ -3652,6 +3751,7 @@ static void amdgpu_device_unlock_adev(struct amdgpu_device *adev)
 	if (!amdgpu_sriov_vf(adev))
                 amdgpu_amdkfd_post_reset(adev);
 	amdgpu_vf_error_trans_all(adev);
+	adev->mp1_state = PP_MP1_STATE_NONE;
 	adev->in_gpu_reset = 0;
 	mutex_unlock(&adev->lock_reset);
 }
