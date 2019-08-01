@@ -86,6 +86,7 @@
 #include "amdgpu_smu.h"
 #include "amdgpu_discovery.h"
 #include "amdgpu_mes.h"
+#include "amdgpu_umc.h"
 
 #define MAX_GPU_INSTANCE		16
 
@@ -532,6 +533,14 @@ struct amdgpu_allowed_register_entry {
 	bool grbm_indexed;
 };
 
+enum amd_reset_method {
+	AMD_RESET_METHOD_LEGACY = 0,
+	AMD_RESET_METHOD_MODE0,
+	AMD_RESET_METHOD_MODE1,
+	AMD_RESET_METHOD_MODE2,
+	AMD_RESET_METHOD_BACO
+};
+
 /*
  * ASIC specific functions.
  */
@@ -543,6 +552,7 @@ struct amdgpu_asic_funcs {
 			     u32 sh_num, u32 reg_offset, u32 *value);
 	void (*set_vga_state)(struct amdgpu_device *adev, bool state);
 	int (*reset)(struct amdgpu_device *adev);
+	enum amd_reset_method (*reset_method)(struct amdgpu_device *adev);
 	/* get the reference clock */
 	u32 (*get_xclk)(struct amdgpu_device *adev);
 	/* MM block clocks */
@@ -630,6 +640,9 @@ void amdgpu_cgs_destroy_device(struct cgs_device *cgs_device);
 typedef uint32_t (*amdgpu_rreg_t)(struct amdgpu_device*, uint32_t);
 typedef void (*amdgpu_wreg_t)(struct amdgpu_device*, uint32_t, uint32_t);
 
+typedef uint64_t (*amdgpu_rreg64_t)(struct amdgpu_device*, uint32_t);
+typedef void (*amdgpu_wreg64_t)(struct amdgpu_device*, uint32_t, uint64_t);
+
 typedef uint32_t (*amdgpu_block_rreg_t)(struct amdgpu_device*, uint32_t, uint32_t);
 typedef void (*amdgpu_block_wreg_t)(struct amdgpu_device*, uint32_t, uint32_t, uint32_t);
 
@@ -714,6 +727,9 @@ struct amdgpu_df_funcs {
 					 int is_disable);
 	void (*pmc_get_count)(struct amdgpu_device *adev, uint64_t config,
 					 uint64_t *count);
+	uint64_t (*get_fica)(struct amdgpu_device *adev, uint32_t ficaa_val);
+	void (*set_fica)(struct amdgpu_device *adev, uint32_t ficaa_val,
+			 uint32_t ficadl_val, uint32_t ficadh_val);
 };
 /* Define the HW IP blocks will be used in driver , add more if necessary */
 enum amd_hw_ip_block_type {
@@ -743,6 +759,8 @@ enum amd_hw_ip_block_type {
 	NBIF_HWIP,
 	THM_HWIP,
 	CLK_HWIP,
+	UMC_HWIP,
+	RSMU_HWIP,
 	MAX_HWIP
 };
 
@@ -818,6 +836,8 @@ struct amdgpu_device {
 	amdgpu_wreg_t			pcie_wreg;
 	amdgpu_rreg_t			pciep_rreg;
 	amdgpu_wreg_t			pciep_wreg;
+	amdgpu_rreg64_t			pcie_rreg64;
+	amdgpu_wreg64_t			pcie_wreg64;
 	/* protects concurrent UVD register access */
 	spinlock_t uvd_ctx_idx_lock;
 	amdgpu_rreg_t			uvd_ctx_rreg;
@@ -931,6 +951,9 @@ struct amdgpu_device {
 	/* KFD */
 	struct amdgpu_kfd_dev		kfd;
 
+	/* UMC */
+	struct amdgpu_umc		umc;
+
 	/* display related functionality */
 	struct amdgpu_display_manager dm;
 
@@ -981,6 +1004,7 @@ struct amdgpu_device {
 	/* record last mm index being written through WREG32*/
 	unsigned long last_mm_index;
 	bool                            in_gpu_reset;
+	enum pp_mp1_state               mp1_state;
 	struct mutex  lock_reset;
 	struct amdgpu_doorbell_index doorbell_index;
 
@@ -1016,6 +1040,8 @@ void amdgpu_mm_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v,
 		    uint32_t acc_flags);
 void amdgpu_mm_wreg8(struct amdgpu_device *adev, uint32_t offset, uint8_t value);
 uint8_t amdgpu_mm_rreg8(struct amdgpu_device *adev, uint32_t offset);
+uint64_t amdgpu_mm_rreg64(struct amdgpu_device *adev, uint32_t reg);
+void amdgpu_mm_wreg64(struct amdgpu_device *adev, uint32_t reg, uint64_t v);
 
 u32 amdgpu_io_rreg(struct amdgpu_device *adev, u32 reg);
 void amdgpu_io_wreg(struct amdgpu_device *adev, u32 reg, u32 v);
@@ -1043,12 +1069,16 @@ int emu_soc_asic_init(struct amdgpu_device *adev);
 #define DREG32(reg) printk(KERN_INFO "REGISTER: " #reg " : 0x%08X\n", amdgpu_mm_rreg(adev, (reg), 0))
 #define WREG32(reg, v) amdgpu_mm_wreg(adev, (reg), (v), 0)
 #define WREG32_IDX(reg, v) amdgpu_mm_wreg(adev, (reg), (v), AMDGPU_REGS_IDX)
+#define RREG64(reg) amdgpu_mm_rreg64(adev, (reg))
+#define WREG64(reg, v) amdgpu_mm_wreg64(adev, (reg), (v))
 #define REG_SET(FIELD, v) (((v) << FIELD##_SHIFT) & FIELD##_MASK)
 #define REG_GET(FIELD, v) (((v) << FIELD##_SHIFT) & FIELD##_MASK)
 #define RREG32_PCIE(reg) adev->pcie_rreg(adev, (reg))
 #define WREG32_PCIE(reg, v) adev->pcie_wreg(adev, (reg), (v))
 #define RREG32_PCIE_PORT(reg) adev->pciep_rreg(adev, (reg))
 #define WREG32_PCIE_PORT(reg, v) adev->pciep_wreg(adev, (reg), (v))
+#define RREG64_PCIE(reg) adev->pcie_rreg64(adev, (reg))
+#define WREG64_PCIE(reg, v) adev->pcie_wreg64(adev, (reg), (v))
 #define RREG32_SMC(reg) adev->smc_rreg(adev, (reg))
 #define WREG32_SMC(reg, v) adev->smc_wreg(adev, (reg), (v))
 #define RREG32_UVD_CTX(reg) adev->uvd_ctx_rreg(adev, (reg))
@@ -1109,6 +1139,7 @@ int emu_soc_asic_init(struct amdgpu_device *adev);
  */
 #define amdgpu_asic_set_vga_state(adev, state) (adev)->asic_funcs->set_vga_state((adev), (state))
 #define amdgpu_asic_reset(adev) (adev)->asic_funcs->reset((adev))
+#define amdgpu_asic_reset_method(adev) (adev)->asic_funcs->reset_method((adev))
 #define amdgpu_asic_get_xclk(adev) (adev)->asic_funcs->get_xclk((adev))
 #define amdgpu_asic_set_uvd_clocks(adev, v, d) (adev)->asic_funcs->set_uvd_clocks((adev), (v), (d))
 #define amdgpu_asic_set_vce_clocks(adev, ev, ec) (adev)->asic_funcs->set_vce_clocks((adev), (ev), (ec))

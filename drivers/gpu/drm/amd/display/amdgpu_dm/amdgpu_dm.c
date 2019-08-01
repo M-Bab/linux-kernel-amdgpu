@@ -686,7 +686,7 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	 */
 	if (adev->flags & AMD_IS_APU &&
 	    adev->asic_type >= CHIP_CARRIZO &&
-	    adev->asic_type < CHIP_RAVEN)
+	    adev->asic_type <= CHIP_RAVEN)
 		init_data.flags.gpu_vm_support = true;
 
 	if (amdgpu_dc_feature_mask & DC_FBC_MASK)
@@ -2501,8 +2501,7 @@ static ssize_t s3_debug_store(struct device *device,
 {
 	int ret;
 	int s3_state;
-	struct pci_dev *pdev = to_pci_dev(device);
-	struct drm_device *drm_dev = pci_get_drvdata(pdev);
+	struct drm_device *drm_dev = dev_get_drvdata(device);
 	struct amdgpu_device *adev = drm_dev->dev_private;
 
 	ret = kstrtoint(buf, 0, &s3_state);
@@ -4415,7 +4414,7 @@ static int dm_plane_helper_prepare_fb(struct drm_plane *plane,
 	}
 
 	if (plane->type != DRM_PLANE_TYPE_CURSOR)
-		domain = amdgpu_display_supported_domains(adev);
+		domain = amdgpu_display_supported_domains(adev, rbo->flags);
 	else
 		domain = AMDGPU_GEM_DOMAIN_VRAM;
 
