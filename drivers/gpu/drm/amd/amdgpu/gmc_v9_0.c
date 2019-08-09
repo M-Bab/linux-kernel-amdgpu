@@ -245,8 +245,17 @@ static int gmc_v9_0_process_ras_data_cb(struct amdgpu_device *adev,
 	kgd2kfd_set_sram_ecc_flag(adev->kfd.dev);
 	if (adev->umc.funcs->query_ras_error_count)
 		adev->umc.funcs->query_ras_error_count(adev, err_data);
-	amdgpu_ras_reset_gpu(adev, 0);
-	return AMDGPU_RAS_UE;
+	/* umc query_ras_error_address is also responsible for clearing
+	 * error status
+	 */
+	if (adev->umc.funcs->query_ras_error_address)
+		adev->umc.funcs->query_ras_error_address(adev, err_data);
+
+	/* only uncorrectable error needs gpu reset */
+	if (err_data->ue_count)
+		amdgpu_ras_reset_gpu(adev, 0);
+
+	return AMDGPU_RAS_SUCCESS;
 }
 
 static int gmc_v9_0_process_ecc_irq(struct amdgpu_device *adev,
@@ -631,8 +640,11 @@ static void gmc_v9_0_set_umc_funcs(struct amdgpu_device *adev)
 {
 	switch (adev->asic_type) {
 	case CHIP_VEGA20:
-		adev->umc.max_ras_err_cnt_per_query =
-			UMC_V6_1_UMC_INSTANCE_NUM * UMC_V6_1_CHANNEL_INSTANCE_NUM;
+		adev->umc.max_ras_err_cnt_per_query = UMC_V6_1_TOTAL_CHANNEL_NUM;
+		adev->umc.channel_inst_num = UMC_V6_1_CHANNEL_INSTANCE_NUM;
+		adev->umc.umc_inst_num = UMC_V6_1_UMC_INSTANCE_NUM;
+		adev->umc.channel_offs = UMC_V6_1_PER_CHANNEL_OFFSET;
+		adev->umc.channel_idx_tbl = &umc_v6_1_channel_idx_tbl[0][0];
 		adev->umc.funcs = &umc_v6_1_funcs;
 		break;
 	default:
@@ -1197,7 +1209,7 @@ static void gmc_v9_0_init_golden_registers(struct amdgpu_device *adev)
 
 	switch (adev->asic_type) {
 	case CHIP_VEGA10:
-		if (amdgpu_virt_support_skip_setting(adev))
+		if (amdgpu_sriov_vf(adev))
 			break;
 		/* fall through */
 	case CHIP_VEGA20:

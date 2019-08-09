@@ -46,6 +46,7 @@ MODULE_FIRMWARE("amdgpu/vega20_smc.bin");
 MODULE_FIRMWARE("amdgpu/arcturus_smc.bin");
 MODULE_FIRMWARE("amdgpu/navi10_smc.bin");
 MODULE_FIRMWARE("amdgpu/navi14_smc.bin");
+MODULE_FIRMWARE("amdgpu/navi12_smc.bin");
 
 #define SMU11_VOLTAGE_SCALE 4
 
@@ -162,6 +163,9 @@ static int smu_v11_0_init_microcode(struct smu_context *smu)
 		break;
 	case CHIP_NAVI14:
 		chip_name = "navi14";
+		break;
+	case CHIP_NAVI12:
+		chip_name = "navi12";
 		break;
 	default:
 		BUG();
@@ -729,8 +733,6 @@ static int smu_v11_0_write_watermarks_table(struct smu_context *smu)
 	struct smu_table *table = NULL;
 
 	table = &smu_table->tables[SMU_TABLE_WATERMARKS];
-	if (!table)
-		return -EINVAL;
 
 	if (!table->cpu_addr)
 		return -EINVAL;
@@ -900,6 +902,10 @@ smu_v11_0_get_max_sustainable_clock(struct smu_context *smu, uint32_t *clock,
 
 	if (!smu->pm_enabled)
 		return ret;
+
+	if ((smu_msg_get_index(smu, SMU_MSG_GetDcModeMaxDpmFreq) < 0) ||
+	    (smu_msg_get_index(smu, SMU_MSG_GetMaxDpmFreq) < 0))
+		return 0;
 
 	clk_id = smu_clk_get_index(smu, clock_select);
 	if (clk_id < 0)
@@ -1331,6 +1337,7 @@ static int smu_v11_0_gfx_off_control(struct smu_context *smu, bool enable)
 		break;
 	case CHIP_NAVI10:
 	case CHIP_NAVI14:
+	case CHIP_NAVI12:
 		if (!(adev->pm.pp_feature & PP_GFXOFF_MASK))
 			return 0;
 		mutex_lock(&smu->mutex);
@@ -1361,7 +1368,7 @@ smu_v11_0_auto_fan_control(struct smu_context *smu, bool auto_fan_control)
 {
 	int ret = 0;
 
-	if (smu_feature_is_supported(smu, SMU_FEATURE_FAN_CONTROL_BIT))
+	if (!smu_feature_is_supported(smu, SMU_FEATURE_FAN_CONTROL_BIT))
 		return 0;
 
 	ret = smu_feature_set_enabled(smu, SMU_FEATURE_FAN_CONTROL_BIT, auto_fan_control);
@@ -1754,6 +1761,7 @@ void smu_v11_0_set_smu_funcs(struct smu_context *smu)
 		break;
 	case CHIP_NAVI10:
 	case CHIP_NAVI14:
+	case CHIP_NAVI12:
 		navi10_set_ppt_funcs(smu);
 		break;
 	default:

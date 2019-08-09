@@ -41,7 +41,7 @@
 /* offset in 256B block */
 #define OFFSET_IN_256B_BLOCK(addr)		((addr) & 0xffULL)
 
-static uint32_t
+const uint32_t
 	umc_v6_1_channel_idx_tbl[UMC_V6_1_UMC_INSTANCE_NUM][UMC_V6_1_CHANNEL_INSTANCE_NUM] = {
 		{2, 18, 11, 27},	{4, 20, 13, 29},
 		{1, 17, 8, 24},		{7, 23, 14, 30},
@@ -98,9 +98,10 @@ static void umc_v6_1_query_correctable_error_count(struct amdgpu_device *adev,
 	WREG32(ecc_err_cnt_sel_addr + umc_reg_offset, ecc_err_cnt_sel);
 	ecc_err_cnt = RREG32(ecc_err_cnt_addr + umc_reg_offset);
 	*error_count +=
-		REG_GET_FIELD(ecc_err_cnt, UMCCH0_0_EccErrCnt, EccErrCnt);
+		(REG_GET_FIELD(ecc_err_cnt, UMCCH0_0_EccErrCnt, EccErrCnt) -
+		 UMC_V6_1_CE_CNT_INIT);
 	/* clear the lower chip err count */
-	WREG32(ecc_err_cnt_addr + umc_reg_offset, 0);
+	WREG32(ecc_err_cnt_addr + umc_reg_offset, UMC_V6_1_CE_CNT_INIT);
 
 	/* select the higher chip and check the err counter */
 	ecc_err_cnt_sel = REG_SET_FIELD(ecc_err_cnt_sel, UMCCH0_0_EccErrCntSel,
@@ -108,9 +109,10 @@ static void umc_v6_1_query_correctable_error_count(struct amdgpu_device *adev,
 	WREG32(ecc_err_cnt_sel_addr + umc_reg_offset, ecc_err_cnt_sel);
 	ecc_err_cnt = RREG32(ecc_err_cnt_addr + umc_reg_offset);
 	*error_count +=
-		REG_GET_FIELD(ecc_err_cnt, UMCCH0_0_EccErrCnt, EccErrCnt);
+		(REG_GET_FIELD(ecc_err_cnt, UMCCH0_0_EccErrCnt, EccErrCnt) -
+		 UMC_V6_1_CE_CNT_INIT);
 	/* clear the higher chip err count */
-	WREG32(ecc_err_cnt_addr + umc_reg_offset, 0);
+	WREG32(ecc_err_cnt_addr + umc_reg_offset, UMC_V6_1_CE_CNT_INIT);
 
 	/* check for SRAM correctable error
 	  MCUMC_STATUS is a 64 bit register */
@@ -142,46 +144,39 @@ static void umc_v6_1_querry_uncorrectable_error_count(struct amdgpu_device *adev
 		*error_count += 1;
 }
 
+static void umc_v6_1_query_error_count(struct amdgpu_device *adev,
+					   struct ras_err_data *err_data, uint32_t umc_reg_offset,
+					   uint32_t channel_index)
+{
+	umc_v6_1_query_correctable_error_count(adev, umc_reg_offset,
+						   &(err_data->ce_count));
+	umc_v6_1_querry_uncorrectable_error_count(adev, umc_reg_offset,
+						  &(err_data->ue_count));
+}
+
 static void umc_v6_1_query_ras_error_count(struct amdgpu_device *adev,
 					   void *ras_error_status)
 {
-	struct ras_err_data *err_data = (struct ras_err_data *)ras_error_status;
-	uint32_t umc_inst, channel_inst, umc_reg_offset, mc_umc_status_addr;
-
-	mc_umc_status_addr =
-		SOC15_REG_OFFSET(UMC, 0, mmMCA_UMC_UMC0_MCUMC_STATUST0);
-
-	for (umc_inst = 0; umc_inst < UMC_V6_1_UMC_INSTANCE_NUM; umc_inst++) {
-		/* enable the index mode to query eror count per channel */
-		umc_v6_1_enable_umc_index_mode(adev, umc_inst);
-		for (channel_inst = 0; channel_inst < UMC_V6_1_CHANNEL_INSTANCE_NUM; channel_inst++) {
-			/* calc the register offset according to channel instance */
-			umc_reg_offset = UMC_V6_1_PER_CHANNEL_OFFSET * channel_inst;
-			umc_v6_1_query_correctable_error_count(adev, umc_reg_offset,
-							       &(err_data->ce_count));
-			umc_v6_1_querry_uncorrectable_error_count(adev, umc_reg_offset,
-								  &(err_data->ue_count));
-			/* clear umc status */
-			WREG64(mc_umc_status_addr + umc_reg_offset, 0x0ULL);
-		}
-	}
-	umc_v6_1_disable_umc_index_mode(adev);
+	amdgpu_umc_for_each_channel(umc_v6_1_query_error_count);
 }
 
 static void umc_v6_1_query_error_address(struct amdgpu_device *adev,
-					 uint32_t umc_reg_offset, uint32_t channel_index,
-					 struct ras_err_data *err_data)
+					 struct ras_err_data *err_data,
+					 uint32_t umc_reg_offset, uint32_t channel_index)
 {
-	uint32_t lsb;
+	uint32_t lsb, mc_umc_status_addr;
 	uint64_t mc_umc_status, err_addr;
-	uint32_t mc_umc_status_addr;
-
-	/* skip error address process if -ENOMEM */
-	if (!err_data->err_addr)
-		return;
 
 	mc_umc_status_addr =
 		SOC15_REG_OFFSET(UMC, 0, mmMCA_UMC_UMC0_MCUMC_STATUST0);
+
+	/* skip error address process if -ENOMEM */
+	if (!err_data->err_addr) {
+		/* clear umc status */
+		WREG64(mc_umc_status_addr + umc_reg_offset, 0x0ULL);
+		return;
+	}
+
 	mc_umc_status = RREG64(mc_umc_status_addr + umc_reg_offset);
 
 	/* calculate error address if ue/ce error is detected */
@@ -197,47 +192,64 @@ static void umc_v6_1_query_error_address(struct amdgpu_device *adev,
 
 		/* translate umc channel address to soc pa, 3 parts are included */
 		err_data->err_addr[err_data->err_addr_cnt] =
-						ADDR_OF_8KB_BLOCK(err_addr)
-						| ADDR_OF_256B_BLOCK(channel_index)
-						| OFFSET_IN_256B_BLOCK(err_addr);
+						ADDR_OF_8KB_BLOCK(err_addr) |
+						ADDR_OF_256B_BLOCK(channel_index) |
+						OFFSET_IN_256B_BLOCK(err_addr);
 
 		err_data->err_addr_cnt++;
 	}
+
+	/* clear umc status */
+	WREG64(mc_umc_status_addr + umc_reg_offset, 0x0ULL);
 }
 
 static void umc_v6_1_query_ras_error_address(struct amdgpu_device *adev,
 					     void *ras_error_status)
 {
-	struct ras_err_data *err_data = (struct ras_err_data *)ras_error_status;
-	uint32_t umc_inst, channel_inst, umc_reg_offset;
-	uint32_t channel_index, mc_umc_status_addr;
+	amdgpu_umc_for_each_channel(umc_v6_1_query_error_address);
+}
 
-	mc_umc_status_addr =
-		SOC15_REG_OFFSET(UMC, 0, mmMCA_UMC_UMC0_MCUMC_STATUST0);
+static void umc_v6_1_ras_init_per_channel(struct amdgpu_device *adev,
+					 struct ras_err_data *err_data,
+					 uint32_t umc_reg_offset, uint32_t channel_index)
+{
+	uint32_t ecc_err_cnt_sel, ecc_err_cnt_sel_addr;
+	uint32_t ecc_err_cnt_addr;
 
-	for (umc_inst = 0; umc_inst < UMC_V6_1_UMC_INSTANCE_NUM; umc_inst++) {
-		/* enable the index mode to query eror count per channel */
-		umc_v6_1_enable_umc_index_mode(adev, umc_inst);
-		for (channel_inst = 0; channel_inst < UMC_V6_1_CHANNEL_INSTANCE_NUM; channel_inst++) {
-			/* calc the register offset according to channel instance */
-			umc_reg_offset = UMC_V6_1_PER_CHANNEL_OFFSET * channel_inst;
-			/* get channel index of interleaved memory */
-			channel_index = umc_v6_1_channel_idx_tbl[umc_inst][channel_inst];
+	ecc_err_cnt_sel_addr =
+		SOC15_REG_OFFSET(UMC, 0, mmUMCCH0_0_EccErrCntSel);
+	ecc_err_cnt_addr =
+		SOC15_REG_OFFSET(UMC, 0, mmUMCCH0_0_EccErrCnt);
 
-			umc_v6_1_query_error_address(adev, umc_reg_offset,
-						     channel_index, err_data);
+	/* select the lower chip and check the error count */
+	ecc_err_cnt_sel = RREG32(ecc_err_cnt_sel_addr + umc_reg_offset);
+	ecc_err_cnt_sel = REG_SET_FIELD(ecc_err_cnt_sel, UMCCH0_0_EccErrCntSel,
+					EccErrCntCsSel, 0);
+	/* set ce error interrupt type to APIC based interrupt */
+	ecc_err_cnt_sel = REG_SET_FIELD(ecc_err_cnt_sel, UMCCH0_0_EccErrCntSel,
+					EccErrInt, 0x1);
+	WREG32(ecc_err_cnt_sel_addr + umc_reg_offset, ecc_err_cnt_sel);
+	/* set error count to initial value */
+	WREG32(ecc_err_cnt_addr + umc_reg_offset, UMC_V6_1_CE_CNT_INIT);
 
-			/* clear umc status */
-			WREG64(mc_umc_status_addr + umc_reg_offset, 0x0ULL);
-			/* clear error address register */
-			WREG64_PCIE(smnMCA_UMC0_MCUMC_ADDRT0 + umc_reg_offset * 4, 0x0ULL);
-		}
-	}
+	/* select the higher chip and check the err counter */
+	ecc_err_cnt_sel = REG_SET_FIELD(ecc_err_cnt_sel, UMCCH0_0_EccErrCntSel,
+					EccErrCntCsSel, 1);
+	WREG32(ecc_err_cnt_sel_addr + umc_reg_offset, ecc_err_cnt_sel);
+	WREG32(ecc_err_cnt_addr + umc_reg_offset, UMC_V6_1_CE_CNT_INIT);
+}
 
-	umc_v6_1_disable_umc_index_mode(adev);
+static void umc_v6_1_ras_init(struct amdgpu_device *adev)
+{
+	void *ras_error_status = NULL;
+
+	amdgpu_umc_for_each_channel(umc_v6_1_ras_init_per_channel);
 }
 
 const struct amdgpu_umc_funcs umc_v6_1_funcs = {
+	.ras_init = umc_v6_1_ras_init,
 	.query_ras_error_count = umc_v6_1_query_ras_error_count,
 	.query_ras_error_address = umc_v6_1_query_ras_error_address,
+	.enable_umc_index_mode = umc_v6_1_enable_umc_index_mode,
+	.disable_umc_index_mode = umc_v6_1_disable_umc_index_mode,
 };

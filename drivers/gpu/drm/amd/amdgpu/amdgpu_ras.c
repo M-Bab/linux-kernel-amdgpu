@@ -599,6 +599,11 @@ int amdgpu_ras_error_query(struct amdgpu_device *adev,
 	case AMDGPU_RAS_BLOCK__UMC:
 		if (adev->umc.funcs->query_ras_error_count)
 			adev->umc.funcs->query_ras_error_count(adev, &err_data);
+		/* umc query_ras_error_address is also responsible for clearing
+		 * error status
+		 */
+		if (adev->umc.funcs->query_ras_error_address)
+			adev->umc.funcs->query_ras_error_address(adev, &err_data);
 		break;
 	case AMDGPU_RAS_BLOCK__GFX:
 		if (adev->gfx.funcs->query_ras_error_count)
@@ -782,25 +787,18 @@ static ssize_t amdgpu_ras_sysfs_features_read(struct device *dev,
 	struct amdgpu_device *adev = ddev->dev_private;
 	struct ras_common_if head;
 	int ras_block_count = AMDGPU_RAS_BLOCK_COUNT;
-	int i;
+	int i, enabled;
 	ssize_t s;
-	struct ras_manager *obj;
 
 	s = scnprintf(buf, PAGE_SIZE, "feature mask: 0x%x\n", con->features);
 
 	for (i = 0; i < ras_block_count; i++) {
 		head.block = i;
+		enabled = amdgpu_ras_is_feature_enabled(adev, &head);
 
-		if (amdgpu_ras_is_feature_enabled(adev, &head)) {
-			obj = amdgpu_ras_find_obj(adev, &head);
-			s += scnprintf(&buf[s], PAGE_SIZE - s,
-					"%s: %s\n",
-					ras_block_str(i),
-					ras_err_str(obj->head.type));
-		} else
-			s += scnprintf(&buf[s], PAGE_SIZE - s,
-					"%s: disabled\n",
-					ras_block_str(i));
+		s += scnprintf(&buf[s], PAGE_SIZE - s,
+				"%s ras feature mask: %s\n",
+				ras_block_str(i), enabled?"on":"off");
 	}
 
 	return s;
@@ -1041,13 +1039,13 @@ static void amdgpu_ras_interrupt_handler(struct ras_manager *obj)
 			 * But leave IP do that recovery, here we just dispatch
 			 * the error.
 			 */
-			if (ret == AMDGPU_RAS_UE) {
+			if (ret == AMDGPU_RAS_SUCCESS) {
+				/* these counts could be left as 0 if
+				 * some blocks do not count error number
+				 */
 				obj->err_data.ue_count += err_data.ue_count;
+				obj->err_data.ce_count += err_data.ce_count;
 			}
-			/* Might need get ce count by register, but not all IP
-			 * saves ce count, some IP just use one bit or two bits
-			 * to indicate ce happened.
-			 */
 		}
 	}
 }
@@ -1543,6 +1541,10 @@ int amdgpu_ras_init(struct amdgpu_device *adev)
 
 	if (amdgpu_ras_fs_init(adev))
 		goto fs_out;
+
+	/* ras init for each ras block */
+	if (adev->umc.funcs->ras_init)
+		adev->umc.funcs->ras_init(adev);
 
 	DRM_INFO("RAS INFO: ras initialized successfully, "
 			"hardware ability[%x] ras_mask[%x]\n",

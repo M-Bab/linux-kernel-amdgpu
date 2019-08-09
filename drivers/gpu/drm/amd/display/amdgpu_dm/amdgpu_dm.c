@@ -808,6 +808,7 @@ static int load_dmcu_fw(struct amdgpu_device *adev)
 	case CHIP_VEGA20:
 	case CHIP_NAVI10:
 	case CHIP_NAVI14:
+	case CHIP_NAVI12:
 		return 0;
 	case CHIP_RAVEN:
 		if (ASICREV_IS_PICASSO(adev->external_rev_id))
@@ -2357,6 +2358,7 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 #if defined(CONFIG_DRM_AMD_DC_DCN1_0)
 	case CHIP_RAVEN:
 #if defined(CONFIG_DRM_AMD_DC_DCN2_0)
+	case CHIP_NAVI12:
 	case CHIP_NAVI10:
 	case CHIP_NAVI14:
 #endif
@@ -2587,6 +2589,7 @@ static int dm_early_init(void *handle)
 #endif
 #if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 	case CHIP_NAVI10:
+	case CHIP_NAVI12:
 		adev->mode_info.num_crtc = 6;
 		adev->mode_info.num_hpd = 6;
 		adev->mode_info.num_dig = 6;
@@ -2892,6 +2895,7 @@ fill_plane_buffer_attributes(struct amdgpu_device *adev,
 #if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 	    adev->asic_type == CHIP_NAVI10 ||
 	    adev->asic_type == CHIP_NAVI14 ||
+	    adev->asic_type == CHIP_NAVI12 ||
 #endif
 	    adev->asic_type == CHIP_RAVEN) {
 		/* Fill GFX9 params */
@@ -4504,18 +4508,8 @@ static int dm_plane_atomic_check(struct drm_plane *plane,
 static int dm_plane_atomic_async_check(struct drm_plane *plane,
 				       struct drm_plane_state *new_plane_state)
 {
-	struct drm_plane_state *old_plane_state =
-		drm_atomic_get_old_plane_state(new_plane_state->state, plane);
-
 	/* Only support async updates on cursor planes. */
 	if (plane->type != DRM_PLANE_TYPE_CURSOR)
-		return -EINVAL;
-
-	/*
-	 * DRM calls prepare_fb and cleanup_fb on new_plane_state for
-	 * async commits so don't allow fb changes.
-	 */
-	if (old_plane_state->fb != new_plane_state->fb)
 		return -EINVAL;
 
 	return 0;
@@ -5690,8 +5684,14 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 		bundle->surface_updates[planes_count].plane_info =
 			&bundle->plane_infos[planes_count];
 
+		/*
+		 * Only allow immediate flips for fast updates that don't
+		 * change FB pitch, DCC state, rotation or mirroing.
+		 */
 		bundle->flip_addrs[planes_count].flip_immediate =
-				(crtc->state->pageflip_flags & DRM_MODE_PAGE_FLIP_ASYNC) != 0;
+			(crtc->state->pageflip_flags &
+			 DRM_MODE_PAGE_FLIP_ASYNC) != 0 &&
+			acrtc_state->update_type == UPDATE_TYPE_FAST;
 
 		timestamp_ns = ktime_get_ns();
 		bundle->flip_addrs[planes_count].flip_timestamp_in_us = div_u64(timestamp_ns, 1000);
@@ -6987,6 +6987,12 @@ dm_determine_update_type_for_commit(struct amdgpu_display_manager *dm,
 			continue;
 
 		for_each_oldnew_plane_in_state(state, plane, old_plane_state, new_plane_state, j) {
+			const struct amdgpu_framebuffer *amdgpu_fb =
+				to_amdgpu_framebuffer(new_plane_state->fb);
+			struct dc_plane_info plane_info;
+			struct dc_flip_addrs flip_addr;
+			uint64_t tiling_flags;
+
 			new_plane_crtc = new_plane_state->crtc;
 			old_plane_crtc = old_plane_state->crtc;
 			new_dm_plane_state = to_dm_plane_state(new_plane_state);
@@ -7029,6 +7035,24 @@ dm_determine_update_type_for_commit(struct amdgpu_display_manager *dm,
 				goto cleanup;
 
 			updates[num_plane].scaling_info = &scaling_info;
+
+			if (amdgpu_fb) {
+				ret = get_fb_info(amdgpu_fb, &tiling_flags);
+				if (ret)
+					goto cleanup;
+
+				memset(&flip_addr, 0, sizeof(flip_addr));
+
+				ret = fill_dc_plane_info_and_addr(
+					dm->adev, new_plane_state, tiling_flags,
+					&plane_info,
+					&flip_addr.address);
+				if (ret)
+					goto cleanup;
+
+				updates[num_plane].plane_info = &plane_info;
+				updates[num_plane].flip_addr = &flip_addr;
+			}
 
 			num_plane++;
 		}
@@ -7226,6 +7250,26 @@ static int amdgpu_dm_atomic_check(struct drm_device *dev,
 	if (ret)
 		goto fail;
 
+	if (state->legacy_cursor_update) {
+		/*
+		 * This is a fast cursor update coming from the plane update
+		 * helper, check if it can be done asynchronously for better
+		 * performance.
+		 */
+		state->async_update =
+			!drm_atomic_helper_async_check(dev, state);
+
+		/*
+		 * Skip the remaining global validation if this is an async
+		 * update. Cursor updates can be done without affecting
+		 * state or bandwidth calcs and this avoids the performance
+		 * penalty of locking the private state object and
+		 * allocating a new dc_state.
+		 */
+		if (state->async_update)
+			return 0;
+	}
+
 	/* Check scaling and underscan changes*/
 	/* TODO Removed scaling changes validation due to inability to commit
 	 * new stream into context w\o causing full reset. Need to
@@ -7278,13 +7322,37 @@ static int amdgpu_dm_atomic_check(struct drm_device *dev,
 			ret = -EINVAL;
 			goto fail;
 		}
-	} else if (state->legacy_cursor_update) {
+	} else {
 		/*
-		 * This is a fast cursor update coming from the plane update
-		 * helper, check if it can be done asynchronously for better
-		 * performance.
+		 * The commit is a fast update. Fast updates shouldn't change
+		 * the DC context, affect global validation, and can have their
+		 * commit work done in parallel with other commits not touching
+		 * the same resource. If we have a new DC context as part of
+		 * the DM atomic state from validation we need to free it and
+		 * retain the existing one instead.
 		 */
-		state->async_update = !drm_atomic_helper_async_check(dev, state);
+		struct dm_atomic_state *new_dm_state, *old_dm_state;
+
+		new_dm_state = dm_atomic_get_new_state(state);
+		old_dm_state = dm_atomic_get_old_state(state);
+
+		if (new_dm_state && old_dm_state) {
+			if (new_dm_state->context)
+				dc_release_state(new_dm_state->context);
+
+			new_dm_state->context = old_dm_state->context;
+
+			if (old_dm_state->context)
+				dc_retain_state(old_dm_state->context);
+		}
+	}
+
+	/* Store the overall update type for use later in atomic check. */
+	for_each_new_crtc_in_state (state, crtc, new_crtc_state, i) {
+		struct dm_crtc_state *dm_new_crtc_state =
+			to_dm_crtc_state(new_crtc_state);
+
+		dm_new_crtc_state->update_type = (int)overall_update_type;
 	}
 
 	/* Must be success */
