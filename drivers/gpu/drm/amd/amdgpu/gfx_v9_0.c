@@ -711,14 +711,12 @@ static void gfx_v9_0_init_golden_registers(struct amdgpu_device *adev)
 {
 	switch (adev->asic_type) {
 	case CHIP_VEGA10:
-		if (!amdgpu_virt_support_skip_setting(adev)) {
-			soc15_program_register_sequence(adev,
-							 golden_settings_gc_9_0,
-							 ARRAY_SIZE(golden_settings_gc_9_0));
-			soc15_program_register_sequence(adev,
-							 golden_settings_gc_9_0_vg10,
-							 ARRAY_SIZE(golden_settings_gc_9_0_vg10));
-		}
+		soc15_program_register_sequence(adev,
+						golden_settings_gc_9_0,
+						ARRAY_SIZE(golden_settings_gc_9_0));
+		soc15_program_register_sequence(adev,
+						golden_settings_gc_9_0_vg10,
+						ARRAY_SIZE(golden_settings_gc_9_0_vg10));
 		break;
 	case CHIP_VEGA12:
 		soc15_program_register_sequence(adev,
@@ -1284,11 +1282,17 @@ static int gfx_v9_0_init_cp_compute_microcode(struct amdgpu_device *adev,
 			cp_hdr = (const struct gfx_firmware_header_v1_0 *)info->fw->data;
 			adev->firmware.fw_size +=
 				ALIGN(le32_to_cpu(header->ucode_size_bytes) - le32_to_cpu(cp_hdr->jt_size) * 4, PAGE_SIZE);
-			info = &adev->firmware.ucode[AMDGPU_UCODE_ID_CP_MEC2_JT];
-			info->ucode_id = AMDGPU_UCODE_ID_CP_MEC2_JT;
-			info->fw = adev->gfx.mec2_fw;
-			adev->firmware.fw_size +=
-				ALIGN(le32_to_cpu(cp_hdr->jt_size) * 4, PAGE_SIZE);
+
+			/* TODO: Determine if MEC2 JT FW loading can be removed
+				 for all GFX V9 asic and above */
+			if (adev->asic_type != CHIP_ARCTURUS) {
+				info = &adev->firmware.ucode[AMDGPU_UCODE_ID_CP_MEC2_JT];
+				info->ucode_id = AMDGPU_UCODE_ID_CP_MEC2_JT;
+				info->fw = adev->gfx.mec2_fw;
+				adev->firmware.fw_size +=
+					ALIGN(le32_to_cpu(cp_hdr->jt_size) * 4,
+					PAGE_SIZE);
+			}
 		}
 	}
 
@@ -1331,7 +1335,6 @@ static int gfx_v9_0_init_microcode(struct amdgpu_device *adev)
 			chip_name = "picasso";
 		else
 			chip_name = "raven";
-		break;
 		break;
 	case CHIP_ARCTURUS:
 		chip_name = "arcturus";
@@ -3339,6 +3342,10 @@ static int gfx_v9_0_mqd_init(struct amdgpu_ring *ring)
 	mqd->compute_static_thread_mgmt_se1 = 0xffffffff;
 	mqd->compute_static_thread_mgmt_se2 = 0xffffffff;
 	mqd->compute_static_thread_mgmt_se3 = 0xffffffff;
+	mqd->compute_static_thread_mgmt_se4 = 0xffffffff;
+	mqd->compute_static_thread_mgmt_se5 = 0xffffffff;
+	mqd->compute_static_thread_mgmt_se6 = 0xffffffff;
+	mqd->compute_static_thread_mgmt_se7 = 0xffffffff;
 	mqd->compute_misc_reserved = 0x00000003;
 
 	mqd->dynamic_cu_mask_addr_lo =
@@ -3797,7 +3804,8 @@ static int gfx_v9_0_hw_init(void *handle)
 	int r;
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-	gfx_v9_0_init_golden_registers(adev);
+	if (!amdgpu_sriov_vf(adev))
+		gfx_v9_0_init_golden_registers(adev);
 
 	gfx_v9_0_constants_init(adev);
 
@@ -5647,7 +5655,7 @@ static int gfx_v9_0_process_ras_data_cb(struct amdgpu_device *adev,
 	if (adev->gfx.funcs->query_ras_error_count)
 		adev->gfx.funcs->query_ras_error_count(adev, err_data);
 	amdgpu_ras_reset_gpu(adev, 0);
-	return AMDGPU_RAS_UE;
+	return AMDGPU_RAS_SUCCESS;
 }
 
 static const struct {
@@ -6350,12 +6358,21 @@ static int gfx_v9_0_get_cu_info(struct amdgpu_device *adev,
 {
 	int i, j, k, counter, active_cu_number = 0;
 	u32 mask, bitmap, ao_bitmap, ao_cu_mask = 0;
-	unsigned disable_masks[4 * 2];
+	unsigned disable_masks[4 * 4];
 
 	if (!adev || !cu_info)
 		return -EINVAL;
 
-	amdgpu_gfx_parse_disable_cu(disable_masks, 4, 2);
+	/*
+	 * 16 comes from bitmap array size 4*4, and it can cover all gfx9 ASICs
+	 */
+	if (adev->gfx.config.max_shader_engines *
+		adev->gfx.config.max_sh_per_se > 16)
+		return -EINVAL;
+
+	amdgpu_gfx_parse_disable_cu(disable_masks,
+				    adev->gfx.config.max_shader_engines,
+				    adev->gfx.config.max_sh_per_se);
 
 	mutex_lock(&adev->grbm_idx_mutex);
 	for (i = 0; i < adev->gfx.config.max_shader_engines; i++) {
@@ -6364,11 +6381,23 @@ static int gfx_v9_0_get_cu_info(struct amdgpu_device *adev,
 			ao_bitmap = 0;
 			counter = 0;
 			gfx_v9_0_select_se_sh(adev, i, j, 0xffffffff);
-			if (i < 4 && j < 2)
-				gfx_v9_0_set_user_cu_inactive_bitmap(
-					adev, disable_masks[i * 2 + j]);
+			gfx_v9_0_set_user_cu_inactive_bitmap(
+				adev, disable_masks[i * adev->gfx.config.max_sh_per_se + j]);
 			bitmap = gfx_v9_0_get_cu_active_bitmap(adev);
-			cu_info->bitmap[i][j] = bitmap;
+
+			/*
+			 * The bitmap(and ao_cu_bitmap) in cu_info structure is
+			 * 4x4 size array, and it's usually suitable for Vega
+			 * ASICs which has 4*2 SE/SH layout.
+			 * But for Arcturus, SE/SH layout is changed to 8*1.
+			 * To mostly reduce the impact, we make it compatible
+			 * with current bitmap array as below:
+			 *    SE4,SH0 --> bitmap[0][1]
+			 *    SE5,SH0 --> bitmap[1][1]
+			 *    SE6,SH0 --> bitmap[2][1]
+			 *    SE7,SH0 --> bitmap[3][1]
+			 */
+			cu_info->bitmap[i % 4][j + i / 4] = bitmap;
 
 			for (k = 0; k < adev->gfx.config.max_cu_per_sh; k ++) {
 				if (bitmap & mask) {
@@ -6381,7 +6410,7 @@ static int gfx_v9_0_get_cu_info(struct amdgpu_device *adev,
 			active_cu_number += counter;
 			if (i < 2 && j < 2)
 				ao_cu_mask |= (ao_bitmap << (i * 16 + j * 8));
-			cu_info->ao_cu_bitmap[i][j] = ao_bitmap;
+			cu_info->ao_cu_bitmap[i % 4][j + i / 4] = ao_bitmap;
 		}
 	}
 	gfx_v9_0_select_se_sh(adev, 0xffffffff, 0xffffffff, 0xffffffff);
