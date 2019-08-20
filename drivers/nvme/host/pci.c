@@ -2964,6 +2964,8 @@ static const struct pci_device_id nvme_id_table[] = {
 		.driver_data = NVME_QUIRK_LIGHTNVM, },
 	{ PCI_DEVICE(0x1d1d, 0x2601),	/* CNEX Granby */
 		.driver_data = NVME_QUIRK_LIGHTNVM, },
+	{ PCI_DEVICE(0x10ec, 0x5762),   /* ADATA SX6000LNP */
+		.driver_data = NVME_QUIRK_IGNORE_DEV_SUBNQN, },
 	{ PCI_VDEVICE(SK_HYNIX, 0x1527),	/* Sk Hynix */
 		.driver_data = NVME_QUIRK_NO_DISABLE, },
 	{ PCI_DEVICE(0x15b7, 0x5002),	/* Sandisk */
