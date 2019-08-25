@@ -140,17 +140,40 @@ static int gmc_v10_0_process_interrupt(struct amdgpu_device *adev,
 	}
 
 	if (printk_ratelimit()) {
+		struct amdgpu_task_info task_info;
+
+		memset(&task_info, 0, sizeof(struct amdgpu_task_info));
+		amdgpu_vm_get_task_info(adev, entry->pasid, &task_info);
+
 		dev_err(adev->dev,
-			"[%s] VMC page fault (src_id:%u ring:%u vmid:%u pasid:%u)\n",
+			"[%s] page fault (src_id:%u ring:%u vmid:%u pasid:%u, "
+			"for process %s pid %d thread %s pid %d)\n",
 			entry->vmid_src ? "mmhub" : "gfxhub",
 			entry->src_id, entry->ring_id, entry->vmid,
-			entry->pasid);
-		dev_err(adev->dev, "  at page 0x%016llx from %d\n",
+			entry->pasid, task_info.process_name, task_info.tgid,
+			task_info.task_name, task_info.pid);
+		dev_err(adev->dev, "  in page starting at address 0x%016llx from client %d\n",
 			addr, entry->client_id);
-		if (!amdgpu_sriov_vf(adev))
+		if (!amdgpu_sriov_vf(adev)) {
 			dev_err(adev->dev,
-				"VM_L2_PROTECTION_FAULT_STATUS:0x%08X\n",
+				"GCVM_L2_PROTECTION_FAULT_STATUS:0x%08X\n",
 				status);
+			dev_err(adev->dev, "\t MORE_FAULTS: 0x%lx\n",
+				REG_GET_FIELD(status,
+				GCVM_L2_PROTECTION_FAULT_STATUS, MORE_FAULTS));
+			dev_err(adev->dev, "\t WALKER_ERROR: 0x%lx\n",
+				REG_GET_FIELD(status,
+				GCVM_L2_PROTECTION_FAULT_STATUS, WALKER_ERROR));
+			dev_err(adev->dev, "\t PERMISSION_FAULTS: 0x%lx\n",
+				REG_GET_FIELD(status,
+				GCVM_L2_PROTECTION_FAULT_STATUS, PERMISSION_FAULTS));
+			dev_err(adev->dev, "\t MAPPING_ERROR: 0x%lx\n",
+				REG_GET_FIELD(status,
+				GCVM_L2_PROTECTION_FAULT_STATUS, MAPPING_ERROR));
+			dev_err(adev->dev, "\t RW: 0x%lx\n",
+				REG_GET_FIELD(status,
+				GCVM_L2_PROTECTION_FAULT_STATUS, RW));
+		}
 	}
 
 	return 0;
@@ -229,8 +252,8 @@ static void gmc_v10_0_flush_vm_hub(struct amdgpu_device *adev, uint32_t vmid,
  *
  * Flush the TLB for the requested page table.
  */
-static void gmc_v10_0_flush_gpu_tlb(struct amdgpu_device *adev,
-				    uint32_t vmid, uint32_t flush_type)
+static void gmc_v10_0_flush_gpu_tlb(struct amdgpu_device *adev, uint32_t vmid,
+					uint32_t vmhub, uint32_t flush_type)
 {
 	struct amdgpu_ring *ring = adev->mman.buffer_funcs_ring;
 	struct dma_fence *fence;
@@ -243,7 +266,14 @@ static void gmc_v10_0_flush_gpu_tlb(struct amdgpu_device *adev,
 
 	mutex_lock(&adev->mman.gtt_window_lock);
 
-	gmc_v10_0_flush_vm_hub(adev, vmid, AMDGPU_MMHUB_0, 0);
+	if (vmhub == AMDGPU_MMHUB_0) {
+		gmc_v10_0_flush_vm_hub(adev, vmid, AMDGPU_MMHUB_0, 0);
+		mutex_unlock(&adev->mman.gtt_window_lock);
+		return;
+	}
+
+	BUG_ON(vmhub != AMDGPU_GFXHUB_0);
+
 	if (!adev->mman.buffer_funcs_enabled ||
 	    !adev->ib_pool_ready ||
 	    adev->asic_type > CHIP_NAVI14 ||
@@ -773,7 +803,8 @@ static int gmc_v10_0_gart_enable(struct amdgpu_device *adev)
 
 	gfxhub_v2_0_set_fault_enable_default(adev, value);
 	mmhub_v2_0_set_fault_enable_default(adev, value);
-	gmc_v10_0_flush_gpu_tlb(adev, 0, 0);
+	gmc_v10_0_flush_gpu_tlb(adev, 0, AMDGPU_MMHUB_0, 0);
+	gmc_v10_0_flush_gpu_tlb(adev, 0, AMDGPU_GFXHUB_0, 0);
 
 	DRM_INFO("PCIE GART of %uM enabled (table at 0x%016llX).\n",
 		 (unsigned)(adev->gmc.gart_size >> 20),
