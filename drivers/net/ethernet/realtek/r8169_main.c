@@ -5921,6 +5921,7 @@ static struct sk_buff *rtl8169_try_rx_copy(void *data,
 	skb = napi_alloc_skb(&tp->napi, pkt_size);
 	if (skb)
 		skb_copy_to_linear_data(skb, data, pkt_size);
+	dma_sync_single_for_device(d, addr, pkt_size, DMA_FROM_DEVICE);
 
 	return skb;
 }
@@ -6136,10 +6137,7 @@ static int r8169_phy_connect(struct rtl8169_private *tp)
 	if (ret)
 		return ret;
 
-	if (tp->supports_gmii)
-		phy_remove_link_mode(phydev,
-				     ETHTOOL_LINK_MODE_1000baseT_Half_BIT);
-	else
+	if (!tp->supports_gmii)
 		phy_set_max_speed(phydev, SPEED_100);
 
 	phy_support_asym_pause(phydev);
@@ -6589,13 +6587,18 @@ static int rtl_alloc_irq(struct rtl8169_private *tp)
 {
 	unsigned int flags;
 
-	if (tp->mac_version <= RTL_GIGA_MAC_VER_06) {
+	switch (tp->mac_version) {
+	case RTL_GIGA_MAC_VER_02 ... RTL_GIGA_MAC_VER_06:
 		rtl_unlock_config_regs(tp);
 		RTL_W8(tp, Config2, RTL_R8(tp, Config2) & ~MSIEnable);
 		rtl_lock_config_regs(tp);
+		/* fall through */
+	case RTL_GIGA_MAC_VER_07 ... RTL_GIGA_MAC_VER_24:
 		flags = PCI_IRQ_LEGACY;
-	} else {
+		break;
+	default:
 		flags = PCI_IRQ_ALL_TYPES;
+		break;
 	}
 
 	return pci_alloc_irq_vectors(tp->pci_dev, 1, 1, flags);
