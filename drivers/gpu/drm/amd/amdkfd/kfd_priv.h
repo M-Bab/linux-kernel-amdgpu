@@ -691,7 +691,7 @@ struct kfd_process {
 	/* Use for delayed freeing of kfd_process structure */
 	struct rcu_head	rcu;
 
-	unsigned int pasid;
+	uint16_t pasid;
 	unsigned int doorbell_index;
 
 	/*
