@@ -116,6 +116,9 @@ Optional properties:
   - cirrus,fast-switch : Specify file names for Fast Use Case Switching DSP
     feature.  Files names are comma-separated strings.
 
+  - cirrus,invert-pcm : Inverts the polarity of the audio signal output from
+    the Class-D amplifier.
+
 Optional H/G Algorithm sub-node:
 
   The cs35l41 node can have a single "cirrus,classh-internal-algo" sub-node
