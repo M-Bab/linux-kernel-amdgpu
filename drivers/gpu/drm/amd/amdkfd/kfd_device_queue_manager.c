@@ -195,20 +195,30 @@ static int allocate_vmid(struct device_queue_manager *dqm,
 			struct qcm_process_device *qpd,
 			struct queue *q)
 {
-	int bit, allocated_vmid;
+	int allocated_vmid = -1, i;
 
-	if (dqm->vmid_bitmap == 0)
-		return -ENOMEM;
+	for (i = dqm->dev->vm_info.first_vmid_kfd;
+			i <= dqm->dev->vm_info.last_vmid_kfd; i++) {
+		if (!dqm->vmid_pasid[i]) {
+			allocated_vmid = i;
+			break;
+		}
+	}
 
-	bit = ffs(dqm->vmid_bitmap) - 1;
-	dqm->vmid_bitmap &= ~(1 << bit);
+	if (allocated_vmid < 0) {
+		pr_err("no more vmid to allocate\n");
+		return -ENOSPC;
+	}
 
-	allocated_vmid = bit + dqm->dev->vm_info.first_vmid_kfd;
-	pr_debug("vmid allocation %d\n", allocated_vmid);
+	pr_debug("vmid allocated: %d\n", allocated_vmid);
+
+	dqm->vmid_pasid[allocated_vmid] = q->process->pasid;
+
+	set_pasid_vmid_mapping(dqm, q->process->pasid, allocated_vmid);
+
 	qpd->vmid = allocated_vmid;
 	q->properties.vmid = allocated_vmid;
 
-	set_pasid_vmid_mapping(dqm, q->process->pasid, q->properties.vmid);
 	program_sh_mem_settings(dqm, qpd);
 
 	/* qpd->page_table_base is set earlier when register_process()
@@ -220,8 +230,9 @@ static int allocate_vmid(struct device_queue_manager *dqm,
 	/* invalidate the VM context after pasid and vmid mapping is set up */
 	kfd_flush_tlb(qpd_to_pdd(qpd));
 
-	dqm->dev->kfd2kgd->set_scratch_backing_va(
-		dqm->dev->kgd, qpd->sh_hidden_private_base, qpd->vmid);
+	if (dqm->dev->kfd2kgd->set_scratch_backing_va)
+		dqm->dev->kfd2kgd->set_scratch_backing_va(dqm->dev->kgd,
+				qpd->sh_hidden_private_base, qpd->vmid);
 
 	return 0;
 }
@@ -248,8 +259,6 @@ static void deallocate_vmid(struct device_queue_manager *dqm,
 				struct qcm_process_device *qpd,
 				struct queue *q)
 {
-	int bit = qpd->vmid - dqm->dev->vm_info.first_vmid_kfd;
-
 	/* On GFX v7, CP doesn't flush TC at dequeue */
 	if (q->device->device_info->asic_family == CHIP_HAWAII)
 		if (flush_texture_cache_nocpsch(q->device, qpd))
@@ -259,8 +268,8 @@ static void deallocate_vmid(struct device_queue_manager *dqm,
 
 	/* Release the vmid mapping */
 	set_pasid_vmid_mapping(dqm, 0, qpd->vmid);
+	dqm->vmid_pasid[qpd->vmid] = 0;
 
-	dqm->vmid_bitmap |= (1 << bit);
 	qpd->vmid = 0;
 	q->properties.vmid = 0;
 }
@@ -579,7 +588,7 @@ static int evict_process_queues_nocpsch(struct device_queue_manager *dqm,
 		goto out;
 
 	pdd = qpd_to_pdd(qpd);
-	pr_info_ratelimited("Evicting PASID %u queues\n",
+	pr_info_ratelimited("Evicting PASID 0x%x queues\n",
 			    pdd->process->pasid);
 
 	/* Mark all queues as evicted. Deactivate all active queues on
@@ -621,7 +630,7 @@ static int evict_process_queues_cpsch(struct device_queue_manager *dqm,
 		goto out;
 
 	pdd = qpd_to_pdd(qpd);
-	pr_info_ratelimited("Evicting PASID %u queues\n",
+	pr_info_ratelimited("Evicting PASID 0x%x queues\n",
 			    pdd->process->pasid);
 
 	/* Mark all queues as evicted. Deactivate all active queues on
@@ -667,7 +676,7 @@ static int restore_process_queues_nocpsch(struct device_queue_manager *dqm,
 		goto out;
 	}
 
-	pr_info_ratelimited("Restoring PASID %u queues\n",
+	pr_info_ratelimited("Restoring PASID 0x%x queues\n",
 			    pdd->process->pasid);
 
 	/* Update PD Base in QPD */
@@ -739,7 +748,7 @@ static int restore_process_queues_cpsch(struct device_queue_manager *dqm,
 		goto out;
 	}
 
-	pr_info_ratelimited("Restoring PASID %u queues\n",
+	pr_info_ratelimited("Restoring PASID 0x%x queues\n",
 			    pdd->process->pasid);
 
 	/* Update PD Base in QPD */
@@ -879,7 +888,8 @@ static int initialize_nocpsch(struct device_queue_manager *dqm)
 				dqm->allocated_queues[pipe] |= 1 << queue;
 	}
 
-	dqm->vmid_bitmap = (1 << dqm->dev->vm_info.vmid_num_kfd) - 1;
+	memset(dqm->vmid_pasid, 0, sizeof(dqm->vmid_pasid));
+
 	dqm->sdma_bitmap = ~0ULL >> (64 - get_num_sdma_queues(dqm));
 	dqm->xgmi_sdma_bitmap = ~0ULL >> (64 - get_num_xgmi_sdma_queues(dqm));
 
@@ -902,12 +912,18 @@ static void uninitialize(struct device_queue_manager *dqm)
 static int start_nocpsch(struct device_queue_manager *dqm)
 {
 	init_interrupts(dqm);
-	return pm_init(&dqm->packets, dqm);
+	
+	if (dqm->dev->device_info->asic_family == CHIP_HAWAII)
+		return pm_init(&dqm->packets, dqm);
+	
+	return 0;
 }
 
 static int stop_nocpsch(struct device_queue_manager *dqm)
 {
-	pm_uninit(&dqm->packets);
+	if (dqm->dev->device_info->asic_family == CHIP_HAWAII)
+		pm_uninit(&dqm->packets);
+	
 	return 0;
 }
 
@@ -1791,6 +1807,7 @@ struct device_queue_manager *device_queue_manager_init(struct kfd_dev *dev)
 		device_queue_manager_init_v9(&dqm->asic_ops);
 		break;
 	case CHIP_NAVI10:
+	case CHIP_NAVI12:
 	case CHIP_NAVI14:
 		device_queue_manager_init_v10_navi10(&dqm->asic_ops);
 		break;

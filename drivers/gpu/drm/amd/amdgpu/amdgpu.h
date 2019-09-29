@@ -147,11 +147,6 @@ extern uint amdgpu_sdma_phase_quantum;
 extern char *amdgpu_disable_cu;
 extern char *amdgpu_virtual_display;
 extern uint amdgpu_pp_feature_mask;
-extern int amdgpu_ngg;
-extern int amdgpu_prim_buf_per_se;
-extern int amdgpu_pos_buf_per_se;
-extern int amdgpu_cntl_sb_buf_per_se;
-extern int amdgpu_param_buf_per_se;
 extern int amdgpu_job_hang_limit;
 extern int amdgpu_lbpw;
 extern int amdgpu_compute_multipipe;
@@ -876,6 +871,9 @@ struct amdgpu_device {
 	/* nbio */
 	struct amdgpu_nbio		nbio;
 
+	/* mmhub */
+	struct amdgpu_mmhub		mmhub;
+
 	/* gfx */
 	struct amdgpu_gfx		gfx;
 
@@ -930,7 +928,6 @@ struct amdgpu_device {
 	uint32_t 		*reg_offset[MAX_HWIP][HWIP_MAX_INSTANCE];
 
 	const struct amdgpu_df_funcs	*df_funcs;
-	const struct amdgpu_mmhub_funcs	*mmhub_funcs;
 
 	/* delayed work_func for deferring clockgating during resume */
 	struct delayed_work     delayed_init_work;

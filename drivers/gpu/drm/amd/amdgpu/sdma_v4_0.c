@@ -1690,7 +1690,7 @@ static int sdma_v4_0_early_init(void *handle)
 }
 
 static int sdma_v4_0_process_ras_data_cb(struct amdgpu_device *adev,
-		struct ras_err_data *err_data,
+		void *err_data,
 		struct amdgpu_iv_entry *entry);
 
 static int sdma_v4_0_late_init(void *handle)
@@ -1772,21 +1772,7 @@ static int sdma_v4_0_sw_fini(void *handle)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	int i;
 
-	if (amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__SDMA) &&
-			adev->sdma.ras_if) {
-		struct ras_common_if *ras_if = adev->sdma.ras_if;
-		struct ras_ih_if ih_info = {
-			.head = *ras_if,
-		};
-
-		/*remove fs first*/
-		amdgpu_ras_debugfs_remove(adev, ras_if);
-		amdgpu_ras_sysfs_remove(adev, ras_if);
-		/*remove the IH*/
-		amdgpu_ras_interrupt_remove_handler(adev, &ih_info);
-		amdgpu_ras_feature_enable(adev, ras_if, 0);
-		kfree(ras_if);
-	}
+	amdgpu_sdma_ras_fini(adev);
 
 	for (i = 0; i < adev->sdma.num_instances; i++) {
 		amdgpu_ring_fini(&adev->sdma.instance[i].ring);
@@ -1939,52 +1925,26 @@ static int sdma_v4_0_process_trap_irq(struct amdgpu_device *adev,
 }
 
 static int sdma_v4_0_process_ras_data_cb(struct amdgpu_device *adev,
-		struct ras_err_data *err_data,
+		void *err_data,
 		struct amdgpu_iv_entry *entry)
 {
-	uint32_t err_source;
 	int instance;
 
-	if (!amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__GFX)) {
-		instance = sdma_v4_0_irq_id_to_seq(entry->client_id);
-		if (instance < 0)
-			return 0;
+	/* When “Full RAS” is enabled, the per-IP interrupt sources should
+	 * be disabled and the driver should only look for the aggregated
+	 * interrupt via sync flood
+	 */
+	if (amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__GFX))
+		goto out;
 
-		switch (entry->src_id) {
-		case SDMA0_4_0__SRCID__SDMA_SRAM_ECC:
-			err_source = 0;
-			break;
-		case SDMA0_4_0__SRCID__SDMA_ECC:
-			err_source = 1;
-			break;
-		default:
-			return 0;
-		}
+	instance = sdma_v4_0_irq_id_to_seq(entry->client_id);
+	if (instance < 0)
+		goto out;
 
-		kgd2kfd_set_sram_ecc_flag(adev->kfd.dev);
+	amdgpu_sdma_process_ras_data_cb(adev, err_data, entry);
 
-		amdgpu_ras_reset_gpu(adev, 0);
-	}
-
+out:
 	return AMDGPU_RAS_SUCCESS;
-}
-
-static int sdma_v4_0_process_ecc_irq(struct amdgpu_device *adev,
-				      struct amdgpu_irq_src *source,
-				      struct amdgpu_iv_entry *entry)
-{
-	struct ras_common_if *ras_if = adev->sdma.ras_if;
-	struct ras_dispatch_if ih_data = {
-		.entry = entry,
-	};
-
-	if (!ras_if)
-		return 0;
-
-	ih_data.head = *ras_if;
-
-	amdgpu_ras_interrupt_dispatch(adev, &ih_data);
-	return 0;
 }
 
 static int sdma_v4_0_process_illegal_inst_irq(struct amdgpu_device *adev,
@@ -2334,7 +2294,7 @@ static const struct amdgpu_irq_src_funcs sdma_v4_0_illegal_inst_irq_funcs = {
 
 static const struct amdgpu_irq_src_funcs sdma_v4_0_ecc_irq_funcs = {
 	.set = sdma_v4_0_set_ecc_irq_state,
-	.process = sdma_v4_0_process_ecc_irq,
+	.process = amdgpu_sdma_process_ecc_irq,
 };
 
 

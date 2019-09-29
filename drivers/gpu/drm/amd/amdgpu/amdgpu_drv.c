@@ -128,11 +128,6 @@ char *amdgpu_disable_cu = NULL;
 char *amdgpu_virtual_display = NULL;
 /* OverDrive(bit 14) disabled by default*/
 uint amdgpu_pp_feature_mask = 0xffffbfff;
-int amdgpu_ngg = 0;
-int amdgpu_prim_buf_per_se = 0;
-int amdgpu_pos_buf_per_se = 0;
-int amdgpu_cntl_sb_buf_per_se = 0;
-int amdgpu_param_buf_per_se = 0;
 int amdgpu_job_hang_limit = 0;
 int amdgpu_lbpw = -1;
 int amdgpu_compute_multipipe = -1;
@@ -451,42 +446,6 @@ module_param_named(disable_cu, amdgpu_disable_cu, charp, 0444);
 MODULE_PARM_DESC(virtual_display,
 		 "Enable virtual display feature (the virtual_display will be set like xxxx:xx:xx.x,x;xxxx:xx:xx.x,x)");
 module_param_named(virtual_display, amdgpu_virtual_display, charp, 0444);
-
-/**
- * DOC: ngg (int)
- * Set to enable Next Generation Graphics (1 = enable). The default is 0 (disabled).
- */
-MODULE_PARM_DESC(ngg, "Next Generation Graphics (1 = enable, 0 = disable(default depending on gfx))");
-module_param_named(ngg, amdgpu_ngg, int, 0444);
-
-/**
- * DOC: prim_buf_per_se (int)
- * Override the size of Primitive Buffer per Shader Engine in Byte. The default is 0 (depending on gfx).
- */
-MODULE_PARM_DESC(prim_buf_per_se, "the size of Primitive Buffer per Shader Engine (default depending on gfx)");
-module_param_named(prim_buf_per_se, amdgpu_prim_buf_per_se, int, 0444);
-
-/**
- * DOC: pos_buf_per_se (int)
- * Override the size of Position Buffer per Shader Engine in Byte. The default is 0 (depending on gfx).
- */
-MODULE_PARM_DESC(pos_buf_per_se, "the size of Position Buffer per Shader Engine (default depending on gfx)");
-module_param_named(pos_buf_per_se, amdgpu_pos_buf_per_se, int, 0444);
-
-/**
- * DOC: cntl_sb_buf_per_se (int)
- * Override the size of Control Sideband per Shader Engine in Byte. The default is 0 (depending on gfx).
- */
-MODULE_PARM_DESC(cntl_sb_buf_per_se, "the size of Control Sideband per Shader Engine (default depending on gfx)");
-module_param_named(cntl_sb_buf_per_se, amdgpu_cntl_sb_buf_per_se, int, 0444);
-
-/**
- * DOC: param_buf_per_se (int)
- * Override the size of Off-Chip Parameter Cache per Shader Engine in Byte.
- * The default is 0 (depending on gfx).
- */
-MODULE_PARM_DESC(param_buf_per_se, "the size of Off-Chip Parameter Cache per Shader Engine (default depending on gfx)");
-module_param_named(param_buf_per_se, amdgpu_param_buf_per_se, int, 0444);
 
 /**
  * DOC: job_hang_limit (int)
@@ -1107,7 +1066,10 @@ amdgpu_pci_remove(struct pci_dev *pdev)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
 
-	DRM_ERROR("Device removal is currently not supported outside of fbcon\n");
+#ifdef MODULE
+	if (THIS_MODULE->state != MODULE_STATE_GOING)
+#endif
+		DRM_ERROR("Hotplug removal is not supported\n");
 	drm_dev_unplug(dev);
 	drm_dev_put(dev);
 	pci_disable_device(pdev);
@@ -1341,10 +1303,15 @@ int amdgpu_device_get_job_timeout_settings(struct amdgpu_device *adev)
 	/*
 	 * By default timeout for non compute jobs is 10000.
 	 * And there is no timeout enforced on compute jobs.
+	 * In SR-IOV or passthrough mode, timeout for compute
+	 * jobs are 10000 by default.
 	 */
 	adev->gfx_timeout = msecs_to_jiffies(10000);
 	adev->sdma_timeout = adev->video_timeout = adev->gfx_timeout;
-	adev->compute_timeout = MAX_SCHEDULE_TIMEOUT;
+	if (amdgpu_sriov_vf(adev) || amdgpu_passthrough(adev))
+		adev->compute_timeout = adev->gfx_timeout;
+	else
+		adev->compute_timeout = MAX_SCHEDULE_TIMEOUT;
 
 	if (strnlen(input, AMDGPU_MAX_TIMEOUT_PARAM_LENTH)) {
 		while ((timeout_setting = strsep(&input, ",")) &&

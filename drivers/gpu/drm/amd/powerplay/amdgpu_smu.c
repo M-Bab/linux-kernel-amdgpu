@@ -205,8 +205,7 @@ int smu_get_smc_version(struct smu_context *smu, uint32_t *if_version, uint32_t 
 int smu_set_soft_freq_range(struct smu_context *smu, enum smu_clk_type clk_type,
 			    uint32_t min, uint32_t max)
 {
-	int ret = 0, clk_id = 0;
-	uint32_t param;
+	int ret = 0;
 
 	if (min <= 0 && max <= 0)
 		return -EINVAL;
@@ -214,27 +213,7 @@ int smu_set_soft_freq_range(struct smu_context *smu, enum smu_clk_type clk_type,
 	if (!smu_clk_dpm_is_enabled(smu, clk_type))
 		return 0;
 
-	clk_id = smu_clk_get_index(smu, clk_type);
-	if (clk_id < 0)
-		return clk_id;
-
-	if (max > 0) {
-		param = (uint32_t)((clk_id << 16) | (max & 0xffff));
-		ret = smu_send_smc_msg_with_param(smu, SMU_MSG_SetSoftMaxByFreq,
-						  param);
-		if (ret)
-			return ret;
-	}
-
-	if (min > 0) {
-		param = (uint32_t)((clk_id << 16) | (min & 0xffff));
-		ret = smu_send_smc_msg_with_param(smu, SMU_MSG_SetSoftMinByFreq,
-						  param);
-		if (ret)
-			return ret;
-	}
-
-
+	ret = smu_set_soft_freq_limited_range(smu, clk_type, min, max);
 	return ret;
 }
 
@@ -733,6 +712,7 @@ static int smu_early_init(void *handle)
 
 	smu->adev = adev;
 	smu->pm_enabled = !!amdgpu_dpm;
+	smu->is_apu = false;
 	mutex_init(&smu->mutex);
 
 	return smu_set_funcs(adev);
@@ -839,6 +819,8 @@ static int smu_sw_init(void *handle)
 	mutex_init(&smu->smu_baco.mutex);
 	smu->smu_baco.state = SMU_BACO_STATE_EXIT;
 	smu->smu_baco.platform_support = false;
+
+	mutex_init(&smu->sensor_lock);
 
 	smu->watermarks_bitmap = 0;
 	smu->power_profile_mode = PP_SMC_POWER_PROFILE_BOOTUP_DEFAULT;
@@ -1363,7 +1345,10 @@ static int smu_suspend(void *handle)
 	int ret;
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	struct smu_context *smu = &adev->smu;
-	bool baco_feature_is_enabled = smu_feature_is_enabled(smu, SMU_FEATURE_BACO_BIT);
+	bool baco_feature_is_enabled = false;
+
+	if(!(adev->flags & AMD_IS_APU))
+		baco_feature_is_enabled = smu_feature_is_enabled(smu, SMU_FEATURE_BACO_BIT);
 
 	ret = smu_system_features_control(smu, false);
 	if (ret)
@@ -1554,7 +1539,8 @@ static int smu_enable_umd_pstate(void *handle,
 
 	struct smu_context *smu = (struct smu_context*)(handle);
 	struct smu_dpm_context *smu_dpm_ctx = &(smu->smu_dpm);
-	if (!smu->pm_enabled || !smu_dpm_ctx->dpm_context)
+
+	if (!smu->is_apu && (!smu->pm_enabled || !smu_dpm_ctx->dpm_context))
 		return -EINVAL;
 
 	if (!(smu_dpm_ctx->dpm_level & profile_mode_mask)) {
@@ -1752,7 +1738,7 @@ enum amd_dpm_forced_level smu_get_performance_level(struct smu_context *smu)
 	struct smu_dpm_context *smu_dpm_ctx = &(smu->smu_dpm);
 	enum amd_dpm_forced_level level;
 
-	if (!smu_dpm_ctx->dpm_context)
+	if (!smu->is_apu && !smu_dpm_ctx->dpm_context)
 		return -EINVAL;
 
 	mutex_lock(&(smu->mutex));
@@ -1767,7 +1753,7 @@ int smu_force_performance_level(struct smu_context *smu, enum amd_dpm_forced_lev
 	struct smu_dpm_context *smu_dpm_ctx = &(smu->smu_dpm);
 	int ret = 0;
 
-	if (!smu_dpm_ctx->dpm_context)
+	if (!smu->is_apu && !smu_dpm_ctx->dpm_context)
 		return -EINVAL;
 
 	ret = smu_enable_umd_pstate(smu, &level);

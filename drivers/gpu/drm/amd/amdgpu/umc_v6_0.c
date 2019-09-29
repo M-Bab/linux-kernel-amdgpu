@@ -20,18 +20,18 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  *
  */
+#include "umc_v6_0.h"
+#include "amdgpu.h"
 
-#ifndef __GFXHUB_V2_0_H__
-#define __GFXHUB_V2_0_H__
+static void umc_v6_0_init_registers(struct amdgpu_device *adev)
+{
+	unsigned i,j;
 
-u64 gfxhub_v2_0_get_fb_location(struct amdgpu_device *adev);
-int gfxhub_v2_0_gart_enable(struct amdgpu_device *adev);
-void gfxhub_v2_0_gart_disable(struct amdgpu_device *adev);
-void gfxhub_v2_0_set_fault_enable_default(struct amdgpu_device *adev,
-					  bool value);
-void gfxhub_v2_0_init(struct amdgpu_device *adev);
-u64 gfxhub_v2_0_get_mc_fb_offset(struct amdgpu_device *adev);
-void gfxhub_v2_0_setup_vm_pt_regs(struct amdgpu_device *adev, uint32_t vmid,
-				uint64_t page_table_base);
+	for (i = 0; i < 4; i++)
+		for (j = 0; j < 4; j++)
+			WREG32((i*0x100000 + 0x5010c + j*0x2000)/4, 0x1002);
+}
 
-#endif
+const struct amdgpu_umc_funcs umc_v6_0_funcs = {
+	.init_registers = umc_v6_0_init_registers,
+};

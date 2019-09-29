@@ -170,8 +170,9 @@ psp_cmd_submit_buf(struct psp_context *psp,
 		if (ucode)
 			DRM_WARN("failed to load ucode id (%d) ",
 				  ucode->ucode_id);
-		DRM_WARN("psp command failed and response status is (0x%X)\n",
-			  psp->cmd_buf_mem->resp.status & GFX_CMD_STATUS_MASK);
+		DRM_DEBUG_DRIVER("psp command (0x%X) failed and response status is (0x%X)\n",
+			 psp->cmd_buf_mem->cmd_id,
+			 psp->cmd_buf_mem->resp.status & GFX_CMD_STATUS_MASK);
 		if (!timeout) {
 			mutex_unlock(&psp->mutex);
 			return -EINVAL;
@@ -1406,7 +1407,8 @@ out:
 			return ret;
 
 		/* Start rlc autoload after psp recieved all the gfx firmware */
-		if (ucode->ucode_id == AMDGPU_UCODE_ID_RLC_RESTORE_LIST_SRM_MEM) {
+		if (psp->autoload_supported && ucode->ucode_id ==
+			AMDGPU_UCODE_ID_RLC_RESTORE_LIST_SRM_MEM) {
 			ret = psp_rlc_autoload(psp);
 			if (ret) {
 				DRM_ERROR("Failed to start rlc autoload\n");
