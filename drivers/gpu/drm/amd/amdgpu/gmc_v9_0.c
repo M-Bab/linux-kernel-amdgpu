@@ -51,6 +51,7 @@
 #include "gfxhub_v1_1.h"
 #include "mmhub_v9_4.h"
 #include "umc_v6_1.h"
+#include "umc_v6_0.h"
 
 #include "ivsrcid/vmc/irqsrcs_vmc_1_0.h"
 
@@ -244,68 +245,6 @@ static int gmc_v9_0_ecc_interrupt_state(struct amdgpu_device *adev,
 	return 0;
 }
 
-static int gmc_v9_0_process_ras_data_cb(struct amdgpu_device *adev,
-		struct ras_err_data *err_data,
-		struct amdgpu_iv_entry *entry)
-{
-	if (amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__GFX))
-		return AMDGPU_RAS_SUCCESS;
-
-	kgd2kfd_set_sram_ecc_flag(adev->kfd.dev);
-	if (adev->umc.funcs &&
-	    adev->umc.funcs->query_ras_error_count)
-	    adev->umc.funcs->query_ras_error_count(adev, err_data);
-
-	if (adev->umc.funcs &&
-	    adev->umc.funcs->query_ras_error_address &&
-	    adev->umc.max_ras_err_cnt_per_query) {
-		err_data->err_addr =
-			kcalloc(adev->umc.max_ras_err_cnt_per_query,
-				sizeof(struct eeprom_table_record), GFP_KERNEL);
-		/* still call query_ras_error_address to clear error status
-		 * even NOMEM error is encountered
-		 */
-		if(!err_data->err_addr)
-			DRM_WARN("Failed to alloc memory for umc error address record!\n");
-
-		/* umc query_ras_error_address is also responsible for clearing
-		 * error status
-		 */
-		adev->umc.funcs->query_ras_error_address(adev, err_data);
-	}
-
-	/* only uncorrectable error needs gpu reset */
-	if (err_data->ue_count) {
-		if (err_data->err_addr_cnt &&
-		    amdgpu_ras_add_bad_pages(adev, err_data->err_addr,
-						err_data->err_addr_cnt))
-			DRM_WARN("Failed to add ras bad page!\n");
-
-		amdgpu_ras_reset_gpu(adev, 0);
-	}
-
-	kfree(err_data->err_addr);
-	return AMDGPU_RAS_SUCCESS;
-}
-
-static int gmc_v9_0_process_ecc_irq(struct amdgpu_device *adev,
-		struct amdgpu_irq_src *source,
-		struct amdgpu_iv_entry *entry)
-{
-	struct ras_common_if *ras_if = adev->gmc.umc_ras_if;
-	struct ras_dispatch_if ih_data = {
-		.entry = entry,
-	};
-
-	if (!ras_if)
-		return 0;
-
-	ih_data.head = *ras_if;
-
-	amdgpu_ras_interrupt_dispatch(adev, &ih_data);
-	return 0;
-}
-
 static int gmc_v9_0_vm_fault_interrupt_state(struct amdgpu_device *adev,
 					struct amdgpu_irq_src *src,
 					unsigned type,
@@ -446,7 +385,7 @@ static const struct amdgpu_irq_src_funcs gmc_v9_0_irq_funcs = {
 
 static const struct amdgpu_irq_src_funcs gmc_v9_0_ecc_funcs = {
 	.set = gmc_v9_0_ecc_interrupt_state,
-	.process = gmc_v9_0_process_ecc_irq,
+	.process = amdgpu_umc_process_ecc_irq,
 };
 
 static void gmc_v9_0_set_irq_funcs(struct amdgpu_device *adev)
@@ -696,6 +635,9 @@ static void gmc_v9_0_set_gmc_funcs(struct amdgpu_device *adev)
 static void gmc_v9_0_set_umc_funcs(struct amdgpu_device *adev)
 {
 	switch (adev->asic_type) {
+	case CHIP_VEGA10:
+		adev->umc.funcs = &umc_v6_0_funcs;
+		break;
 	case CHIP_VEGA20:
 		adev->umc.max_ras_err_cnt_per_query = UMC_V6_1_TOTAL_CHANNEL_NUM;
 		adev->umc.channel_inst_num = UMC_V6_1_CHANNEL_INSTANCE_NUM;
@@ -713,7 +655,7 @@ static void gmc_v9_0_set_mmhub_funcs(struct amdgpu_device *adev)
 {
 	switch (adev->asic_type) {
 	case CHIP_VEGA20:
-		adev->mmhub_funcs = &mmhub_v1_0_funcs;
+		adev->mmhub.funcs = &mmhub_v1_0_funcs;
 		break;
 	default:
 		break;
@@ -794,29 +736,6 @@ static int gmc_v9_0_allocate_vm_inv_eng(struct amdgpu_device *adev)
 	return 0;
 }
 
-static int gmc_v9_0_ecc_late_init(void *handle)
-{
-	int r;
-	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-	struct ras_ih_if umc_ih_info = {
-		.cb = gmc_v9_0_process_ras_data_cb,
-	};
-
-	if (adev->umc.funcs && adev->umc.funcs->ras_late_init) {
-		r = adev->umc.funcs->ras_late_init(adev, &umc_ih_info);
-		if (r)
-			return r;
-	}
-
-	if (adev->mmhub_funcs && adev->mmhub_funcs->ras_late_init) {
-		r = adev->mmhub_funcs->ras_late_init(adev);
-		if (r)
-			return r;
-	}
-
-	return amdgpu_xgmi_ras_late_init(adev);
-}
-
 static int gmc_v9_0_late_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
@@ -854,7 +773,7 @@ static int gmc_v9_0_late_init(void *handle)
 		}
 	}
 
-	r = gmc_v9_0_ecc_late_init(handle);
+	r = amdgpu_gmc_ras_late_init(adev);
 	if (r)
 		return r;
 
@@ -895,29 +814,7 @@ static void gmc_v9_0_vram_gtt_location(struct amdgpu_device *adev,
  */
 static int gmc_v9_0_mc_init(struct amdgpu_device *adev)
 {
-	int chansize, numchan;
 	int r;
-
-	if (amdgpu_sriov_vf(adev)) {
-		/* For Vega10 SR-IOV, vram_width can't be read from ATOM as RAVEN,
-		 * and DF related registers is not readable, seems hardcord is the
-		 * only way to set the correct vram_width
-		 */
-		adev->gmc.vram_width = 2048;
-	} else if (amdgpu_emu_mode != 1) {
-		adev->gmc.vram_width = amdgpu_atomfirmware_get_vram_width(adev);
-	}
-
-	if (!adev->gmc.vram_width) {
-		/* hbm memory channel size */
-		if (adev->flags & AMD_IS_APU)
-			chansize = 64;
-		else
-			chansize = 128;
-
-		numchan = adev->df_funcs->get_hbm_channel_number(adev);
-		adev->gmc.vram_width = numchan * chansize;
-	}
 
 	/* size in MB on si */
 	adev->gmc.mc_vram_size =
@@ -1033,7 +930,7 @@ static unsigned gmc_v9_0_get_vbios_fb_size(struct amdgpu_device *adev)
 
 static int gmc_v9_0_sw_init(void *handle)
 {
-	int r;
+	int r, vram_width = 0, vram_type = 0;
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
 	gfxhub_v1_0_init(adev);
@@ -1044,7 +941,30 @@ static int gmc_v9_0_sw_init(void *handle)
 
 	spin_lock_init(&adev->gmc.invalidate_lock);
 
-	adev->gmc.vram_type = amdgpu_atomfirmware_get_vram_type(adev);
+	r = amdgpu_atomfirmware_get_vram_info(adev, &vram_width, &vram_type);
+	if (amdgpu_sriov_vf(adev))
+		/* For Vega10 SR-IOV, vram_width can't be read from ATOM as RAVEN,
+		 * and DF related registers is not readable, seems hardcord is the
+		 * only way to set the correct vram_width
+		 */
+		adev->gmc.vram_width = 2048;
+	else if (amdgpu_emu_mode != 1)
+		adev->gmc.vram_width = vram_width;
+
+	if (!adev->gmc.vram_width) {
+		int chansize, numchan;
+
+		/* hbm memory channel size */
+		if (adev->flags & AMD_IS_APU)
+			chansize = 64;
+		else
+			chansize = 128;
+
+		numchan = adev->df_funcs->get_hbm_channel_number(adev);
+		adev->gmc.vram_width = numchan * chansize;
+	}
+
+	adev->gmc.vram_type = vram_type;
 	switch (adev->asic_type) {
 	case CHIP_RAVEN:
 		adev->num_vmhubs = 2;
@@ -1165,33 +1085,7 @@ static int gmc_v9_0_sw_fini(void *handle)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	void *stolen_vga_buf;
 
-	if (amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__UMC) &&
-			adev->gmc.umc_ras_if) {
-		struct ras_common_if *ras_if = adev->gmc.umc_ras_if;
-		struct ras_ih_if ih_info = {
-			.head = *ras_if,
-		};
-
-		/* remove fs first */
-		amdgpu_ras_debugfs_remove(adev, ras_if);
-		amdgpu_ras_sysfs_remove(adev, ras_if);
-		/* remove the IH */
-		amdgpu_ras_interrupt_remove_handler(adev, &ih_info);
-		amdgpu_ras_feature_enable(adev, ras_if, 0);
-		kfree(ras_if);
-	}
-
-	if (amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__MMHUB) &&
-			adev->gmc.mmhub_ras_if) {
-		struct ras_common_if *ras_if = adev->gmc.mmhub_ras_if;
-
-		/* remove fs and disable ras feature */
-		amdgpu_ras_debugfs_remove(adev, ras_if);
-		amdgpu_ras_sysfs_remove(adev, ras_if);
-		amdgpu_ras_feature_enable(adev, ras_if, 0);
-		kfree(ras_if);
-	}
-
+	amdgpu_gmc_ras_fini(adev);
 	amdgpu_gem_force_release(adev);
 	amdgpu_vm_manager_fini(adev);
 
@@ -1301,6 +1195,9 @@ static int gmc_v9_0_gart_enable(struct amdgpu_device *adev)
 
 	for (i = 0; i < adev->num_vmhubs; ++i)
 		gmc_v9_0_flush_gpu_tlb(adev, 0, i, 0);
+
+	if (adev->umc.funcs && adev->umc.funcs->init_registers)
+		adev->umc.funcs->init_registers(adev);
 
 	DRM_INFO("PCIE GART of %uM enabled (table at 0x%016llX).\n",
 		 (unsigned)(adev->gmc.gart_size >> 20),

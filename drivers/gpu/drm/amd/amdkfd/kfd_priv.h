@@ -36,6 +36,8 @@
 #include <linux/seq_file.h>
 #include <linux/kref.h>
 #include <linux/sysfs.h>
+#include <linux/device_cgroup.h>
+#include <drm/drmP.h>
 #include <kgd_kfd_interface.h>
 
 #include "amd_shared.h"
@@ -46,6 +48,8 @@
 
 /* GPU ID hash width in bits */
 #define KFD_GPU_ID_HASH_WIDTH 16
+
+struct drm_device;
 
 /* Use upper bits of mmap offset to store KFD driver specific information.
  * BITS[63:62] - Encode MMAP type
@@ -226,6 +230,7 @@ struct kfd_dev {
 
 	const struct kfd_device_info *device_info;
 	struct pci_dev *pdev;
+	struct drm_device *ddev;
 
 	unsigned int id;		/* topology stub index */
 
@@ -686,7 +691,7 @@ struct kfd_process {
 	/* Use for delayed freeing of kfd_process structure */
 	struct rcu_head	rcu;
 
-	unsigned int pasid;
+	uint16_t pasid;
 	unsigned int doorbell_index;
 
 	/*
@@ -1040,6 +1045,21 @@ bool kfd_is_locked(void);
 /* Compute profile */
 void kfd_inc_compute_active(struct kfd_dev *dev);
 void kfd_dec_compute_active(struct kfd_dev *dev);
+
+/* Cgroup Support */
+/* Check with device cgroup if @kfd device is accessible */
+static inline int kfd_devcgroup_check_permission(struct kfd_dev *kfd)
+{
+#if defined(CONFIG_CGROUP_DEVICE)
+	struct drm_device *ddev = kfd->ddev;
+
+	return devcgroup_check_permission(DEVCG_DEV_CHAR, ddev->driver->major,
+					  ddev->render->index,
+					  DEVCG_ACC_WRITE | DEVCG_ACC_READ);
+#else
+	return 0;
+#endif
+}
 
 /* Debugfs */
 #if defined(CONFIG_DEBUG_FS)

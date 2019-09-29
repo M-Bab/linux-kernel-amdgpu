@@ -1957,190 +1957,6 @@ static int gfx_v9_0_gpu_early_init(struct amdgpu_device *adev)
 	return 0;
 }
 
-static int gfx_v9_0_ngg_create_buf(struct amdgpu_device *adev,
-				   struct amdgpu_ngg_buf *ngg_buf,
-				   int size_se,
-				   int default_size_se)
-{
-	int r;
-
-	if (size_se < 0) {
-		dev_err(adev->dev, "Buffer size is invalid: %d\n", size_se);
-		return -EINVAL;
-	}
-	size_se = size_se ? size_se : default_size_se;
-
-	ngg_buf->size = size_se * adev->gfx.config.max_shader_engines;
-	r = amdgpu_bo_create_kernel(adev, ngg_buf->size,
-				    PAGE_SIZE, AMDGPU_GEM_DOMAIN_VRAM,
-				    &ngg_buf->bo,
-				    &ngg_buf->gpu_addr,
-				    NULL);
-	if (r) {
-		dev_err(adev->dev, "(%d) failed to create NGG buffer\n", r);
-		return r;
-	}
-	ngg_buf->bo_size = amdgpu_bo_size(ngg_buf->bo);
-
-	return r;
-}
-
-static int gfx_v9_0_ngg_fini(struct amdgpu_device *adev)
-{
-	int i;
-
-	for (i = 0; i < NGG_BUF_MAX; i++)
-		amdgpu_bo_free_kernel(&adev->gfx.ngg.buf[i].bo,
-				      &adev->gfx.ngg.buf[i].gpu_addr,
-				      NULL);
-
-	memset(&adev->gfx.ngg.buf[0], 0,
-			sizeof(struct amdgpu_ngg_buf) * NGG_BUF_MAX);
-
-	adev->gfx.ngg.init = false;
-
-	return 0;
-}
-
-static int gfx_v9_0_ngg_init(struct amdgpu_device *adev)
-{
-	int r;
-
-	if (!amdgpu_ngg || adev->gfx.ngg.init == true)
-		return 0;
-
-	/* GDS reserve memory: 64 bytes alignment */
-	adev->gfx.ngg.gds_reserve_size = ALIGN(5 * 4, 0x40);
-	adev->gds.gds_size -= adev->gfx.ngg.gds_reserve_size;
-	adev->gfx.ngg.gds_reserve_addr = RREG32_SOC15(GC, 0, mmGDS_VMID0_BASE);
-	adev->gfx.ngg.gds_reserve_addr += RREG32_SOC15(GC, 0, mmGDS_VMID0_SIZE);
-
-	/* Primitive Buffer */
-	r = gfx_v9_0_ngg_create_buf(adev, &adev->gfx.ngg.buf[NGG_PRIM],
-				    amdgpu_prim_buf_per_se,
-				    64 * 1024);
-	if (r) {
-		dev_err(adev->dev, "Failed to create Primitive Buffer\n");
-		goto err;
-	}
-
-	/* Position Buffer */
-	r = gfx_v9_0_ngg_create_buf(adev, &adev->gfx.ngg.buf[NGG_POS],
-				    amdgpu_pos_buf_per_se,
-				    256 * 1024);
-	if (r) {
-		dev_err(adev->dev, "Failed to create Position Buffer\n");
-		goto err;
-	}
-
-	/* Control Sideband */
-	r = gfx_v9_0_ngg_create_buf(adev, &adev->gfx.ngg.buf[NGG_CNTL],
-				    amdgpu_cntl_sb_buf_per_se,
-				    256);
-	if (r) {
-		dev_err(adev->dev, "Failed to create Control Sideband Buffer\n");
-		goto err;
-	}
-
-	/* Parameter Cache, not created by default */
-	if (amdgpu_param_buf_per_se <= 0)
-		goto out;
-
-	r = gfx_v9_0_ngg_create_buf(adev, &adev->gfx.ngg.buf[NGG_PARAM],
-				    amdgpu_param_buf_per_se,
-				    512 * 1024);
-	if (r) {
-		dev_err(adev->dev, "Failed to create Parameter Cache\n");
-		goto err;
-	}
-
-out:
-	adev->gfx.ngg.init = true;
-	return 0;
-err:
-	gfx_v9_0_ngg_fini(adev);
-	return r;
-}
-
-static int gfx_v9_0_ngg_en(struct amdgpu_device *adev)
-{
-	struct amdgpu_ring *ring = &adev->gfx.gfx_ring[0];
-	int r;
-	u32 data, base;
-
-	if (!amdgpu_ngg)
-		return 0;
-
-	/* Program buffer size */
-	data = REG_SET_FIELD(0, WD_BUF_RESOURCE_1, INDEX_BUF_SIZE,
-			     adev->gfx.ngg.buf[NGG_PRIM].size >> 8);
-	data = REG_SET_FIELD(data, WD_BUF_RESOURCE_1, POS_BUF_SIZE,
-			     adev->gfx.ngg.buf[NGG_POS].size >> 8);
-	WREG32_SOC15(GC, 0, mmWD_BUF_RESOURCE_1, data);
-
-	data = REG_SET_FIELD(0, WD_BUF_RESOURCE_2, CNTL_SB_BUF_SIZE,
-			     adev->gfx.ngg.buf[NGG_CNTL].size >> 8);
-	data = REG_SET_FIELD(data, WD_BUF_RESOURCE_2, PARAM_BUF_SIZE,
-			     adev->gfx.ngg.buf[NGG_PARAM].size >> 10);
-	WREG32_SOC15(GC, 0, mmWD_BUF_RESOURCE_2, data);
-
-	/* Program buffer base address */
-	base = lower_32_bits(adev->gfx.ngg.buf[NGG_PRIM].gpu_addr);
-	data = REG_SET_FIELD(0, WD_INDEX_BUF_BASE, BASE, base);
-	WREG32_SOC15(GC, 0, mmWD_INDEX_BUF_BASE, data);
-
-	base = upper_32_bits(adev->gfx.ngg.buf[NGG_PRIM].gpu_addr);
-	data = REG_SET_FIELD(0, WD_INDEX_BUF_BASE_HI, BASE_HI, base);
-	WREG32_SOC15(GC, 0, mmWD_INDEX_BUF_BASE_HI, data);
-
-	base = lower_32_bits(adev->gfx.ngg.buf[NGG_POS].gpu_addr);
-	data = REG_SET_FIELD(0, WD_POS_BUF_BASE, BASE, base);
-	WREG32_SOC15(GC, 0, mmWD_POS_BUF_BASE, data);
-
-	base = upper_32_bits(adev->gfx.ngg.buf[NGG_POS].gpu_addr);
-	data = REG_SET_FIELD(0, WD_POS_BUF_BASE_HI, BASE_HI, base);
-	WREG32_SOC15(GC, 0, mmWD_POS_BUF_BASE_HI, data);
-
-	base = lower_32_bits(adev->gfx.ngg.buf[NGG_CNTL].gpu_addr);
-	data = REG_SET_FIELD(0, WD_CNTL_SB_BUF_BASE, BASE, base);
-	WREG32_SOC15(GC, 0, mmWD_CNTL_SB_BUF_BASE, data);
-
-	base = upper_32_bits(adev->gfx.ngg.buf[NGG_CNTL].gpu_addr);
-	data = REG_SET_FIELD(0, WD_CNTL_SB_BUF_BASE_HI, BASE_HI, base);
-	WREG32_SOC15(GC, 0, mmWD_CNTL_SB_BUF_BASE_HI, data);
-
-	/* Clear GDS reserved memory */
-	r = amdgpu_ring_alloc(ring, 17);
-	if (r) {
-		DRM_ERROR("amdgpu: NGG failed to lock ring %s (%d).\n",
-			  ring->name, r);
-		return r;
-	}
-
-	gfx_v9_0_write_data_to_reg(ring, 0, false,
-				   SOC15_REG_OFFSET(GC, 0, mmGDS_VMID0_SIZE),
-			           (adev->gds.gds_size +
-				    adev->gfx.ngg.gds_reserve_size));
-
-	amdgpu_ring_write(ring, PACKET3(PACKET3_DMA_DATA, 5));
-	amdgpu_ring_write(ring, (PACKET3_DMA_DATA_CP_SYNC |
-				PACKET3_DMA_DATA_DST_SEL(1) |
-				PACKET3_DMA_DATA_SRC_SEL(2)));
-	amdgpu_ring_write(ring, 0);
-	amdgpu_ring_write(ring, 0);
-	amdgpu_ring_write(ring, adev->gfx.ngg.gds_reserve_addr);
-	amdgpu_ring_write(ring, 0);
-	amdgpu_ring_write(ring, PACKET3_DMA_DATA_CMD_RAW_WAIT |
-				adev->gfx.ngg.gds_reserve_size);
-
-	gfx_v9_0_write_data_to_reg(ring, 0, false,
-				   SOC15_REG_OFFSET(GC, 0, mmGDS_VMID0_SIZE), 0);
-
-	amdgpu_ring_commit(ring);
-
-	return 0;
-}
-
 static int gfx_v9_0_compute_ring_init(struct amdgpu_device *adev, int ring_id,
 				      int mec, int pipe, int queue)
 {
@@ -2308,10 +2124,6 @@ static int gfx_v9_0_sw_init(void *handle)
 	if (r)
 		return r;
 
-	r = gfx_v9_0_ngg_init(adev);
-	if (r)
-		return r;
-
 	return 0;
 }
 
@@ -2321,19 +2133,7 @@ static int gfx_v9_0_sw_fini(void *handle)
 	int i;
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-	if (amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__GFX) &&
-			adev->gfx.ras_if) {
-		struct ras_common_if *ras_if = adev->gfx.ras_if;
-		struct ras_ih_if ih_info = {
-			.head = *ras_if,
-		};
-
-		amdgpu_ras_debugfs_remove(adev, ras_if);
-		amdgpu_ras_sysfs_remove(adev, ras_if);
-		amdgpu_ras_interrupt_remove_handler(adev,  &ih_info);
-		amdgpu_ras_feature_enable(adev, ras_if, 0);
-		kfree(ras_if);
-	}
+	amdgpu_gfx_ras_fini(adev);
 
 	for (i = 0; i < adev->gfx.num_gfx_rings; i++)
 		amdgpu_ring_fini(&adev->gfx.gfx_ring[i]);
@@ -2345,7 +2145,6 @@ static int gfx_v9_0_sw_fini(void *handle)
 	amdgpu_gfx_kiq_fini(adev);
 
 	gfx_v9_0_mec_fini(adev);
-	gfx_v9_0_ngg_fini(adev);
 	amdgpu_bo_unref(&adev->gfx.rlc.clear_state_obj);
 	if (adev->asic_type == CHIP_RAVEN || adev->asic_type == CHIP_RENOIR) {
 		amdgpu_bo_free_kernel(&adev->gfx.rlc.cp_table_obj,
@@ -3884,12 +3683,6 @@ static int gfx_v9_0_hw_init(void *handle)
 	if (r)
 		return r;
 
-	if (adev->asic_type != CHIP_ARCTURUS) {
-		r = gfx_v9_0_ngg_en(adev);
-		if (r)
-			return r;
-	}
-
 	return r;
 }
 
@@ -4398,19 +4191,12 @@ static int gfx_v9_0_early_init(void *handle)
 	return 0;
 }
 
-static int gfx_v9_0_process_ras_data_cb(struct amdgpu_device *adev,
-		struct ras_err_data *err_data,
-		struct amdgpu_iv_entry *entry);
-
 static int gfx_v9_0_ecc_late_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
-	struct ras_ih_if ih_info = {
-		.cb = gfx_v9_0_process_ras_data_cb,
-	};
 	int r;
 
-	r = amdgpu_gfx_ras_late_init(adev, &ih_info);
+	r = amdgpu_gfx_ras_late_init(adev);
 	if (r)
 		return r;
 
@@ -5651,20 +5437,6 @@ static int gfx_v9_0_priv_inst_irq(struct amdgpu_device *adev,
 	return 0;
 }
 
-static int gfx_v9_0_process_ras_data_cb(struct amdgpu_device *adev,
-		struct ras_err_data *err_data,
-		struct amdgpu_iv_entry *entry)
-{
-	/* TODO ue will trigger an interrupt. */
-	if (!amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__GFX)) {
-		kgd2kfd_set_sram_ecc_flag(adev->kfd.dev);
-		if (adev->gfx.funcs->query_ras_error_count)
-			adev->gfx.funcs->query_ras_error_count(adev, err_data);
-		amdgpu_ras_reset_gpu(adev, 0);
-	}
-	return AMDGPU_RAS_SUCCESS;
-}
-
 static const struct {
 	const char *name;
 	uint32_t ip;
@@ -6073,25 +5845,6 @@ static int gfx_v9_0_query_ras_error_count(struct amdgpu_device *adev,
 	return 0;
 }
 
-static int gfx_v9_0_cp_ecc_error_irq(struct amdgpu_device *adev,
-				  struct amdgpu_irq_src *source,
-				  struct amdgpu_iv_entry *entry)
-{
-	struct ras_common_if *ras_if = adev->gfx.ras_if;
-	struct ras_dispatch_if ih_data = {
-		.entry = entry,
-	};
-
-	if (!ras_if)
-		return 0;
-
-	ih_data.head = *ras_if;
-
-	DRM_ERROR("CP ECC ERROR IRQ\n");
-	amdgpu_ras_interrupt_dispatch(adev, &ih_data);
-	return 0;
-}
-
 static const struct amd_ip_funcs gfx_v9_0_ip_funcs = {
 	.name = "gfx_v9_0",
 	.early_init = gfx_v9_0_early_init,
@@ -6255,7 +6008,7 @@ static const struct amdgpu_irq_src_funcs gfx_v9_0_priv_inst_irq_funcs = {
 
 static const struct amdgpu_irq_src_funcs gfx_v9_0_cp_ecc_error_irq_funcs = {
 	.set = gfx_v9_0_set_cp_ecc_error_state,
-	.process = gfx_v9_0_cp_ecc_error_irq,
+	.process = amdgpu_gfx_cp_ecc_error_irq,
 };
 
 

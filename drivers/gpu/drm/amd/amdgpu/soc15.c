@@ -514,6 +514,8 @@ static int soc15_asic_baco_reset(struct amdgpu_device *adev)
 
 static int soc15_mode2_reset(struct amdgpu_device *adev)
 {
+	if (is_support_sw_smu(adev))
+		return smu_mode2_reset(&adev->smu);
 	if (!adev->powerplay.pp_funcs ||
 	    !adev->powerplay.pp_funcs->asic_reset_mode_2)
 		return -ENOENT;
@@ -528,6 +530,7 @@ soc15_asic_reset_method(struct amdgpu_device *adev)
 
 	switch (adev->asic_type) {
 	case CHIP_RAVEN:
+	case CHIP_RENOIR:
 		return AMD_RESET_METHOD_MODE2;
 	case CHIP_VEGA10:
 	case CHIP_VEGA12:
@@ -763,7 +766,8 @@ int soc15_set_ip_blocks(struct amdgpu_device *adev)
 		amdgpu_device_ip_block_add(adev, &gfx_v9_0_ip_block);
 		amdgpu_device_ip_block_add(adev, &sdma_v4_0_ip_block);
 		amdgpu_device_ip_block_add(adev, &smu_v11_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &vcn_v2_5_ip_block);
+		if (unlikely(adev->firmware.load_type == AMDGPU_FW_LOAD_DIRECT))
+			amdgpu_device_ip_block_add(adev, &vcn_v2_5_ip_block);
 		break;
 	case CHIP_RENOIR:
 		amdgpu_device_ip_block_add(adev, &vega10_common_ip_block);
@@ -1166,7 +1170,8 @@ static int soc15_common_early_init(void *handle)
 			AMD_CG_SUPPORT_SDMA_MGCG |
 			AMD_CG_SUPPORT_SDMA_LS |
 			AMD_CG_SUPPORT_MC_MGCG |
-			AMD_CG_SUPPORT_MC_LS;
+			AMD_CG_SUPPORT_MC_LS |
+			AMD_CG_SUPPORT_IH_CG;
 		adev->pg_flags = 0;
 		adev->external_rev_id = adev->rev_id + 0x32;
 		break;
@@ -1244,6 +1249,7 @@ static int soc15_common_sw_fini(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
+	amdgpu_nbio_ras_fini(adev);
 	adev->df_funcs->sw_fini(adev);
 	return 0;
 }

@@ -21,39 +21,37 @@
  *
  */
 
-#include "amdgpu.h"
 #include "amdgpu_ras.h"
 
-int amdgpu_umc_ras_late_init(struct amdgpu_device *adev, void *ras_ih_info)
+int amdgpu_umc_ras_late_init(struct amdgpu_device *adev)
 {
 	int r;
-	struct ras_ih_if *ih_info = (struct ras_ih_if *)ras_ih_info;
 	struct ras_fs_if fs_info = {
 		.sysfs_name = "umc_err_count",
 		.debugfs_name = "umc_err_inject",
 	};
+	struct ras_ih_if ih_info = {
+		.cb = amdgpu_umc_process_ras_data_cb,
+	};
 
-	if (!ih_info)
-		return -EINVAL;
-
-	if (!adev->gmc.umc_ras_if) {
-		adev->gmc.umc_ras_if =
+	if (!adev->umc.ras_if) {
+		adev->umc.ras_if =
 			kmalloc(sizeof(struct ras_common_if), GFP_KERNEL);
-		if (!adev->gmc.umc_ras_if)
+		if (!adev->umc.ras_if)
 			return -ENOMEM;
-		adev->gmc.umc_ras_if->block = AMDGPU_RAS_BLOCK__UMC;
-		adev->gmc.umc_ras_if->type = AMDGPU_RAS_ERROR__MULTI_UNCORRECTABLE;
-		adev->gmc.umc_ras_if->sub_block_index = 0;
-		strcpy(adev->gmc.umc_ras_if->name, "umc");
+		adev->umc.ras_if->block = AMDGPU_RAS_BLOCK__UMC;
+		adev->umc.ras_if->type = AMDGPU_RAS_ERROR__MULTI_UNCORRECTABLE;
+		adev->umc.ras_if->sub_block_index = 0;
+		strcpy(adev->umc.ras_if->name, "umc");
 	}
-	ih_info->head = fs_info.head = *adev->gmc.umc_ras_if;
+	ih_info.head = fs_info.head = *adev->umc.ras_if;
 
-	r = amdgpu_ras_late_init(adev, adev->gmc.umc_ras_if,
-				 &fs_info, ih_info);
+	r = amdgpu_ras_late_init(adev, adev->umc.ras_if,
+				 &fs_info, &ih_info);
 	if (r)
 		goto free;
 
-	if (amdgpu_ras_is_supported(adev, adev->gmc.umc_ras_if->block)) {
+	if (amdgpu_ras_is_supported(adev, adev->umc.ras_if->block)) {
 		r = amdgpu_irq_get(adev, &adev->gmc.ecc_irq, 0);
 		if (r)
 			goto late_fini;
@@ -69,9 +67,92 @@ int amdgpu_umc_ras_late_init(struct amdgpu_device *adev, void *ras_ih_info)
 	return 0;
 
 late_fini:
-	amdgpu_ras_late_fini(adev, adev->gmc.umc_ras_if, ih_info);
+	amdgpu_ras_late_fini(adev, adev->umc.ras_if, &ih_info);
 free:
-	kfree(adev->gmc.umc_ras_if);
-	adev->gmc.umc_ras_if = NULL;
+	kfree(adev->umc.ras_if);
+	adev->umc.ras_if = NULL;
 	return r;
+}
+
+void amdgpu_umc_ras_fini(struct amdgpu_device *adev)
+{
+	if (amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__UMC) &&
+			adev->umc.ras_if) {
+		struct ras_common_if *ras_if = adev->umc.ras_if;
+		struct ras_ih_if ih_info = {
+			.head = *ras_if,
+			.cb = amdgpu_umc_process_ras_data_cb,
+		};
+
+		amdgpu_ras_late_fini(adev, ras_if, &ih_info);
+		kfree(ras_if);
+	}
+}
+
+int amdgpu_umc_process_ras_data_cb(struct amdgpu_device *adev,
+		void *ras_error_status,
+		struct amdgpu_iv_entry *entry)
+{
+	struct ras_err_data *err_data = (struct ras_err_data *)ras_error_status;
+
+	/* When “Full RAS” is enabled, the per-IP interrupt sources should
+	 * be disabled and the driver should only look for the aggregated
+	 * interrupt via sync flood
+	 */
+	if (amdgpu_ras_is_supported(adev, AMDGPU_RAS_BLOCK__GFX))
+		return AMDGPU_RAS_SUCCESS;
+
+	kgd2kfd_set_sram_ecc_flag(adev->kfd.dev);
+	if (adev->umc.funcs &&
+	    adev->umc.funcs->query_ras_error_count)
+	    adev->umc.funcs->query_ras_error_count(adev, ras_error_status);
+
+	if (adev->umc.funcs &&
+	    adev->umc.funcs->query_ras_error_address &&
+	    adev->umc.max_ras_err_cnt_per_query) {
+		err_data->err_addr =
+			kcalloc(adev->umc.max_ras_err_cnt_per_query,
+				sizeof(struct eeprom_table_record), GFP_KERNEL);
+		/* still call query_ras_error_address to clear error status
+		 * even NOMEM error is encountered
+		 */
+		if(!err_data->err_addr)
+			DRM_WARN("Failed to alloc memory for umc error address record!\n");
+
+		/* umc query_ras_error_address is also responsible for clearing
+		 * error status
+		 */
+		adev->umc.funcs->query_ras_error_address(adev, ras_error_status);
+	}
+
+	/* only uncorrectable error needs gpu reset */
+	if (err_data->ue_count) {
+		if (err_data->err_addr_cnt &&
+		    amdgpu_ras_add_bad_pages(adev, err_data->err_addr,
+						err_data->err_addr_cnt))
+			DRM_WARN("Failed to add ras bad page!\n");
+
+		amdgpu_ras_reset_gpu(adev, 0);
+	}
+
+	kfree(err_data->err_addr);
+	return AMDGPU_RAS_SUCCESS;
+}
+
+int amdgpu_umc_process_ecc_irq(struct amdgpu_device *adev,
+		struct amdgpu_irq_src *source,
+		struct amdgpu_iv_entry *entry)
+{
+	struct ras_common_if *ras_if = adev->umc.ras_if;
+	struct ras_dispatch_if ih_data = {
+		.entry = entry,
+	};
+
+	if (!ras_if)
+		return 0;
+
+	ih_data.head = *ras_if;
+
+	amdgpu_ras_interrupt_dispatch(adev, &ih_data);
+	return 0;
 }
