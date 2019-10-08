@@ -319,10 +319,12 @@ static int nv_asic_reset(struct amdgpu_device *adev)
 	struct smu_context *smu = &adev->smu;
 
 	if (nv_asic_reset_method(adev) == AMD_RESET_METHOD_BACO) {
-		amdgpu_inc_vram_lost(adev);
+		if (!adev->in_suspend)
+			amdgpu_inc_vram_lost(adev);
 		ret = smu_baco_reset(smu);
 	} else {
-		amdgpu_inc_vram_lost(adev);
+		if (!adev->in_suspend)
+			amdgpu_inc_vram_lost(adev);
 		ret = nv_asic_mode1_reset(adev);
 	}
 
@@ -587,8 +589,11 @@ static const struct amdgpu_asic_funcs nv_asic_funcs =
 
 static int nv_common_early_init(void *handle)
 {
+#define MMIO_REG_HOLE_OFFSET (0x80000 - PAGE_SIZE)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
+	adev->rmmio_remap.reg_offset = MMIO_REG_HOLE_OFFSET;
+	adev->rmmio_remap.bus_addr = adev->rmmio_base + MMIO_REG_HOLE_OFFSET;
 	adev->smc_rreg = NULL;
 	adev->smc_wreg = NULL;
 	adev->pcie_rreg = &nv_pcie_rreg;
@@ -714,6 +719,12 @@ static int nv_common_hw_init(void *handle)
 	nv_program_aspm(adev);
 	/* setup nbio registers */
 	adev->nbio.funcs->init_registers(adev);
+	/* remap HDP registers to a hole in mmio space,
+	 * for the purpose of expose those registers
+	 * to process space
+	 */
+	if (adev->nbio.funcs->remap_hdp_registers)
+		adev->nbio.funcs->remap_hdp_registers(adev);
 	/* enable the doorbell aperture */
 	nv_enable_doorbell_aperture(adev, true);
 
