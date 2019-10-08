@@ -22,14 +22,10 @@
 
 #define pr_fmt(fmt) "kfd2kgd: " fmt
 
-#include <linux/module.h>
-#include <linux/fdtable.h>
-#include <linux/uaccess.h>
 #include <linux/mmu_context.h>
 
 #include "amdgpu.h"
 #include "amdgpu_amdkfd.h"
-#include "soc15_hw_ip.h"
 #include "gc/gc_9_0_offset.h"
 #include "gc/gc_9_0_sh_mask.h"
 #include "vega10_enum.h"
@@ -790,7 +786,7 @@ void kgd_gfx_v9_set_vm_context_page_table_base(struct kgd_dev *kgd, uint32_t vmi
 	gfxhub_v1_0_setup_vm_pt_regs(adev, vmid, page_table_base);
 }
 
-static const struct kfd2kgd_calls kfd2kgd = {
+const struct kfd2kgd_calls gfx_v9_kfd2kgd = {
 	.program_sh_mem_settings = kgd_gfx_v9_program_sh_mem_settings,
 	.set_pasid_vmid_mapping = kgd_gfx_v9_set_pasid_vmid_mapping,
 	.init_interrupts = kgd_gfx_v9_init_interrupts,
@@ -814,8 +810,3 @@ static const struct kfd2kgd_calls kfd2kgd = {
 	.invalidate_tlbs_vmid = kgd_gfx_v9_invalidate_tlbs_vmid,
 	.get_hive_id = amdgpu_amdkfd_get_hive_id,
 };
-
-struct kfd2kgd_calls *amdgpu_amdkfd_gfx_9_0_get_functions(void)
-{
-	return (struct kfd2kgd_calls *)&kfd2kgd;
-}

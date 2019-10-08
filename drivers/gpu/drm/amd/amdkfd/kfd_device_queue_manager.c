@@ -1692,7 +1692,8 @@ static int allocate_hiq_sdma_mqd(struct device_queue_manager *dqm)
 	struct kfd_dev *dev = dqm->dev;
 	struct kfd_mem_obj *mem_obj = &dqm->hiq_sdma_mqd;
 	uint32_t size = dqm->mqd_mgrs[KFD_MQD_TYPE_SDMA]->mqd_size *
-		dev->device_info->num_sdma_engines *
+		(dev->device_info->num_sdma_engines +
+		dev->device_info->num_xgmi_sdma_engines) *
 		dev->device_info->num_sdma_queues_per_engine +
 		dqm->mqd_mgrs[KFD_MQD_TYPE_HIQ]->mqd_size;
 
@@ -1936,7 +1937,8 @@ int dqm_debugfs_hqds(struct seq_file *m, void *data)
 		}
 	}
 
-	for (pipe = 0; pipe < get_num_sdma_engines(dqm); pipe++) {
+	for (pipe = 0; pipe < get_num_sdma_engines(dqm) +
+			get_num_xgmi_sdma_engines(dqm); pipe++) {
 		for (queue = 0;
 		     queue < dqm->dev->device_info->num_sdma_queues_per_engine;
 		     queue++) {

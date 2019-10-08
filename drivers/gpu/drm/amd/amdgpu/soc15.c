@@ -564,12 +564,14 @@ static int soc15_asic_reset(struct amdgpu_device *adev)
 {
 	switch (soc15_asic_reset_method(adev)) {
 		case AMD_RESET_METHOD_BACO:
-			amdgpu_inc_vram_lost(adev);
+			if (!adev->in_suspend)
+				amdgpu_inc_vram_lost(adev);
 			return soc15_asic_baco_reset(adev);
 		case AMD_RESET_METHOD_MODE2:
 			return soc15_mode2_reset(adev);
 		default:
-			amdgpu_inc_vram_lost(adev);
+			if (!adev->in_suspend)
+				amdgpu_inc_vram_lost(adev);
 			return soc15_asic_mode1_reset(adev);
 	}
 }
@@ -758,14 +760,24 @@ int soc15_set_ip_blocks(struct amdgpu_device *adev)
 	case CHIP_ARCTURUS:
 		amdgpu_device_ip_block_add(adev, &vega10_common_ip_block);
 		amdgpu_device_ip_block_add(adev, &gmc_v9_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &vega10_ih_ip_block);
-		if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
-			amdgpu_device_ip_block_add(adev, &psp_v11_0_ip_block);
+
+		if (amdgpu_sriov_vf(adev)) {
+			if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
+				amdgpu_device_ip_block_add(adev, &psp_v11_0_ip_block);
+			amdgpu_device_ip_block_add(adev, &vega10_ih_ip_block);
+		} else {
+			amdgpu_device_ip_block_add(adev, &vega10_ih_ip_block);
+			if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
+				amdgpu_device_ip_block_add(adev, &psp_v11_0_ip_block);
+		}
+
 		if (adev->enable_virtual_display || amdgpu_sriov_vf(adev))
 			amdgpu_device_ip_block_add(adev, &dce_virtual_ip_block);
 		amdgpu_device_ip_block_add(adev, &gfx_v9_0_ip_block);
 		amdgpu_device_ip_block_add(adev, &sdma_v4_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &smu_v11_0_ip_block);
+		if (!amdgpu_sriov_vf(adev))
+			amdgpu_device_ip_block_add(adev, &smu_v11_0_ip_block);
+
 		if (unlikely(adev->firmware.load_type == AMDGPU_FW_LOAD_DIRECT))
 			amdgpu_device_ip_block_add(adev, &vcn_v2_5_ip_block);
 		break;
@@ -784,8 +796,6 @@ int soc15_set_ip_blocks(struct amdgpu_device *adev)
 #if defined(CONFIG_DRM_AMD_DC)
                 else if (amdgpu_device_has_dc_support(adev))
                         amdgpu_device_ip_block_add(adev, &dm_ip_block);
-#else
-#       warning "Enable CONFIG_DRM_AMD_DC for display support on SOC15."
 #endif
 		amdgpu_device_ip_block_add(adev, &vcn_v2_0_ip_block);
 		break;
