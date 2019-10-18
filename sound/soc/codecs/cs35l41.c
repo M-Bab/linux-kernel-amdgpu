@@ -1785,6 +1785,15 @@ static irqreturn_t cs35l41_irq(int irq, void *data)
 				CS35L41_OTP_BOOT_DONE, CS35L41_OTP_BOOT_DONE);
 	}
 
+	if (status[2] & CS35L41_PLL_LOCK) {
+		regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS3,
+			     CS35L41_PLL_LOCK);
+		if (cs35l41->pdata.shared_boost == SHARED_BOOST_PASSIVE)
+			regmap_update_bits(cs35l41->regmap, CS35L41_PWR_CTRL3,
+					   CS35L41_SYNC_EN_MASK,
+					   CS35L41_SYNC_EN_MASK);
+	}
+
 	/*
 	 * The following interrupts require a
 	 * protection release cycle to get the
@@ -2078,6 +2087,9 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 		regmap_multi_reg_write_bypassed(cs35l41->regmap,
 					cs35l41_pdn_patch,
 					ARRAY_SIZE(cs35l41_pdn_patch));
+		if (cs35l41->pdata.shared_boost == SHARED_BOOST_PASSIVE)
+			regmap_update_bits(cs35l41->regmap, CS35L41_PWR_CTRL3,
+					   CS35L41_SYNC_EN_MASK, 0);
 		atomic_set(&cs35l41->vol_ctl.playback, 0);
 		cs35l41_abort_ramp(cs35l41);
 		cs35l41->vol_ctl.prev_active_dev = cs35l41->vol_ctl.output_dev;
@@ -2659,6 +2671,26 @@ static int cs35l41_boost_config(struct cs35l41_private *cs35l41,
 	return 0;
 }
 
+static const struct reg_sequence cs35l41_active_seq[] = {
+	/* SYNC_BST_CTL_RX_EN = 1; SYNC_BST_CTL_TX_EN = 1*/
+	{CS35L41_MDSYNC_EN,		0x00003200},
+	/* BST_CTL_SEL = MDSYNC */
+	{CS35L41_BSTCVRT_VCTRL2,	0x00000002},
+	/* WKFET_AMP_EN = 1; SYNC_EN = 1; CLASSH_EN= 1 */
+	{CS35L41_PWR_CTRL3,		0x01000110},
+};
+
+static const struct reg_sequence cs35l41_passive_seq[] = {
+	/* SYNC_BST_CTL_RX_EN = 0; SYNC_BST_CTL_TX_EN = 1 */
+	{CS35L41_MDSYNC_EN,		0x00001200},
+	/* BST_EN = 0 */
+	{CS35L41_PWR_CTRL2,		0x00003300},
+	/* BST_CTL_SEL = CLASSH */
+	{CS35L41_BSTCVRT_VCTRL2,	0x00000001},
+	/* WKFET_AMP_EN = 1; SYNC_EN = 0; CLASSH_EN= 1 */
+	{CS35L41_PWR_CTRL3,		0x01000010},
+};
+
 static int cs35l41_set_pdata(struct cs35l41_private *cs35l41)
 {
 	struct cs35l41_classh_cfg *classh = &cs35l41->pdata.classh_config;
@@ -2818,6 +2850,24 @@ static int cs35l41_set_pdata(struct cs35l41_private *cs35l41)
 					CS35L41_CH_WKFET_THLD_MASK,
 					classh->classh_wk_fet_thld <<
 					CS35L41_CH_WKFET_THLD_SHIFT);
+	}
+
+	if (cs35l41->pdata.shared_boost == SHARED_BOOST_ACTIVE) {
+		ret = regmap_multi_reg_write(cs35l41->regmap,
+					     cs35l41_active_seq,
+					     ARRAY_SIZE(cs35l41_active_seq));
+		if (ret < 0)
+			dev_err(cs35l41->dev,
+				"Active shared boost seq failed %d\n", ret);
+	}
+
+	if (cs35l41->pdata.shared_boost == SHARED_BOOST_PASSIVE) {
+		ret = regmap_multi_reg_write(cs35l41->regmap,
+					     cs35l41_passive_seq,
+					     ARRAY_SIZE(cs35l41_passive_seq));
+		if (ret < 0)
+			dev_err(cs35l41->dev,
+				"Passive shared boost seq failed %d\n", ret);
 	}
 
 	return 0;
@@ -3040,6 +3090,11 @@ static int cs35l41_handle_of_data(struct device *dev,
 
 	pdata->invert_pcm = of_property_read_bool(np,
 					"cirrus,invert-pcm");
+	pdata->shared_boost = SHARED_BOOST_DISABLED;
+	if (of_property_read_bool(np, "cirrus,shared-boost-active"))
+		pdata->shared_boost = SHARED_BOOST_ACTIVE;
+	if (of_property_read_bool(np, "cirrus,shared-boost-passive"))
+		pdata->shared_boost = SHARED_BOOST_PASSIVE;
 
 	pdata->fwname_use_revid = of_property_read_bool(np,
 					"cirrus,fwname-use-revid");
@@ -3312,6 +3367,9 @@ static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41)
 
 	/* Disable interrupts */
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
+	if (cs35l41->pdata.shared_boost == SHARED_BOOST_PASSIVE)
+		regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK3,
+			     CS35L41_INT3_MASK_DEFAULT);
 	disable_irq(cs35l41->irq);
 
 	/* Reset DSP sticky bit */
@@ -3492,6 +3550,9 @@ static int cs35l41_restore(struct cs35l41_private *cs35l41)
 
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1,
 		CS35L41_INT1_MASK_DEFAULT);
+	if (cs35l41->pdata.shared_boost == SHARED_BOOST_PASSIVE)
+		regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK3,
+			     CS35L41_INT3_UNMASK_PLL_LOCK);
 
 	regmap_write(cs35l41->regmap,
 		     CS35L41_DSP1_RX5_SRC, CS35L41_INPUT_SRC_VPMON);
@@ -3789,6 +3850,9 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	/* Set interrupt masks for critical errors */
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1,
 			CS35L41_INT1_MASK_DEFAULT);
+	if (cs35l41->pdata.shared_boost == SHARED_BOOST_PASSIVE)
+		regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK3,
+			     CS35L41_INT3_UNMASK_PLL_LOCK);
 
 	mutex_init(&cs35l41->force_int_lock);
 
@@ -3928,6 +3992,9 @@ int cs35l41_remove(struct cs35l41_private *cs35l41)
 	destroy_workqueue(cs35l41->vol_ctl.ramp_wq);
 	mutex_destroy(&cs35l41->vol_ctl.vol_mutex);
 	regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK1, 0xFFFFFFFF);
+	if (cs35l41->pdata.shared_boost == SHARED_BOOST_PASSIVE)
+		regmap_write(cs35l41->regmap, CS35L41_IRQ1_MASK3,
+			     CS35L41_INT3_MASK_DEFAULT);
 	mutex_destroy(&cs35l41->force_int_lock);
 	wm_adsp2_remove(&cs35l41->dsp);
 	mutex_destroy(&cs35l41->rate_lock);

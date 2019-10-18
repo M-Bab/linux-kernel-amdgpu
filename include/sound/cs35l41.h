@@ -40,6 +40,7 @@ struct cs35l41_platform_data {
 	bool invert_pcm;
 	bool hibernate_enable;
 	bool fwname_use_revid;
+	enum cs35l41_shared_boost shared_boost;
 	int bst_ind;
 	int bst_vctrl;
 	int bst_ipk;
