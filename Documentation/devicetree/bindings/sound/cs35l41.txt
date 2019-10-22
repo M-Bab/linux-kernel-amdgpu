@@ -163,10 +163,19 @@ Optional properties:
   - cirrus,invert-pcm : Inverts the polarity of the audio signal output from
     the Class-D amplifier.
 
-
   - cirrus,hibernate-enable : Enables low-power hibernation mode for B2 revision
     parts. With this property set, hibernation mode will be entered when the part
     is idle after the first playback event with firmware loaded.
+
+  - cirrus,shared-boost-active : Enable shared boost between this active
+    amplifier and a passive amplifier.  GPIO1 must be configured for MDSYNC.
+    Active amp contains inductor for boost circuit, whereas passive amp does
+    not have inductor.
+
+  - cirrus,shared-boost-passive : Enable shared boost between this passive
+    amplifier and an active amplifier.  GPIO1 must be configured for MDSYNC.
+    Active amp contains inductor for boost circuit, whereas passive amp does
+    not have inductor.
 
 Optional Class H Algorithm sub-node:
 
