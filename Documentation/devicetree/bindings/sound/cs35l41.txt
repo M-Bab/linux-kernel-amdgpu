@@ -113,6 +113,12 @@ Optional properties:
   14 = 60 s
   15 = 120 s
 
+  - cirrus,fwname-use-revid : Add Rev ID prefix to DSP firmware file name.
+  For example, if FW is set to 'Protection'
+    CS35l41 Rev A: cs35l41-revA-dsp1-spk-prot.wmfw
+    CS35l41 Rev B0: cs35l41-revB0-dsp1-spk-prot.wmfw
+    CS35l41 Rev B2: cs35l41-revB2-dsp1-spk-prot.wmfw
+
   - cirrus,fast-switch : Specify file names for Fast Use Case Switching DSP
     feature.  Files names are comma-separated strings.
 
