@@ -112,6 +112,7 @@ struct _vcs_dpi_soc_bounding_box_st {
 	bool do_urgent_latency_adjustment;
 	double urgent_latency_adjustment_fabric_clock_component_us;
 	double urgent_latency_adjustment_fabric_clock_reference_mhz;
+	bool disable_dram_clock_change_vactive_support;
 };
 
 struct _vcs_dpi_ip_params_st {
@@ -145,7 +146,6 @@ struct _vcs_dpi_ip_params_st {
 	unsigned int writeback_interface_buffer_size_kbytes;
 	unsigned int writeback_line_buffer_buffer_size;
 
-#ifdef CONFIG_DRM_AMD_DC_DCN2_0
 	unsigned int writeback_10bpc420_supported;
 	double writeback_max_hscl_ratio;
 	double writeback_max_vscl_ratio;
@@ -155,7 +155,6 @@ struct _vcs_dpi_ip_params_st {
 	unsigned int writeback_max_vscl_taps;
 	unsigned int writeback_line_buffer_luma_buffer_size;
 	unsigned int writeback_line_buffer_chroma_buffer_size;
-#endif
 
 	unsigned int max_page_table_levels;
 	unsigned int max_num_dpp;
@@ -269,7 +268,7 @@ struct writeback_st {
 
 struct _vcs_dpi_display_output_params_st {
 	int dp_lanes;
-	int output_bpp;
+	double output_bpp;
 	int dsc_enable;
 	int wb_enable;
 	int num_active_wb;
@@ -318,6 +317,7 @@ struct _vcs_dpi_display_pipe_dest_params_st {
 	unsigned int vupdate_width;
 	unsigned int vready_offset;
 	unsigned char interlaced;
+	unsigned char embedded;
 	double pixel_rate_mhz;
 	unsigned char synchronized_vblank_all_planes;
 	unsigned char otg_inst;

@@ -1419,6 +1419,9 @@ static int amdgpu_vm_update_ptes(struct amdgpu_vm_update_params *params,
 		uint64_t incr, entry_end, pe_start;
 		struct amdgpu_bo *pt;
 
+		/* make sure that the page tables covering the address range are
+		 * actually allocated
+		 */
 		r = amdgpu_vm_alloc_pts(params->adev, params->vm, &cursor,
 					params->direct);
 		if (r)
@@ -1492,7 +1495,12 @@ static int amdgpu_vm_update_ptes(struct amdgpu_vm_update_params *params,
 		} while (frag_start < entry_end);
 
 		if (amdgpu_vm_pt_descendant(adev, &cursor)) {
-			/* Free all child entries */
+			/* Free all child entries.
+			 * Update the tables with the flags and addresses and free up subsequent
+			 * tables in the case of huge pages or freed up areas.
+			 * This is the maximum you can free, because all other page tables are not
+			 * completely covered by the range and so potentially still in use.
+			 */
 			while (cursor.pfn < frag_start) {
 				amdgpu_vm_free_pts(adev, params->vm, &cursor);
 				amdgpu_vm_pt_next(adev, &cursor);
@@ -1717,6 +1725,10 @@ int amdgpu_vm_bo_update(struct amdgpu_device *adev, struct amdgpu_bo_va *bo_va,
 
 	if (bo) {
 		flags = amdgpu_ttm_tt_pte_flags(adev, bo->tbo.ttm, mem);
+
+		if (amdgpu_bo_encrypted(bo))
+			flags |= AMDGPU_PTE_TMZ;
+
 		bo_adev = amdgpu_ttm_adev(bo->tbo.bdev);
 	} else {
 		flags = 0x0;
@@ -2971,6 +2983,16 @@ void amdgpu_vm_fini(struct amdgpu_device *adev, struct amdgpu_vm *vm)
 		vm->pasid = 0;
 	}
 
+	list_for_each_entry_safe(mapping, tmp, &vm->freed, list) {
+		if (mapping->flags & AMDGPU_PTE_PRT && prt_fini_needed) {
+			amdgpu_vm_prt_fini(adev, vm);
+			prt_fini_needed = false;
+		}
+
+		list_del(&mapping->list);
+		amdgpu_vm_free_mapping(adev, vm, mapping, NULL);
+	}
+
 	amdgpu_vm_free_pts(adev, vm, NULL);
 	amdgpu_bo_unreserve(root);
 	amdgpu_bo_unref(&root);
@@ -2989,15 +3011,6 @@ void amdgpu_vm_fini(struct amdgpu_device *adev, struct amdgpu_vm *vm)
 		 */
 		list_del(&mapping->list);
 		kfree(mapping);
-	}
-	list_for_each_entry_safe(mapping, tmp, &vm->freed, list) {
-		if (mapping->flags & AMDGPU_PTE_PRT && prt_fini_needed) {
-			amdgpu_vm_prt_fini(adev, vm);
-			prt_fini_needed = false;
-		}
-
-		list_del(&mapping->list);
-		amdgpu_vm_free_mapping(adev, vm, mapping, NULL);
 	}
 
 	dma_fence_put(vm->last_update);

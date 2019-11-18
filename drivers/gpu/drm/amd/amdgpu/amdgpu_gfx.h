@@ -225,7 +225,7 @@ struct amdgpu_me {
 	uint32_t			num_me;
 	uint32_t			num_pipe_per_me;
 	uint32_t			num_queue_per_pipe;
-	void				*mqd_backup[AMDGPU_MAX_GFX_RINGS + 1];
+	void				*mqd_backup[AMDGPU_MAX_GFX_RINGS];
 
 	/* These are the resources for which amdgpu takes ownership */
 	DECLARE_BITMAP(queue_bitmap, AMDGPU_MAX_GFX_QUEUES);
@@ -267,6 +267,7 @@ struct amdgpu_gfx {
 	uint32_t			mec2_feature_version;
 	bool				mec_fw_write_wait;
 	bool				me_fw_write_wait;
+	bool				cp_fw_write_wait;
 	struct amdgpu_ring		gfx_ring[AMDGPU_MAX_GFX_RINGS];
 	unsigned			num_gfx_rings;
 	struct amdgpu_ring		compute_ring[AMDGPU_MAX_COMPUTE_RINGS];
@@ -330,8 +331,7 @@ int amdgpu_gfx_kiq_init_ring(struct amdgpu_device *adev,
 			     struct amdgpu_ring *ring,
 			     struct amdgpu_irq_src *irq);
 
-void amdgpu_gfx_kiq_free_ring(struct amdgpu_ring *ring,
-			      struct amdgpu_irq_src *irq);
+void amdgpu_gfx_kiq_free_ring(struct amdgpu_ring *ring);
 
 void amdgpu_gfx_kiq_fini(struct amdgpu_device *adev);
 int amdgpu_gfx_kiq_init(struct amdgpu_device *adev,

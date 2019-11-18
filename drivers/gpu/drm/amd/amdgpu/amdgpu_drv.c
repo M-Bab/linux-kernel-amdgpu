@@ -83,9 +83,10 @@
  * - 3.33.0 - Fixes for GDS ENOMEM failures in AMDGPU_CS.
  * - 3.34.0 - Non-DC can flip correctly between buffers with different pitches
  * - 3.35.0 - Add drm_amdgpu_info_device::tcc_disabled_mask
+ * - 3.36.0 - Allow reading more status registers on si/cik
  */
 #define KMS_DRIVER_MAJOR	3
-#define KMS_DRIVER_MINOR	35
+#define KMS_DRIVER_MINOR	36
 #define KMS_DRIVER_PATCHLEVEL	0
 
 int amdgpu_vram_limit = 0;
@@ -100,7 +101,7 @@ int amdgpu_disp_priority = 0;
 int amdgpu_hw_i2c = 0;
 int amdgpu_pcie_gen2 = -1;
 int amdgpu_msi = -1;
-char amdgpu_lockup_timeout[AMDGPU_MAX_TIMEOUT_PARAM_LENTH];
+char amdgpu_lockup_timeout[AMDGPU_MAX_TIMEOUT_PARAM_LENGTH];
 int amdgpu_dpm = -1;
 int amdgpu_fw_load_type = -1;
 int amdgpu_aspm = -1;
@@ -127,6 +128,7 @@ char *amdgpu_disable_cu = NULL;
 char *amdgpu_virtual_display = NULL;
 /* OverDrive(bit 14) disabled by default*/
 uint amdgpu_pp_feature_mask = 0xffffbfff;
+uint amdgpu_force_long_training = 0;
 int amdgpu_job_hang_limit = 0;
 int amdgpu_lbpw = -1;
 int amdgpu_compute_multipipe = -1;
@@ -141,6 +143,7 @@ int amdgpu_discovery = -1;
 int amdgpu_mes = 0;
 int amdgpu_noretry = 1;
 int amdgpu_force_asic_type = -1;
+int amdgpu_tmz = 0;
 
 struct amdgpu_mgpu_info mgpu_info = {
 	.mutex = __MUTEX_INITIALIZER(mgpu_info.mutex),
@@ -249,9 +252,11 @@ module_param_named(msi, amdgpu_msi, int, 0444);
  * By default(with no lockup_timeout settings), the timeout for all non-compute(GFX, SDMA and Video)
  * jobs is 10000. And there is no timeout enforced on compute jobs.
  */
-MODULE_PARM_DESC(lockup_timeout, "GPU lockup timeout in ms (default: 10000 for non-compute jobs and infinity timeout for compute jobs."
+MODULE_PARM_DESC(lockup_timeout, "GPU lockup timeout in ms (default: for bare metal 10000 for non-compute jobs and infinity timeout for compute jobs; "
+		"for passthrough or sriov, 10000 for all jobs."
 		" 0: keep default value. negative: infinity timeout), "
-		"format is [Non-Compute] or [GFX,Compute,SDMA,Video]");
+		"format: for bare metal [Non-Compute] or [GFX,Compute,SDMA,Video]; "
+		"for passthrough or sriov [all jobs] or [GFX,Compute,SDMA,Video].");
 module_param_string(lockup_timeout, amdgpu_lockup_timeout, sizeof(amdgpu_lockup_timeout), 0444);
 
 /**
@@ -388,6 +393,14 @@ module_param_named(sched_hw_submission, amdgpu_sched_hw_submission, int, 0444);
  */
 MODULE_PARM_DESC(ppfeaturemask, "all power features enabled (default))");
 module_param_named(ppfeaturemask, amdgpu_pp_feature_mask, uint, 0444);
+
+/**
+ * DOC: forcelongtraining (uint)
+ * Force long memory training in resume.
+ * The default is zero, indicates short training in resume.
+ */
+MODULE_PARM_DESC(forcelongtraining, "force memory long training");
+module_param_named(forcelongtraining, amdgpu_force_long_training, uint, 0444);
 
 /**
  * DOC: pcie_gen_cap (uint)
@@ -715,6 +728,16 @@ uint amdgpu_dm_abm_level = 0;
 MODULE_PARM_DESC(abmlevel, "ABM level (0 = off (default), 1-4 = backlight reduction level) ");
 module_param_named(abmlevel, amdgpu_dm_abm_level, uint, 0444);
 
+/**
+ * DOC: tmz (int)
+ * Trusted Memory Zone (TMZ) is a method to protect data being written
+ * to or read from memory.
+ *
+ * The default value: 0 (off).  TODO: change to auto till it is completed.
+ */
+MODULE_PARM_DESC(tmz, "Enable TMZ feature (-1 = auto, 0 = off (default), 1 = on)");
+module_param_named(tmz, amdgpu_tmz, int, 0444);
+
 static const struct pci_device_id pciidlist[] = {
 #ifdef  CONFIG_DRM_AMDGPU_SI
 	{0x1002, 0x6780, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_TAHITI},
@@ -988,6 +1011,7 @@ static const struct pci_device_id pciidlist[] = {
 	{0x1002, 0x7340, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI14},
 	{0x1002, 0x7341, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI14},
 	{0x1002, 0x7347, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI14},
+	{0x1002, 0x734F, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_NAVI14},
 
 	/* Renoir */
 	{0x1002, 0x1636, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CHIP_RENOIR|AMD_IS_APU},
@@ -1020,6 +1044,41 @@ static int amdgpu_pci_probe(struct pci_dev *pdev,
 			 "See modparam exp_hw_support\n");
 		return -ENODEV;
 	}
+
+#ifdef CONFIG_DRM_AMDGPU_SI
+	if (!amdgpu_si_support) {
+		switch (flags & AMD_ASIC_MASK) {
+		case CHIP_TAHITI:
+		case CHIP_PITCAIRN:
+		case CHIP_VERDE:
+		case CHIP_OLAND:
+		case CHIP_HAINAN:
+			dev_info(&pdev->dev,
+				 "SI support provided by radeon.\n");
+			dev_info(&pdev->dev,
+				 "Use radeon.si_support=0 amdgpu.si_support=1 to override.\n"
+				);
+			return -ENODEV;
+		}
+	}
+#endif
+#ifdef CONFIG_DRM_AMDGPU_CIK
+	if (!amdgpu_cik_support) {
+		switch (flags & AMD_ASIC_MASK) {
+		case CHIP_KAVERI:
+		case CHIP_BONAIRE:
+		case CHIP_HAWAII:
+		case CHIP_KABINI:
+		case CHIP_MULLINS:
+			dev_info(&pdev->dev,
+				 "CIK support provided by radeon.\n");
+			dev_info(&pdev->dev,
+				 "Use radeon.cik_support=0 amdgpu.cik_support=1 to override.\n"
+				);
+			return -ENODEV;
+		}
+	}
+#endif
 
 	/* Get rid of things like offb */
 	ret = drm_fb_helper_remove_conflicting_pci_framebuffers(pdev, 0, "amdgpudrmfb");
@@ -1118,8 +1177,13 @@ static int amdgpu_pmops_resume(struct device *dev)
 static int amdgpu_pmops_freeze(struct device *dev)
 {
 	struct drm_device *drm_dev = dev_get_drvdata(dev);
+	struct amdgpu_device *adev = drm_dev->dev_private;
+	int r;
 
-	return amdgpu_device_suspend(drm_dev, false, true);
+	r = amdgpu_device_suspend(drm_dev, false, true);
+	if (r)
+		return r;
+	return amdgpu_asic_reset(adev);
 }
 
 static int amdgpu_pmops_thaw(struct device *dev)
@@ -1305,7 +1369,8 @@ static struct drm_driver kms_driver = {
 	.driver_features =
 	    DRIVER_USE_AGP | DRIVER_ATOMIC |
 	    DRIVER_GEM |
-	    DRIVER_RENDER | DRIVER_MODESET | DRIVER_SYNCOBJ,
+	    DRIVER_RENDER | DRIVER_MODESET | DRIVER_SYNCOBJ |
+	    DRIVER_SYNCOBJ_TIMELINE,
 	.load = amdgpu_driver_load_kms,
 	.open = amdgpu_driver_open_kms,
 	.postclose = amdgpu_driver_postclose_kms,

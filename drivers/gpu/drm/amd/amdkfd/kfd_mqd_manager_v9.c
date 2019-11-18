@@ -92,7 +92,7 @@ static struct kfd_mem_obj *allocate_mqd(struct kfd_dev *kfd,
 	 * instead of sub-allocation function.
 	 */
 	if (kfd->cwsr_enabled && (q->type == KFD_QUEUE_TYPE_COMPUTE)) {
-		mqd_mem_obj = kzalloc(sizeof(struct kfd_mem_obj), GFP_NOIO);
+		mqd_mem_obj = kzalloc(sizeof(struct kfd_mem_obj), GFP_KERNEL);
 		if (!mqd_mem_obj)
 			return NULL;
 		retval = amdgpu_amdkfd_alloc_gtt_mem(kfd->kgd,
@@ -302,7 +302,8 @@ static int get_wave_state(struct mqd_manager *mm, void *mqd,
 
 	*ctl_stack_used_size = m->cp_hqd_cntl_stack_size -
 		m->cp_hqd_cntl_stack_offset;
-	*save_area_used_size = m->cp_hqd_wg_state_offset;
+	*save_area_used_size = m->cp_hqd_wg_state_offset -
+		m->cp_hqd_cntl_stack_size;
 
 	if (copy_to_user(ctl_stack, mqd_ctl_stack, m->cp_hqd_cntl_stack_size))
 		return -EFAULT;

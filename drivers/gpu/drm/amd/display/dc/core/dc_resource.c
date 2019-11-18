@@ -46,15 +46,11 @@
 #include "dce100/dce100_resource.h"
 #include "dce110/dce110_resource.h"
 #include "dce112/dce112_resource.h"
-#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
+#if defined(CONFIG_DRM_AMD_DC_DCN)
 #include "dcn10/dcn10_resource.h"
 #endif
-#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 #include "dcn20/dcn20_resource.h"
-#endif
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
 #include "dcn21/dcn21_resource.h"
-#endif
 #include "dce120/dce120_resource.h"
 
 #define DC_LOGGER_INIT(logger)
@@ -99,23 +95,19 @@ enum dce_version resource_parse_asic_id(struct hw_asic_id asic_id)
 		else
 			dc_version = DCE_VERSION_12_0;
 		break;
-#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
+#if defined(CONFIG_DRM_AMD_DC_DCN)
 	case FAMILY_RV:
 		dc_version = DCN_VERSION_1_0;
 		if (ASICREV_IS_RAVEN2(asic_id.hw_internal_rev))
 			dc_version = DCN_VERSION_1_01;
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
 		if (ASICREV_IS_RENOIR(asic_id.hw_internal_rev))
 			dc_version = DCN_VERSION_2_1;
-#endif
 		break;
 #endif
 
-#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 	case FAMILY_NV:
 		dc_version = DCN_VERSION_2_0;
 		break;
-#endif
 	default:
 		dc_version = DCE_VERSION_UNKNOWN;
 		break;
@@ -162,20 +154,16 @@ struct resource_pool *dc_create_resource_pool(struct dc  *dc,
 				init_data->num_virtual_links, dc);
 		break;
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
+#if defined(CONFIG_DRM_AMD_DC_DCN)
 	case DCN_VERSION_1_0:
 	case DCN_VERSION_1_01:
 		res_pool = dcn10_create_resource_pool(init_data, dc);
 		break;
-#endif
 
 
-#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 	case DCN_VERSION_2_0:
 		res_pool = dcn20_create_resource_pool(init_data, dc);
 		break;
-#endif
-#if defined(CONFIG_DRM_AMD_DC_DCN2_1)
 	case DCN_VERSION_2_1:
 		res_pool = dcn21_create_resource_pool(init_data, dc);
 		break;
@@ -402,6 +390,9 @@ bool resource_are_streams_timing_synchronizable(
 		return false;
 
 	if (stream1->view_format != stream2->view_format)
+		return false;
+
+	if (stream1->ignore_msa_timing_param || stream2->ignore_msa_timing_param)
 		return false;
 
 	return true;
@@ -948,14 +939,33 @@ static void calculate_inits_and_adj_vp(struct pipe_ctx *pipe_ctx)
 	data->inits.v_c_bot = dc_fixpt_add(data->inits.v_c, data->ratios.vert_c);
 
 }
-static bool are_rect_integer_multiples(struct rect src, struct rect dest)
-{
-	if (dest.width  >= src.width  && dest.width  % src.width  == 0 &&
-		dest.height >= src.height && dest.height % src.height == 0)
-		return true;
 
-	return false;
+static void calculate_integer_scaling(struct pipe_ctx *pipe_ctx)
+{
+	unsigned int integer_multiple = 1;
+
+	if (pipe_ctx->plane_state->scaling_quality.integer_scaling) {
+		// calculate maximum # of replication of src onto addressable
+		integer_multiple = min(
+				pipe_ctx->stream->timing.h_addressable / pipe_ctx->stream->src.width,
+				pipe_ctx->stream->timing.v_addressable  / pipe_ctx->stream->src.height);
+
+		//scale dst
+		pipe_ctx->stream->dst.width  = integer_multiple * pipe_ctx->stream->src.width;
+		pipe_ctx->stream->dst.height = integer_multiple * pipe_ctx->stream->src.height;
+
+		//center dst onto addressable
+		pipe_ctx->stream->dst.x = (pipe_ctx->stream->timing.h_addressable - pipe_ctx->stream->dst.width)/2;
+		pipe_ctx->stream->dst.y = (pipe_ctx->stream->timing.v_addressable - pipe_ctx->stream->dst.height)/2;
+
+		//We are guaranteed that we are scaling in integer ratio
+		pipe_ctx->plane_state->scaling_quality.v_taps = 1;
+		pipe_ctx->plane_state->scaling_quality.h_taps = 1;
+		pipe_ctx->plane_state->scaling_quality.v_taps_c = 1;
+		pipe_ctx->plane_state->scaling_quality.h_taps_c = 1;
+	}
 }
+
 bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 {
 	const struct dc_plane_state *plane_state = pipe_ctx->plane_state;
@@ -968,6 +978,8 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 	 */
 	pipe_ctx->plane_res.scl_data.format = convert_pixel_format_to_dalsurface(
 			pipe_ctx->plane_state->format);
+
+	calculate_integer_scaling(pipe_ctx);
 
 	calculate_scaling_ratios(pipe_ctx);
 
@@ -999,13 +1011,6 @@ bool resource_build_scaling_params(struct pipe_ctx *pipe_ctx)
 		res = pipe_ctx->plane_res.dpp->funcs->dpp_get_optimal_number_of_taps(
 				pipe_ctx->plane_res.dpp, &pipe_ctx->plane_res.scl_data, &plane_state->scaling_quality);
 
-	if (res &&
-	    plane_state->scaling_quality.integer_scaling &&
-	    are_rect_integer_multiples(pipe_ctx->plane_res.scl_data.viewport,
-				       pipe_ctx->plane_res.scl_data.recout)) {
-		pipe_ctx->plane_res.scl_data.taps.v_taps = 1;
-		pipe_ctx->plane_res.scl_data.taps.h_taps = 1;
-	}
 
 	if (!res) {
 		/* Try 24 bpp linebuffer */
@@ -1187,7 +1192,7 @@ static struct pipe_ctx *acquire_free_pipe_for_head(
 	return pool->funcs->acquire_idle_pipe_for_layer(context, pool, head_pipe->stream);
 }
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
+#if defined(CONFIG_DRM_AMD_DC_DCN)
 static int acquire_first_split_pipe(
 		struct resource_context *res_ctx,
 		const struct resource_pool *pool,
@@ -1268,7 +1273,7 @@ bool dc_add_plane_to_context(
 
 		free_pipe = acquire_free_pipe_for_head(context, pool, head_pipe);
 
-	#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
+	#if defined(CONFIG_DRM_AMD_DC_DCN)
 		if (!free_pipe) {
 			int pipe_idx = acquire_first_split_pipe(&context->res_ctx, pool, stream);
 			if (pipe_idx >= 0)
@@ -1540,6 +1545,9 @@ bool dc_is_stream_unchanged(
 	if (!are_stream_backends_same(old_stream, stream))
 		return false;
 
+	if (old_stream->ignore_msa_timing_param != stream->ignore_msa_timing_param)
+		return false;
+
 	return true;
 }
 
@@ -1629,7 +1637,8 @@ static int acquire_first_free_pipe(
 static struct audio *find_first_free_audio(
 		struct resource_context *res_ctx,
 		const struct resource_pool *pool,
-		enum engine_id id)
+		enum engine_id id,
+		enum dce_version dc_version)
 {
 	int i, available_audio_count;
 
@@ -1938,7 +1947,7 @@ enum dc_status resource_map_pool_resources(
 		/* acquire new resources */
 		pipe_idx = acquire_first_free_pipe(&context->res_ctx, pool, stream);
 
-#ifdef CONFIG_DRM_AMD_DC_DCN1_0
+#ifdef CONFIG_DRM_AMD_DC_DCN
 	if (pipe_idx < 0)
 		pipe_idx = acquire_first_split_pipe(&context->res_ctx, pool, stream);
 #endif
@@ -1965,7 +1974,7 @@ enum dc_status resource_map_pool_resources(
 	    dc_is_audio_capable_signal(pipe_ctx->stream->signal) &&
 	    stream->audio_info.mode_count && stream->audio_info.flags.all) {
 		pipe_ctx->stream_res.audio = find_first_free_audio(
-		&context->res_ctx, pool, pipe_ctx->stream_res.stream_enc->id);
+		&context->res_ctx, pool, pipe_ctx->stream_res.stream_enc->id, dc_ctx->dce_version);
 
 		/*
 		 * Audio assigned in order first come first get.

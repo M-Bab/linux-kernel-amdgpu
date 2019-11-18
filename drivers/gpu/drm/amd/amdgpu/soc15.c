@@ -67,7 +67,9 @@
 #include "vce_v4_0.h"
 #include "vcn_v1_0.h"
 #include "vcn_v2_0.h"
+#include "jpeg_v2_0.h"
 #include "vcn_v2_5.h"
+#include "jpeg_v2_5.h"
 #include "dce_virtual.h"
 #include "mxgpu_ai.h"
 #include "amdgpu_smu.h"
@@ -339,6 +341,7 @@ static struct soc15_allowed_register_entry soc15_allowed_read_registers[] = {
 	{ SOC15_REG_ENTRY(GC, 0, mmCP_CPF_BUSY_STAT)},
 	{ SOC15_REG_ENTRY(GC, 0, mmCP_CPF_STALLED_STAT1)},
 	{ SOC15_REG_ENTRY(GC, 0, mmCP_CPF_STATUS)},
+	{ SOC15_REG_ENTRY(GC, 0, mmCP_CPC_BUSY_STAT)},
 	{ SOC15_REG_ENTRY(GC, 0, mmCP_CPC_STALLED_STAT1)},
 	{ SOC15_REG_ENTRY(GC, 0, mmCP_CPC_STATUS)},
 	{ SOC15_REG_ENTRY(GC, 0, mmGB_ADDR_CONFIG)},
@@ -478,36 +481,58 @@ static int soc15_asic_mode1_reset(struct amdgpu_device *adev)
 
 static int soc15_asic_get_baco_capability(struct amdgpu_device *adev, bool *cap)
 {
-	void *pp_handle = adev->powerplay.pp_handle;
-	const struct amd_pm_funcs *pp_funcs = adev->powerplay.pp_funcs;
+	if (is_support_sw_smu(adev)) {
+		struct smu_context *smu = &adev->smu;
 
-	if (!pp_funcs || !pp_funcs->get_asic_baco_capability) {
-		*cap = false;
-		return -ENOENT;
+		*cap = smu_baco_is_support(smu);
+		return 0;
+	} else {
+		void *pp_handle = adev->powerplay.pp_handle;
+		const struct amd_pm_funcs *pp_funcs = adev->powerplay.pp_funcs;
+
+		if (!pp_funcs || !pp_funcs->get_asic_baco_capability) {
+			*cap = false;
+			return -ENOENT;
+		}
+
+		return pp_funcs->get_asic_baco_capability(pp_handle, cap);
 	}
-
-	return pp_funcs->get_asic_baco_capability(pp_handle, cap);
 }
 
 static int soc15_asic_baco_reset(struct amdgpu_device *adev)
 {
-	void *pp_handle = adev->powerplay.pp_handle;
-	const struct amd_pm_funcs *pp_funcs = adev->powerplay.pp_funcs;
+	struct amdgpu_ras *ras = amdgpu_ras_get_context(adev);
 
-	if (!pp_funcs ||!pp_funcs->get_asic_baco_state ||!pp_funcs->set_asic_baco_state)
-		return -ENOENT;
-
-	/* enter BACO state */
-	if (pp_funcs->set_asic_baco_state(pp_handle, 1))
-		return -EIO;
-
-	/* exit BACO state */
-	if (pp_funcs->set_asic_baco_state(pp_handle, 0))
-		return -EIO;
+	/* avoid NBIF got stuck when do RAS recovery in BACO reset */
+	if (ras && ras->supported)
+		adev->nbio.funcs->enable_doorbell_interrupt(adev, false);
 
 	dev_info(adev->dev, "GPU BACO reset\n");
 
-	adev->in_baco_reset = 1;
+	if (is_support_sw_smu(adev)) {
+		struct smu_context *smu = &adev->smu;
+
+		if (smu_baco_reset(smu))
+			return -EIO;
+	} else {
+		void *pp_handle = adev->powerplay.pp_handle;
+		const struct amd_pm_funcs *pp_funcs = adev->powerplay.pp_funcs;
+
+		if (!pp_funcs ||!pp_funcs->get_asic_baco_state ||!pp_funcs->set_asic_baco_state)
+			return -ENOENT;
+
+		/* enter BACO state */
+		if (pp_funcs->set_asic_baco_state(pp_handle, 1))
+			return -EIO;
+
+		/* exit BACO state */
+		if (pp_funcs->set_asic_baco_state(pp_handle, 0))
+			return -EIO;
+	}
+
+	/* re-enable doorbell interrupt after BACO exit */
+	if (ras && ras->supported)
+		adev->nbio.funcs->enable_doorbell_interrupt(adev, true);
 
 	return 0;
 }
@@ -780,6 +805,7 @@ int soc15_set_ip_blocks(struct amdgpu_device *adev)
 
 		if (unlikely(adev->firmware.load_type == AMDGPU_FW_LOAD_DIRECT))
 			amdgpu_device_ip_block_add(adev, &vcn_v2_5_ip_block);
+		amdgpu_device_ip_block_add(adev, &jpeg_v2_5_ip_block);
 		break;
 	case CHIP_RENOIR:
 		amdgpu_device_ip_block_add(adev, &vega10_common_ip_block);
@@ -798,6 +824,7 @@ int soc15_set_ip_blocks(struct amdgpu_device *adev)
                         amdgpu_device_ip_block_add(adev, &dm_ip_block);
 #endif
 		amdgpu_device_ip_block_add(adev, &vcn_v2_0_ip_block);
+		amdgpu_device_ip_block_add(adev, &jpeg_v2_0_ip_block);
 		break;
 	default:
 		return -EINVAL;
@@ -984,6 +1011,7 @@ static const struct amdgpu_asic_funcs vega20_asic_funcs =
 	.read_bios_from_rom = &soc15_read_bios_from_rom,
 	.read_register = &soc15_read_register,
 	.reset = &soc15_asic_reset,
+	.reset_method = &soc15_asic_reset_method,
 	.set_vga_state = &soc15_vga_set_state,
 	.get_xclk = &soc15_get_xclk,
 	.set_uvd_clocks = &soc15_set_uvd_clocks,
@@ -996,7 +1024,6 @@ static const struct amdgpu_asic_funcs vega20_asic_funcs =
 	.get_pcie_usage = &vega20_get_pcie_usage,
 	.need_reset_on_init = &soc15_need_reset_on_init,
 	.get_pcie_replay_count = &soc15_get_pcie_replay_count,
-	.reset_method = &soc15_asic_reset_method
 };
 
 static int soc15_common_early_init(void *handle)
@@ -1122,7 +1149,9 @@ static int soc15_common_early_init(void *handle)
 				AMD_CG_SUPPORT_SDMA_LS |
 				AMD_CG_SUPPORT_VCN_MGCG;
 
-			adev->pg_flags = AMD_PG_SUPPORT_SDMA | AMD_PG_SUPPORT_VCN;
+			adev->pg_flags = AMD_PG_SUPPORT_SDMA |
+				AMD_PG_SUPPORT_VCN |
+				AMD_PG_SUPPORT_VCN_DPG;
 		} else if (adev->pdev->device == 0x15d8) {
 			adev->cg_flags = AMD_CG_SUPPORT_GFX_MGCG |
 				AMD_CG_SUPPORT_GFX_MGLS |
@@ -1165,7 +1194,9 @@ static int soc15_common_early_init(void *handle)
 				AMD_CG_SUPPORT_SDMA_LS |
 				AMD_CG_SUPPORT_VCN_MGCG;
 
-			adev->pg_flags = AMD_PG_SUPPORT_SDMA | AMD_PG_SUPPORT_VCN;
+			adev->pg_flags = AMD_PG_SUPPORT_SDMA |
+				AMD_PG_SUPPORT_VCN |
+				AMD_PG_SUPPORT_VCN_DPG;
 		}
 		break;
 	case CHIP_ARCTURUS:
@@ -1181,7 +1212,9 @@ static int soc15_common_early_init(void *handle)
 			AMD_CG_SUPPORT_SDMA_LS |
 			AMD_CG_SUPPORT_MC_MGCG |
 			AMD_CG_SUPPORT_MC_LS |
-			AMD_CG_SUPPORT_IH_CG;
+			AMD_CG_SUPPORT_IH_CG |
+			AMD_CG_SUPPORT_VCN_MGCG |
+			AMD_CG_SUPPORT_JPEG_MGCG;
 		adev->pg_flags = 0;
 		adev->external_rev_id = adev->rev_id + 0x32;
 		break;
@@ -1202,19 +1235,16 @@ static int soc15_common_early_init(void *handle)
 				 AMD_CG_SUPPORT_HDP_LS |
 				 AMD_CG_SUPPORT_ROM_MGCG |
 				 AMD_CG_SUPPORT_VCN_MGCG |
+				 AMD_CG_SUPPORT_JPEG_MGCG |
 				 AMD_CG_SUPPORT_IH_CG |
 				 AMD_CG_SUPPORT_ATHUB_LS |
 				 AMD_CG_SUPPORT_ATHUB_MGCG |
 				 AMD_CG_SUPPORT_DF_MGCG;
 		adev->pg_flags = AMD_PG_SUPPORT_SDMA |
 				 AMD_PG_SUPPORT_VCN |
+				 AMD_PG_SUPPORT_JPEG |
 				 AMD_PG_SUPPORT_VCN_DPG;
 		adev->external_rev_id = adev->rev_id + 0x91;
-
-		if (adev->pm.pp_feature & PP_GFXOFF_MASK)
-			adev->pg_flags |= AMD_PG_SUPPORT_GFX_PG |
-				AMD_PG_SUPPORT_CP |
-				AMD_PG_SUPPORT_RLC_SMU_HS;
 		break;
 	default:
 		/* FIXME: not supported yet */
