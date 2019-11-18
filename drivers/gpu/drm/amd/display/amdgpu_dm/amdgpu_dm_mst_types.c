@@ -36,7 +36,9 @@
 #include "dc_link_ddc.h"
 
 #include "i2caux_interface.h"
-
+#if defined(CONFIG_DEBUG_FS)
+#include "amdgpu_dm_debugfs.h"
+#endif
 /* #define TRACE_DPCD */
 
 #ifdef TRACE_DPCD
@@ -113,6 +115,7 @@ static ssize_t dm_dp_aux_transfer(struct drm_dp_aux *aux,
 			result = -EIO;
 			break;
 		case AUX_CHANNEL_OPERATION_FAILED_INVALID_REPLY:
+		case AUX_CHANNEL_OPERATION_FAILED_ENGINE_ACQUIRE:
 			result = -EBUSY;
 			break;
 		case AUX_CHANNEL_OPERATION_FAILED_TIMEOUT:
@@ -160,6 +163,12 @@ amdgpu_dm_mst_connector_late_register(struct drm_connector *connector)
 	struct amdgpu_dm_connector *amdgpu_dm_connector =
 		to_amdgpu_dm_connector(connector);
 	struct drm_dp_mst_port *port = amdgpu_dm_connector->port;
+
+#if defined(CONFIG_DEBUG_FS)
+	connector_debugfs_init(amdgpu_dm_connector);
+	amdgpu_dm_connector->debugfs_dpcd_address = 0;
+	amdgpu_dm_connector->debugfs_dpcd_size = 0;
+#endif
 
 	return drm_dp_mst_connector_late_register(connector, port);
 }
@@ -250,10 +259,42 @@ dm_mst_atomic_best_encoder(struct drm_connector *connector,
 	return &to_amdgpu_dm_connector(connector)->mst_encoder->base;
 }
 
+static int dm_dp_mst_atomic_check(struct drm_connector *connector,
+				struct drm_atomic_state *state)
+{
+	struct drm_connector_state *new_conn_state =
+			drm_atomic_get_new_connector_state(state, connector);
+	struct drm_connector_state *old_conn_state =
+			drm_atomic_get_old_connector_state(state, connector);
+	struct amdgpu_dm_connector *aconnector = to_amdgpu_dm_connector(connector);
+	struct drm_crtc_state *new_crtc_state;
+	struct drm_dp_mst_topology_mgr *mst_mgr;
+	struct drm_dp_mst_port *mst_port;
+
+	mst_port = aconnector->port;
+	mst_mgr = &aconnector->mst_port->mst_mgr;
+
+	if (!old_conn_state->crtc)
+		return 0;
+
+	if (new_conn_state->crtc) {
+		new_crtc_state = drm_atomic_get_new_crtc_state(state, new_conn_state->crtc);
+		if (!new_crtc_state ||
+		    !drm_atomic_crtc_needs_modeset(new_crtc_state) ||
+		    new_crtc_state->enable)
+			return 0;
+		}
+
+	return drm_dp_atomic_release_vcpi_slots(state,
+						mst_mgr,
+						mst_port);
+}
+
 static const struct drm_connector_helper_funcs dm_dp_mst_connector_helper_funcs = {
 	.get_modes = dm_dp_mst_get_modes,
 	.mode_valid = amdgpu_dm_connector_mode_valid,
 	.atomic_best_encoder = dm_mst_atomic_best_encoder,
+	.atomic_check = dm_dp_mst_atomic_check,
 };
 
 static void amdgpu_dm_encoder_destroy(struct drm_encoder *encoder)

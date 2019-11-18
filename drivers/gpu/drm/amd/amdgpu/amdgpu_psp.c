@@ -34,6 +34,8 @@
 #include "psp_v11_0.h"
 #include "psp_v12_0.h"
 
+#include "amdgpu_ras.h"
+
 static void psp_set_funcs(struct amdgpu_device *adev);
 
 static int psp_early_init(void *handle)
@@ -88,6 +90,17 @@ static int psp_sw_init(void *handle)
 		return ret;
 	}
 
+	ret = psp_mem_training_init(psp);
+	if (ret) {
+		DRM_ERROR("Failed to initialize memory training!\n");
+		return ret;
+	}
+	ret = psp_mem_training(psp, PSP_MEM_TRAIN_COLD_BOOT);
+	if (ret) {
+		DRM_ERROR("Failed to process memory training!\n");
+		return ret;
+	}
+
 	return 0;
 }
 
@@ -95,6 +108,7 @@ static int psp_sw_fini(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
+	psp_mem_training_fini(&adev->psp);
 	release_firmware(adev->psp.sos_fw);
 	adev->psp.sos_fw = NULL;
 	release_firmware(adev->psp.asd_fw);
@@ -154,6 +168,13 @@ psp_cmd_submit_buf(struct psp_context *psp,
 	amdgpu_asic_invalidate_hdp(psp->adev, NULL);
 	while (*((unsigned int *)psp->fence_buf) != index) {
 		if (--timeout == 0)
+			break;
+		/*
+		 * Shouldn't wait for timeout when err_event_athub occurs,
+		 * because gpu reset thread triggered and lock resource should
+		 * be released for psp resume sequence.
+		 */
+		if (amdgpu_ras_intr_triggered())
 			break;
 		msleep(1);
 		amdgpu_asic_invalidate_hdp(psp->adev, NULL);
@@ -546,7 +567,9 @@ static int psp_xgmi_initialize(struct psp_context *psp)
 	struct ta_xgmi_shared_memory *xgmi_cmd;
 	int ret;
 
-	if (!psp->adev->psp.ta_fw)
+	if (!psp->adev->psp.ta_fw ||
+	    !psp->adev->psp.ta_xgmi_ucode_size ||
+	    !psp->adev->psp.ta_xgmi_start_addr)
 		return -ENOENT;
 
 	if (!psp->xgmi_context.initialized) {
@@ -756,6 +779,12 @@ static int psp_ras_initialize(struct psp_context *psp)
 {
 	int ret;
 
+	if (!psp->adev->psp.ta_ras_ucode_size ||
+	    !psp->adev->psp.ta_ras_start_addr) {
+		dev_warn(psp->adev->dev, "RAS: ras ta ucode is not available\n");
+		return 0;
+	}
+
 	if (!psp->ras.ras_initialized) {
 		ret = psp_ras_init_shared_buf(psp);
 		if (ret)
@@ -844,6 +873,12 @@ static int psp_hdcp_load(struct psp_context *psp)
 static int psp_hdcp_initialize(struct psp_context *psp)
 {
 	int ret;
+
+	if (!psp->adev->psp.ta_hdcp_ucode_size ||
+	    !psp->adev->psp.ta_hdcp_start_addr) {
+		dev_warn(psp->adev->dev, "HDCP: hdcp ta ucode is not available\n");
+		return 0;
+	}
 
 	if (!psp->hdcp_context.hdcp_initialized) {
 		ret = psp_hdcp_init_shared_buf(psp);
@@ -1017,6 +1052,12 @@ static int psp_dtm_load(struct psp_context *psp)
 static int psp_dtm_initialize(struct psp_context *psp)
 {
 	int ret;
+
+	if (!psp->adev->psp.ta_dtm_ucode_size ||
+	    !psp->adev->psp.ta_dtm_start_addr) {
+		dev_warn(psp->adev->dev, "DTM: dtm ta ucode is not available\n");
+		return 0;
+	}
 
 	if (!psp->dtm_context.dtm_initialized) {
 		ret = psp_dtm_init_shared_buf(psp);
@@ -1263,6 +1304,9 @@ static int psp_get_fw_type(struct amdgpu_firmware_info *ucode,
 		break;
 	case AMDGPU_UCODE_ID_VCN1_RAM:
 		*type = GFX_FW_TYPE_VCN1_RAM;
+		break;
+	case AMDGPU_UCODE_ID_DMCUB:
+		*type = GFX_FW_TYPE_DMUB;
 		break;
 	case AMDGPU_UCODE_ID_MAXIMUM:
 	default:
@@ -1607,6 +1651,12 @@ static int psp_resume(void *handle)
 	struct psp_context *psp = &adev->psp;
 
 	DRM_INFO("PSP is resuming...\n");
+
+	ret = psp_mem_training(psp, PSP_MEM_TRAIN_RESUME);
+	if (ret) {
+		DRM_ERROR("Failed to process memory training!\n");
+		return ret;
+	}
 
 	mutex_lock(&adev->firmware.mutex);
 

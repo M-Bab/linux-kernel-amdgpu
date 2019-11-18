@@ -61,6 +61,8 @@
 
 #include "atomfirmware.h"
 
+#define GAMMA_HW_POINTS_NUM 256
+
 /*
  * All values are in milliseconds;
  * For eDP, after power-up/power/down,
@@ -268,7 +270,7 @@ static void build_prescale_params(struct ipp_prescale_params *prescale_params,
 }
 
 static bool
-dce110_set_input_transfer_func(struct pipe_ctx *pipe_ctx,
+dce110_set_input_transfer_func(struct dc *dc, struct pipe_ctx *pipe_ctx,
 			       const struct dc_plane_state *plane_state)
 {
 	struct input_pixel_processor *ipp = pipe_ctx->plane_res.ipp;
@@ -596,7 +598,7 @@ dce110_translate_regamma_to_hw_format(const struct dc_transfer_func *output_tf,
 }
 
 static bool
-dce110_set_output_transfer_func(struct pipe_ctx *pipe_ctx,
+dce110_set_output_transfer_func(struct dc *dc, struct pipe_ctx *pipe_ctx,
 				const struct dc_stream_state *stream)
 {
 	struct transform *xfm = pipe_ctx->plane_res.xfm;
@@ -1161,8 +1163,9 @@ static void build_audio_output(
 		}
 	}
 
-	if (pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT ||
-			pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST) {
+	if (state->clk_mgr &&
+		(pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT ||
+			pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST)) {
 		audio_output->pll_info.dp_dto_source_clock_in_khz =
 				state->clk_mgr->funcs->get_dp_ref_clk_frequency(
 						state->clk_mgr);
@@ -1222,7 +1225,7 @@ static void program_scaler(const struct dc *dc,
 {
 	struct tg_color color = {0};
 
-#if defined(CONFIG_DRM_AMD_DC_DCN1_0)
+#if defined(CONFIG_DRM_AMD_DC_DCN)
 	/* TOFPGA */
 	if (pipe_ctx->plane_res.xfm->funcs->transform_set_pixel_storage_depth == NULL)
 		return;
@@ -1321,9 +1324,7 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct drr_params params = {0};
 	unsigned int event_triggers = 0;
-#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 	struct pipe_ctx *odm_pipe = pipe_ctx->next_odm_pipe;
-#endif
 
 	if (dc->hwss.disable_stream_gating) {
 		dc->hwss.disable_stream_gating(dc, pipe_ctx);
@@ -1359,7 +1360,7 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 		dc->hwss.enable_stream_timing(pipe_ctx, context, dc);
 
 	if (dc->hwss.setup_vupdate_interrupt)
-		dc->hwss.setup_vupdate_interrupt(pipe_ctx);
+		dc->hwss.setup_vupdate_interrupt(dc, pipe_ctx);
 
 	params.vertical_total_min = stream->adjust.v_total_min;
 	params.vertical_total_max = stream->adjust.v_total_max;
@@ -1389,7 +1390,6 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 		pipe_ctx->stream_res.opp,
 		&stream->bit_depth_params,
 		&stream->clamping);
-#if defined(CONFIG_DRM_AMD_DC_DCN2_0)
 	while (odm_pipe) {
 		odm_pipe->stream_res.opp->funcs->opp_set_dyn_expansion(
 				odm_pipe->stream_res.opp,
@@ -1403,14 +1403,13 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 				&stream->clamping);
 		odm_pipe = odm_pipe->next_odm_pipe;
 	}
-#endif
 
 	if (!stream->dpms_off)
 		core_link_enable_stream(context, pipe_ctx);
 
 	pipe_ctx->plane_res.scl_data.lb_params.alpha_en = pipe_ctx->bottom_pipe != 0;
 
-	pipe_ctx->stream->link->psr_enabled = false;
+	pipe_ctx->stream->link->psr_feature_enabled = false;
 
 	return DC_OK;
 }
@@ -1420,8 +1419,6 @@ static enum dc_status apply_single_controller_ctx_to_hw(
 static void power_down_encoders(struct dc *dc)
 {
 	int i;
-	enum connector_id connector_id;
-	enum signal_type signal = SIGNAL_TYPE_NONE;
 
 	/* do not know BIOS back-front mapping, simply blank all. It will not
 	 * hurt for non-DP
@@ -1432,15 +1429,15 @@ static void power_down_encoders(struct dc *dc)
 	}
 
 	for (i = 0; i < dc->link_count; i++) {
-		connector_id = dal_graphics_object_id_get_connector_id(dc->links[i]->link_id);
-		if ((connector_id == CONNECTOR_ID_DISPLAY_PORT) ||
-			(connector_id == CONNECTOR_ID_EDP)) {
+		enum signal_type signal = dc->links[i]->connector_signal;
 
+		if ((signal == SIGNAL_TYPE_EDP) ||
+			(signal == SIGNAL_TYPE_DISPLAY_PORT))
 			if (!dc->links[i]->wa_flags.dp_keep_receiver_powered)
 				dp_receiver_power_ctrl(dc->links[i], false);
-			if (connector_id == CONNECTOR_ID_EDP)
-				signal = SIGNAL_TYPE_EDP;
-		}
+
+		if (signal != SIGNAL_TYPE_EDP)
+			signal = SIGNAL_TYPE_NONE;
 
 		dc->links[i]->link_enc->funcs->disable_output(
 				dc->links[i]->link_enc, signal);
@@ -1517,18 +1514,6 @@ static struct dc_stream_state *get_edp_stream(struct dc_state *context)
 	for (i = 0; i < context->stream_count; i++) {
 		if (context->streams[i]->signal == SIGNAL_TYPE_EDP)
 			return context->streams[i];
-	}
-	return NULL;
-}
-
-static struct dc_link *get_edp_link(struct dc *dc)
-{
-	int i;
-
-	// report any eDP links, even unconnected DDI's
-	for (i = 0; i < dc->link_count; i++) {
-		if (dc->links[i]->connector_signal == SIGNAL_TYPE_EDP)
-			return dc->links[i];
 	}
 	return NULL;
 }
@@ -1826,7 +1811,7 @@ static bool should_enable_fbc(struct dc *dc,
 		return false;
 
 	/* PSR should not be enabled */
-	if (pipe_ctx->stream->link->psr_enabled)
+	if (pipe_ctx->stream->link->psr_feature_enabled)
 		return false;
 
 	/* Nothing to compress */
@@ -2518,10 +2503,10 @@ static void dce110_program_front_end_for_pipe(
 	if (pipe_ctx->plane_state->update_flags.bits.full_update ||
 			pipe_ctx->plane_state->update_flags.bits.in_transfer_func_change ||
 			pipe_ctx->plane_state->update_flags.bits.gamma_change)
-		dc->hwss.set_input_transfer_func(pipe_ctx, pipe_ctx->plane_state);
+		dc->hwss.set_input_transfer_func(dc, pipe_ctx, pipe_ctx->plane_state);
 
 	if (pipe_ctx->plane_state->update_flags.bits.full_update)
-		dc->hwss.set_output_transfer_func(pipe_ctx, pipe_ctx->stream);
+		dc->hwss.set_output_transfer_func(dc, pipe_ctx, pipe_ctx->stream);
 
 	DC_LOG_SURFACE(
 			"Pipe:%d %p: addr hi:0x%x, "

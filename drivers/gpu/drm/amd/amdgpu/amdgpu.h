@@ -69,6 +69,7 @@
 #include "amdgpu_uvd.h"
 #include "amdgpu_vce.h"
 #include "amdgpu_vcn.h"
+#include "amdgpu_jpeg.h"
 #include "amdgpu_mn.h"
 #include "amdgpu_gmc.h"
 #include "amdgpu_gfx.h"
@@ -89,6 +90,7 @@
 #include "amdgpu_mes.h"
 #include "amdgpu_umc.h"
 #include "amdgpu_mmhub.h"
+#include "amdgpu_tmz.h"
 
 #define MAX_GPU_INSTANCE		16
 
@@ -107,7 +109,7 @@ struct amdgpu_mgpu_info
 	uint32_t			num_apu;
 };
 
-#define AMDGPU_MAX_TIMEOUT_PARAM_LENTH	256
+#define AMDGPU_MAX_TIMEOUT_PARAM_LENGTH	256
 
 /*
  * Modules parameters.
@@ -125,7 +127,7 @@ extern int amdgpu_disp_priority;
 extern int amdgpu_hw_i2c;
 extern int amdgpu_pcie_gen2;
 extern int amdgpu_msi;
-extern char amdgpu_lockup_timeout[AMDGPU_MAX_TIMEOUT_PARAM_LENTH];
+extern char amdgpu_lockup_timeout[AMDGPU_MAX_TIMEOUT_PARAM_LENGTH];
 extern int amdgpu_dpm;
 extern int amdgpu_fw_load_type;
 extern int amdgpu_aspm;
@@ -139,6 +141,7 @@ extern int amdgpu_vm_fragment_size;
 extern int amdgpu_vm_fault_stop;
 extern int amdgpu_vm_debug;
 extern int amdgpu_vm_update_mode;
+extern int amdgpu_exp_hw_support;
 extern int amdgpu_dc;
 extern int amdgpu_sched_jobs;
 extern int amdgpu_sched_hw_submission;
@@ -150,6 +153,7 @@ extern uint amdgpu_sdma_phase_quantum;
 extern char *amdgpu_disable_cu;
 extern char *amdgpu_virtual_display;
 extern uint amdgpu_pp_feature_mask;
+extern uint amdgpu_force_long_training;
 extern int amdgpu_job_hang_limit;
 extern int amdgpu_lbpw;
 extern int amdgpu_compute_multipipe;
@@ -172,6 +176,8 @@ extern int sched_policy;
 #else
 static const int sched_policy = KFD_SCHED_POLICY_HWS;
 #endif
+
+extern int amdgpu_tmz;
 
 #ifdef CONFIG_DRM_AMDGPU_SI
 extern int amdgpu_si_support;
@@ -287,6 +293,9 @@ struct amdgpu_ip_block_version {
 	const u32 rev;
 	const struct amd_ip_funcs *funcs;
 };
+
+#define HW_REV(_Major, _Minor, _Rev) \
+	((((uint32_t) (_Major)) << 16) | ((uint32_t) (_Minor) << 8) | ((uint32_t) (_Rev)))
 
 struct amdgpu_ip_block {
 	struct amdgpu_ip_block_status status;
@@ -630,6 +639,11 @@ struct amdgpu_fw_vram_usage {
 	u64 size;
 	struct amdgpu_bo *reserved_bo;
 	void *va;
+
+	/* Offset on the top of VRAM, used as c2p write buffer.
+	*/
+	u64 mem_train_fb_loc;
+	bool mem_train_support;
 };
 
 /*
@@ -697,6 +711,7 @@ enum amd_hw_ip_block_type {
 	MP1_HWIP,
 	UVD_HWIP,
 	VCN_HWIP = UVD_HWIP,
+	JPEG_HWIP = VCN_HWIP,
 	VCE_HWIP,
 	DF_HWIP,
 	DCE_HWIP,
@@ -762,6 +777,7 @@ struct amdgpu_device {
 	uint8_t				*bios;
 	uint32_t			bios_size;
 	struct amdgpu_bo		*stolen_vga_memory;
+	struct amdgpu_bo		*discovery_memory;
 	uint32_t			bios_scratch_reg_offset;
 	uint32_t			bios_scratch[AMDGPU_BIOS_NUM_SCRATCH];
 
@@ -891,6 +907,9 @@ struct amdgpu_device {
 	/* vcn */
 	struct amdgpu_vcn		vcn;
 
+	/* jpeg */
+	struct amdgpu_jpeg		jpeg;
+
 	/* firmwares */
 	struct amdgpu_firmware		firmware;
 
@@ -916,6 +935,9 @@ struct amdgpu_device {
 	bool                            enable_mes;
 	struct amdgpu_mes               mes;
 
+	/* tmz */
+	struct amdgpu_tmz		tmz;
+
 	struct amdgpu_ip_block          ip_blocks[AMDGPU_MAX_IP_NUM];
 	int				num_ip_blocks;
 	struct mutex	mn_lock;
@@ -927,7 +949,7 @@ struct amdgpu_device {
 	atomic64_t gart_pin_size;
 
 	/* soc15 register offset based on ip, instance and  segment */
-	uint32_t 		*reg_offset[MAX_HWIP][HWIP_MAX_INSTANCE];
+	uint32_t		*reg_offset[MAX_HWIP][HWIP_MAX_INSTANCE];
 
 	const struct amdgpu_df_funcs	*df_funcs;
 
@@ -962,8 +984,6 @@ struct amdgpu_device {
 	int asic_reset_res;
 	struct work_struct		xgmi_reset_work;
 
-	bool                            in_baco_reset;
-
 	long				gfx_timeout;
 	long				sdma_timeout;
 	long				video_timeout;
@@ -971,6 +991,9 @@ struct amdgpu_device {
 
 	uint64_t			unique_id;
 	uint64_t	df_perfmon_config_assign_mask[AMDGPU_MAX_DF_PERFMONS];
+
+	/* device pstate */
+	int				pstate;
 };
 
 static inline struct amdgpu_device *amdgpu_ttm_adev(struct ttm_bo_device *bdev)
@@ -985,6 +1008,8 @@ int amdgpu_device_init(struct amdgpu_device *adev,
 void amdgpu_device_fini(struct amdgpu_device *adev);
 int amdgpu_gpu_wait_for_idle(struct amdgpu_device *adev);
 
+void amdgpu_device_vram_access(struct amdgpu_device *adev, loff_t pos,
+			       uint32_t *buf, size_t size, bool write);
 uint32_t amdgpu_mm_rreg(struct amdgpu_device *adev, uint32_t reg,
 			uint32_t acc_flags);
 void amdgpu_mm_wreg(struct amdgpu_device *adev, uint32_t reg, uint32_t v,
