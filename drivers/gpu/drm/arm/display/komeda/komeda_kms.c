@@ -14,7 +14,6 @@
 #include <drm/drm_gem_cma_helper.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_irq.h>
-#include <drm/drm_probe_helper.h>
 #include <drm/drm_vblank.h>
 
 #include "komeda_dev.h"
@@ -144,6 +143,7 @@ static int komeda_crtc_normalize_zpos(struct drm_crtc *crtc,
 	struct komeda_crtc_state *kcrtc_st = to_kcrtc_st(crtc_st);
 	struct komeda_plane_state *kplane_st;
 	struct drm_plane_state *plane_st;
+	struct drm_framebuffer *fb;
 	struct drm_plane *plane;
 	struct list_head zorder_list;
 	int order = 0, err;
@@ -169,6 +169,7 @@ static int komeda_crtc_normalize_zpos(struct drm_crtc *crtc,
 
 	list_for_each_entry(kplane_st, &zorder_list, zlist_node) {
 		plane_st = &kplane_st->base;
+		fb = plane_st->fb;
 		plane = plane_st->plane;
 
 		plane_st->normalized_zpos = order++;
@@ -201,7 +202,7 @@ static int komeda_kms_check(struct drm_device *dev,
 			    struct drm_atomic_state *state)
 {
 	struct drm_crtc *crtc;
-	struct drm_crtc_state *new_crtc_st;
+	struct drm_crtc_state *old_crtc_st, *new_crtc_st;
 	int i, err;
 
 	err = drm_atomic_helper_check_modeset(dev, state);
@@ -212,7 +213,7 @@ static int komeda_kms_check(struct drm_device *dev,
 	 * so need to add all affected_planes (even unchanged) to
 	 * drm_atomic_state.
 	 */
-	for_each_new_crtc_in_state(state, crtc, new_crtc_st, i) {
+	for_each_oldnew_crtc_in_state(state, crtc, old_crtc_st, new_crtc_st, i) {
 		err = drm_atomic_add_affected_planes(state, crtc);
 		if (err)
 			return err;
@@ -303,33 +304,24 @@ struct komeda_kms_dev *komeda_kms_attach(struct komeda_dev *mdev)
 			       komeda_kms_irq_handler, IRQF_SHARED,
 			       drm->driver->name, drm);
 	if (err)
-		goto free_component_binding;
+		goto cleanup_mode_config;
 
 	err = mdev->funcs->enable_irq(mdev);
 	if (err)
-		goto free_component_binding;
+		goto cleanup_mode_config;
 
 	drm->irq_enabled = true;
 
-	drm_kms_helper_poll_init(drm);
-
 	err = drm_dev_register(drm, 0);
 	if (err)
-		goto free_interrupts;
+		goto cleanup_mode_config;
 
 	return kms;
 
-free_interrupts:
-	drm_kms_helper_poll_fini(drm);
-	drm->irq_enabled = false;
-	mdev->funcs->disable_irq(mdev);
-free_component_binding:
-	component_unbind_all(mdev->dev, drm);
 cleanup_mode_config:
+	drm->irq_enabled = false;
 	drm_mode_config_cleanup(drm);
 	komeda_kms_cleanup_private_objs(kms);
-	drm->dev_private = NULL;
-	drm_dev_put(drm);
 free_kms:
 	kfree(kms);
 	return ERR_PTR(err);
@@ -340,14 +332,12 @@ void komeda_kms_detach(struct komeda_kms_dev *kms)
 	struct drm_device *drm = &kms->base;
 	struct komeda_dev *mdev = drm->dev_private;
 
-	drm_dev_unregister(drm);
-	drm_kms_helper_poll_fini(drm);
-	drm_atomic_helper_shutdown(drm);
 	drm->irq_enabled = false;
 	mdev->funcs->disable_irq(mdev);
+	drm_dev_unregister(drm);
 	component_unbind_all(mdev->dev, drm);
-	drm_mode_config_cleanup(drm);
 	komeda_kms_cleanup_private_objs(kms);
+	drm_mode_config_cleanup(drm);
 	drm->dev_private = NULL;
 	drm_dev_put(drm);
 }
