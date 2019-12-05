@@ -71,8 +71,6 @@ static int cs35l41_i2c_probe(struct i2c_client *client,
 	if (cs35l41 == NULL)
 		return -ENOMEM;
 
-	mutex_init(&cs35l41->rate_lock);
-
 	cs35l41->dev = dev;
 	cs35l41->irq = client->irq;
 	cs35l41->bus_spi = false;
