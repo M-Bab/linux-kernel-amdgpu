@@ -1,3 +1,5 @@
+/* SPDX-License-Identifier: GPL-2.0 */
+
 /*
  * linux/sound/cs35l41.h -- Platform data for CS35L41
  *

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 /*
  * cs35l41-spi.c -- CS35l41 SPI driver
  *

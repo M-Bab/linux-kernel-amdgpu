@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 /*
  * cs35l41-i2c.c -- CS35l41 I2C driver
  *

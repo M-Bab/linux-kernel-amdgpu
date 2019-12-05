@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-2.0
+
 /*
  * cs35l41-tables.c -- CS35L41 ALSA SoC audio driver
  *
