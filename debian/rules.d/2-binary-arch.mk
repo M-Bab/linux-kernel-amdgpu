@@ -413,12 +413,14 @@ ifneq ($(skipdbg),true)
 	  -name '*.ko' | while read path_module ; do \
 		module="/lib/modules/$${path_module#*/lib/modules/}"; \
 		if [[ -f "$(dbgpkgdir)/usr/lib/debug/$$module" ]] ; then \
-			signer=$$(/sbin/modinfo -F signer "$$path_module"); \
+			while IFS= read -r -d '' signature < <(tail -c 28 "$$path_module"); do \
+				break; \
+			done; \
 			$(CROSS_COMPILE)objcopy \
 				--add-gnu-debuglink=$(dbgpkgdir)/usr/lib/debug/$$module \
 				$$path_module; \
 			if grep -q CONFIG_MODULE_SIG=y $(builddir)/build-$*/.config && \
-			   [ -n "$$signer" ]; then \
+			   [ "$$signature" = $$'~Module signature appended~\n' ]; then \
 				$(builddir)/build-$*/scripts/sign-file $(MODHASHALGO) \
 					$(MODSECKEY) \
 					$(MODPUBKEY) \
