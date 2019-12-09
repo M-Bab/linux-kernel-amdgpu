@@ -1,5 +1,5 @@
 /*
-* Copyright 2016 Advanced Micro Devices, Inc.
+ * Copyright 2019 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,25 +23,19 @@
  *
  */
 
-#ifndef __DC_HWSS_DCN21_H__
-#define __DC_HWSS_DCN21_H__
+#ifndef _DMUB_CMD_VBIOS_H_
+#define _DMUB_CMD_VBIOS_H_
 
-#include "hw_sequencer_private.h"
+/*
+ * Command IDs should be treated as stable ABI.
+ * Do not reuse or modify IDs.
+ */
 
-struct dc;
+enum dmub_cmd_vbios_type {
+	DMUB_CMD__VBIOS_DIGX_ENCODER_CONTROL = 0,
+	DMUB_CMD__VBIOS_DIG1_TRANSMITTER_CONTROL = 1,
+	DMUB_CMD__VBIOS_SET_PIXEL_CLOCK = 2,
+	DMUB_CMD__VBIOS_ENABLE_DISP_POWER_GATING = 3,
+};
 
-int dcn21_init_sys_ctx(struct dce_hwseq *hws,
-		struct dc *dc,
-		struct dc_phy_addr_space_config *pa_config);
-
-bool dcn21_s0i3_golden_init_wa(struct dc *dc);
-
-void dcn21_exit_optimized_pwr_state(
-		const struct dc *dc,
-		struct dc_state *context);
-
-void dcn21_optimize_pwr_state(
-		const struct dc *dc,
-		struct dc_state *context);
-
-#endif /* __DC_HWSS_DCN21_H__ */
+#endif /* _DMUB_CMD_VBIOS_H_ */

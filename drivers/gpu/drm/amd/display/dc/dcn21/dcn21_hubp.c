@@ -169,7 +169,8 @@ static void hubp21_setup(
 void hubp21_set_viewport(
 	struct hubp *hubp,
 	const struct rect *viewport,
-	const struct rect *viewport_c)
+	const struct rect *viewport_c,
+	enum dc_rotation_angle rotation)
 {
 	struct dcn21_hubp *hubp21 = TO_DCN21_HUBP(hubp);
 	int patched_viewport_height = 0;
@@ -196,9 +197,11 @@ void hubp21_set_viewport(
 	 *	Work around for underflow issue with NV12 + rIOMMU translation
 	 *	+ immediate flip. This will cause hubp underflow, but will not
 	 *	be user visible since underflow is in blank region
+	 *	Disable w/a when rotated 180 degrees, causes vertical chroma offset
 	 */
 	patched_viewport_height = viewport_c->height;
-	if (viewport_c->height != 0 && debug->nv12_iflip_vm_wa) {
+	if (debug->nv12_iflip_vm_wa && viewport_c->height > 512 &&
+			rotation != ROTATION_ANGLE_180) {
 		int pte_row_height = 0;
 		int pte_rows = 0;
 
@@ -267,6 +270,7 @@ void hubp21_validate_dml_output(struct hubp *hubp,
 	struct _vcs_dpi_display_dlg_regs_st dlg_attr = {0};
 	struct _vcs_dpi_display_ttu_regs_st ttu_attr = {0};
 	DC_LOGGER_INIT(ctx->logger);
+	DC_LOG_DEBUG("DML Validation | Running Validation");
 
 	/* Requester - Per hubp */
 	REG_GET(HUBPRET_CONTROL,

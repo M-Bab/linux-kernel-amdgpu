@@ -39,7 +39,7 @@
 #include "inc/hw/dmcu.h"
 #include "dml/display_mode_lib.h"
 
-#define DC_VER "3.2.60"
+#define DC_VER "3.2.62"
 
 #define MAX_SURFACES 3
 #define MAX_PLANES 6
@@ -52,6 +52,10 @@
 struct dc_versions {
 	const char *dc_ver;
 	struct dmcu_version dmcu_version;
+};
+
+enum dp_protocol_version {
+	DP_VERSION_1_4,
 };
 
 enum dc_plane_type {
@@ -114,6 +118,7 @@ struct dc_caps {
 	bool extended_aux_timeout_support;
 	bool dmcub_support;
 	bool hw_3d_lut;
+	enum dp_protocol_version max_dp_protocol_version;
 	struct dc_plane_cap planes[MAX_PLANES];
 };
 

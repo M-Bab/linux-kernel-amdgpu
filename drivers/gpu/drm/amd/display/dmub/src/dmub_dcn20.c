@@ -76,7 +76,8 @@ void dmub_dcn20_setup_windows(struct dmub_srv *dmub,
 			      const struct dmub_window *cw2,
 			      const struct dmub_window *cw3,
 			      const struct dmub_window *cw4,
-				  const struct dmub_window *cw5)
+			      const struct dmub_window *cw5,
+			      const struct dmub_window *cw6)
 {
 	REG_WRITE(DMCUB_REGION3_CW2_OFFSET, cw2->offset.u.low_part);
 	REG_WRITE(DMCUB_REGION3_CW2_OFFSET_HIGH, cw2->offset.u.high_part);
@@ -99,6 +100,20 @@ void dmub_dcn20_setup_windows(struct dmub_srv *dmub,
 	REG_SET_2(DMCUB_REGION4_TOP_ADDRESS, 0, DMCUB_REGION4_TOP_ADDRESS,
 		  cw4->region.top - cw4->region.base - 1, DMCUB_REGION4_ENABLE,
 		  1);
+
+	REG_WRITE(DMCUB_REGION3_CW5_OFFSET, cw5->offset.u.low_part);
+	REG_WRITE(DMCUB_REGION3_CW5_OFFSET_HIGH, cw5->offset.u.high_part);
+	REG_WRITE(DMCUB_REGION3_CW5_BASE_ADDRESS, cw5->region.base);
+	REG_SET_2(DMCUB_REGION3_CW5_TOP_ADDRESS, 0,
+		  DMCUB_REGION3_CW5_TOP_ADDRESS, cw5->region.top,
+		  DMCUB_REGION3_CW5_ENABLE, 1);
+
+	REG_WRITE(DMCUB_REGION3_CW6_OFFSET, cw6->offset.u.low_part);
+	REG_WRITE(DMCUB_REGION3_CW6_OFFSET_HIGH, cw6->offset.u.high_part);
+	REG_WRITE(DMCUB_REGION3_CW6_BASE_ADDRESS, cw6->region.base);
+	REG_SET_2(DMCUB_REGION3_CW6_TOP_ADDRESS, 0,
+		  DMCUB_REGION3_CW6_TOP_ADDRESS, cw6->region.top,
+		  DMCUB_REGION3_CW6_ENABLE, 1);
 }
 
 void dmub_dcn20_setup_mailbox(struct dmub_srv *dmub,
@@ -134,9 +149,4 @@ bool dmub_dcn20_is_supported(struct dmub_srv *dmub)
 	REG_GET(CC_DC_PIPE_DIS, DC_DMCUB_ENABLE, &supported);
 
 	return supported;
-}
-
-bool dmub_dcn20_is_phy_init(struct dmub_srv *dmub)
-{
-	return REG_READ(DMCUB_SCRATCH10) == 0;
 }
