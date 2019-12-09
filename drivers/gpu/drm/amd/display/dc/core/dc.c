@@ -809,6 +809,8 @@ struct dc *dc_create(const struct dc_init_data *init_params)
 	dc->caps.max_audios = dc->res_pool->audio_count;
 	dc->caps.linear_pitch_alignment = 64;
 
+	dc->caps.max_dp_protocol_version = DP_VERSION_1_4;
+
 	/* Populate versioning information */
 	dc->versions.dc_ver = DC_VER;
 
@@ -1165,8 +1167,6 @@ static enum dc_status dc_commit_state_no_check(struct dc *dc, struct dc_state *c
 				context->stream_status[i].plane_count,
 				context); /* use new pipe config in new context */
 		}
-	if (dc->hwss.program_front_end_for_ctx)
-		dc->hwss.program_front_end_for_ctx(dc, context);
 
 	/* Program hardware */
 	for (i = 0; i < dc->res_pool->pipe_count; i++) {
@@ -2004,6 +2004,12 @@ static void commit_planes_do_stream_update(struct dc *dc,
 				dc->hwss.update_info_frame(pipe_ctx);
 			}
 
+			if (stream_update->hdr_static_metadata &&
+					stream->use_dynamic_meta &&
+					dc->hwss.set_dmdata_attributes &&
+					pipe_ctx->stream->dmdata_address.quad_part != 0)
+				dc->hwss.set_dmdata_attributes(pipe_ctx);
+
 			if (stream_update->gamut_remap)
 				dc_stream_set_gamut_remap(dc, stream);
 
@@ -2181,7 +2187,7 @@ static void commit_planes_for_stream(struct dc *dc,
 	}
 	if (dc->hwss.program_front_end_for_ctx && update_type != UPDATE_TYPE_FAST) {
 		dc->hwss.program_front_end_for_ctx(dc, context);
-#ifdef CONFIG_DRM_AMD_DC_DCN1_0
+#ifdef CONFIG_DRM_AMD_DC_DCN
 		if (dc->debug.validate_dml_output) {
 			for (i = 0; i < dc->res_pool->pipe_count; i++) {
 				struct pipe_ctx cur_pipe = context->res_ctx.pipe_ctx[i];

@@ -834,6 +834,7 @@ static enum bp_result bios_parser_get_spread_spectrum_info(
 		case 1:
 			return get_ss_info_v4_1(bp, signal, index, ss_info);
 		case 2:
+		case 3:
 			return get_ss_info_v4_2(bp, signal, index, ss_info);
 		default:
 			break;
@@ -992,7 +993,7 @@ static uint32_t get_support_mask_for_device_id(struct device_id device_id)
 		break;
 	default:
 		break;
-	};
+	}
 
 	/* Unidentified device ID, return empty support mask. */
 	return 0;
@@ -1638,6 +1639,7 @@ static enum bp_result construct_integrated_info(
 		/* Don't need to check major revision as they are all 1 */
 		switch (revision.minor) {
 		case 11:
+		case 12:
 			result = get_integrated_info_v11(bp, info);
 			break;
 		default:

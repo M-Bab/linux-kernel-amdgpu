@@ -46,7 +46,8 @@ void dmub_dcn20_setup_windows(struct dmub_srv *dmub,
 			      const struct dmub_window *cw2,
 			      const struct dmub_window *cw3,
 			      const struct dmub_window *cw4,
-				  const struct dmub_window *cw5);
+			      const struct dmub_window *cw5,
+			      const struct dmub_window *cw6);
 
 void dmub_dcn20_setup_mailbox(struct dmub_srv *dmub,
 			      const struct dmub_region *inbox1);
@@ -58,7 +59,5 @@ void dmub_dcn20_set_inbox1_wptr(struct dmub_srv *dmub, uint32_t wptr_offset);
 bool dmub_dcn20_is_hw_init(struct dmub_srv *dmub);
 
 bool dmub_dcn20_is_supported(struct dmub_srv *dmub);
-
-bool dmub_dcn20_is_phy_init(struct dmub_srv *dmub);
 
 #endif /* _DMUB_DCN20_H_ */

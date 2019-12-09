@@ -318,35 +318,17 @@ static int psp_tmr_load(struct psp_context *psp)
 	return ret;
 }
 
-static void psp_prep_asd_cmd_buf(struct psp_gfx_cmd_resp *cmd,
-				 uint64_t asd_mc, uint64_t asd_mc_shared,
-				 uint32_t size, uint32_t shared_size)
+static void psp_prep_asd_load_cmd_buf(struct psp_gfx_cmd_resp *cmd,
+				uint64_t asd_mc, uint32_t size)
 {
 	cmd->cmd_id = GFX_CMD_ID_LOAD_ASD;
 	cmd->cmd.cmd_load_ta.app_phy_addr_lo = lower_32_bits(asd_mc);
 	cmd->cmd.cmd_load_ta.app_phy_addr_hi = upper_32_bits(asd_mc);
 	cmd->cmd.cmd_load_ta.app_len = size;
 
-	cmd->cmd.cmd_load_ta.cmd_buf_phy_addr_lo = lower_32_bits(asd_mc_shared);
-	cmd->cmd.cmd_load_ta.cmd_buf_phy_addr_hi = upper_32_bits(asd_mc_shared);
-	cmd->cmd.cmd_load_ta.cmd_buf_len = shared_size;
-}
-
-static int psp_asd_init(struct psp_context *psp)
-{
-	int ret;
-
-	/*
-	 * Allocate 16k memory aligned to 4k from Frame Buffer (local
-	 * physical) for shared ASD <-> Driver
-	 */
-	ret = amdgpu_bo_create_kernel(psp->adev, PSP_ASD_SHARED_MEM_SIZE,
-				      PAGE_SIZE, AMDGPU_GEM_DOMAIN_VRAM,
-				      &psp->asd_shared_bo,
-				      &psp->asd_shared_mc_addr,
-				      &psp->asd_shared_buf);
-
-	return ret;
+	cmd->cmd.cmd_load_ta.cmd_buf_phy_addr_lo = 0;
+	cmd->cmd.cmd_load_ta.cmd_buf_phy_addr_hi = 0;
+	cmd->cmd.cmd_load_ta.cmd_buf_len = 0;
 }
 
 static int psp_asd_load(struct psp_context *psp)
@@ -368,11 +350,49 @@ static int psp_asd_load(struct psp_context *psp)
 	memset(psp->fw_pri_buf, 0, PSP_1_MEG);
 	memcpy(psp->fw_pri_buf, psp->asd_start_addr, psp->asd_ucode_size);
 
-	psp_prep_asd_cmd_buf(cmd, psp->fw_pri_mc_addr, psp->asd_shared_mc_addr,
-			     psp->asd_ucode_size, PSP_ASD_SHARED_MEM_SIZE);
+	psp_prep_asd_load_cmd_buf(cmd, psp->fw_pri_mc_addr,
+				  psp->asd_ucode_size);
 
 	ret = psp_cmd_submit_buf(psp, NULL, cmd,
 				 psp->fence_buf_mc_addr);
+	if (!ret) {
+		psp->asd_context.asd_initialized = true;
+		psp->asd_context.session_id = cmd->resp.session_id;
+	}
+
+	kfree(cmd);
+
+	return ret;
+}
+
+static void psp_prep_asd_unload_cmd_buf(struct psp_gfx_cmd_resp *cmd,
+					uint32_t asd_session_id)
+{
+	cmd->cmd_id = GFX_CMD_ID_UNLOAD_TA;
+	cmd->cmd.cmd_unload_ta.session_id = asd_session_id;
+}
+
+static int psp_asd_unload(struct psp_context *psp)
+{
+	int ret;
+	struct psp_gfx_cmd_resp *cmd;
+
+	if (amdgpu_sriov_vf(psp->adev))
+		return 0;
+
+	if (!psp->asd_context.asd_initialized)
+		return 0;
+
+	cmd = kzalloc(sizeof(struct psp_gfx_cmd_resp), GFP_KERNEL);
+	if (!cmd)
+		return -ENOMEM;
+
+	psp_prep_asd_unload_cmd_buf(cmd, psp->asd_context.session_id);
+
+	ret = psp_cmd_submit_buf(psp, NULL, cmd,
+				 psp->fence_buf_mc_addr);
+	if (!ret)
+		psp->asd_context.asd_initialized = false;
 
 	kfree(cmd);
 
@@ -1211,45 +1231,6 @@ static int psp_hw_start(struct psp_context *psp)
 		return ret;
 	}
 
-	ret = psp_asd_init(psp);
-	if (ret) {
-		DRM_ERROR("PSP asd init failed!\n");
-		return ret;
-	}
-
-	ret = psp_asd_load(psp);
-	if (ret) {
-		DRM_ERROR("PSP load asd failed!\n");
-		return ret;
-	}
-
-	if (adev->gmc.xgmi.num_physical_nodes > 1) {
-		ret = psp_xgmi_initialize(psp);
-		/* Warning the XGMI seesion initialize failure
-		 * Instead of stop driver initialization
-		 */
-		if (ret)
-			dev_err(psp->adev->dev,
-				"XGMI: Failed to initialize XGMI session\n");
-	}
-
-	if (psp->adev->psp.ta_fw) {
-		ret = psp_ras_initialize(psp);
-		if (ret)
-			dev_err(psp->adev->dev,
-					"RAS: Failed to initialize RAS\n");
-
-		ret = psp_hdcp_initialize(psp);
-		if (ret)
-			dev_err(psp->adev->dev,
-				"HDCP: Failed to initialize HDCP\n");
-
-		ret = psp_dtm_initialize(psp);
-		if (ret)
-			dev_err(psp->adev->dev,
-				"DTM: Failed to initialize DTM\n");
-	}
-
 	return 0;
 }
 
@@ -1490,8 +1471,8 @@ out:
 			return ret;
 
 		/* Start rlc autoload after psp recieved all the gfx firmware */
-		if (psp->autoload_supported && ucode->ucode_id ==
-			AMDGPU_UCODE_ID_RLC_RESTORE_LIST_SRM_MEM) {
+		if (psp->autoload_supported && ucode->ucode_id == (amdgpu_sriov_vf(adev) ?
+		    AMDGPU_UCODE_ID_CP_MEC2 : AMDGPU_UCODE_ID_RLC_RESTORE_LIST_SRM_MEM)) {
 			ret = psp_rlc_autoload(psp);
 			if (ret) {
 				DRM_ERROR("Failed to start rlc autoload\n");
@@ -1565,6 +1546,39 @@ skip_memalloc:
 	if (ret)
 		goto failed;
 
+	ret = psp_asd_load(psp);
+	if (ret) {
+		DRM_ERROR("PSP load asd failed!\n");
+		return ret;
+	}
+
+	if (adev->gmc.xgmi.num_physical_nodes > 1) {
+		ret = psp_xgmi_initialize(psp);
+		/* Warning the XGMI seesion initialize failure
+		 * Instead of stop driver initialization
+		 */
+		if (ret)
+			dev_err(psp->adev->dev,
+				"XGMI: Failed to initialize XGMI session\n");
+	}
+
+	if (psp->adev->psp.ta_fw) {
+		ret = psp_ras_initialize(psp);
+		if (ret)
+			dev_err(psp->adev->dev,
+					"RAS: Failed to initialize RAS\n");
+
+		ret = psp_hdcp_initialize(psp);
+		if (ret)
+			dev_err(psp->adev->dev,
+				"HDCP: Failed to initialize HDCP\n");
+
+		ret = psp_dtm_initialize(psp);
+		if (ret)
+			dev_err(psp->adev->dev,
+				"DTM: Failed to initialize DTM\n");
+	}
+
 	return 0;
 
 failed:
@@ -1622,6 +1636,8 @@ static int psp_hw_fini(void *handle)
 		psp_hdcp_terminate(psp);
 	}
 
+	psp_asd_unload(psp);
+
 	psp_ring_destroy(psp, PSP_RING_TYPE__KM);
 
 	pptr = amdgpu_sriov_vf(psp->adev) ? &tmr_buf : NULL;
@@ -1630,8 +1646,6 @@ static int psp_hw_fini(void *handle)
 			      &psp->fw_pri_mc_addr, &psp->fw_pri_buf);
 	amdgpu_bo_free_kernel(&psp->fence_buf_bo,
 			      &psp->fence_buf_mc_addr, &psp->fence_buf);
-	amdgpu_bo_free_kernel(&psp->asd_shared_bo, &psp->asd_shared_mc_addr,
-			      &psp->asd_shared_buf);
 	amdgpu_bo_free_kernel(&psp->cmd_buf_bo, &psp->cmd_buf_mc_addr,
 			      (void **)&psp->cmd_buf_mem);
 
@@ -1706,6 +1720,39 @@ static int psp_resume(void *handle)
 	ret = psp_np_fw_load(psp);
 	if (ret)
 		goto failed;
+
+	ret = psp_asd_load(psp);
+	if (ret) {
+		DRM_ERROR("PSP load asd failed!\n");
+		goto failed;
+	}
+
+	if (adev->gmc.xgmi.num_physical_nodes > 1) {
+		ret = psp_xgmi_initialize(psp);
+		/* Warning the XGMI seesion initialize failure
+		 * Instead of stop driver initialization
+		 */
+		if (ret)
+			dev_err(psp->adev->dev,
+				"XGMI: Failed to initialize XGMI session\n");
+	}
+
+	if (psp->adev->psp.ta_fw) {
+		ret = psp_ras_initialize(psp);
+		if (ret)
+			dev_err(psp->adev->dev,
+					"RAS: Failed to initialize RAS\n");
+
+		ret = psp_hdcp_initialize(psp);
+		if (ret)
+			dev_err(psp->adev->dev,
+				"HDCP: Failed to initialize HDCP\n");
+
+		ret = psp_dtm_initialize(psp);
+		if (ret)
+			dev_err(psp->adev->dev,
+				"DTM: Failed to initialize DTM\n");
+	}
 
 	mutex_unlock(&adev->firmware.mutex);
 

@@ -66,44 +66,18 @@ int smu_v12_0_wait_for_response(struct smu_context *smu)
 	for (i = 0; i < adev->usec_timeout; i++) {
 		cur_value = RREG32_SOC15(MP1, 0, mmMP1_SMN_C2PMSG_90);
 		if ((cur_value & MP1_C2PMSG_90__CONTENT_MASK) != 0)
-			break;
+			return cur_value == 0x1 ? 0 : -EIO;
+
 		udelay(1);
 	}
 
 	/* timeout means wrong logic */
-	if (i == adev->usec_timeout)
-		return -ETIME;
-
-	return RREG32_SOC15(MP1, 0, mmMP1_SMN_C2PMSG_90) == 0x1 ? 0 : -EIO;
-}
-
-int smu_v12_0_send_msg(struct smu_context *smu, uint16_t msg)
-{
-	struct amdgpu_device *adev = smu->adev;
-	int ret = 0, index = 0;
-
-	index = smu_msg_get_index(smu, msg);
-	if (index < 0)
-		return index;
-
-	smu_v12_0_wait_for_response(smu);
-
-	WREG32_SOC15(MP1, 0, mmMP1_SMN_C2PMSG_90, 0);
-
-	smu_v12_0_send_msg_without_waiting(smu, (uint16_t)index);
-
-	ret = smu_v12_0_wait_for_response(smu);
-
-	if (ret)
-		pr_err("Failed to send message 0x%x, response 0x%x\n", index,
-		       ret);
-
-	return ret;
-
+	return -ETIME;
 }
 
 int
-smu_v12_0_send_msg_with_param(struct smu_context *smu, uint16_t msg,
+smu_v12_0_send_msg_with_param(struct smu_context *smu,
+			      enum smu_message_type msg,
 			      uint32_t param)
 {
 	struct amdgpu_device *adev = smu->adev;
@@ -114,9 +88,11 @@ smu_v12_0_send_msg_with_param(struct smu_context *smu, uint16_t msg,
 		return index;
 
 	ret = smu_v12_0_wait_for_response(smu);
-	if (ret)
-		pr_err("Failed to send message 0x%x, response 0x%x, param 0x%x\n",
-		       index, ret, param);
+	if (ret) {
+		pr_err("Msg issuing pre-check failed and "
+		       "SMU may be not in the right state!\n");
+		return ret;
+	}
 
 	WREG32_SOC15(MP1, 0, mmMP1_SMN_C2PMSG_90, 0);
 

@@ -38,8 +38,11 @@ void dmub_dcn21_setup_windows(struct dmub_srv *dmub,
 			      const struct dmub_window *cw2,
 			      const struct dmub_window *cw3,
 			      const struct dmub_window *cw4,
-				  const struct dmub_window *cw5);
+			      const struct dmub_window *cw5,
+			      const struct dmub_window *cw6);
 
 bool dmub_dcn21_is_auto_load_done(struct dmub_srv *dmub);
+
+bool dmub_dcn21_is_phy_init(struct dmub_srv *dmub);
 
 #endif /* _DMUB_DCN21_H_ */

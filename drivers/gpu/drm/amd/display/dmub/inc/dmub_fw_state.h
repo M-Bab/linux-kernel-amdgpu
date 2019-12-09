@@ -1,5 +1,5 @@
 /*
-* Copyright 2016 Advanced Micro Devices, Inc.
+ * Copyright 2019 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -23,25 +23,51 @@
  *
  */
 
-#ifndef __DC_HWSS_DCN21_H__
-#define __DC_HWSS_DCN21_H__
+#ifndef _DMUB_FW_STATE_H_
+#define _DMUB_FW_STATE_H_
 
-#include "hw_sequencer_private.h"
+#include "dmub_types.h"
 
-struct dc;
+#pragma pack(push, 1)
 
-int dcn21_init_sys_ctx(struct dce_hwseq *hws,
-		struct dc *dc,
-		struct dc_phy_addr_space_config *pa_config);
+struct dmub_fw_state {
+	/**
+	 * @phy_initialized_during_fw_boot:
+	 *
+	 * Detects if VBIOS/VBL has ran before firmware boot.
+	 * A value of 1 will usually mean S0i3 boot.
+	 */
+	uint8_t phy_initialized_during_fw_boot;
 
-bool dcn21_s0i3_golden_init_wa(struct dc *dc);
+	/**
+	 * @intialized_phy:
+	 *
+	 * Bit vector of initialized PHY.
+	 */
+	uint8_t initialized_phy;
 
-void dcn21_exit_optimized_pwr_state(
-		const struct dc *dc,
-		struct dc_state *context);
+	/**
+	 * @enabled_phy:
+	 *
+	 * Bit vector of enabled PHY for DP alt mode switch tracking.
+	 */
+	uint8_t enabled_phy;
 
-void dcn21_optimize_pwr_state(
-		const struct dc *dc,
-		struct dc_state *context);
+	/**
+	 * @dmcu_fw_loaded:
+	 *
+	 * DMCU auto load state.
+	 */
+	uint8_t dmcu_fw_loaded;
 
-#endif /* __DC_HWSS_DCN21_H__ */
+	/**
+	 * @psr_state:
+	 *
+	 * PSR state tracking.
+	 */
+	uint8_t psr_state;
+};
+
+#pragma pack(pop)
+
+#endif /* _DMUB_FW_STATE_H_ */

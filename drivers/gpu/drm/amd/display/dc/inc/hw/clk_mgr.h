@@ -66,6 +66,8 @@ struct wm_range_table_entry {
 	unsigned int wm_inst;
 	unsigned int wm_type;
 	double pstate_latency_us;
+	double sr_exit_time_us;
+	double sr_enter_plus_exit_time_us;
 	bool valid;
 };
 
@@ -189,6 +191,7 @@ struct clk_mgr {
 	bool psr_allow_active_cache;
 	int dprefclk_khz; // Used by program pixel clock in clock source funcs, need to figureout where this goes
 	int dentist_vco_freq_khz;
+	struct clk_state_registers_and_bypass boot_snapshot;
 	struct clk_bw_params *bw_params;
 };
 

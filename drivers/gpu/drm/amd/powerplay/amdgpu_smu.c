@@ -530,9 +530,12 @@ bool is_support_sw_smu(struct amdgpu_device *adev)
 {
 	if (adev->asic_type == CHIP_VEGA20)
 		return (amdgpu_dpm == 2) ? true : false;
-	else if (adev->asic_type >= CHIP_ARCTURUS)
-		return true;
-	else
+	else if (adev->asic_type >= CHIP_ARCTURUS) {
+		if (amdgpu_sriov_vf(adev))
+			return false;
+		else
+			return true;
+	} else
 		return false;
 }
 
@@ -1189,10 +1192,9 @@ static int smu_free_memory_pool(struct smu_context *smu)
 {
 	struct smu_table_context *smu_table = &smu->smu_table;
 	struct smu_table *memory_pool = &smu_table->memory_pool;
-	int ret = 0;
 
 	if (memory_pool->size == SMU_MEMORY_POOL_SIZE_ZERO)
-		return ret;
+		return 0;
 
 	amdgpu_bo_free_kernel(&memory_pool->bo,
 			      &memory_pool->mc_address,
@@ -1200,7 +1202,7 @@ static int smu_free_memory_pool(struct smu_context *smu)
 
 	memset(memory_pool, 0, sizeof(struct smu_table));
 
-	return ret;
+	return 0;
 }
 
 static int smu_start_smc_engine(struct smu_context *smu)
@@ -1381,7 +1383,7 @@ static int smu_suspend(void *handle)
 	if (ret)
 		return ret;
 
-	if (adev->in_gpu_reset && baco_feature_is_enabled) {
+	if (baco_feature_is_enabled) {
 		ret = smu_feature_set_enabled(smu, SMU_FEATURE_BACO_BIT, true);
 		if (ret) {
 			pr_warn("set BACO feature enabled failed, return %d\n", ret);
@@ -1942,7 +1944,6 @@ int smu_write_watermarks_table(struct smu_context *smu)
 int smu_set_watermarks_for_clock_ranges(struct smu_context *smu,
 		struct dm_pp_wm_sets_with_clock_ranges_soc15 *clock_ranges)
 {
-	int ret = 0;
 	struct smu_table *watermarks = &smu->smu_table.tables[SMU_TABLE_WATERMARKS];
 	void *table = watermarks->cpu_addr;
 
@@ -1958,7 +1959,7 @@ int smu_set_watermarks_for_clock_ranges(struct smu_context *smu,
 
 	mutex_unlock(&smu->mutex);
 
-	return ret;
+	return 0;
 }
 
 const struct amd_ip_funcs smu_ip_funcs = {
@@ -2565,5 +2566,14 @@ uint32_t smu_get_pptable_power_limit(struct smu_context *smu)
 	if (smu->ppt_funcs->get_pptable_power_limit)
 		ret = smu->ppt_funcs->get_pptable_power_limit(smu);
 
+	return ret;
+}
+
+int smu_send_smc_msg(struct smu_context *smu,
+		     enum smu_message_type msg)
+{
+	int ret;
+
+	ret = smu_send_smc_msg_with_param(smu, msg, 0);
 	return ret;
 }

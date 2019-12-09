@@ -1090,6 +1090,7 @@ static int amdgpu_device_check_arguments(struct amdgpu_device *adev)
 static void amdgpu_switcheroo_set_state(struct pci_dev *pdev, enum vga_switcheroo_state state)
 {
 	struct drm_device *dev = pci_get_drvdata(pdev);
+	int r;
 
 	if (amdgpu_device_supports_boco(dev) && state == VGA_SWITCHEROO_OFF)
 		return;
@@ -1099,7 +1100,12 @@ static void amdgpu_switcheroo_set_state(struct pci_dev *pdev, enum vga_switchero
 		/* don't suspend or resume card normally */
 		dev->switch_power_state = DRM_SWITCH_POWER_CHANGING;
 
-		amdgpu_device_resume(dev, true, true);
+		pci_set_power_state(dev->pdev, PCI_D0);
+		pci_restore_state(dev->pdev);
+		r = pci_enable_device(dev->pdev);
+		if (r)
+			DRM_WARN("pci_enable_device failed (%d)\n", r);
+		amdgpu_device_resume(dev, true);
 
 		dev->switch_power_state = DRM_SWITCH_POWER_ON;
 		drm_kms_helper_poll_enable(dev);
@@ -1107,7 +1113,11 @@ static void amdgpu_switcheroo_set_state(struct pci_dev *pdev, enum vga_switchero
 		pr_info("amdgpu: switched off\n");
 		drm_kms_helper_poll_disable(dev);
 		dev->switch_power_state = DRM_SWITCH_POWER_CHANGING;
-		amdgpu_device_suspend(dev, true, true);
+		amdgpu_device_suspend(dev, true);
+		pci_save_state(dev->pdev);
+		/* Shut down the device */
+		pci_disable_device(dev->pdev);
+		pci_set_power_state(dev->pdev, PCI_D3cold);
 		dev->switch_power_state = DRM_SWITCH_POWER_OFF;
 	}
 }
@@ -2654,7 +2664,13 @@ static void amdgpu_device_xgmi_reset_func(struct work_struct *__work)
 	struct amdgpu_device *adev =
 		container_of(__work, struct amdgpu_device, xgmi_reset_work);
 
-	adev->asic_reset_res =  amdgpu_asic_reset(adev);
+	if (amdgpu_asic_reset_method(adev) == AMD_RESET_METHOD_BACO)
+		adev->asic_reset_res = (adev->in_baco == false) ?
+				amdgpu_device_baco_enter(adev->ddev) :
+				amdgpu_device_baco_exit(adev->ddev);
+	else
+		adev->asic_reset_res = amdgpu_asic_reset(adev);
+
 	if (adev->asic_reset_res)
 		DRM_WARN("ASIC reset failed with error, %d for drm dev, %s",
 			 adev->asic_reset_res, adev->ddev->unique);
@@ -3011,8 +3027,6 @@ fence_driver_init:
 		}
 		dev_err(adev->dev, "amdgpu_device_ip_init failed\n");
 		amdgpu_vf_error_put(adev, AMDGIM_ERROR_VF_AMDGPU_INIT_FAIL, 0, 0);
-		if (amdgpu_virt_request_full_gpu(adev, false))
-			amdgpu_virt_release_full_gpu(adev, false);
 		goto failed;
 	}
 
@@ -3034,12 +3048,18 @@ fence_driver_init:
 		amdgpu_pm_virt_sysfs_init(adev);
 
 	r = amdgpu_pm_sysfs_init(adev);
-	if (r)
+	if (r) {
+		adev->pm_sysfs_en = false;
 		DRM_ERROR("registering pm debugfs failed (%d).\n", r);
+	} else
+		adev->pm_sysfs_en = true;
 
 	r = amdgpu_ucode_sysfs_init(adev);
-	if (r)
+	if (r) {
+		adev->ucode_sysfs_en = false;
 		DRM_ERROR("Creating firmware sysfs failed (%d).\n", r);
+	} else
+		adev->ucode_sysfs_en = true;
 
 	r = amdgpu_debugfs_gem_init(adev);
 	if (r)
@@ -3139,7 +3159,8 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
 			drm_atomic_helper_shutdown(adev->ddev);
 	}
 	amdgpu_fence_driver_fini(adev);
-	amdgpu_pm_sysfs_fini(adev);
+	if (adev->pm_sysfs_en)
+		amdgpu_pm_sysfs_fini(adev);
 	amdgpu_fbdev_fini(adev);
 	r = amdgpu_device_ip_fini(adev);
 	if (adev->firmware.gpu_info_fw) {
@@ -3175,7 +3196,8 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
 
 	amdgpu_debugfs_regs_cleanup(adev);
 	device_remove_file(adev->dev, &dev_attr_pcie_replay_count);
-	amdgpu_ucode_sysfs_fini(adev);
+	if (adev->ucode_sysfs_en)
+		amdgpu_ucode_sysfs_fini(adev);
 	if (IS_ENABLED(CONFIG_PERF_EVENTS))
 		amdgpu_pmu_fini(adev);
 	amdgpu_debugfs_preempt_cleanup(adev);
@@ -3198,7 +3220,7 @@ void amdgpu_device_fini(struct amdgpu_device *adev)
  * Returns 0 for success or an error on failure.
  * Called at driver suspend.
  */
-int amdgpu_device_suspend(struct drm_device *dev, bool suspend, bool fbcon)
+int amdgpu_device_suspend(struct drm_device *dev, bool fbcon)
 {
 	struct amdgpu_device *adev;
 	struct drm_crtc *crtc;
@@ -3281,13 +3303,6 @@ int amdgpu_device_suspend(struct drm_device *dev, bool suspend, bool fbcon)
 	 */
 	amdgpu_bo_evict_vram(adev);
 
-	if (suspend) {
-		pci_save_state(dev->pdev);
-		/* Shut down the device */
-		pci_disable_device(dev->pdev);
-		pci_set_power_state(dev->pdev, PCI_D3hot);
-	}
-
 	return 0;
 }
 
@@ -3302,7 +3317,7 @@ int amdgpu_device_suspend(struct drm_device *dev, bool suspend, bool fbcon)
  * Returns 0 for success or an error on failure.
  * Called at driver resume.
  */
-int amdgpu_device_resume(struct drm_device *dev, bool resume, bool fbcon)
+int amdgpu_device_resume(struct drm_device *dev, bool fbcon)
 {
 	struct drm_connector *connector;
 	struct drm_connector_list_iter iter;
@@ -3312,14 +3327,6 @@ int amdgpu_device_resume(struct drm_device *dev, bool resume, bool fbcon)
 
 	if (dev->switch_power_state == DRM_SWITCH_POWER_OFF)
 		return 0;
-
-	if (resume) {
-		pci_set_power_state(dev->pdev, PCI_D0);
-		pci_restore_state(dev->pdev);
-		r = pci_enable_device(dev->pdev);
-		if (r)
-			return r;
-	}
 
 	/* post card */
 	if (amdgpu_device_need_post(adev)) {
@@ -3789,13 +3796,18 @@ static int amdgpu_device_pre_asic_reset(struct amdgpu_device *adev,
 	return r;
 }
 
-static int amdgpu_do_asic_reset(struct amdgpu_hive_info *hive,
+static int amdgpu_do_asic_reset(struct amdgpu_device *adev,
+			       struct amdgpu_hive_info *hive,
 			       struct list_head *device_list_handle,
 			       bool *need_full_reset_arg)
 {
 	struct amdgpu_device *tmp_adev = NULL;
 	bool need_full_reset = *need_full_reset_arg, vram_lost = false;
 	int r = 0;
+	int cpu = smp_processor_id();
+	bool use_baco =
+		(amdgpu_asic_reset_method(adev) == AMD_RESET_METHOD_BACO) ?
+		true : false;
 
 	/*
 	 * ASIC reset has to be done on all HGMI hive nodes ASAP
@@ -3803,21 +3815,24 @@ static int amdgpu_do_asic_reset(struct amdgpu_hive_info *hive,
 	 */
 	if (need_full_reset) {
 		list_for_each_entry(tmp_adev, device_list_handle, gmc.xgmi.head) {
-			/* For XGMI run all resets in parallel to speed up the process */
+			/*
+			 * For XGMI run all resets in parallel to speed up the
+			 * process by scheduling the highpri wq on different
+			 * cpus. For XGMI with baco reset, all nodes must enter
+			 * baco within close proximity before anyone exit.
+			 */
 			if (tmp_adev->gmc.xgmi.num_physical_nodes > 1) {
-				if (!queue_work(system_highpri_wq, &tmp_adev->xgmi_reset_work))
+				if (!queue_work_on(cpu, system_highpri_wq,
+						   &tmp_adev->xgmi_reset_work))
 					r = -EALREADY;
+				cpu = cpumask_next(cpu, cpu_online_mask);
 			} else
 				r = amdgpu_asic_reset(tmp_adev);
-
-			if (r) {
-				DRM_ERROR("ASIC reset failed with error, %d for drm dev, %s",
-					 r, tmp_adev->ddev->unique);
+			if (r)
 				break;
-			}
 		}
 
-		/* For XGMI wait for all PSP resets to complete before proceed */
+		/* For XGMI wait for all work to complete before proceed */
 		if (!r) {
 			list_for_each_entry(tmp_adev, device_list_handle,
 					    gmc.xgmi.head) {
@@ -3826,11 +3841,57 @@ static int amdgpu_do_asic_reset(struct amdgpu_hive_info *hive,
 					r = tmp_adev->asic_reset_res;
 					if (r)
 						break;
+					if (use_baco)
+						tmp_adev->in_baco = true;
 				}
 			}
 		}
+
+		/*
+		 * For XGMI with baco reset, need exit baco phase by scheduling
+		 * xgmi_reset_work one more time. PSP reset and sGPU skips this
+		 * phase. Not assume the situation that PSP reset and baco reset
+		 * coexist within an XGMI hive.
+		 */
+
+		if (!r && use_baco) {
+			cpu = smp_processor_id();
+			list_for_each_entry(tmp_adev, device_list_handle,
+					    gmc.xgmi.head) {
+				if (tmp_adev->gmc.xgmi.num_physical_nodes > 1) {
+					if (!queue_work_on(cpu,
+						system_highpri_wq,
+						&tmp_adev->xgmi_reset_work))
+						r = -EALREADY;
+					if (r)
+						break;
+					cpu = cpumask_next(cpu, cpu_online_mask);
+				}
+			}
+		}
+
+		if (!r && use_baco) {
+			list_for_each_entry(tmp_adev, device_list_handle,
+					    gmc.xgmi.head) {
+				if (tmp_adev->gmc.xgmi.num_physical_nodes > 1) {
+					flush_work(&tmp_adev->xgmi_reset_work);
+					r = tmp_adev->asic_reset_res;
+					if (r)
+						break;
+					tmp_adev->in_baco = false;
+				}
+			}
+		}
+
+		if (r) {
+			DRM_ERROR("ASIC reset failed with error, %d for drm dev, %s",
+				 r, tmp_adev->ddev->unique);
+			goto end;
+		}
 	}
 
+	if (!r && amdgpu_ras_intr_triggered())
+		amdgpu_ras_intr_cleared();
 
 	list_for_each_entry(tmp_adev, device_list_handle, gmc.xgmi.head) {
 		if (need_full_reset) {
@@ -3963,12 +4024,15 @@ int amdgpu_device_gpu_recover(struct amdgpu_device *adev,
 	struct amdgpu_device *tmp_adev = NULL;
 	int i, r = 0;
 	bool in_ras_intr = amdgpu_ras_intr_triggered();
+	bool use_baco =
+		(amdgpu_asic_reset_method(adev) == AMD_RESET_METHOD_BACO) ?
+		true : false;
 
 	/*
 	 * Flush RAM to disk so that after reboot
 	 * the user can read log and see why the system rebooted.
 	 */
-	if (in_ras_intr && amdgpu_ras_get_context(adev)->reboot) {
+	if (in_ras_intr && !use_baco && amdgpu_ras_get_context(adev)->reboot) {
 
 		DRM_WARN("Emergency reboot.");
 
@@ -3979,7 +4043,8 @@ int amdgpu_device_gpu_recover(struct amdgpu_device *adev,
 	need_full_reset = job_signaled = false;
 	INIT_LIST_HEAD(&device_list);
 
-	dev_info(adev->dev, "GPU %s begin!\n", in_ras_intr ? "jobs stop":"reset");
+	dev_info(adev->dev, "GPU %s begin!\n",
+		(in_ras_intr && !use_baco) ? "jobs stop":"reset");
 
 	cancel_delayed_work_sync(&adev->delayed_init_work);
 
@@ -4046,7 +4111,8 @@ int amdgpu_device_gpu_recover(struct amdgpu_device *adev,
 		amdgpu_unregister_gpu_instance(tmp_adev);
 
 		/* disable ras on ALL IPs */
-		if (!in_ras_intr && amdgpu_device_ip_need_full_reset(tmp_adev))
+		if (!(in_ras_intr && !use_baco) &&
+		      amdgpu_device_ip_need_full_reset(tmp_adev))
 			amdgpu_ras_suspend(tmp_adev);
 
 		for (i = 0; i < AMDGPU_MAX_RINGS; ++i) {
@@ -4057,13 +4123,13 @@ int amdgpu_device_gpu_recover(struct amdgpu_device *adev,
 
 			drm_sched_stop(&ring->sched, job ? &job->base : NULL);
 
-			if (in_ras_intr)
+			if (in_ras_intr && !use_baco)
 				amdgpu_job_stop_all_jobs_on_sched(&ring->sched);
 		}
 	}
 
 
-	if (in_ras_intr)
+	if (in_ras_intr && !use_baco)
 		goto skip_sched_resume;
 
 	/*
@@ -4115,7 +4181,8 @@ retry:	/* Rest of adevs pre asic reset from XGMI hive. */
 		if (r)
 			adev->asic_reset_res = r;
 	} else {
-		r  = amdgpu_do_asic_reset(hive, device_list_handle, &need_full_reset);
+		r  = amdgpu_do_asic_reset(adev, hive, device_list_handle,
+					  &need_full_reset);
 		if (r && r == -EAGAIN)
 			goto retry;
 	}
@@ -4156,7 +4223,7 @@ skip_hw_reset:
 skip_sched_resume:
 	list_for_each_entry(tmp_adev, device_list_handle, gmc.xgmi.head) {
 		/*unlock kfd: SRIOV would do it separately */
-		if (!in_ras_intr && !amdgpu_sriov_vf(tmp_adev))
+		if (!(in_ras_intr && !use_baco) && !amdgpu_sriov_vf(tmp_adev))
 	                amdgpu_amdkfd_post_reset(tmp_adev);
 		amdgpu_device_unlock_adev(tmp_adev);
 	}
@@ -4308,9 +4375,13 @@ static void amdgpu_device_get_pcie_info(struct amdgpu_device *adev)
 int amdgpu_device_baco_enter(struct drm_device *dev)
 {
 	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_ras *ras = amdgpu_ras_get_context(adev);
 
 	if (!amdgpu_device_supports_baco(adev->ddev))
 		return -ENOTSUPP;
+
+	if (ras && ras->supported)
+		adev->nbio.funcs->enable_doorbell_interrupt(adev, false);
 
 	if (is_support_sw_smu(adev)) {
 		struct smu_context *smu = &adev->smu;
@@ -4319,8 +4390,6 @@ int amdgpu_device_baco_enter(struct drm_device *dev)
 		ret = smu_baco_enter(smu);
 		if (ret)
 			return ret;
-
-		return 0;
 	} else {
 		void *pp_handle = adev->powerplay.pp_handle;
 		const struct amd_pm_funcs *pp_funcs = adev->powerplay.pp_funcs;
@@ -4331,14 +4400,15 @@ int amdgpu_device_baco_enter(struct drm_device *dev)
 		/* enter BACO state */
 		if (pp_funcs->set_asic_baco_state(pp_handle, 1))
 			return -EIO;
-
-		return 0;
 	}
+
+	return 0;
 }
 
 int amdgpu_device_baco_exit(struct drm_device *dev)
 {
 	struct amdgpu_device *adev = dev->dev_private;
+	struct amdgpu_ras *ras = amdgpu_ras_get_context(adev);
 
 	if (!amdgpu_device_supports_baco(adev->ddev))
 		return -ENOTSUPP;
@@ -4351,7 +4421,6 @@ int amdgpu_device_baco_exit(struct drm_device *dev)
 		if (ret)
 			return ret;
 
-		return 0;
 	} else {
 		void *pp_handle = adev->powerplay.pp_handle;
 		const struct amd_pm_funcs *pp_funcs = adev->powerplay.pp_funcs;
@@ -4362,7 +4431,10 @@ int amdgpu_device_baco_exit(struct drm_device *dev)
 		/* exit BACO state */
 		if (pp_funcs->set_asic_baco_state(pp_handle, 0))
 			return -EIO;
-
-		return 0;
 	}
+
+	if (ras && ras->supported)
+		adev->nbio.funcs->enable_doorbell_interrupt(adev, true);
+
+	return 0;
 }
