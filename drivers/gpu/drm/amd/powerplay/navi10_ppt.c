@@ -564,17 +564,20 @@ static int navi10_get_metrics_table(struct smu_context *smu,
 	struct smu_table_context *smu_table= &smu->smu_table;
 	int ret = 0;
 
+	mutex_lock(&smu->metrics_lock);
 	if (!smu_table->metrics_time || time_after(jiffies, smu_table->metrics_time + msecs_to_jiffies(100))) {
 		ret = smu_update_table(smu, SMU_TABLE_SMU_METRICS, 0,
 				(void *)smu_table->metrics_table, false);
 		if (ret) {
 			pr_info("Failed to export SMU metrics table!\n");
+			mutex_unlock(&smu->metrics_lock);
 			return ret;
 		}
 		smu_table->metrics_time = jiffies;
 	}
 
 	memcpy(metrics_table, smu_table->metrics_table, sizeof(SmuMetrics_t));
+	mutex_unlock(&smu->metrics_lock);
 
 	return ret;
 }
@@ -1374,7 +1377,7 @@ static int navi10_get_profiling_clk_mask(struct smu_context *smu,
 	return ret;
 }
 
-static int navi10_notify_smc_dispaly_config(struct smu_context *smu)
+static int navi10_notify_smc_display_config(struct smu_context *smu)
 {
 	struct smu_clocks min_clocks = {0};
 	struct pp_display_clock_request clock_req;
@@ -1584,7 +1587,7 @@ static int navi10_set_peak_clock_by_device(struct smu_context *smu)
 	struct amdgpu_device *adev = smu->adev;
 	int ret = 0;
 	uint32_t sclk_freq = 0, uclk_freq = 0;
-	uint32_t uclk_level = 0;
+	uint32_t sclk_level = 0, uclk_level = 0;
 
 	switch (adev->asic_type) {
 	case CHIP_NAVI10:
@@ -1625,8 +1628,17 @@ static int navi10_set_peak_clock_by_device(struct smu_context *smu)
 			break;
 		}
 		break;
+	case CHIP_NAVI12:
+		sclk_freq = NAVI12_UMD_PSTATE_PEAK_GFXCLK;
+		break;
 	default:
-		return -EINVAL;
+		ret = smu_get_dpm_level_count(smu, SMU_SCLK, &sclk_level);
+		if (ret)
+			return ret;
+		ret = smu_get_dpm_freq_by_index(smu, SMU_SCLK, sclk_level - 1, &sclk_freq);
+		if (ret)
+			return ret;
+		break;
 	}
 
 	ret = smu_get_dpm_level_count(smu, SMU_UCLK, &uclk_level);
@@ -2047,7 +2059,7 @@ static const struct pptable_funcs navi10_ppt_funcs = {
 	.get_clock_by_type_with_latency = navi10_get_clock_by_type_with_latency,
 	.pre_display_config_changed = navi10_pre_display_config_changed,
 	.display_config_changed = navi10_display_config_changed,
-	.notify_smc_dispaly_config = navi10_notify_smc_dispaly_config,
+	.notify_smc_display_config = navi10_notify_smc_display_config,
 	.force_dpm_limit_value = navi10_force_dpm_limit_value,
 	.unforce_dpm_levels = navi10_unforce_dpm_levels,
 	.is_dpm_running = navi10_is_dpm_running,

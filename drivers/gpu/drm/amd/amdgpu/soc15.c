@@ -557,7 +557,8 @@ static int soc15_mode2_reset(struct amdgpu_device *adev)
 static enum amd_reset_method
 soc15_asic_reset_method(struct amdgpu_device *adev)
 {
-	bool baco_reset;
+	bool baco_reset = false;
+	struct amdgpu_ras *ras = amdgpu_ras_get_context(adev);
 
 	switch (adev->asic_type) {
 	case CHIP_RAVEN:
@@ -571,18 +572,15 @@ soc15_asic_reset_method(struct amdgpu_device *adev)
 	case CHIP_VEGA20:
 		if (adev->psp.sos_fw_version >= 0x80067)
 			soc15_asic_get_baco_capability(adev, &baco_reset);
-		else
-			baco_reset = false;
-		if (baco_reset) {
-			struct amdgpu_hive_info *hive = amdgpu_get_xgmi_hive(adev, 0);
-			struct amdgpu_ras *ras = amdgpu_ras_get_context(adev);
 
-			if (hive || (ras && ras->supported))
-				baco_reset = false;
-		}
+		/*
+		 * 1. PMFW version > 0x284300: all cases use baco
+		 * 2. PMFW version <= 0x284300: only sGPU w/o RAS use baco
+		 */
+		if ((ras && ras->supported) && adev->pm.fw_version <= 0x283400)
+			baco_reset = false;
 		break;
 	default:
-		baco_reset = false;
 		break;
 	}
 
@@ -777,11 +775,11 @@ int soc15_set_ip_blocks(struct amdgpu_device *adev)
 		}
 		amdgpu_device_ip_block_add(adev, &gfx_v9_0_ip_block);
 		amdgpu_device_ip_block_add(adev, &sdma_v4_0_ip_block);
-		if (!amdgpu_sriov_vf(adev)) {
-			if (is_support_sw_smu(adev))
+		if (is_support_sw_smu(adev)) {
+			if (!amdgpu_sriov_vf(adev))
 				amdgpu_device_ip_block_add(adev, &smu_v11_0_ip_block);
-			else
-				amdgpu_device_ip_block_add(adev, &pp_smu_ip_block);
+		} else {
+			amdgpu_device_ip_block_add(adev, &pp_smu_ip_block);
 		}
 		if (adev->enable_virtual_display || amdgpu_sriov_vf(adev))
 			amdgpu_device_ip_block_add(adev, &dce_virtual_ip_block);
@@ -832,8 +830,13 @@ int soc15_set_ip_blocks(struct amdgpu_device *adev)
 		if (!amdgpu_sriov_vf(adev))
 			amdgpu_device_ip_block_add(adev, &smu_v11_0_ip_block);
 
-		if (unlikely(adev->firmware.load_type == AMDGPU_FW_LOAD_DIRECT))
-			amdgpu_device_ip_block_add(adev, &vcn_v2_5_ip_block);
+		if (amdgpu_sriov_vf(adev)) {
+			if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
+				amdgpu_device_ip_block_add(adev, &vcn_v2_5_ip_block);
+		} else {
+			if (unlikely(adev->firmware.load_type == AMDGPU_FW_LOAD_DIRECT))
+				amdgpu_device_ip_block_add(adev, &vcn_v2_5_ip_block);
+		}
 		if (!amdgpu_sriov_vf(adev))
 			amdgpu_device_ip_block_add(adev, &jpeg_v2_5_ip_block);
 		break;
