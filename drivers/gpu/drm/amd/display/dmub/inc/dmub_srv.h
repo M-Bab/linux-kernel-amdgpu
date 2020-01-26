@@ -231,6 +231,8 @@ struct dmub_srv_base_funcs {
 struct dmub_srv_hw_funcs {
 	/* private: internal use only */
 
+	void (*init)(struct dmub_srv *dmub);
+
 	void (*reset)(struct dmub_srv *dmub);
 
 	void (*reset_release)(struct dmub_srv *dmub);
@@ -417,6 +419,21 @@ enum dmub_status dmub_srv_hw_init(struct dmub_srv *dmub,
 				  const struct dmub_srv_hw_params *params);
 
 /**
+ * dmub_srv_hw_reset() - puts the DMUB hardware in reset state if initialized
+ * @dmub: the dmub service
+ *
+ * Before destroying the DMUB service or releasing the backing framebuffer
+ * memory we'll need to put the DMCUB into reset first.
+ *
+ * A subsequent call to dmub_srv_hw_init() will re-enable the DMCUB.
+ *
+ * Return:
+ *   DMUB_STATUS_OK - success
+ *   DMUB_STATUS_INVALID - unspecified error
+ */
+enum dmub_status dmub_srv_hw_reset(struct dmub_srv *dmub);
+
+/**
  * dmub_srv_cmd_queue() - queues a command to the DMUB
  * @dmub: the dmub service
  * @cmd: the command to queue
@@ -443,25 +460,6 @@ enum dmub_status dmub_srv_cmd_queue(struct dmub_srv *dmub,
  *   DMUB_STATUS_INVALID - unspecified error
  */
 enum dmub_status dmub_srv_cmd_execute(struct dmub_srv *dmub);
-
-/**
- * dmub_srv_cmd_submit() - submits a command to the DMUB immediately
- * @dmub: the dmub service
- * @cmd: the command to submit
- * @timeout_us: the maximum number of microseconds to wait
- *
- * Submits a command to the DMUB with an optional timeout.
- * If timeout_us is given then the service will attempt to
- * resubmit for the given number of microseconds.
- *
- * Return:
- *   DMUB_STATUS_OK - success
- *   DMUB_STATUS_TIMEOUT - wait for submit timed out
- *   DMUB_STATUS_INVALID - unspecified error
- */
-enum dmub_status dmub_srv_cmd_submit(struct dmub_srv *dmub,
-				     const struct dmub_cmd_header *cmd,
-				     uint32_t timeout_us);
 
 /**
  * dmub_srv_wait_for_auto_load() - Waits for firmware auto load to complete

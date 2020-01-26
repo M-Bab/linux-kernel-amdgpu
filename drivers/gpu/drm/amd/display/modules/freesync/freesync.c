@@ -381,7 +381,7 @@ static void apply_fixed_refresh(struct core_freesync *core_freesync,
 	bool update = false;
 	unsigned int max_render_time_in_us = in_out_vrr->max_duration_in_us;
 
-	//Compute the exit refresh rate and exit frame duration
+	/* Compute the exit refresh rate and exit frame duration */
 	unsigned int exit_refresh_rate_in_milli_hz = ((1000000000/max_render_time_in_us)
 			+ (1000*FIXED_REFRESH_EXIT_MARGIN_IN_HZ));
 	unsigned int exit_frame_duration_in_us = 1000000000/exit_refresh_rate_in_milli_hz;
@@ -816,6 +816,8 @@ void mod_freesync_build_vrr_params(struct mod_freesync *mod_freesync,
 	in_out_vrr->btr.inserted_duration_in_us = 0;
 	in_out_vrr->btr.frames_to_insert = 0;
 	in_out_vrr->btr.frame_counter = 0;
+	in_out_vrr->fixed.fixed_active = false;
+	in_out_vrr->fixed.target_refresh_in_uhz = 0;
 
 	in_out_vrr->btr.mid_point_in_us =
 				(in_out_vrr->min_duration_in_us +
@@ -832,6 +834,7 @@ void mod_freesync_build_vrr_params(struct mod_freesync *mod_freesync,
 		in_out_vrr->adjust.v_total_max = stream->timing.v_total;
 	} else if (in_out_vrr->state == VRR_STATE_ACTIVE_VARIABLE &&
 			refresh_range >= MIN_REFRESH_RANGE_IN_US) {
+
 		in_out_vrr->adjust.v_total_min =
 			calc_v_total_from_refresh(stream,
 				in_out_vrr->max_refresh_in_uhz);

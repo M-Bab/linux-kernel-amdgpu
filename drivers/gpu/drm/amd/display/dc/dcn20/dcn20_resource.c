@@ -638,6 +638,7 @@ static const struct dce110_aux_registers aux_engine_regs[] = {
 #define tf_regs(id)\
 [id] = {\
 	TF_REG_LIST_DCN20(id),\
+	TF_REG_LIST_DCN20_COMMON_APPEND(id),\
 }
 
 static const struct dcn2_dpp_registers tf_regs[] = {
@@ -651,12 +652,12 @@ static const struct dcn2_dpp_registers tf_regs[] = {
 
 static const struct dcn2_dpp_shift tf_shift = {
 		TF_REG_LIST_SH_MASK_DCN20(__SHIFT),
-		TF_DEBUG_REG_LIST_SH_DCN10
+		TF_DEBUG_REG_LIST_SH_DCN20
 };
 
 static const struct dcn2_dpp_mask tf_mask = {
 		TF_REG_LIST_SH_MASK_DCN20(_MASK),
-		TF_DEBUG_REG_LIST_MASK_DCN10
+		TF_DEBUG_REG_LIST_MASK_DCN20
 };
 
 #define dwbc_regs_dcn2(id)\
@@ -706,14 +707,17 @@ static const struct dcn20_mpc_registers mpc_regs = {
 		MPC_OUT_MUX_REG_LIST_DCN2_0(3),
 		MPC_OUT_MUX_REG_LIST_DCN2_0(4),
 		MPC_OUT_MUX_REG_LIST_DCN2_0(5),
+		MPC_DBG_REG_LIST_DCN2_0()
 };
 
 static const struct dcn20_mpc_shift mpc_shift = {
-	MPC_COMMON_MASK_SH_LIST_DCN2_0(__SHIFT)
+	MPC_COMMON_MASK_SH_LIST_DCN2_0(__SHIFT),
+	MPC_DEBUG_REG_LIST_SH_DCN20
 };
 
 static const struct dcn20_mpc_mask mpc_mask = {
-	MPC_COMMON_MASK_SH_LIST_DCN2_0(_MASK)
+	MPC_COMMON_MASK_SH_LIST_DCN2_0(_MASK),
+	MPC_DEBUG_REG_LIST_MASK_DCN20
 };
 
 #define tg_regs(id)\
@@ -1569,7 +1573,7 @@ static void release_dsc(struct resource_context *res_ctx,
 
 
 
-static enum dc_status add_dsc_to_stream_resource(struct dc *dc,
+enum dc_status dcn20_add_dsc_to_stream_resource(struct dc *dc,
 		struct dc_state *dc_ctx,
 		struct dc_stream_state *dc_stream)
 {
@@ -1582,6 +1586,9 @@ static enum dc_status add_dsc_to_stream_resource(struct dc *dc,
 		struct pipe_ctx *pipe_ctx = &dc_ctx->res_ctx.pipe_ctx[i];
 
 		if (pipe_ctx->stream != dc_stream)
+			continue;
+
+		if (pipe_ctx->stream_res.dsc)
 			continue;
 
 		acquire_dsc(&dc_ctx->res_ctx, pool, &pipe_ctx->stream_res.dsc, i);
@@ -1632,7 +1639,7 @@ enum dc_status dcn20_add_stream_to_ctx(struct dc *dc, struct dc_state *new_ctx, 
 
 	/* Get a DSC if required and available */
 	if (result == DC_OK && dc_stream->timing.flags.DSC)
-		result = add_dsc_to_stream_resource(dc, new_ctx, dc_stream);
+		result = dcn20_add_dsc_to_stream_resource(dc, new_ctx, dc_stream);
 
 	if (result == DC_OK)
 		result = dcn20_build_mapped_resource(dc, new_ctx, dc_stream);
@@ -1854,6 +1861,22 @@ void dcn20_populate_dml_writeback_from_context(
 
 }
 
+static int get_num_odm_heads(struct pipe_ctx *pipe)
+{
+	int odm_head_count = 0;
+	struct pipe_ctx *next_pipe = pipe->next_odm_pipe;
+	while (next_pipe) {
+		odm_head_count++;
+		next_pipe = next_pipe->next_odm_pipe;
+	}
+	pipe = pipe->prev_odm_pipe;
+	while (pipe) {
+		odm_head_count++;
+		pipe = pipe->prev_odm_pipe;
+	}
+	return odm_head_count ? odm_head_count + 1 : 0;
+}
+
 int dcn20_populate_dml_pipes_from_context(
 		struct dc *dc, struct dc_state *context, display_e2e_pipe_params_st *pipes)
 {
@@ -1880,16 +1903,20 @@ int dcn20_populate_dml_pipes_from_context(
 	for (i = 0, pipe_cnt = 0; i < dc->res_pool->pipe_count; i++) {
 		struct dc_crtc_timing *timing = &res_ctx->pipe_ctx[i].stream->timing;
 		unsigned int v_total;
+		unsigned int front_porch;
 		int output_bpc;
 
 		if (!res_ctx->pipe_ctx[i].stream)
 			continue;
 
 		v_total = timing->v_total;
+		front_porch = timing->v_front_porch;
 		/* todo:
 		pipes[pipe_cnt].pipe.src.dynamic_metadata_enable = 0;
 		pipes[pipe_cnt].pipe.src.dcc = 0;
 		pipes[pipe_cnt].pipe.src.vm = 0;*/
+
+		pipes[pipe_cnt].clks_cfg.refclk_mhz = dc->res_pool->ref_clocks.dchub_ref_clock_inKhz / 1000.0;
 
 		pipes[pipe_cnt].dout.dsc_enable = res_ctx->pipe_ctx[i].stream->timing.flags.DSC;
 		/* todo: rotation?*/
@@ -1912,7 +1939,7 @@ int dcn20_populate_dml_pipes_from_context(
 				- timing->h_addressable
 				- timing->h_border_left
 				- timing->h_border_right;
-		pipes[pipe_cnt].pipe.dest.vblank_start = v_total - timing->v_front_porch;
+		pipes[pipe_cnt].pipe.dest.vblank_start = v_total - front_porch;
 		pipes[pipe_cnt].pipe.dest.vblank_end = pipes[pipe_cnt].pipe.dest.vblank_start
 				- timing->v_addressable
 				- timing->v_border_top
@@ -1929,8 +1956,13 @@ int dcn20_populate_dml_pipes_from_context(
 		pipes[pipe_cnt].dout.dp_lanes = 4;
 		pipes[pipe_cnt].pipe.dest.vtotal_min = res_ctx->pipe_ctx[i].stream->adjust.v_total_min;
 		pipes[pipe_cnt].pipe.dest.vtotal_max = res_ctx->pipe_ctx[i].stream->adjust.v_total_max;
-		pipes[pipe_cnt].pipe.dest.odm_combine = res_ctx->pipe_ctx[i].prev_odm_pipe
-							|| res_ctx->pipe_ctx[i].next_odm_pipe;
+		switch (get_num_odm_heads(&res_ctx->pipe_ctx[i])) {
+		case 2:
+			pipes[pipe_cnt].pipe.dest.odm_combine = dm_odm_combine_mode_2to1;
+			break;
+		default:
+			pipes[pipe_cnt].pipe.dest.odm_combine = dm_odm_combine_mode_disabled;
+		}
 		pipes[pipe_cnt].pipe.src.hsplit_grp = res_ctx->pipe_ctx[i].pipe_idx;
 		if (res_ctx->pipe_ctx[i].top_pipe && res_ctx->pipe_ctx[i].top_pipe->plane_state
 				== res_ctx->pipe_ctx[i].plane_state)
@@ -2040,6 +2072,9 @@ int dcn20_populate_dml_pipes_from_context(
 			if (pipes[pipe_cnt].pipe.src.viewport_height > 1080)
 				pipes[pipe_cnt].pipe.src.viewport_height = 1080;
 			pipes[pipe_cnt].pipe.src.surface_height_y = pipes[pipe_cnt].pipe.src.viewport_height;
+			pipes[pipe_cnt].pipe.src.surface_width_y = pipes[pipe_cnt].pipe.src.viewport_width;
+			pipes[pipe_cnt].pipe.src.surface_height_c = pipes[pipe_cnt].pipe.src.viewport_height;
+			pipes[pipe_cnt].pipe.src.surface_width_c = pipes[pipe_cnt].pipe.src.viewport_width;
 			pipes[pipe_cnt].pipe.src.data_pitch = ((pipes[pipe_cnt].pipe.src.viewport_width + 63) / 64) * 64; /* linear sw only */
 			pipes[pipe_cnt].pipe.src.source_format = dm_444_32;
 			pipes[pipe_cnt].pipe.dest.recout_width = pipes[pipe_cnt].pipe.src.viewport_width; /*vp_width/hratio*/
@@ -2073,7 +2108,10 @@ int dcn20_populate_dml_pipes_from_context(
 			pipes[pipe_cnt].pipe.src.viewport_width_c = scl->viewport_c.width;
 			pipes[pipe_cnt].pipe.src.viewport_height = scl->viewport.height;
 			pipes[pipe_cnt].pipe.src.viewport_height_c = scl->viewport_c.height;
+			pipes[pipe_cnt].pipe.src.surface_width_y = pln->plane_size.surface_size.width;
 			pipes[pipe_cnt].pipe.src.surface_height_y = pln->plane_size.surface_size.height;
+			pipes[pipe_cnt].pipe.src.surface_width_c = pln->plane_size.chroma_size.width;
+			pipes[pipe_cnt].pipe.src.surface_height_c = pln->plane_size.chroma_size.height;
 			if (pln->format >= SURFACE_PIXEL_FORMAT_VIDEO_BEGIN) {
 				pipes[pipe_cnt].pipe.src.data_pitch = pln->plane_size.surface_pitch;
 				pipes[pipe_cnt].pipe.src.data_pitch_c = pln->plane_size.chroma_pitch;
@@ -2487,7 +2525,7 @@ int dcn20_validate_apply_pipe_split_flags(
 			split[i] = true;
 		if (dc->debug.force_odm_combine & (1 << pipe->stream_res.tg->inst)) {
 			split[i] = true;
-			context->bw_ctx.dml.vba.ODMCombineEnablePerState[vlevel][pipe_idx] = true;
+			context->bw_ctx.dml.vba.ODMCombineEnablePerState[vlevel][pipe_idx] = dm_odm_combine_mode_2to1;
 		}
 		context->bw_ctx.dml.vba.ODMCombineEnabled[pipe_idx] =
 			context->bw_ctx.dml.vba.ODMCombineEnablePerState[vlevel][pipe_idx];
@@ -2912,7 +2950,7 @@ bool dcn20_validate_bandwidth(struct dc *dc, struct dc_state *context,
 
 	if (context->bw_ctx.dml.soc.dummy_pstate_latency_us == 0 ||
 		(voltage_supported && full_pstate_supported)) {
-		context->bw_ctx.bw.dcn.clk.p_state_change_support = true;
+		context->bw_ctx.bw.dcn.clk.p_state_change_support = full_pstate_supported;
 		goto restore_dml_state;
 	}
 
@@ -3225,7 +3263,6 @@ void dcn20_update_bounding_box(struct dc *dc, struct _vcs_dpi_soc_bounding_box_s
 
 void dcn20_patch_bounding_box(struct dc *dc, struct _vcs_dpi_soc_bounding_box_st *bb)
 {
-	DC_FP_START();
 	if ((int)(bb->sr_exit_time_us * 1000) != dc->bb_overrides.sr_exit_time_ns
 			&& dc->bb_overrides.sr_exit_time_ns) {
 		bb->sr_exit_time_us = dc->bb_overrides.sr_exit_time_ns / 1000.0;
@@ -3249,7 +3286,6 @@ void dcn20_patch_bounding_box(struct dc *dc, struct _vcs_dpi_soc_bounding_box_st
 		bb->dram_clock_change_latency_us =
 				dc->bb_overrides.dram_clock_change_latency_ns / 1000.0;
 	}
-	DC_FP_END();
 }
 
 static struct _vcs_dpi_soc_bounding_box_st *get_asic_rev_soc_bb(

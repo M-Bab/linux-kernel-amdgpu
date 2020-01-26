@@ -91,6 +91,7 @@
 #include "amdgpu_umc.h"
 #include "amdgpu_mmhub.h"
 #include "amdgpu_tmz.h"
+#include "amdgpu_df.h"
 
 #define MAX_GPU_INSTANCE		16
 
@@ -670,29 +671,6 @@ struct amdgpu_mmio_remap {
 	resource_size_t bus_addr;
 };
 
-struct amdgpu_df_funcs {
-	void (*sw_init)(struct amdgpu_device *adev);
-	void (*sw_fini)(struct amdgpu_device *adev);
-	void (*enable_broadcast_mode)(struct amdgpu_device *adev,
-				      bool enable);
-	u32 (*get_fb_channel_number)(struct amdgpu_device *adev);
-	u32 (*get_hbm_channel_number)(struct amdgpu_device *adev);
-	void (*update_medium_grain_clock_gating)(struct amdgpu_device *adev,
-						 bool enable);
-	void (*get_clockgating_state)(struct amdgpu_device *adev,
-				      u32 *flags);
-	void (*enable_ecc_force_par_wr_rmw)(struct amdgpu_device *adev,
-					    bool enable);
-	int (*pmc_start)(struct amdgpu_device *adev, uint64_t config,
-					 int is_enable);
-	int (*pmc_stop)(struct amdgpu_device *adev, uint64_t config,
-					 int is_disable);
-	void (*pmc_get_count)(struct amdgpu_device *adev, uint64_t config,
-					 uint64_t *count);
-	uint64_t (*get_fica)(struct amdgpu_device *adev, uint32_t ficaa_val);
-	void (*set_fica)(struct amdgpu_device *adev, uint32_t ficaa_val,
-			 uint32_t ficadl_val, uint32_t ficadh_val);
-};
 /* Define the HW IP blocks will be used in driver , add more if necessary */
 enum amd_hw_ip_block_type {
 	GC_HWIP = 1,
@@ -939,6 +917,9 @@ struct amdgpu_device {
 	/* tmz */
 	struct amdgpu_tmz		tmz;
 
+	/* df */
+	struct amdgpu_df                df;
+
 	struct amdgpu_ip_block          ip_blocks[AMDGPU_MAX_IP_NUM];
 	int				num_ip_blocks;
 	struct mutex	mn_lock;
@@ -951,8 +932,6 @@ struct amdgpu_device {
 
 	/* soc15 register offset based on ip, instance and  segment */
 	uint32_t		*reg_offset[MAX_HWIP][HWIP_MAX_INSTANCE];
-
-	const struct amdgpu_df_funcs	*df_funcs;
 
 	/* delayed work_func for deferring clockgating during resume */
 	struct delayed_work     delayed_init_work;
@@ -1037,9 +1016,13 @@ int emu_soc_asic_init(struct amdgpu_device *adev);
 
 #define AMDGPU_REGS_IDX       (1<<0)
 #define AMDGPU_REGS_NO_KIQ    (1<<1)
+#define AMDGPU_REGS_KIQ       (1<<2)
 
 #define RREG32_NO_KIQ(reg) amdgpu_mm_rreg(adev, (reg), AMDGPU_REGS_NO_KIQ)
 #define WREG32_NO_KIQ(reg, v) amdgpu_mm_wreg(adev, (reg), (v), AMDGPU_REGS_NO_KIQ)
+
+#define RREG32_KIQ(reg) amdgpu_mm_rreg(adev, (reg), AMDGPU_REGS_KIQ)
+#define WREG32_KIQ(reg, v) amdgpu_mm_wreg(adev, (reg), (v), AMDGPU_REGS_KIQ)
 
 #define RREG8(reg) amdgpu_mm_rreg8(adev, (reg))
 #define WREG8(reg, v) amdgpu_mm_wreg8(adev, (reg), (v))
