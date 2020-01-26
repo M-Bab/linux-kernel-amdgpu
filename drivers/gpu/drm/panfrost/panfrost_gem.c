@@ -19,16 +19,6 @@ static void panfrost_gem_free_object(struct drm_gem_object *obj)
 	struct panfrost_gem_object *bo = to_panfrost_bo(obj);
 	struct panfrost_device *pfdev = obj->dev->dev_private;
 
-	/*
-	 * Make sure the BO is no longer inserted in the shrinker list before
-	 * taking care of the destruction itself. If we don't do that we have a
-	 * race condition between this function and what's done in
-	 * panfrost_gem_shrinker_scan().
-	 */
-	mutex_lock(&pfdev->shrinker_lock);
-	list_del_init(&bo->base.madv_list);
-	mutex_unlock(&pfdev->shrinker_lock);
-
 	if (bo->sgts) {
 		int i;
 		int n_sgt = bo->base.base.size / SZ_2M;
@@ -43,10 +33,15 @@ static void panfrost_gem_free_object(struct drm_gem_object *obj)
 		kfree(bo->sgts);
 	}
 
+	mutex_lock(&pfdev->shrinker_lock);
+	if (!list_empty(&bo->base.madv_list))
+		list_del(&bo->base.madv_list);
+	mutex_unlock(&pfdev->shrinker_lock);
+
 	drm_gem_shmem_free_object(obj);
 }
 
-int panfrost_gem_open(struct drm_gem_object *obj, struct drm_file *file_priv)
+static int panfrost_gem_open(struct drm_gem_object *obj, struct drm_file *file_priv)
 {
 	int ret;
 	size_t size = obj->size;
@@ -85,7 +80,7 @@ int panfrost_gem_open(struct drm_gem_object *obj, struct drm_file *file_priv)
 	return ret;
 }
 
-void panfrost_gem_close(struct drm_gem_object *obj, struct drm_file *file_priv)
+static void panfrost_gem_close(struct drm_gem_object *obj, struct drm_file *file_priv)
 {
 	struct panfrost_gem_object *bo = to_panfrost_bo(obj);
 	struct panfrost_file_priv *priv = file_priv->driver_priv;

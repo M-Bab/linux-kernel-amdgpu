@@ -3183,11 +3183,9 @@ int drm_dp_update_payload_part1(struct drm_dp_mst_topology_mgr *mgr)
 			drm_dp_mst_topology_put_port(port);
 	}
 
-	for (i = 0; i < mgr->max_payloads; /* do nothing */) {
-		if (mgr->payloads[i].payload_state != DP_PAYLOAD_DELETE_LOCAL) {
-			i++;
+	for (i = 0; i < mgr->max_payloads; i++) {
+		if (mgr->payloads[i].payload_state != DP_PAYLOAD_DELETE_LOCAL)
 			continue;
-		}
 
 		DRM_DEBUG_KMS("removing payload %d\n", i);
 		for (j = i; j < mgr->max_payloads - 1; j++) {
