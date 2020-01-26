@@ -686,6 +686,7 @@ int amdgpu_ras_error_query(struct amdgpu_device *adev,
 {
 	struct ras_manager *obj = amdgpu_ras_find_obj(adev, &info->head);
 	struct ras_err_data err_data = {0, 0, 0, NULL};
+	int i;
 
 	if (!obj)
 		return -EINVAL;
@@ -699,6 +700,13 @@ int amdgpu_ras_error_query(struct amdgpu_device *adev,
 		 */
 		if (adev->umc.funcs->query_ras_error_address)
 			adev->umc.funcs->query_ras_error_address(adev, &err_data);
+		break;
+	case AMDGPU_RAS_BLOCK__SDMA:
+		if (adev->sdma.funcs->query_ras_error_count) {
+			for (i = 0; i < adev->sdma.num_instances; i++)
+				adev->sdma.funcs->query_ras_error_count(adev, i,
+									&err_data);
+		}
 		break;
 	case AMDGPU_RAS_BLOCK__GFX:
 		if (adev->gfx.funcs->query_ras_error_count)
@@ -734,6 +742,20 @@ int amdgpu_ras_error_query(struct amdgpu_device *adev,
 	return 0;
 }
 
+uint64_t get_xgmi_relative_phy_addr(struct amdgpu_device *adev, uint64_t addr)
+{
+	uint32_t df_inst_id;
+
+	if ((!adev->df.funcs)                 ||
+	    (!adev->df.funcs->get_df_inst_id) ||
+	    (!adev->df.funcs->get_dram_base_addr))
+		return addr;
+
+	df_inst_id = adev->df.funcs->get_df_inst_id(adev);
+
+	return addr + adev->df.funcs->get_dram_base_addr(adev, df_inst_id);
+}
+
 /* wrapper of psp_ras_trigger_error */
 int amdgpu_ras_error_inject(struct amdgpu_device *adev,
 		struct ras_inject_if *info)
@@ -750,6 +772,12 @@ int amdgpu_ras_error_inject(struct amdgpu_device *adev,
 
 	if (!obj)
 		return -EINVAL;
+
+	/* Calculate XGMI relative offset */
+	if (adev->gmc.xgmi.num_physical_nodes > 1) {
+		block_info.address = get_xgmi_relative_phy_addr(adev,
+								block_info.address);
+	}
 
 	switch (info->head.block) {
 	case AMDGPU_RAS_BLOCK__GFX:
@@ -1345,7 +1373,8 @@ static void amdgpu_ras_do_recovery(struct work_struct *work)
 	struct amdgpu_ras *ras =
 		container_of(work, struct amdgpu_ras, recovery_work);
 
-	amdgpu_device_gpu_recover(ras->adev, 0);
+	if (amdgpu_device_should_recover_gpu(ras->adev))
+		amdgpu_device_gpu_recover(ras->adev, 0);
 	atomic_set(&ras->in_recovery, 0);
 }
 

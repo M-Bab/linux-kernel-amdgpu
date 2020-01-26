@@ -41,6 +41,7 @@
 #include <linux/swap.h>
 #include <linux/swiotlb.h>
 #include <linux/dma-buf.h>
+#include <linux/sizes.h>
 
 #include <drm/ttm/ttm_bo_api.h>
 #include <drm/ttm/ttm_bo_driver.h>
@@ -1691,10 +1692,10 @@ static int amdgpu_ttm_training_reserve_vram_fini(struct amdgpu_device *adev)
 
 static u64 amdgpu_ttm_training_get_c2p_offset(u64 vram_size)
 {
-       if ((vram_size & (ONE_MiB - 1)) < (4 * ONE_KiB + 1) )
-               vram_size -= ONE_MiB;
+       if ((vram_size & (SZ_1M - 1)) < (SZ_4K + 1) )
+               vram_size -= SZ_1M;
 
-       return ALIGN(vram_size, ONE_MiB);
+       return ALIGN(vram_size, SZ_1M);
 }
 
 /**
@@ -2084,8 +2085,8 @@ int amdgpu_copy_buffer(struct amdgpu_ring *ring, uint64_t src_offset,
 	}
 	if (resv) {
 		r = amdgpu_sync_resv(adev, &job->sync, resv,
-				     AMDGPU_FENCE_OWNER_UNDEFINED,
-				     false);
+				     AMDGPU_SYNC_ALWAYS,
+				     AMDGPU_FENCE_OWNER_UNDEFINED);
 		if (r) {
 			DRM_ERROR("sync failed (%d).\n", r);
 			goto error_free;
@@ -2169,7 +2170,8 @@ int amdgpu_fill_buffer(struct amdgpu_bo *bo,
 
 	if (resv) {
 		r = amdgpu_sync_resv(adev, &job->sync, resv,
-				     AMDGPU_FENCE_OWNER_UNDEFINED, false);
+				     AMDGPU_SYNC_ALWAYS,
+				     AMDGPU_FENCE_OWNER_UNDEFINED);
 		if (r) {
 			DRM_ERROR("sync failed (%d).\n", r);
 			goto error_free;
