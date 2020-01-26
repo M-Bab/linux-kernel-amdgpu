@@ -236,6 +236,7 @@ static int mwifiex_process_country_ie(struct mwifiex_private *priv,
 			    "11D: country_ie_len overflow!, deauth AP\n");
 		return -EINVAL;
 	}
+
 	memcpy(priv->adapter->country_code, &country_ie[2], 2);
 
 	domain_info->country_code[0] = country_ie[2];
