@@ -375,6 +375,104 @@ static int cs35l41_force_int_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int cs35l41_amp_reset_get(struct snd_kcontrol *kcontrol,
+				     struct snd_ctl_elem_value *ucontrol)
+{
+	return 0;
+}
+
+static int cs35l41_amp_reset_put(struct snd_kcontrol *kcontrol,
+			   struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component =
+		snd_soc_kcontrol_component(kcontrol);
+	struct cs35l41_private *cs35l41 =
+		snd_soc_component_get_drvdata(component);
+	struct snd_soc_dapm_context *dapm =
+		snd_soc_component_get_dapm(component);
+	int ret, retries, timeout = 100;
+	u32 status;
+
+	if (!ucontrol->value.integer.value[0])
+		return 0;
+
+	dev_info(cs35l41->dev, "AMP reset requested\n");
+
+	if (!cs35l41->reset_gpio) {
+		dev_info(cs35l41->dev, "Reset GPIO is not configured\n");
+		return 0;
+	}
+
+	disable_irq(cs35l41->irq);
+	cs35l41->halo_booted = false;
+
+	/* invalidate all cached values which have now been reset */
+	regcache_cache_only(cs35l41->regmap, true);
+	regcache_mark_dirty(cs35l41->regmap);
+
+	/* Toggle reset pin */
+	gpiod_set_value_cansleep(cs35l41->reset_gpio, 0);
+	/* satisfy minimum reset pulse width spec */
+	usleep_range(2000, 2100);
+	gpiod_set_value_cansleep(cs35l41->reset_gpio, 1);
+	usleep_range(2000, 2100);
+
+	regcache_cache_only(cs35l41->regmap, false);
+
+	do {
+		if (timeout == 0) {
+			dev_err(cs35l41->dev,
+				"Timeout waiting for OTP_BOOT_DONE\n");
+			return -EBUSY;
+		}
+		usleep_range(1000, 1100);
+		regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS4, &status);
+		timeout--;
+	} while (!(status & CS35L41_OTP_BOOT_DONE));
+
+	/* Sync regmap */
+	regcache_sync(cs35l41->regmap);
+
+	/* Reset DSP */
+	regmap_update_bits(cs35l41->regmap, CS35L41_DSP_CLK_CTRL,
+			0x3, 0x2);
+	regmap_update_bits(cs35l41->regmap,
+			CS35L41_DSP1_CCM_CORE_CTRL,
+			CS35L41_HALO_CORE_RESET, CS35L41_HALO_CORE_RESET);
+	regmap_update_bits(cs35l41->regmap, CS35L41_DSP_CLK_CTRL,
+			0x3, 0x3);
+
+	/* Restore OTP and cached values */
+	retries = 5;
+	do {
+		dev_info(cs35l41->dev, "cs35l41_restore attempt %d\n",
+		 6 - retries);
+		ret = cs35l41_restore(cs35l41);
+		usleep_range(4000, 5000);
+	} while (ret < 0 && --retries > 0);
+
+	enable_irq(cs35l41->irq);
+
+	if (retries < 0) {
+		dev_err(cs35l41->dev, "Failed to reset AMP\n");
+		return 0;
+	}
+
+	dev_dbg(cs35l41->dev, "cs35l41 restored in %d attempts\n",
+			6 - retries);
+
+	if (cs35l41->dsp.preloaded) {
+		dev_info(cs35l41->dev, "Reload DSP\n");
+		snd_soc_component_disable_pin(component, "DSP1 Preload");
+		snd_soc_dapm_sync(dapm);
+		usleep_range(4000, 5000);
+		snd_soc_component_force_enable_pin(component, "DSP1 Preload");
+		snd_soc_dapm_sync(dapm);
+		flush_work(&cs35l41->dsp.boot_work);
+	}
+	return 0;
+}
+
 static int cs35l41_ccm_reset_get(struct snd_kcontrol *kcontrol,
 			   struct snd_ctl_elem_value *ucontrol)
 {
@@ -1407,6 +1505,8 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 	SOC_ENUM("PCM Soft Ramp", pcm_sft_ramp),
 	SOC_SINGLE_EXT("DSP Booted", SND_SOC_NOPM, 0, 1, 0,
 			cs35l41_halo_booted_get, cs35l41_halo_booted_put),
+	SOC_SINGLE_EXT("AMP Reset", SND_SOC_NOPM, 0, 1, 0,
+			cs35l41_amp_reset_get, cs35l41_amp_reset_put),
 	SOC_SINGLE_EXT("CCM Reset", CS35L41_DSP1_CCM_CORE_CTRL, 0, 1, 0,
 			cs35l41_ccm_reset_get, cs35l41_ccm_reset_put),
 	SOC_SINGLE_EXT("Force Interrupt", SND_SOC_NOPM, 0, 1, 0,
