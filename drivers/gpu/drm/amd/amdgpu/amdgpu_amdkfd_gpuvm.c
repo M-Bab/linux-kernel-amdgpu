@@ -276,6 +276,26 @@ static int amdgpu_amdkfd_remove_eviction_fence(struct amdgpu_bo *bo,
 	return 0;
 }
 
+int amdgpu_amdkfd_remove_fence_on_pt_pd_bos(struct amdgpu_bo *bo)
+{
+	struct amdgpu_vm *vm;
+	int ret = 0;
+
+	if (bo->vm_bo && bo->vm_bo->vm) {
+		vm = bo->vm_bo->vm;
+		if (vm->process_info && vm->process_info->eviction_fence) {
+			BUG_ON(!dma_resv_trylock(&bo->tbo.base._resv));
+			if (bo->tbo.base.resv != &bo->tbo.base._resv) {
+				dma_resv_copy_fences(&bo->tbo.base._resv, bo->tbo.base.resv);
+				bo->tbo.base.resv = &bo->tbo.base._resv;
+			}
+			ret = amdgpu_amdkfd_remove_eviction_fence(bo, vm->process_info->eviction_fence);
+			dma_resv_unlock(bo->tbo.base.resv);
+		}
+	}
+	return ret;
+}
+
 static int amdgpu_amdkfd_bo_validate(struct amdgpu_bo *bo, uint32_t domain,
 				     bool wait)
 {
