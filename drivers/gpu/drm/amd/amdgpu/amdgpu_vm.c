@@ -945,6 +945,7 @@ error_free_pt:
 static void amdgpu_vm_free_table(struct amdgpu_vm_pt *entry)
 {
 	if (entry->base.bo) {
+		entry->base.bo->vm_bo = NULL;
 		list_del(&entry->base.vm_status);
 		amdgpu_bo_unref(&entry->base.bo->shadow);
 		amdgpu_bo_unref(&entry->base.bo);
