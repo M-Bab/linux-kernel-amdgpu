@@ -1788,10 +1788,14 @@ static irqreturn_t cs35l41_irq(int irq, void *data)
 	if (status[2] & CS35L41_PLL_LOCK) {
 		regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS3,
 			     CS35L41_PLL_LOCK);
-		if (cs35l41->pdata.shared_boost == SHARED_BOOST_PASSIVE)
+		if (cs35l41->pdata.shared_boost == SHARED_BOOST_PASSIVE) {
+			/* GPIO2 as open drain interrupt, GPIO1 as SYNC */
+			regmap_write(cs35l41->regmap, CS35L41_GPIO_PAD_CONTROL,
+				     0x02020000);
 			regmap_update_bits(cs35l41->regmap, CS35L41_PWR_CTRL3,
 					   CS35L41_SYNC_EN_MASK,
 					   CS35L41_SYNC_EN_MASK);
+		}
 	}
 
 	/*
@@ -2087,9 +2091,13 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 		regmap_multi_reg_write_bypassed(cs35l41->regmap,
 					cs35l41_pdn_patch,
 					ARRAY_SIZE(cs35l41_pdn_patch));
-		if (cs35l41->pdata.shared_boost == SHARED_BOOST_PASSIVE)
+		if (cs35l41->pdata.shared_boost == SHARED_BOOST_PASSIVE) {
 			regmap_update_bits(cs35l41->regmap, CS35L41_PWR_CTRL3,
 					   CS35L41_SYNC_EN_MASK, 0);
+			/* GPIO2 as open drain interrupt, GPIO1 as hi-z input */
+			regmap_write(cs35l41->regmap, CS35L41_GPIO_PAD_CONTROL,
+				     0x02000000);
+		}
 		atomic_set(&cs35l41->vol_ctl.playback, 0);
 		cs35l41_abort_ramp(cs35l41);
 		cs35l41->vol_ctl.prev_active_dev = cs35l41->vol_ctl.output_dev;
@@ -2681,6 +2689,8 @@ static const struct reg_sequence cs35l41_active_seq[] = {
 };
 
 static const struct reg_sequence cs35l41_passive_seq[] = {
+	/* GPIO2 as open drain interrupt, GPIO1 as hi-z input */
+	{CS35L41_GPIO_PAD_CONTROL,	0x02000000},
 	/* SYNC_BST_CTL_RX_EN = 0; SYNC_BST_CTL_TX_EN = 1 */
 	{CS35L41_MDSYNC_EN,		0x00001200},
 	/* BST_EN = 0 */
