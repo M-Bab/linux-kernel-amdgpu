@@ -1106,10 +1106,11 @@ static void gfx_v9_0_check_fw_write_wait(struct amdgpu_device *adev)
 	adev->gfx.me_fw_write_wait = false;
 	adev->gfx.mec_fw_write_wait = false;
 
-	if ((adev->gfx.mec_fw_version < 0x000001a5) ||
+	if ((adev->asic_type != CHIP_ARCTURUS) &&
+	    ((adev->gfx.mec_fw_version < 0x000001a5) ||
 	    (adev->gfx.mec_feature_version < 46) ||
 	    (adev->gfx.pfp_fw_version < 0x000000b7) ||
-	    (adev->gfx.pfp_feature_version < 46))
+	    (adev->gfx.pfp_feature_version < 46)))
 		DRM_WARN_ONCE("CP firmware version too old, please update!");
 
 	switch (adev->asic_type) {
@@ -1162,18 +1163,61 @@ static void gfx_v9_0_check_fw_write_wait(struct amdgpu_device *adev)
 	}
 }
 
+struct amdgpu_gfxoff_quirk {
+	u16 chip_vendor;
+	u16 chip_device;
+	u16 subsys_vendor;
+	u16 subsys_device;
+	u8 revision;
+};
+
+static const struct amdgpu_gfxoff_quirk amdgpu_gfxoff_quirk_list[] = {
+	/* https://bugzilla.kernel.org/show_bug.cgi?id=204689 */
+	{ 0x1002, 0x15dd, 0x1002, 0x15dd, 0xc8 },
+	{ 0, 0, 0, 0, 0 },
+};
+
+static bool gfx_v9_0_should_disable_gfxoff(struct pci_dev *pdev)
+{
+	const struct amdgpu_gfxoff_quirk *p = amdgpu_gfxoff_quirk_list;
+
+	while (p && p->chip_device != 0) {
+		if (pdev->vendor == p->chip_vendor &&
+		    pdev->device == p->chip_device &&
+		    pdev->subsystem_vendor == p->subsys_vendor &&
+		    pdev->subsystem_device == p->subsys_device &&
+		    pdev->revision == p->revision) {
+			return true;
+		}
+		++p;
+	}
+	return false;
+}
+
+static bool is_raven_kicker(struct amdgpu_device *adev)
+{
+	if (adev->pm.fw_version >= 0x41e2b)
+		return true;
+	else
+		return false;
+}
+
 static void gfx_v9_0_check_if_need_gfxoff(struct amdgpu_device *adev)
 {
+	if (gfx_v9_0_should_disable_gfxoff(adev->pdev))
+		adev->pm.pp_feature &= ~PP_GFXOFF_MASK;
+
 	switch (adev->asic_type) {
 	case CHIP_VEGA10:
 	case CHIP_VEGA12:
 	case CHIP_VEGA20:
 		break;
 	case CHIP_RAVEN:
-		if (!(adev->rev_id >= 0x8 ||
-		      adev->pdev->device == 0x15d8) &&
-		    (adev->pm.fw_version < 0x41e2b || /* not raven1 fresh */
-		     !adev->gfx.rlc.is_rlc_v2_1)) /* without rlc save restore ucodes */
+		if (!(adev->rev_id >= 0x8 || adev->pdev->device == 0x15d8) &&
+		    ((!is_raven_kicker(adev) &&
+		      adev->gfx.rlc_fw_version < 531) ||
+		     (adev->gfx.rlc_feature_version < 1) ||
+		     !adev->gfx.rlc.is_rlc_v2_1))
 			adev->pm.pp_feature &= ~PP_GFXOFF_MASK;
 
 		if (adev->pm.pp_feature & PP_GFXOFF_MASK)
@@ -2405,6 +2449,22 @@ static void gfx_v9_0_init_gds_vmid(struct amdgpu_device *adev)
 	}
 }
 
+static void gfx_v9_0_init_sq_config(struct amdgpu_device *adev)
+{
+	uint32_t tmp;
+
+	switch (adev->asic_type) {
+	case CHIP_ARCTURUS:
+		tmp = RREG32_SOC15(GC, 0, mmSQ_CONFIG);
+		tmp = REG_SET_FIELD(tmp, SQ_CONFIG,
+					DISABLE_BARRIER_WAITCNT, 1);
+		WREG32_SOC15(GC, 0, mmSQ_CONFIG, tmp);
+		break;
+	default:
+		break;
+	};
+}
+
 static void gfx_v9_0_constants_init(struct amdgpu_device *adev)
 {
 	u32 tmp;
@@ -2450,6 +2510,7 @@ static void gfx_v9_0_constants_init(struct amdgpu_device *adev)
 
 	gfx_v9_0_init_compute_vmid(adev);
 	gfx_v9_0_init_gds_vmid(adev);
+	gfx_v9_0_init_sq_config(adev);
 }
 
 static void gfx_v9_0_wait_for_rlc_serdes(struct amdgpu_device *adev)
@@ -3906,6 +3967,7 @@ static uint64_t gfx_v9_0_get_gpu_clock_counter(struct amdgpu_device *adev)
 {
 	uint64_t clock;
 
+	amdgpu_gfx_off_ctrl(adev, false);
 	mutex_lock(&adev->gfx.gpu_clock_mutex);
 	if (adev->asic_type == CHIP_VEGA10 && amdgpu_sriov_runtime(adev)) {
 		uint32_t tmp, lsb, msb, i = 0;
@@ -3924,6 +3986,7 @@ static uint64_t gfx_v9_0_get_gpu_clock_counter(struct amdgpu_device *adev)
 			((uint64_t)RREG32_SOC15(GC, 0, mmRLC_GPU_CLOCK_COUNT_MSB) << 32ULL);
 	}
 	mutex_unlock(&adev->gfx.gpu_clock_mutex);
+	amdgpu_gfx_off_ctrl(adev, true);
 	return clock;
 }
 
@@ -4321,9 +4384,17 @@ static int gfx_v9_0_ecc_late_init(void *handle)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	int r;
 
-	r = gfx_v9_0_do_edc_gds_workarounds(adev);
-	if (r)
-		return r;
+	/*
+	 * Temp workaround to fix the issue that CP firmware fails to
+	 * update read pointer when CPDMA is writing clearing operation
+	 * to GDS in suspend/resume sequence on several cards. So just
+	 * limit this operation in cold boot sequence.
+	 */
+	if (!adev->in_suspend) {
+		r = gfx_v9_0_do_edc_gds_workarounds(adev);
+		if (r)
+			return r;
+	}
 
 	/* requires IBs so do in late init after IB pool is initialized */
 	r = gfx_v9_0_do_edc_gpr_workarounds(adev);
@@ -5159,28 +5230,20 @@ static void gfx_v9_0_ring_emit_de_meta(struct amdgpu_ring *ring)
 	amdgpu_ring_write_multiple(ring, (void *)&de_payload, sizeof(de_payload) >> 2);
 }
 
-static void gfx_v9_0_ring_emit_tmz(struct amdgpu_ring *ring, bool start,
-				   bool trusted)
+static void gfx_v9_0_ring_emit_tmz(struct amdgpu_ring *ring, bool start)
 {
-	amdgpu_ring_write(ring, PACKET3(PACKET3_FRAME_CONTROL, 0));
-	/*
-	 * cmd = 0: frame begin
-	 * cmd = 1: frame end
-	 */
-	amdgpu_ring_write(ring,
-			  ((ring->adev->tmz.enabled && trusted) ? FRAME_TMZ : 0)
-			  | FRAME_CMD(start ? 0 : 1));
+	if (amdgpu_is_tmz(ring->adev)) {
+		amdgpu_ring_write(ring, PACKET3(PACKET3_FRAME_CONTROL, 0));
+		amdgpu_ring_write(ring, FRAME_TMZ | FRAME_CMD(start ? 0 : 1));
+	}
 }
 
-static void gfx_v9_ring_emit_cntxcntl(struct amdgpu_ring *ring, uint32_t flags,
-				      bool trusted)
+static void gfx_v9_ring_emit_cntxcntl(struct amdgpu_ring *ring, uint32_t flags)
 {
 	uint32_t dw2 = 0;
 
 	if (amdgpu_sriov_vf(ring->adev))
 		gfx_v9_0_ring_emit_ce_meta(ring);
-
-	gfx_v9_0_ring_emit_tmz(ring, true, trusted);
 
 	dw2 |= 0x80000000; /* set load_enable otherwise this package is just NOPs */
 	if (flags & AMDGPU_HAVE_CTX_SWITCH) {

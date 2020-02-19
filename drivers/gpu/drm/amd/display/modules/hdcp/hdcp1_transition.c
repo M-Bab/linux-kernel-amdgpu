@@ -46,8 +46,7 @@ enum mod_hdcp_status mod_hdcp_hdcp1_transition(struct mod_hdcp *hdcp,
 		set_state_id(hdcp, output, H1_A1_EXCHANGE_KSVS);
 		break;
 	case H1_A1_EXCHANGE_KSVS:
-		if (input->add_topology != PASS ||
-				input->create_session != PASS) {
+		if (input->create_session != PASS) {
 			/* out of sync with psp state */
 			adjust->hdcp1.disable = 1;
 			fail_and_restart_in_ms(0, &status, output);
@@ -173,8 +172,7 @@ enum mod_hdcp_status mod_hdcp_hdcp1_dp_transition(struct mod_hdcp *hdcp,
 		set_state_id(hdcp, output, D1_A1_EXCHANGE_KSVS);
 		break;
 	case D1_A1_EXCHANGE_KSVS:
-		if (input->add_topology != PASS ||
-				input->create_session != PASS) {
+		if (input->create_session != PASS) {
 			/* out of sync with psp state */
 			adjust->hdcp1.disable = 1;
 			fail_and_restart_in_ms(0, &status, output);
@@ -210,7 +208,8 @@ enum mod_hdcp_status mod_hdcp_hdcp1_dp_transition(struct mod_hdcp *hdcp,
 			fail_and_restart_in_ms(0, &status, output);
 			break;
 		} else if (input->rx_validation != PASS) {
-			if (hdcp->state.stay_count < 2) {
+			if (hdcp->state.stay_count < 2 &&
+					!hdcp->connection.is_hdcp1_revoked) {
 				/* allow 2 additional retries */
 				callback_in_ms(0, output);
 				increment_stay_counter(hdcp);
@@ -241,7 +240,7 @@ enum mod_hdcp_status mod_hdcp_hdcp1_dp_transition(struct mod_hdcp *hdcp,
 		}
 		break;
 	case D1_A4_AUTHENTICATED:
-		if (input->link_integiry_check != PASS ||
+		if (input->link_integrity_check != PASS ||
 				input->reauth_request_check != PASS) {
 			/* 1A-07: restart hdcp on a link integrity failure */
 			fail_and_restart_in_ms(0, &status, output);
@@ -249,7 +248,7 @@ enum mod_hdcp_status mod_hdcp_hdcp1_dp_transition(struct mod_hdcp *hdcp,
 		}
 		break;
 	case D1_A6_WAIT_FOR_READY:
-		if (input->link_integiry_check == FAIL ||
+		if (input->link_integrity_check == FAIL ||
 				input->reauth_request_check == FAIL) {
 			fail_and_restart_in_ms(0, &status, output);
 			break;
@@ -290,7 +289,8 @@ enum mod_hdcp_status mod_hdcp_hdcp1_dp_transition(struct mod_hdcp *hdcp,
 			fail_and_restart_in_ms(0, &status, output);
 			break;
 		} else if (input->ksvlist_vp_validation != PASS) {
-			if (hdcp->state.stay_count < 2) {
+			if (hdcp->state.stay_count < 2 &&
+					!hdcp->connection.is_hdcp1_revoked) {
 				/* allow 2 additional retries */
 				callback_in_ms(0, output);
 				increment_stay_counter(hdcp);

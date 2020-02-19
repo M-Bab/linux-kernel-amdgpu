@@ -232,19 +232,21 @@ int amdgpu_sync_resv(struct amdgpu_device *adev, struct amdgpu_sync *sync,
 
 		f = rcu_dereference_protected(flist->shared[i],
 					      dma_resv_held(resv));
+
+		fence_owner = amdgpu_sync_get_owner(f);
+
+		/* Always sync to moves, no matter what */
+		if (fence_owner == AMDGPU_FENCE_OWNER_UNDEFINED) {
+			r = amdgpu_sync_fence(sync, f, false);
+			if (r)
+				break;
+		}
+
 		/* We only want to trigger KFD eviction fences on
 		 * evict or move jobs. Skip KFD fences otherwise.
 		 */
-		fence_owner = amdgpu_sync_get_owner(f);
 		if (fence_owner == AMDGPU_FENCE_OWNER_KFD &&
 		    owner != AMDGPU_FENCE_OWNER_UNDEFINED)
-			continue;
-
-		/* VM updates only sync with moves but not with user
-		 * command submissions or KFD evictions fences
-		 */
-		if (fence_owner != AMDGPU_FENCE_OWNER_UNDEFINED &&
-		    owner == AMDGPU_FENCE_OWNER_VM)
 			continue;
 
 		/* Ignore fences depending on the sync mode */
@@ -265,9 +267,7 @@ int amdgpu_sync_resv(struct amdgpu_device *adev, struct amdgpu_sync *sync,
 			break;
 
 		case AMDGPU_SYNC_EXPLICIT:
-			if (owner != AMDGPU_FENCE_OWNER_UNDEFINED)
-				continue;
-			break;
+			continue;
 		}
 
 		r = amdgpu_sync_fence(sync, f, false);
