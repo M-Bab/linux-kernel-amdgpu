@@ -31,6 +31,8 @@
 #include <drm/drm_debugfs.h>
 
 #include "amdgpu.h"
+#include "amdgpu_pm.h"
+#include "amdgpu_dm_debugfs.h"
 
 /**
  * amdgpu_debugfs_add_files - Add simple debugfs entries
@@ -1216,6 +1218,8 @@ DEFINE_SIMPLE_ATTRIBUTE(fops_ib_preempt, NULL,
 
 int amdgpu_debugfs_init(struct amdgpu_device *adev)
 {
+	int r, i;
+
 	adev->debugfs_preempt =
 		debugfs_create_file("amdgpu_preempt_ib", 0600,
 				    adev->ddev->primary->debugfs_root, adev,
@@ -1225,12 +1229,73 @@ int amdgpu_debugfs_init(struct amdgpu_device *adev)
 		return -EIO;
 	}
 
+	/* Register debugfs entries for amdgpu_ttm */
+	r = amdgpu_ttm_debugfs_init(adev);
+	if (r) {
+		DRM_ERROR("Failed to init debugfs\n");
+		return r;
+	}
+
+	r = amdgpu_debugfs_pm_init(adev);
+	if (r) {
+		DRM_ERROR("Failed to register debugfs file for dpm!\n");
+		return r;
+	}
+
+	if (amdgpu_debugfs_sa_init(adev)) {
+		dev_err(adev->dev, "failed to register debugfs file for SA\n");
+	}
+
+	if (amdgpu_debugfs_fence_init(adev))
+		dev_err(adev->dev, "fence debugfs file creation failed\n");
+
+	r = amdgpu_debugfs_gem_init(adev);
+	if (r)
+		DRM_ERROR("registering gem debugfs failed (%d).\n", r);
+
+	r = amdgpu_debugfs_regs_init(adev);
+	if (r)
+		DRM_ERROR("registering register debugfs failed (%d).\n", r);
+
+	r = amdgpu_debugfs_firmware_init(adev);
+	if (r)
+		DRM_ERROR("registering firmware debugfs failed (%d).\n", r);
+
+#if defined(CONFIG_DRM_AMD_DC)
+	if (amdgpu_device_has_dc_support(adev)) {
+		if (dtn_debugfs_init(adev))
+			DRM_ERROR("amdgpu: failed initialize dtn debugfs support.\n");
+	}
+#endif
+
+	for (i = 0; i < AMDGPU_MAX_RINGS; ++i) {
+		struct amdgpu_ring *ring = adev->rings[i];
+
+		if (!ring)
+			continue;
+
+		if (amdgpu_debugfs_ring_init(adev, ring)) {
+			DRM_ERROR("Failed to register debugfs file for rings !\n");
+		}
+	}
+
 	return amdgpu_debugfs_add_files(adev, amdgpu_debugfs_list,
 					ARRAY_SIZE(amdgpu_debugfs_list));
 }
 
-void amdgpu_debugfs_preempt_cleanup(struct amdgpu_device *adev)
+void amdgpu_debugfs_fini(struct amdgpu_device *adev)
 {
+	int i;
+
+	for (i = 0; i < AMDGPU_MAX_RINGS; ++i) {
+		struct amdgpu_ring *ring = adev->rings[i];
+
+		if (!ring)
+			continue;
+
+		amdgpu_debugfs_ring_fini(ring);
+	}
+	amdgpu_ttm_debugfs_fini(adev);
 	debugfs_remove(adev->debugfs_preempt);
 }
 
@@ -1239,7 +1304,7 @@ int amdgpu_debugfs_init(struct amdgpu_device *adev)
 {
 	return 0;
 }
-void amdgpu_debugfs_preempt_cleanup(struct amdgpu_device *adev) { }
+void amdgpu_debugfs_fini(struct amdgpu_device *adev) { }
 int amdgpu_debugfs_regs_init(struct amdgpu_device *adev)
 {
 	return 0;

@@ -48,7 +48,6 @@
  * produce command buffers which are send to the kernel and
  * put in IBs for execution by the requested ring.
  */
-static int amdgpu_debugfs_sa_init(struct amdgpu_device *adev);
 
 /**
  * amdgpu_ib_get - request an IB (Indirect Buffer)
@@ -132,6 +131,7 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned num_ibs,
 	uint64_t fence_ctx;
 	uint32_t status = 0, alloc_size;
 	unsigned fence_flags = 0;
+	bool secure;
 
 	unsigned i;
 	int r = 0;
@@ -213,9 +213,10 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned num_ibs,
 	if (job && ring->funcs->emit_cntxcntl) {
 		status |= job->preamble_status;
 		status |= job->preemption_status;
-		amdgpu_ring_emit_cntxcntl(ring, status, job->secure);
+		amdgpu_ring_emit_cntxcntl(ring, status);
 	}
 
+	secure = false;
 	for (i = 0; i < num_ibs; ++i) {
 		ib = &ibs[i];
 
@@ -227,12 +228,27 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned num_ibs,
 		    !amdgpu_sriov_vf(adev)) /* for SRIOV preemption, Preamble CE ib must be inserted anyway */
 			continue;
 
+		/* If this IB is TMZ, add frame TMZ start packet,
+		 * else, turn off TMZ.
+		 */
+		if (ib->flags & AMDGPU_IB_FLAGS_SECURE && ring->funcs->emit_tmz) {
+			if (!secure) {
+				secure = true;
+				amdgpu_ring_emit_tmz(ring, true);
+			}
+		} else if (secure) {
+			secure = false;
+			amdgpu_ring_emit_tmz(ring, false);
+		}
+
 		amdgpu_ring_emit_ib(ring, job, ib, status);
 		status &= ~AMDGPU_HAVE_CTX_SWITCH;
 	}
 
-	if (ring->funcs->emit_tmz)
-		amdgpu_ring_emit_tmz(ring, false, job ? job->secure : false);
+	if (secure) {
+		secure = false;
+		amdgpu_ring_emit_tmz(ring, false);
+	}
 
 #ifdef CONFIG_X86_64
 	if (!(adev->flags & AMD_IS_APU))
@@ -295,9 +311,7 @@ int amdgpu_ib_pool_init(struct amdgpu_device *adev)
 	}
 
 	adev->ib_pool_ready = true;
-	if (amdgpu_debugfs_sa_init(adev)) {
-		dev_err(adev->dev, "failed to register debugfs file for SA\n");
-	}
+
 	return 0;
 }
 
@@ -421,7 +435,7 @@ static const struct drm_info_list amdgpu_debugfs_sa_list[] = {
 
 #endif
 
-static int amdgpu_debugfs_sa_init(struct amdgpu_device *adev)
+int amdgpu_debugfs_sa_init(struct amdgpu_device *adev)
 {
 #if defined(CONFIG_DEBUG_FS)
 	return amdgpu_debugfs_add_files(adev, amdgpu_debugfs_sa_list, 1);

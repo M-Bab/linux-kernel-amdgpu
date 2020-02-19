@@ -960,7 +960,7 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 
 #ifdef CONFIG_DRM_AMD_DC_HDCP
 	if (adev->asic_type >= CHIP_RAVEN) {
-		adev->dm.hdcp_workqueue = hdcp_create_workqueue(&adev->psp, &init_params.cp_psp, adev->dm.dc);
+		adev->dm.hdcp_workqueue = hdcp_create_workqueue(adev, &init_params.cp_psp, adev->dm.dc);
 
 		if (!adev->dm.hdcp_workqueue)
 			DRM_ERROR("amdgpu: failed to initialize hdcp_workqueue.\n");
@@ -990,11 +990,6 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 		"amdgpu: failed to initialize sw for display support.\n");
 		goto error;
 	}
-
-#if defined(CONFIG_DEBUG_FS)
-	if (dtn_debugfs_init(adev))
-		DRM_ERROR("amdgpu: failed initialize dtn debugfs support.\n");
-#endif
 
 	DRM_DEBUG_DRIVER("KMS initialized.\n");
 
@@ -1758,6 +1753,61 @@ static struct drm_mode_config_helper_funcs amdgpu_dm_mode_config_helperfuncs = {
 	.atomic_commit_tail = amdgpu_dm_atomic_commit_tail
 };
 
+static void update_connector_ext_caps(struct amdgpu_dm_connector *aconnector)
+{
+	u32 max_cll, min_cll, max, min, q, r;
+	struct amdgpu_dm_backlight_caps *caps;
+	struct amdgpu_display_manager *dm;
+	struct drm_connector *conn_base;
+	struct amdgpu_device *adev;
+	static const u8 pre_computed_values[] = {
+		50, 51, 52, 53, 55, 56, 57, 58, 59, 61, 62, 63, 65, 66, 68, 69,
+		71, 72, 74, 75, 77, 79, 81, 82, 84, 86, 88, 90, 92, 94, 96, 98};
+
+	if (!aconnector || !aconnector->dc_link)
+		return;
+
+	conn_base = &aconnector->base;
+	adev = conn_base->dev->dev_private;
+	dm = &adev->dm;
+	caps = &dm->backlight_caps;
+	caps->ext_caps = &aconnector->dc_link->dpcd_sink_ext_caps;
+	caps->aux_support = false;
+	max_cll = conn_base->hdr_sink_metadata.hdmi_type1.max_cll;
+	min_cll = conn_base->hdr_sink_metadata.hdmi_type1.min_cll;
+
+	if (caps->ext_caps->bits.oled == 1 ||
+	    caps->ext_caps->bits.sdr_aux_backlight_control == 1 ||
+	    caps->ext_caps->bits.hdr_aux_backlight_control == 1)
+		caps->aux_support = true;
+
+	/* From the specification (CTA-861-G), for calculating the maximum
+	 * luminance we need to use:
+	 *	Luminance = 50*2**(CV/32)
+	 * Where CV is a one-byte value.
+	 * For calculating this expression we may need float point precision;
+	 * to avoid this complexity level, we take advantage that CV is divided
+	 * by a constant. From the Euclids division algorithm, we know that CV
+	 * can be written as: CV = 32*q + r. Next, we replace CV in the
+	 * Luminance expression and get 50*(2**q)*(2**(r/32)), hence we just
+	 * need to pre-compute the value of r/32. For pre-computing the values
+	 * We just used the following Ruby line:
+	 *	(0...32).each {|cv| puts (50*2**(cv/32.0)).round}
+	 * The results of the above expressions can be verified at
+	 * pre_computed_values.
+	 */
+	q = max_cll >> 5;
+	r = max_cll % 32;
+	max = (1 << q) * pre_computed_values[r];
+
+	// min luminance: maxLum * (CV/255)^2 / 100
+	q = DIV_ROUND_CLOSEST(min_cll, 255);
+	min = max * DIV_ROUND_CLOSEST((q * q), 100);
+
+	caps->aux_max_input_signal = max;
+	caps->aux_min_input_signal = min;
+}
+
 static void
 amdgpu_dm_update_connector_after_detect(struct amdgpu_dm_connector *aconnector)
 {
@@ -1872,7 +1922,7 @@ amdgpu_dm_update_connector_after_detect(struct amdgpu_dm_connector *aconnector)
 					    aconnector->edid);
 		}
 		amdgpu_dm_update_freesync_caps(connector, aconnector->edid);
-
+		update_connector_ext_caps(aconnector);
 	} else {
 		drm_dp_cec_unset_edid(&aconnector->dm_dp_aux.aux);
 		amdgpu_dm_update_freesync_caps(connector, NULL);
@@ -2484,6 +2534,7 @@ static int amdgpu_dm_mode_config_init(struct amdgpu_device *adev)
 
 #define AMDGPU_DM_DEFAULT_MIN_BACKLIGHT 12
 #define AMDGPU_DM_DEFAULT_MAX_BACKLIGHT 255
+#define AUX_BL_DEFAULT_TRANSITION_TIME_MS 50
 
 #if defined(CONFIG_BACKLIGHT_CLASS_DEVICE) ||\
 	defined(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
@@ -2498,9 +2549,11 @@ static void amdgpu_dm_update_backlight_caps(struct amdgpu_display_manager *dm)
 
 	amdgpu_acpi_get_backlight_caps(dm->adev, &caps);
 	if (caps.caps_valid) {
+		dm->backlight_caps.caps_valid = true;
+		if (caps.aux_support)
+			return;
 		dm->backlight_caps.min_input_signal = caps.min_input_signal;
 		dm->backlight_caps.max_input_signal = caps.max_input_signal;
-		dm->backlight_caps.caps_valid = true;
 	} else {
 		dm->backlight_caps.min_input_signal =
 				AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
@@ -2508,40 +2561,95 @@ static void amdgpu_dm_update_backlight_caps(struct amdgpu_display_manager *dm)
 				AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
 	}
 #else
+	if (dm->backlight_caps.aux_support)
+		return;
+
 	dm->backlight_caps.min_input_signal = AMDGPU_DM_DEFAULT_MIN_BACKLIGHT;
 	dm->backlight_caps.max_input_signal = AMDGPU_DM_DEFAULT_MAX_BACKLIGHT;
 #endif
+}
+
+static int set_backlight_via_aux(struct dc_link *link, uint32_t brightness)
+{
+	bool rc;
+
+	if (!link)
+		return 1;
+
+	rc = dc_link_set_backlight_level_nits(link, true, brightness,
+					      AUX_BL_DEFAULT_TRANSITION_TIME_MS);
+
+	return rc ? 0 : 1;
+}
+
+static u32 convert_brightness(const struct amdgpu_dm_backlight_caps *caps,
+			      const uint32_t user_brightness)
+{
+	u32 min, max, conversion_pace;
+	u32 brightness = user_brightness;
+
+	if (!caps)
+		goto out;
+
+	if (!caps->aux_support) {
+		max = caps->max_input_signal;
+		min = caps->min_input_signal;
+		/*
+		 * The brightness input is in the range 0-255
+		 * It needs to be rescaled to be between the
+		 * requested min and max input signal
+		 * It also needs to be scaled up by 0x101 to
+		 * match the DC interface which has a range of
+		 * 0 to 0xffff
+		 */
+		conversion_pace = 0x101;
+		brightness =
+			user_brightness
+			* conversion_pace
+			* (max - min)
+			/ AMDGPU_MAX_BL_LEVEL
+			+ min * conversion_pace;
+	} else {
+		/* TODO
+		 * We are doing a linear interpolation here, which is OK but
+		 * does not provide the optimal result. We probably want
+		 * something close to the Perceptual Quantizer (PQ) curve.
+		 */
+		max = caps->aux_max_input_signal;
+		min = caps->aux_min_input_signal;
+
+		brightness = (AMDGPU_MAX_BL_LEVEL - user_brightness) * min
+			       + user_brightness * max;
+		// Multiple the value by 1000 since we use millinits
+		brightness *= 1000;
+		brightness = DIV_ROUND_CLOSEST(brightness, AMDGPU_MAX_BL_LEVEL);
+	}
+
+out:
+	return brightness;
 }
 
 static int amdgpu_dm_backlight_update_status(struct backlight_device *bd)
 {
 	struct amdgpu_display_manager *dm = bl_get_data(bd);
 	struct amdgpu_dm_backlight_caps caps;
-	uint32_t brightness = bd->props.brightness;
+	struct dc_link *link = NULL;
+	u32 brightness;
+	bool rc;
 
 	amdgpu_dm_update_backlight_caps(dm);
 	caps = dm->backlight_caps;
-	/*
-	 * The brightness input is in the range 0-255
-	 * It needs to be rescaled to be between the
-	 * requested min and max input signal
-	 *
-	 * It also needs to be scaled up by 0x101 to
-	 * match the DC interface which has a range of
-	 * 0 to 0xffff
-	 */
-	brightness =
-		brightness
-		* 0x101
-		* (caps.max_input_signal - caps.min_input_signal)
-		/ AMDGPU_MAX_BL_LEVEL
-		+ caps.min_input_signal * 0x101;
 
-	if (dc_link_set_backlight_level(dm->backlight_link,
-			brightness, 0))
-		return 0;
-	else
-		return 1;
+	link = (struct dc_link *)dm->backlight_link;
+
+	brightness = convert_brightness(&caps, bd->props.brightness);
+	// Change brightness based on AUX property
+	if (caps.aux_support)
+		return set_backlight_via_aux(link, brightness);
+
+	rc = dc_link_set_backlight_level(dm->backlight_link, brightness, 0);
+
+	return rc ? 0 : 1;
 }
 
 static int amdgpu_dm_backlight_get_brightness(struct backlight_device *bd)
@@ -3166,7 +3274,7 @@ static int fill_dc_scaling_info(const struct drm_plane_state *state,
 }
 
 static int get_fb_info(const struct amdgpu_framebuffer *amdgpu_fb,
-		       uint64_t *tiling_flags)
+		       uint64_t *tiling_flags, bool *tmz_surface)
 {
 	struct amdgpu_bo *rbo = gem_to_amdgpu_bo(amdgpu_fb->base.obj[0]);
 	int r = amdgpu_bo_reserve(rbo, false);
@@ -3180,6 +3288,9 @@ static int get_fb_info(const struct amdgpu_framebuffer *amdgpu_fb,
 
 	if (tiling_flags)
 		amdgpu_bo_get_tiling_flags(rbo, tiling_flags);
+
+	if (tmz_surface)
+		*tmz_surface = amdgpu_bo_encrypted(rbo);
 
 	amdgpu_bo_unreserve(rbo);
 
@@ -3263,7 +3374,8 @@ fill_plane_buffer_attributes(struct amdgpu_device *adev,
 			     union dc_tiling_info *tiling_info,
 			     struct plane_size *plane_size,
 			     struct dc_plane_dcc_param *dcc,
-			     struct dc_plane_address *address)
+			     struct dc_plane_address *address,
+			     bool tmz_surface)
 {
 	const struct drm_framebuffer *fb = &afb->base;
 	int ret;
@@ -3272,6 +3384,8 @@ fill_plane_buffer_attributes(struct amdgpu_device *adev,
 	memset(plane_size, 0, sizeof(*plane_size));
 	memset(dcc, 0, sizeof(*dcc));
 	memset(address, 0, sizeof(*address));
+
+	address->tmz_surface = tmz_surface;
 
 	if (format < SURFACE_PIXEL_FORMAT_VIDEO_BEGIN) {
 		plane_size->surface_size.x = 0;
@@ -3461,7 +3575,8 @@ fill_dc_plane_info_and_addr(struct amdgpu_device *adev,
 			    const struct drm_plane_state *plane_state,
 			    const uint64_t tiling_flags,
 			    struct dc_plane_info *plane_info,
-			    struct dc_plane_address *address)
+			    struct dc_plane_address *address,
+			    bool tmz_surface)
 {
 	const struct drm_framebuffer *fb = plane_state->fb;
 	const struct amdgpu_framebuffer *afb =
@@ -3540,7 +3655,7 @@ fill_dc_plane_info_and_addr(struct amdgpu_device *adev,
 					   plane_info->rotation, tiling_flags,
 					   &plane_info->tiling_info,
 					   &plane_info->plane_size,
-					   &plane_info->dcc, address);
+					   &plane_info->dcc, address, tmz_surface);
 	if (ret)
 		return ret;
 
@@ -3563,6 +3678,7 @@ static int fill_dc_plane_attributes(struct amdgpu_device *adev,
 	struct dc_plane_info plane_info;
 	uint64_t tiling_flags;
 	int ret;
+	bool tmz_surface = false;
 
 	ret = fill_dc_scaling_info(plane_state, &scaling_info);
 	if (ret)
@@ -3573,13 +3689,14 @@ static int fill_dc_plane_attributes(struct amdgpu_device *adev,
 	dc_plane_state->clip_rect = scaling_info.clip_rect;
 	dc_plane_state->scaling_quality = scaling_info.scaling_quality;
 
-	ret = get_fb_info(amdgpu_fb, &tiling_flags);
+	ret = get_fb_info(amdgpu_fb, &tiling_flags, &tmz_surface);
 	if (ret)
 		return ret;
 
 	ret = fill_dc_plane_info_and_addr(adev, plane_state, tiling_flags,
 					  &plane_info,
-					  &dc_plane_state->address);
+					  &dc_plane_state->address,
+					  tmz_surface);
 	if (ret)
 		return ret;
 
@@ -4577,6 +4694,19 @@ amdgpu_dm_connector_atomic_duplicate_state(struct drm_connector *connector)
 	return &new_state->base;
 }
 
+static int
+amdgpu_dm_connector_late_register(struct drm_connector *connector)
+{
+	struct amdgpu_dm_connector *amdgpu_dm_connector =
+		to_amdgpu_dm_connector(connector);
+
+#if defined(CONFIG_DEBUG_FS)
+	connector_debugfs_init(amdgpu_dm_connector);
+#endif
+
+	return 0;
+}
+
 static const struct drm_connector_funcs amdgpu_dm_connector_funcs = {
 	.reset = amdgpu_dm_connector_funcs_reset,
 	.detect = amdgpu_dm_connector_detect,
@@ -4586,6 +4716,7 @@ static const struct drm_connector_funcs amdgpu_dm_connector_funcs = {
 	.atomic_destroy_state = drm_atomic_helper_connector_destroy_state,
 	.atomic_set_property = amdgpu_dm_connector_atomic_set_property,
 	.atomic_get_property = amdgpu_dm_connector_atomic_get_property,
+	.late_register = amdgpu_dm_connector_late_register,
 	.early_unregister = amdgpu_dm_connector_unregister
 };
 
@@ -5174,6 +5305,7 @@ static int dm_plane_helper_prepare_fb(struct drm_plane *plane,
 	uint64_t tiling_flags;
 	uint32_t domain;
 	int r;
+	bool tmz_surface = false;
 
 	dm_plane_state_old = to_dm_plane_state(plane->state);
 	dm_plane_state_new = to_dm_plane_state(new_state);
@@ -5222,6 +5354,8 @@ static int dm_plane_helper_prepare_fb(struct drm_plane *plane,
 
 	amdgpu_bo_get_tiling_flags(rbo, &tiling_flags);
 
+	tmz_surface = amdgpu_bo_encrypted(rbo);
+
 	ttm_eu_backoff_reservation(&ticket, &list);
 
 	afb->address = amdgpu_bo_gpu_offset(rbo);
@@ -5236,7 +5370,7 @@ static int dm_plane_helper_prepare_fb(struct drm_plane *plane,
 			adev, afb, plane_state->format, plane_state->rotation,
 			tiling_flags, &plane_state->tiling_info,
 			&plane_state->plane_size, &plane_state->dcc,
-			&plane_state->address);
+			&plane_state->address, tmz_surface);
 	}
 
 	return 0;
@@ -5928,13 +6062,6 @@ static int amdgpu_dm_connector_init(struct amdgpu_display_manager *dm,
 	drm_connector_attach_encoder(
 		&aconnector->base, &aencoder->base);
 
-	drm_connector_register(&aconnector->base);
-#if defined(CONFIG_DEBUG_FS)
-	connector_debugfs_init(aconnector);
-	aconnector->debugfs_dpcd_address = 0;
-	aconnector->debugfs_dpcd_size = 0;
-#endif
-
 	if (connector_type == DRM_MODE_CONNECTOR_DisplayPort
 		|| connector_type == DRM_MODE_CONNECTOR_eDP)
 		amdgpu_dm_initialize_dp_connector(dm, aconnector);
@@ -6417,6 +6544,7 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 	unsigned long flags;
 	struct amdgpu_bo *abo;
 	uint64_t tiling_flags;
+	bool tmz_surface = false;
 	uint32_t target_vblank, last_flip_vblank;
 	bool vrr_active = amdgpu_dm_vrr_active(acrtc_state);
 	bool pflip_present = false;
@@ -6515,12 +6643,14 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 
 		amdgpu_bo_get_tiling_flags(abo, &tiling_flags);
 
+		tmz_surface = amdgpu_bo_encrypted(abo);
+
 		amdgpu_bo_unreserve(abo);
 
 		fill_dc_plane_info_and_addr(
 			dm->adev, new_plane_state, tiling_flags,
 			&bundle->plane_infos[planes_count],
-			&bundle->flip_addrs[planes_count].address);
+			&bundle->flip_addrs[planes_count].address, tmz_surface);
 
 		bundle->surface_updates[planes_count].plane_info =
 			&bundle->plane_infos[planes_count];
@@ -7889,6 +8019,7 @@ dm_determine_update_type_for_commit(struct amdgpu_display_manager *dm,
 			struct dc_flip_addrs *flip_addr = &bundle->flip_addrs[num_plane];
 			struct dc_scaling_info *scaling_info = &bundle->scaling_infos[num_plane];
 			uint64_t tiling_flags;
+			bool tmz_surface = false;
 
 			new_plane_crtc = new_plane_state->crtc;
 			new_dm_plane_state = to_dm_plane_state(new_plane_state);
@@ -7934,14 +8065,14 @@ dm_determine_update_type_for_commit(struct amdgpu_display_manager *dm,
 			bundle->surface_updates[num_plane].scaling_info = scaling_info;
 
 			if (amdgpu_fb) {
-				ret = get_fb_info(amdgpu_fb, &tiling_flags);
+				ret = get_fb_info(amdgpu_fb, &tiling_flags, &tmz_surface);
 				if (ret)
 					goto cleanup;
 
 				ret = fill_dc_plane_info_and_addr(
 					dm->adev, new_plane_state, tiling_flags,
 					plane_info,
-					&flip_addr->address);
+					&flip_addr->address, tmz_surface);
 				if (ret)
 					goto cleanup;
 
@@ -8256,6 +8387,16 @@ static int amdgpu_dm_atomic_check(struct drm_device *dev,
 			goto fail;
 #endif
 
+		/*
+		 * Perform validation of MST topology in the state:
+		 * We need to perform MST atomic check before calling
+		 * dc_validate_global_state(), or there is a chance
+		 * to get stuck in an infinite loop and hang eventually.
+		 */
+		ret = drm_dp_mst_atomic_check(state);
+		if (ret)
+			goto fail;
+
 		if (dc_validate_global_state(dc, dm_state->context, false) != DC_OK) {
 			ret = -EINVAL;
 			goto fail;
@@ -8284,10 +8425,6 @@ static int amdgpu_dm_atomic_check(struct drm_device *dev,
 				dc_retain_state(old_dm_state->context);
 		}
 	}
-	/* Perform validation of MST topology in the state*/
-	ret = drm_dp_mst_atomic_check(state);
-	if (ret)
-		goto fail;
 
 	/* Store the overall update type for use later in atomic check. */
 	for_each_new_crtc_in_state (state, crtc, new_crtc_state, i) {
@@ -8491,7 +8628,6 @@ bool amdgpu_dm_psr_enable(struct dc_stream_state *stream)
 	/* Calculate number of static frames before generating interrupt to
 	 * enter PSR.
 	 */
-	unsigned int frame_time_microsec = 1000000 / vsync_rate_hz;
 	// Init fail safe of 2 frames static
 	unsigned int num_frames_static = 2;
 
@@ -8506,8 +8642,10 @@ bool amdgpu_dm_psr_enable(struct dc_stream_state *stream)
 	 * Calculate number of frames such that at least 30 ms of time has
 	 * passed.
 	 */
-	if (vsync_rate_hz != 0)
+	if (vsync_rate_hz != 0) {
+		unsigned int frame_time_microsec = 1000000 / vsync_rate_hz;
 		num_frames_static = (30000 / frame_time_microsec) + 1;
+	}
 
 	params.triggers.cursor_update = true;
 	params.triggers.overlay_update = true;
