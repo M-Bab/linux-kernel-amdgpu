@@ -188,6 +188,7 @@ struct io_ring_ctx {
 		bool			account_mem;
 		bool			cq_overflow_flushed;
 		bool			drain_next;
+		bool			eventfd_async;
 
 		/*
 		 * Ring buffer of indices into array of io_uring_sqe, which is
@@ -735,14 +736,28 @@ static struct io_uring_cqe *io_get_cqring(struct io_ring_ctx *ctx)
 	return &rings->cqes[tail & ctx->cq_mask];
 }
 
-static void io_cqring_ev_posted(struct io_ring_ctx *ctx)
+static inline bool io_should_trigger_evfd(struct io_ring_ctx *ctx)
+{
+	if (!ctx->cq_ev_fd)
+		return false;
+	if (!ctx->eventfd_async)
+		return true;
+	return io_wq_current_is_worker() || in_interrupt();
+}
+
+static void __io_cqring_ev_posted(struct io_ring_ctx *ctx, bool trigger_ev)
 {
 	if (waitqueue_active(&ctx->wait))
 		wake_up(&ctx->wait);
 	if (waitqueue_active(&ctx->sqo_wait))
 		wake_up(&ctx->sqo_wait);
-	if (ctx->cq_ev_fd)
+	if (trigger_ev)
 		eventfd_signal(ctx->cq_ev_fd, 1);
+}
+
+static void io_cqring_ev_posted(struct io_ring_ctx *ctx)
+{
+	__io_cqring_ev_posted(ctx, io_should_trigger_evfd(ctx));
 }
 
 /* Returns true if there are no backlogged entries after the flush */
@@ -1271,11 +1286,17 @@ static void io_iopoll_reap_events(struct io_ring_ctx *ctx)
 	mutex_unlock(&ctx->uring_lock);
 }
 
-static int __io_iopoll_check(struct io_ring_ctx *ctx, unsigned *nr_events,
-			    long min)
+static int io_iopoll_check(struct io_ring_ctx *ctx, unsigned *nr_events,
+			   long min)
 {
 	int iters = 0, ret = 0;
 
+	/*
+	 * We disallow the app entering submit/complete with polling, but we
+	 * still need to lock the ring to prevent racing with polled issue
+	 * that got punted to a workqueue.
+	 */
+	mutex_lock(&ctx->uring_lock);
 	do {
 		int tmin = 0;
 
@@ -1311,21 +1332,6 @@ static int __io_iopoll_check(struct io_ring_ctx *ctx, unsigned *nr_events,
 		ret = 0;
 	} while (min && !*nr_events && !need_resched());
 
-	return ret;
-}
-
-static int io_iopoll_check(struct io_ring_ctx *ctx, unsigned *nr_events,
-			   long min)
-{
-	int ret;
-
-	/*
-	 * We disallow the app entering submit/complete with polling, but we
-	 * still need to lock the ring to prevent racing with polled issue
-	 * that got punted to a workqueue.
-	 */
-	mutex_lock(&ctx->uring_lock);
-	ret = __io_iopoll_check(ctx, nr_events, min);
 	mutex_unlock(&ctx->uring_lock);
 	return ret;
 }
@@ -1771,17 +1777,6 @@ static int io_alloc_async_ctx(struct io_kiocb *req)
 	return req->io == NULL;
 }
 
-static void io_rw_async(struct io_wq_work **workptr)
-{
-	struct io_kiocb *req = container_of(*workptr, struct io_kiocb, work);
-	struct iovec *iov = NULL;
-
-	if (req->io->rw.iov != req->io->rw.fast_iov)
-		iov = req->io->rw.iov;
-	io_wq_submit_work(workptr);
-	kfree(iov);
-}
-
 static int io_setup_async_rw(struct io_kiocb *req, ssize_t io_size,
 			     struct iovec *iovec, struct iovec *fast_iov,
 			     struct iov_iter *iter)
@@ -1789,11 +1784,12 @@ static int io_setup_async_rw(struct io_kiocb *req, ssize_t io_size,
 	if (req->opcode == IORING_OP_READ_FIXED ||
 	    req->opcode == IORING_OP_WRITE_FIXED)
 		return 0;
-	if (!req->io && io_alloc_async_ctx(req))
-		return -ENOMEM;
+	if (!req->io) {
+		if (io_alloc_async_ctx(req))
+			return -ENOMEM;
 
-	io_req_map_rw(req, io_size, iovec, fast_iov, iter);
-	req->work.func = io_rw_async;
+		io_req_map_rw(req, io_size, iovec, fast_iov, iter);
+	}
 	return 0;
 }
 
@@ -1880,8 +1876,7 @@ copy_iov:
 		}
 	}
 out_free:
-	if (!io_wq_current_is_worker())
-		kfree(iovec);
+	kfree(iovec);
 	return ret;
 }
 
@@ -1974,6 +1969,12 @@ static int io_write(struct io_kiocb *req, struct io_kiocb **nxt,
 			ret2 = call_write_iter(req->file, kiocb, &iter);
 		else
 			ret2 = loop_rw_iter(WRITE, req->file, kiocb, &iter);
+		/*
+		 * Raw bdev writes will -EOPNOTSUPP for IOCB_NOWAIT. Just
+		 * retry them without IOCB_NOWAIT.
+		 */
+		if (ret2 == -EOPNOTSUPP && (kiocb->ki_flags & IOCB_NOWAIT))
+			ret2 = -EAGAIN;
 		if (!force_nonblock || ret2 != -EAGAIN) {
 			kiocb_done(kiocb, ret2, nxt, req->in_async);
 		} else {
@@ -1986,8 +1987,7 @@ copy_iov:
 		}
 	}
 out_free:
-	if (!io_wq_current_is_worker())
-		kfree(iovec);
+	kfree(iovec);
 	return ret;
 }
 
@@ -2157,19 +2157,6 @@ static int io_sync_file_range(struct io_kiocb *req, struct io_kiocb **nxt,
 	return 0;
 }
 
-#if defined(CONFIG_NET)
-static void io_sendrecv_async(struct io_wq_work **workptr)
-{
-	struct io_kiocb *req = container_of(*workptr, struct io_kiocb, work);
-	struct iovec *iov = NULL;
-
-	if (req->io->rw.iov != req->io->rw.fast_iov)
-		iov = req->io->msg.iov;
-	io_wq_submit_work(workptr);
-	kfree(iov);
-}
-#endif
-
 static int io_sendmsg_prep(struct io_kiocb *req, const struct io_uring_sqe *sqe)
 {
 #if defined(CONFIG_NET)
@@ -2237,17 +2224,19 @@ static int io_sendmsg(struct io_kiocb *req, struct io_kiocb **nxt,
 		if (force_nonblock && ret == -EAGAIN) {
 			if (req->io)
 				return -EAGAIN;
-			if (io_alloc_async_ctx(req))
+			if (io_alloc_async_ctx(req)) {
+				if (kmsg && kmsg->iov != kmsg->fast_iov)
+					kfree(kmsg->iov);
 				return -ENOMEM;
+			}
 			memcpy(&req->io->msg, &io.msg, sizeof(io.msg));
-			req->work.func = io_sendrecv_async;
 			return -EAGAIN;
 		}
 		if (ret == -ERESTARTSYS)
 			ret = -EINTR;
 	}
 
-	if (!io_wq_current_is_worker() && kmsg && kmsg->iov != kmsg->fast_iov)
+	if (kmsg && kmsg->iov != kmsg->fast_iov)
 		kfree(kmsg->iov);
 	io_cqring_add_event(req, ret);
 	if (ret < 0)
@@ -2329,17 +2318,19 @@ static int io_recvmsg(struct io_kiocb *req, struct io_kiocb **nxt,
 		if (force_nonblock && ret == -EAGAIN) {
 			if (req->io)
 				return -EAGAIN;
-			if (io_alloc_async_ctx(req))
+			if (io_alloc_async_ctx(req)) {
+				if (kmsg && kmsg->iov != kmsg->fast_iov)
+					kfree(kmsg->iov);
 				return -ENOMEM;
+			}
 			memcpy(&req->io->msg, &io.msg, sizeof(io.msg));
-			req->work.func = io_sendrecv_async;
 			return -EAGAIN;
 		}
 		if (ret == -ERESTARTSYS)
 			ret = -EINTR;
 	}
 
-	if (!io_wq_current_is_worker() && kmsg && kmsg->iov != kmsg->fast_iov)
+	if (kmsg && kmsg->iov != kmsg->fast_iov)
 		kfree(kmsg->iov);
 	io_cqring_add_event(req, ret);
 	if (ret < 0)
@@ -2635,6 +2626,14 @@ static void io_poll_complete_work(struct io_wq_work **workptr)
 		io_wq_assign_next(workptr, nxt);
 }
 
+static void io_poll_trigger_evfd(struct io_wq_work **workptr)
+{
+	struct io_kiocb *req = container_of(*workptr, struct io_kiocb, work);
+
+	eventfd_signal(req->ctx->cq_ev_fd, 1);
+	io_put_req(req);
+}
+
 static int io_poll_wake(struct wait_queue_entry *wait, unsigned mode, int sync,
 			void *key)
 {
@@ -2657,13 +2656,21 @@ static int io_poll_wake(struct wait_queue_entry *wait, unsigned mode, int sync,
 	 * for finalizing the request, mark us as having grabbed that already.
 	 */
 	if (mask && spin_trylock_irqsave(&ctx->completion_lock, flags)) {
+		bool trigger_ev;
+
 		hash_del(&req->hash_node);
 		io_poll_complete(req, mask, 0);
-		req->flags |= REQ_F_COMP_LOCKED;
-		io_put_req(req);
+		trigger_ev = io_should_trigger_evfd(ctx);
+		if (trigger_ev && eventfd_signal_count()) {
+			trigger_ev = false;
+			req->work.func = io_poll_trigger_evfd;
+		} else {
+			req->flags |= REQ_F_COMP_LOCKED;
+			io_put_req(req);
+			req = NULL;
+		}
 		spin_unlock_irqrestore(&ctx->completion_lock, flags);
-
-		io_cqring_ev_posted(ctx);
+		__io_cqring_ev_posted(ctx, trigger_ev);
 	} else {
 		io_queue_async_work(req);
 	}
@@ -3868,7 +3875,7 @@ static int io_sq_thread(void *data)
 				 */
 				mutex_lock(&ctx->uring_lock);
 				if (!list_empty(&ctx->poll_list))
-					__io_iopoll_check(ctx, &nr_events, 0);
+					io_iopoll_getevents(ctx, &nr_events, 0);
 				else
 					inflight = 0;
 				mutex_unlock(&ctx->uring_lock);
@@ -3893,19 +3900,6 @@ static int io_sq_thread(void *data)
 		 */
 		if (!to_submit || ret == -EBUSY) {
 			/*
-			 * We're polling. If we're within the defined idle
-			 * period, then let us spin without work before going
-			 * to sleep. The exception is if we got EBUSY doing
-			 * more IO, we should wait for the application to
-			 * reap events and wake us up.
-			 */
-			if (inflight ||
-			    (!time_after(jiffies, timeout) && ret != -EBUSY)) {
-				cond_resched();
-				continue;
-			}
-
-			/*
 			 * Drop cur_mm before scheduling, we can't hold it for
 			 * long periods (or over schedule()). Do this before
 			 * adding ourselves to the waitqueue, as the unuse/drop
@@ -3915,6 +3909,20 @@ static int io_sq_thread(void *data)
 				unuse_mm(cur_mm);
 				mmput(cur_mm);
 				cur_mm = NULL;
+			}
+
+			/*
+			 * We're polling. If we're within the defined idle
+			 * period, then let us spin without work before going
+			 * to sleep. The exception is if we got EBUSY doing
+			 * more IO, we should wait for the application to
+			 * reap events and wake us up.
+			 */
+			if (inflight ||
+			    (!time_after(jiffies, timeout) && ret != -EBUSY &&
+			    !percpu_ref_is_dying(&ctx->refs))) {
+				cond_resched();
+				continue;
 			}
 
 			prepare_to_wait(&ctx->sqo_wait, &wait,
@@ -4463,13 +4471,15 @@ static int io_sqe_files_update(struct io_ring_ctx *ctx, void __user *arg,
 		return -EINVAL;
 	if (copy_from_user(&up, arg, sizeof(up)))
 		return -EFAULT;
+	if (up.resv)
+		return -EINVAL;
 	if (check_add_overflow(up.offset, nr_args, &done))
 		return -EOVERFLOW;
 	if (done > ctx->nr_user_files)
 		return -EINVAL;
 
 	done = 0;
-	fds = (__s32 __user *) up.fds;
+	fds = u64_to_user_ptr(up.fds);
 	while (nr_args) {
 		struct fixed_file_table *table;
 		unsigned index;
@@ -4979,6 +4989,16 @@ static void io_ring_ctx_wait_and_kill(struct io_ring_ctx *ctx)
 	percpu_ref_kill(&ctx->refs);
 	mutex_unlock(&ctx->uring_lock);
 
+	/*
+	 * Wait for sq thread to idle, if we have one. It won't spin on new
+	 * work after we've killed the ctx ref above. This is important to do
+	 * before we cancel existing commands, as the thread could otherwise
+	 * be queueing new work post that. If that's work we need to cancel,
+	 * it could cause shutdown to hang.
+	 */
+	while (ctx->sqo_thread && !wq_has_sleeper(&ctx->sqo_wait))
+		cpu_relax();
+
 	io_kill_timeouts(ctx);
 	io_poll_remove_all(ctx);
 
@@ -5042,10 +5062,6 @@ static int io_uring_flush(struct file *file, void *data)
 	struct io_ring_ctx *ctx = file->private_data;
 
 	io_uring_cancel_files(ctx, data);
-	if (fatal_signal_pending(current) || (current->flags & PF_EXITING)) {
-		io_cqring_overflow_flush(ctx, true);
-		io_wq_cancel_all(ctx->io_wq);
-	}
 	return 0;
 }
 
@@ -5158,12 +5174,6 @@ SYSCALL_DEFINE6(io_uring_enter, unsigned int, fd, u32, to_submit,
 		submitted = to_submit;
 	} else if (to_submit) {
 		struct mm_struct *cur_mm;
-
-		if (current->mm != ctx->sqo_mm ||
-		    current_cred() != ctx->creds) {
-			ret = -EPERM;
-			goto out;
-		}
 
 		to_submit = min(to_submit, ctx->sq_entries);
 		mutex_lock(&ctx->uring_lock);
@@ -5481,10 +5491,17 @@ static int __io_uring_register(struct io_ring_ctx *ctx, unsigned opcode,
 		ret = io_sqe_files_update(ctx, arg, nr_args);
 		break;
 	case IORING_REGISTER_EVENTFD:
+	case IORING_REGISTER_EVENTFD_ASYNC:
 		ret = -EINVAL;
 		if (nr_args != 1)
 			break;
 		ret = io_eventfd_register(ctx, arg);
+		if (ret)
+			break;
+		if (opcode == IORING_REGISTER_EVENTFD_ASYNC)
+			ctx->eventfd_async = 1;
+		else
+			ctx->eventfd_async = 0;
 		break;
 	case IORING_UNREGISTER_EVENTFD:
 		ret = -EINVAL;
