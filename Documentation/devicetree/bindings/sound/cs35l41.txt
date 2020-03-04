@@ -50,7 +50,9 @@ Optional properties:
 
   - cirrus,boost-ctl-millivolt : Boost Voltage Value. Configures the
   boost converter's output voltage in mV. The range is from 2550 mV to
-  11000 mV with increments of 50 mV.
+  11000 mV with increments of 50 mV. This will be the maximum voltage
+  in Class-H mode if 'classh-bst-max-limit' is set to 1, or the fixed
+  boost voltage if 'classh-bst-overide' is set to true.
   (Default) VP
 
   - cirrus,amp-gain-zc : Boolean to determine whether to use the amplifier
@@ -125,14 +127,15 @@ Optional properties:
   - cirrus,invert-pcm : Inverts the polarity of the audio signal output from
     the Class-D amplifier.
 
+
   - cirrus,hibernate-enable : Enables low-power hibernation mode for B2 revision
     parts. With this property set, hibernation mode will be entered when the part
     is idle after the first playback event with firmware loaded.
 
-Optional H/G Algorithm sub-node:
+Optional Class H Algorithm sub-node:
 
   The cs35l41 node can have a single "cirrus,classh-internal-algo" sub-node
-  that will disable automatic control of the internal H/G Algorithm.
+  that will disable automatic control of the internal Class H Algorithm.
 
   It is strongly recommended that the Datasheet be referenced when adjusting
   or using these Class H Algorithm controls over the internal Algorithm.
@@ -145,16 +148,78 @@ Optional H/G Algorithm sub-node:
 Optional properties for the "cirrus,classh-internal-algo" Sub-node
 
   Section 7.9 Boost Control
-  - cirrus,classh-bst-overide : Boolean
-  - cirrus,classh-bst-max-limit
+  - cirrus,classh-bst-overide : Boolean which will disable Class H tracking and
+  set Boost voltage to the value in the 'boost-ctl-millivolt' property
+
+  - cirrus,classh-bst-max-limit : Value set to the BST_CTL_LIM_EN field.
+  A value of 1 will limit the Class-H voltage to the value in the
+  'boost-ctl-millivolt' property.
+
+  0 = No Class-H limit (default)
+  1 = Class-H limited to 'boost-ctl-millivolt' value
 
   Section 7.17 Class H, Weak-FET Control
-  - cirrus,classh-headroom
-  - cirrus,classh-release-rate
-  - cirrus,classh-mem-depth
-  - cirrus,classh-wk-fet-delay
-  - cirrus,classh-wk-fet-thld
+  - cirrus,classh-headroom : Class H algorithm headroom. Controls VBST headroom
+  in the max detection path of the Class H algorithm. Step size is 0.1 V.
+  Range is from -6.4V to +6.3V with 7-bit 2's complement representation.
 
+  0 = 0V
+  1 = 0.1V
+  2 = 0.2V
+  ...
+  11 = 1.1V (Default)
+  ...
+  62 = 6.2V
+  63 = 6.3V
+  64 = -6.4V
+  65 = -6.3V
+  ...
+  126 = -0.2V
+  127 = -0.1V
+
+  - cirrus,classh-release-rate : Class H release rate. Controls the amount of
+  time required before allowing consecutive release condition VBST supply
+  tracking updates. Step size is 5us with range from 20us to 1275us.
+
+  4 = 20us (Default)
+  5 = 25us
+  ...
+  254 = 1270us
+  255 = 1275us
+
+  - cirrus,classh-mem-depth : Class H memory depth. Controls the memory depth
+  used in the Class H algorithm for audio data buffering and analysis.
+
+  0 = 20.83 - 23.4 us
+  1 = 41.67 - 46.88 us
+  2 = 83.33 - 85.94 us
+  3 = 166.67 - 171.88 us
+  4 = 250.00 - 255.10 us
+  5 = 333.33 - 335.93 us (Default)
+
+  - cirrus,classh-wk-fet-thld : Weak-FET amplifier driver threshold.
+  Configures the signal threshold at which the PWM output stage enters weak-FET
+  operation. Step size is 0.05V. Range is from 0.05V to 0.7V.
+
+  1 = 0.05V
+  2 = 0.1V
+  3 = 0.15V
+  ...
+  13 = 0.65V
+  14 = 0.7V
+
+  - cirrus,classh-wk-fet-delay : Weak-Fet entry . Controls the delay in ms
+  before the Class H algorithm switches to the weak-FET voltage after the audio
+  falls and remains below the value specified in 'classh-wk-fet-thld'.
+
+  0 = 0ms
+  1 = 5ms
+  2 = 10ms
+  3 = 50ms
+  4 = 100ms (Default)
+  5 = 200ms
+  6 = 500ms
+  7 = 1000ms
 
 Optional GPIO1 sub-node:
 
