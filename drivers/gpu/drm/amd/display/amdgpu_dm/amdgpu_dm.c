@@ -288,28 +288,6 @@ static inline bool amdgpu_dm_vrr_active(struct dm_crtc_state *dm_state)
 }
 
 /**
- * dm_crtc_is_flip_pending() - Is a pageflip pending on this crtc?
- *
- * Returns true if any plane on the crtc has a flip pending, false otherwise.
- */
-static bool dm_crtc_is_flip_pending(struct dm_crtc_state *acrtc_state)
-{
-	struct dc_stream_status *status = dc_stream_get_status(acrtc_state->stream);
-	const struct dc_plane_status *plane_status;
-	int i;
-	bool pending = false;
-
-	for (i = 0; i < status->plane_count; i++) {
-		plane_status = dc_plane_get_status(status->plane_states[i]);
-		pending |= plane_status->is_flip_pending;
-		DRM_DEBUG_DRIVER("plane:%d, flip_pending=%d\n",
-				 i, plane_status->is_flip_pending);
-	}
-
-	return pending;
-}
-
-/**
  * dm_pflip_high_irq() - Handle pageflip interrupt
  * @interrupt_params: ignored
  *
@@ -458,11 +436,6 @@ static void dm_vupdate_high_irq(void *interrupt_params)
 				spin_unlock_irqrestore(&adev->ddev->event_lock, flags);
 			}
 		}
-
-		if (acrtc->pflip_status == AMDGPU_FLIP_SUBMITTED) {
-			DRM_DEBUG_DRIVER("%s:crtc:%d, flip_pending=%d\n", __func__,
-					    acrtc->crtc_id, dm_crtc_is_flip_pending(acrtc_state));
-		}
 	}
 }
 
@@ -518,11 +491,6 @@ static void dm_crtc_high_irq(void *interrupt_params)
 				&acrtc_state->vrr_params.adjust);
 			spin_unlock_irqrestore(&adev->ddev->event_lock, flags);
 		}
-
-		if (acrtc->pflip_status == AMDGPU_FLIP_SUBMITTED) {
-			DRM_DEBUG_DRIVER("%s:crtc:%d, flip_pending=%d\n", __func__,
-					 acrtc->crtc_id, dm_crtc_is_flip_pending(acrtc_state));
-		}
 	}
 }
 
@@ -577,29 +545,13 @@ static void dm_dcn_crtc_high_irq(void *interrupt_params)
 			&acrtc_state->vrr_params.adjust);
 	}
 
-	/*
-	 * If there aren't any active_planes, or PSR is active, then DCH HUBP
-	 * may be clock-gated. In that state, pageflip completion interrupts
-	 * won't fire and pageflip completion events won't get delivered.
-	 *
-	 * Prevent this by sending pending pageflip events from here if a flip
-	 * has been submitted, but is no longer pending in hw, ie. has already
-	 * completed.
-	 *
-	 * If the flip is still pending in hw, then use dm_pflip_high_irq()
-	 * instead, handling completion as usual by pflip irq.
-	 */
-	if (acrtc->pflip_status == AMDGPU_FLIP_SUBMITTED &&
-	    !dm_crtc_is_flip_pending(acrtc_state)) {
+	if (acrtc->pflip_status == AMDGPU_FLIP_SUBMITTED) {
 		if (acrtc->event) {
 			drm_crtc_send_vblank_event(&acrtc->base, acrtc->event);
 			acrtc->event = NULL;
 			drm_crtc_vblank_put(&acrtc->base);
 		}
 		acrtc->pflip_status = AMDGPU_FLIP_NONE;
-
-		DRM_DEBUG_DRIVER("crtc:%d, pflip_stat:AMDGPU_FLIP_NONE\n",
-				 acrtc->crtc_id);
 	}
 
 	spin_unlock_irqrestore(&adev->ddev->event_lock, flags);
@@ -6693,7 +6645,7 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			to_dm_crtc_state(drm_atomic_get_old_crtc_state(state, pcrtc));
 	int planes_count = 0, vpos, hpos;
 	long r;
-	unsigned long flags = 0;
+	unsigned long flags;
 	struct amdgpu_bo *abo;
 	uint64_t tiling_flags;
 	bool tmz_surface = false;
@@ -6880,6 +6832,17 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 			usleep_range(1000, 1100);
 		}
 
+		if (acrtc_attach->base.state->event) {
+			drm_crtc_vblank_get(pcrtc);
+
+			spin_lock_irqsave(&pcrtc->dev->event_lock, flags);
+
+			WARN_ON(acrtc_attach->pflip_status != AMDGPU_FLIP_NONE);
+			prepare_flip_isr(acrtc_attach);
+
+			spin_unlock_irqrestore(&pcrtc->dev->event_lock, flags);
+		}
+
 		if (acrtc_state->stream) {
 			if (acrtc_state->freesync_vrr_info_changed)
 				bundle->stream_update.vrr_infopacket =
@@ -6931,29 +6894,12 @@ static void amdgpu_dm_commit_planes(struct drm_atomic_state *state,
 				acrtc_state->stream->link->psr_allow_active)
 			amdgpu_dm_psr_disable(acrtc_state->stream);
 
-		if (pflip_present && acrtc_attach->base.state->event) {
-			drm_crtc_vblank_get(pcrtc);
-
-			spin_lock_irqsave(&pcrtc->dev->event_lock, flags);
-
-			WARN_ON(acrtc_attach->pflip_status != AMDGPU_FLIP_NONE);
-			prepare_flip_isr(acrtc_attach);
-		}
-
 		dc_commit_updates_for_stream(dm->dc,
 						     bundle->surface_updates,
 						     planes_count,
 						     acrtc_state->stream,
 						     &bundle->stream_update,
 						     dc_state);
-
-		/*
-		 * Must event_lock protect prepare_flip_isr() above and
-		 * dc_commit_updates_for_stream within same critical section,
-		 * or pageflip completion will suffer bad races on DCN.
-		 */
-		if (pflip_present && acrtc_attach->pflip_status == AMDGPU_FLIP_SUBMITTED)
-			spin_unlock_irqrestore(&pcrtc->dev->event_lock, flags);
 
 		if ((acrtc_state->update_type > UPDATE_TYPE_FAST) &&
 						acrtc_state->stream->psr_version &&
