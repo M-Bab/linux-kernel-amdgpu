@@ -20,7 +20,6 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include "pp_debug.h"
 #include <linux/firmware.h>
 #include "amdgpu.h"
 #include "amdgpu_smu.h"
@@ -460,9 +459,6 @@ int smu_v12_0_set_soft_freq_limited_range(struct smu_context *smu, enum smu_clk_
 			    uint32_t min, uint32_t max)
 {
 	int ret = 0;
-
-	if (max < min)
-		return -EINVAL;
 
 	switch (clk_type) {
 	case SMU_GFXCLK:
