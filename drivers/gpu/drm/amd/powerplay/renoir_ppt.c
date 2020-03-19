@@ -24,7 +24,6 @@
 #include "amdgpu.h"
 #include "amdgpu_smu.h"
 #include "smu_internal.h"
-#include "soc15_common.h"
 #include "smu_v12_0_ppsmc.h"
 #include "smu12_driver_if.h"
 #include "smu_v12_0.h"
@@ -111,8 +110,8 @@ static struct smu_12_0_cmn2aisc_mapping renoir_clk_map[SMU_CLK_COUNT] = {
 	CLK_MAP(GFXCLK, CLOCK_GFXCLK),
 	CLK_MAP(SCLK,	CLOCK_GFXCLK),
 	CLK_MAP(SOCCLK, CLOCK_SOCCLK),
-	CLK_MAP(UCLK, CLOCK_UMCCLK),
-	CLK_MAP(MCLK, CLOCK_UMCCLK),
+	CLK_MAP(UCLK, CLOCK_FCLK),
+	CLK_MAP(MCLK, CLOCK_FCLK),
 };
 
 static struct smu_12_0_cmn2aisc_mapping renoir_table_map[SMU_TABLE_COUNT] = {
@@ -280,7 +279,7 @@ static int renoir_print_clk_levels(struct smu_context *smu,
 		break;
 	case SMU_MCLK:
 		count = NUM_MEMCLK_DPM_LEVELS;
-		cur_value = metrics.ClockFrequency[CLOCK_UMCCLK];
+		cur_value = metrics.ClockFrequency[CLOCK_FCLK];
 		break;
 	case SMU_DCEFCLK:
 		count = NUM_DCFCLK_DPM_LEVELS;
@@ -423,7 +422,7 @@ static int renoir_force_dpm_limit_value(struct smu_context *smu, bool highest)
 			return ret;
 
 		force_freq = highest ? max_freq : min_freq;
-		ret = smu_set_soft_freq_range(smu, clk_type, force_freq, force_freq);
+		ret = smu_set_soft_freq_range(smu, clk_type, force_freq, force_freq, false);
 		if (ret)
 			return ret;
 	}
@@ -456,7 +455,7 @@ static int renoir_unforce_dpm_levels(struct smu_context *smu) {
 		if (ret)
 			return ret;
 
-		ret = smu_set_soft_freq_range(smu, clk_type, min_freq, max_freq);
+		ret = smu_set_soft_freq_range(smu, clk_type, min_freq, max_freq, false);
 		if (ret)
 			return ret;
 	}
@@ -704,7 +703,7 @@ static int renoir_set_peak_clock_by_device(struct smu_context *smu)
 	if (ret)
 		return ret;
 
-	ret = smu_set_soft_freq_range(smu, SMU_SCLK, sclk_freq, sclk_freq);
+	ret = smu_set_soft_freq_range(smu, SMU_SCLK, sclk_freq, sclk_freq, false);
 	if (ret)
 		return ret;
 
@@ -712,7 +711,7 @@ static int renoir_set_peak_clock_by_device(struct smu_context *smu)
 	if (ret)
 		return ret;
 
-	ret = smu_set_soft_freq_range(smu, SMU_UCLK, uclk_freq, uclk_freq);
+	ret = smu_set_soft_freq_range(smu, SMU_UCLK, uclk_freq, uclk_freq, false);
 	if (ret)
 		return ret;
 

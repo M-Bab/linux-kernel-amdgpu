@@ -23,15 +23,12 @@
 #include <linux/firmware.h>
 #include <linux/pci.h>
 
-#include "pp_debug.h"
 #include "amdgpu.h"
 #include "amdgpu_smu.h"
 #include "smu_internal.h"
-#include "soc15_common.h"
 #include "smu_v11_0.h"
 #include "smu_v12_0.h"
 #include "atom.h"
-#include "amd_pcie.h"
 #include "vega20_ppt.h"
 #include "arcturus_ppt.h"
 #include "navi10_ppt.h"
@@ -210,17 +207,19 @@ int smu_get_smc_version(struct smu_context *smu, uint32_t *if_version, uint32_t 
 }
 
 int smu_set_soft_freq_range(struct smu_context *smu, enum smu_clk_type clk_type,
-			    uint32_t min, uint32_t max)
+			    uint32_t min, uint32_t max, bool lock_needed)
 {
 	int ret = 0;
-
-	if (min <= 0 && max <= 0)
-		return -EINVAL;
 
 	if (!smu_clk_dpm_is_enabled(smu, clk_type))
 		return 0;
 
+	if (lock_needed)
+		mutex_lock(&smu->mutex);
 	ret = smu_set_soft_freq_limited_range(smu, clk_type, min, max);
+	if (lock_needed)
+		mutex_unlock(&smu->mutex);
+
 	return ret;
 }
 
@@ -933,6 +932,13 @@ static int smu_sw_init(void *handle)
 		return ret;
 	}
 
+	if (adev->smu.ppt_funcs->i2c_eeprom_init) {
+		ret = smu_i2c_eeprom_init(smu, &adev->pm.smu_i2c);
+
+		if (ret)
+			return ret;
+	}
+
 	return 0;
 }
 
@@ -941,6 +947,9 @@ static int smu_sw_fini(void *handle)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	struct smu_context *smu = &adev->smu;
 	int ret;
+
+	if (adev->smu.ppt_funcs->i2c_eeprom_fini)
+		smu_i2c_eeprom_fini(smu, &adev->pm.smu_i2c);
 
 	kfree(smu->irq_source);
 	smu->irq_source = NULL;
@@ -1461,19 +1470,24 @@ static int smu_disable_dpm(struct smu_context *smu)
 	}
 
 	/*
-	 * For baco on Arcturus, this operation
-	 * (disable all smu feature) will be handled by SMU FW.
+	 * Disable all enabled SMU features.
+	 * This should be handled in SMU FW, as a backup
+	 * driver can issue call to SMU FW until sequence
+	 * in SMU FW is operational.
 	 */
-	if (adev->asic_type == CHIP_ARCTURUS) {
-		if (use_baco && (smu_version > 0x360e00))
-			return 0;
-	}
-
-	/* Disable all enabled SMU features */
 	ret = smu_system_features_control(smu, false);
 	if (ret) {
 		pr_err("Failed to disable smu features.\n");
 		return ret;
+	}
+
+	/*
+	 * Arcturus does not have BACO bit in disable feature mask.
+	 * Enablement of BACO bit on Arcturus should be skipped.
+	 */
+	if (adev->asic_type == CHIP_ARCTURUS) {
+		if (use_baco && (smu_version > 0x360e00))
+			return 0;
 	}
 
 	/* For baco, need to leave BACO feature enabled */
