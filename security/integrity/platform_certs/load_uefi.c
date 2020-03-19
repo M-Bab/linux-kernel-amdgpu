@@ -34,42 +34,35 @@ static __init bool uefi_check_ignore_db(void)
 /*
  * Get a certificate list blob from the named EFI variable.
  */
-static __init int get_cert_list(efi_char16_t *name, efi_guid_t *guid,
-				  unsigned long *size , void **cert_list)
+static __init void *get_cert_list(efi_char16_t *name, efi_guid_t *guid,
+				  unsigned long *size, efi_status_t *status)
 {
-	efi_status_t status;
 	unsigned long lsize = 4;
 	unsigned long tmpdb[4];
 	void *db;
 
-	status = efi.get_variable(name, guid, NULL, &lsize, &tmpdb);
-	if (status == EFI_NOT_FOUND) {
-		*size = 0;
-		*cert_list = NULL;
-		return 0;
-	}
+	*status = efi.get_variable(name, guid, NULL, &lsize, &tmpdb);
+	if (*status == EFI_NOT_FOUND)
+		return NULL;
 
-	if (status != EFI_BUFFER_TOO_SMALL) {
-		pr_err("Couldn't get size: %s (0x%lx)\n",
-		       efi_status_to_str(status), status);
-		return efi_status_to_err(status);
+	if (*status != EFI_BUFFER_TOO_SMALL) {
+		pr_err("Couldn't get size: 0x%lx\n", *status);
+		return NULL;
 	}
 
 	db = kmalloc(lsize, GFP_KERNEL);
 	if (!db)
-		return -ENOMEM;
+		return NULL;
 
-	status = efi.get_variable(name, guid, NULL, &lsize, db);
-	if (status != EFI_SUCCESS) {
+	*status = efi.get_variable(name, guid, NULL, &lsize, db);
+	if (*status != EFI_SUCCESS) {
 		kfree(db);
-		pr_err("Error reading db var: %s (0x%lx)\n",
-		       efi_status_to_str(status), status);
-		return efi_status_to_err(status);
+		pr_err("Error reading db var: 0x%lx\n", *status);
+		return NULL;
 	}
 
 	*size = lsize;
-	*cert_list = db;
-	return 0;
+	return db;
 }
 
 /*
@@ -83,6 +76,7 @@ static int __init load_uefi_certs(void)
 	efi_guid_t mok_var = EFI_SHIM_LOCK_GUID;
 	void *db = NULL, *dbx = NULL, *mok = NULL;
 	unsigned long dbsize = 0, dbxsize = 0, moksize = 0;
+	efi_status_t status;
 	int rc = 0;
 
 	if (!efi.get_variable)
@@ -92,10 +86,13 @@ static int __init load_uefi_certs(void)
 	 * an error if we can't get them.
 	 */
 	if (!uefi_check_ignore_db()) {
-		rc = get_cert_list(L"db", &secure_var, &dbsize, &db);
-		if (rc < 0) {
-			pr_err("MODSIGN: Couldn't get UEFI db list\n");
-		} else if (dbsize != 0) {
+		db = get_cert_list(L"db", &secure_var, &dbsize, &status);
+		if (!db) {
+			if (status == EFI_NOT_FOUND)
+				pr_debug("MODSIGN: db variable wasn't found\n");
+			else
+				pr_err("MODSIGN: Couldn't get UEFI db list\n");
+		} else {
 			rc = parse_efi_signature_list("UEFI:db",
 					db, dbsize, get_handler_for_db);
 			if (rc)
@@ -105,10 +102,13 @@ static int __init load_uefi_certs(void)
 		}
 	}
 
-	rc = get_cert_list(L"MokListRT", &mok_var, &moksize, &mok);
-	if (rc < 0) {
-		pr_info("Couldn't get UEFI MokListRT\n");
-	} else if (moksize != 0) {
+	mok = get_cert_list(L"MokListRT", &mok_var, &moksize, &status);
+	if (!mok) {
+		if (status == EFI_NOT_FOUND)
+			pr_debug("MokListRT variable wasn't found\n");
+		else
+			pr_info("Couldn't get UEFI MokListRT\n");
+	} else {
 		rc = parse_efi_signature_list("UEFI:MokListRT",
 					      mok, moksize, get_handler_for_db);
 		if (rc)
@@ -116,10 +116,13 @@ static int __init load_uefi_certs(void)
 		kfree(mok);
 	}
 
-	rc = get_cert_list(L"dbx", &secure_var, &dbxsize, &dbx);
-	if (rc < 0) {
-		pr_info("Couldn't get UEFI dbx list\n");
-	} else if (dbxsize != 0) {
+	dbx = get_cert_list(L"dbx", &secure_var, &dbxsize, &status);
+	if (!dbx) {
+		if (status == EFI_NOT_FOUND)
+			pr_debug("dbx variable wasn't found\n");
+		else
+			pr_info("Couldn't get UEFI dbx list\n");
+	} else {
 		rc = parse_efi_signature_list("UEFI:dbx",
 					      dbx, dbxsize,
 					      get_handler_for_dbx);
