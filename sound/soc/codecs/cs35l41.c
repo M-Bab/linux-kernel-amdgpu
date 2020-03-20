@@ -2450,7 +2450,7 @@ static int cs35l41_boost_config(struct cs35l41_private *cs35l41,
 
 static int cs35l41_set_pdata(struct cs35l41_private *cs35l41)
 {
-	struct classh_cfg *classh = &cs35l41->pdata.classh_config;
+	struct cs35l41_classh_cfg *classh = &cs35l41->pdata.classh_config;
 	int ret;
 
 	/* Set Platform Data */
@@ -2633,8 +2633,8 @@ exit:
 
 static int cs35l41_irq_gpio_config(struct cs35l41_private *cs35l41)
 {
-	struct irq_cfg *irq_gpio_cfg1 = &cs35l41->pdata.irq_config1;
-	struct irq_cfg *irq_gpio_cfg2 = &cs35l41->pdata.irq_config2;
+	struct cs35l41_irq_cfg *irq_gpio_cfg1 = &cs35l41->pdata.irq_config1;
+	struct cs35l41_irq_cfg *irq_gpio_cfg2 = &cs35l41->pdata.irq_config2;
 	int irq_pol = IRQF_TRIGGER_NONE;
 
 	if (irq_gpio_cfg1->is_present) {
@@ -2748,9 +2748,9 @@ static int cs35l41_handle_of_data(struct device *dev,
 	int ret;
 	size_t	num_fast_switch;
 	struct device_node *sub_node;
-	struct classh_cfg *classh_config = &pdata->classh_config;
-	struct irq_cfg *irq_gpio1_config = &pdata->irq_config1;
-	struct irq_cfg *irq_gpio2_config = &pdata->irq_config2;
+	struct cs35l41_classh_cfg *classh_config = &pdata->classh_config;
+	struct cs35l41_irq_cfg *irq_gpio1_config = &pdata->irq_config1;
+	struct cs35l41_irq_cfg *irq_gpio2_config = &pdata->irq_config2;
 	unsigned int i;
 
 	if (!np)
