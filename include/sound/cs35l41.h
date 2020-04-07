@@ -3,7 +3,7 @@
 /*
  * linux/sound/cs35l41.h -- Platform data for CS35L41
  *
- * Copyright (c) 2018 Cirrus Logic Inc.
+ * Copyright (c) 2017-2020 Cirrus Logic Inc.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
