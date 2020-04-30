@@ -3079,7 +3079,7 @@ static int cs35l41_wait_for_pwrmgt_sts(struct cs35l41_private *cs35l41)
 
 static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 {
-	int timeout = 10, ret;
+	int timeout = 20, ret;
 	unsigned int status;
 	int retries = 5, i;
 	u32 *p_trim_data;
@@ -3106,7 +3106,7 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 				dev_dbg(cs35l41->dev,
 					"%s: wakeup write fail\n", __func__);
 
-			usleep_range(1000, 1100);
+			usleep_range(100, 110);
 
 			ret = regmap_read(cs35l41->regmap,
 					  CS35L41_CSPL_MBOX_STS, &status);
@@ -3117,8 +3117,11 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 
 		} while (status != CSPL_MBOX_STS_PAUSED && --timeout > 0);
 
-		if (timeout != 0)
+		if (timeout != 0) {
+			dev_dbg(cs35l41->dev, "wake success at cycle %d\n",
+				timeout);
 			break;
+		}
 
 		dev_err(cs35l41->dev, "hibernate wake failed\n");
 
