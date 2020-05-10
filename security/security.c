@@ -74,7 +74,14 @@ static struct kmem_cache *lsm_file_cache;
 static struct kmem_cache *lsm_inode_cache;
 
 char *lsm_names;
-static struct lsm_blob_sizes blob_sizes __lsm_ro_after_init;
+
+/*
+ *	Socket blobs include infrastructure managed data
+ *	Cred blobs include context display instructions
+ */
+static struct lsm_blob_sizes blob_sizes __lsm_ro_after_init = {
+	.lbs_cred = sizeof(struct lsm_one_hooks),
+};
 
 /* Boot-time LSM user choice */
 static __initdata const char *chosen_lsm_order;
@@ -464,6 +471,9 @@ static int lsm_append(const char *new, char **result)
 	return 0;
 }
 
+/* Base list of once-only hooks */
+static struct lsm_one_hooks lsm_base_one;
+
 /**
  * security_add_hooks - Add a modules hooks to the hook lists.
  * @hooks: the hooks to add
@@ -480,6 +490,25 @@ void __init security_add_hooks(struct security_hook_list *hooks, int count,
 	for (i = 0; i < count; i++) {
 		hooks[i].lsm = lsm;
 		hlist_add_tail_rcu(&hooks[i].list, hooks[i].head);
+
+		/*
+		 * Check for the special hooks that are restricted to
+		 * a single module to create the base set. Use the hooks
+		 * from that module for the set, which may not be complete.
+		 */
+		if (lsm_base_one.lsm && strcmp(lsm_base_one.lsm, hooks[i].lsm))
+			continue;
+		if (hooks[i].head == &security_hook_heads.secid_to_secctx)
+			lsm_base_one.secid_to_secctx = hooks[i].hook;
+		else if (hooks[i].head == &security_hook_heads.secctx_to_secid)
+			lsm_base_one.secctx_to_secid = hooks[i].hook;
+		else if (hooks[i].head ==
+				&security_hook_heads.socket_getpeersec_stream)
+			lsm_base_one.socket_getpeersec_stream = hooks[i].hook;
+		else
+			continue;
+		if (lsm_base_one.lsm == NULL)
+			lsm_base_one.lsm = kstrdup(hooks[i].lsm, GFP_KERNEL);
 	}
 
 	/*
@@ -686,6 +715,16 @@ static void __init lsm_early_task(struct task_struct *task)
 			P->hook.FUNC(__VA_ARGS__);		\
 	} while (0)
 
+#define call_one_void_hook(FUNC, ...)				\
+	do {							\
+		struct security_hook_list *P;			\
+								\
+		hlist_for_each_entry(P, &security_hook_heads.FUNC, list) { \
+			P->hook.FUNC(__VA_ARGS__);		\
+			break;					\
+		}						\
+	} while (0)
+
 #define call_int_hook(FUNC, IRC, ...) ({			\
 	int RC = IRC;						\
 	do {							\
@@ -700,30 +739,44 @@ static void __init lsm_early_task(struct task_struct *task)
 	RC;							\
 })
 
+#define call_one_int_hook(FUNC, IRC, ...) ({			\
+	int RC = IRC;						\
+	struct lsm_one_hooks *LOH = current_cred()->security;	\
+	if (LOH->FUNC.FUNC)					\
+		RC = LOH->FUNC.FUNC(__VA_ARGS__);		\
+	else if (LOH->lsm == NULL && lsm_base_one.FUNC.FUNC)	\
+		RC = lsm_base_one.FUNC.FUNC(__VA_ARGS__);	\
+	RC;							\
+})
+
 /* Security operations */
 
 int security_binder_set_context_mgr(struct task_struct *mgr)
 {
 	return call_int_hook(binder_set_context_mgr, 0, mgr);
 }
+EXPORT_SYMBOL(security_binder_set_context_mgr);
 
 int security_binder_transaction(struct task_struct *from,
 				struct task_struct *to)
 {
 	return call_int_hook(binder_transaction, 0, from, to);
 }
+EXPORT_SYMBOL(security_binder_transaction);
 
 int security_binder_transfer_binder(struct task_struct *from,
 				    struct task_struct *to)
 {
 	return call_int_hook(binder_transfer_binder, 0, from, to);
 }
+EXPORT_SYMBOL(security_binder_transfer_binder);
 
 int security_binder_transfer_file(struct task_struct *from,
 				  struct task_struct *to, struct file *file)
 {
 	return call_int_hook(binder_transfer_file, 0, from, to, file);
 }
+EXPORT_SYMBOL(security_binder_transfer_file);
 
 int security_ptrace_access_check(struct task_struct *child, unsigned int mode)
 {
@@ -1568,6 +1621,8 @@ int security_cred_alloc_blank(struct cred *cred, gfp_t gfp)
 
 void security_cred_free(struct cred *cred)
 {
+	struct lsm_one_hooks *loh = cred->security;
+
 	/*
 	 * There is a failure case in prepare_creds() that
 	 * may result in a call here with ->security being NULL.
@@ -1577,26 +1632,44 @@ void security_cred_free(struct cred *cred)
 
 	call_void_hook(cred_free, cred);
 
+	kfree(loh->lsm);
 	kfree(cred->security);
 	cred->security = NULL;
+}
+
+static int copy_loh(struct lsm_one_hooks *new, struct lsm_one_hooks *old,
+		    gfp_t gfp)
+{
+	*new = *old;
+	if (old->lsm) {
+		new->lsm = kstrdup(old->lsm, gfp);
+		if (unlikely(new->lsm == NULL))
+			return -ENOMEM;
+	}
+	return 0;
 }
 
 int security_prepare_creds(struct cred *new, const struct cred *old, gfp_t gfp)
 {
 	int rc = lsm_cred_alloc(new, gfp);
 
-	if (rc)
+	if (unlikely(rc))
 		return rc;
 
 	rc = call_int_hook(cred_prepare, 0, new, old, gfp);
+	if (!unlikely(rc))
+		rc = copy_loh(new->security, old->security, gfp);
+
 	if (unlikely(rc))
 		security_cred_free(new);
+
 	return rc;
 }
 
 void security_transfer_creds(struct cred *new, const struct cred *old)
 {
 	call_void_hook(cred_transfer, new, old);
+	WARN_ON(copy_loh(new->security, old->security, GFP_KERNEL));
 }
 
 void security_cred_getsecid(const struct cred *c, u32 *secid)
@@ -1911,9 +1984,27 @@ int security_getprocattr(struct task_struct *p, const char *lsm, char *name,
 				char **value)
 {
 	struct security_hook_list *hp;
+	struct lsm_one_hooks *loh = current_cred()->security;
+	char *s;
+
+	if (!strcmp(name, "display")) {
+		if (loh->lsm)
+			s = loh->lsm;
+		else if (lsm_base_one.lsm)
+			s = lsm_base_one.lsm;
+		else
+			return -EINVAL;
+
+		*value = kstrdup(s, GFP_KERNEL);
+		if (*value)
+			return strlen(s);
+		return -ENOMEM;
+	}
 
 	hlist_for_each_entry(hp, &security_hook_heads.getprocattr, list) {
 		if (lsm != NULL && strcmp(lsm, hp->lsm))
+			continue;
+		if (lsm == NULL && loh->lsm && strcmp(loh->lsm, hp->lsm))
 			continue;
 		return hp->hook.getprocattr(p, name, value);
 	}
@@ -1924,9 +2015,82 @@ int security_setprocattr(const char *lsm, const char *name, void *value,
 			 size_t size)
 {
 	struct security_hook_list *hp;
+	struct lsm_one_hooks *loh = current_cred()->security;
+	bool found = false;
+	char *s;
+
+	/*
+	 * End the passed name at a newline.
+	 */
+	s = strnchr(value, size, '\n');
+	if (s)
+		*s = '\0';
+
+	if (!strcmp(name, "display")) {
+		union security_list_options secid_to_secctx;
+		union security_list_options secctx_to_secid;
+		union security_list_options socket_getpeersec_stream;
+
+		if (size == 0 || size >= 100)
+			return -EINVAL;
+
+		secid_to_secctx.secid_to_secctx = NULL;
+		hlist_for_each_entry(hp, &security_hook_heads.secid_to_secctx,
+				     list) {
+			if (size >= strlen(hp->lsm) &&
+			    !strncmp(value, hp->lsm, size)) {
+				secid_to_secctx = hp->hook;
+				found = true;
+				break;
+			}
+		}
+		secctx_to_secid.secctx_to_secid = NULL;
+		hlist_for_each_entry(hp, &security_hook_heads.secctx_to_secid,
+				     list) {
+			if (size >= strlen(hp->lsm) &&
+			    !strncmp(value, hp->lsm, size)) {
+				secctx_to_secid = hp->hook;
+				found = true;
+				break;
+			}
+		}
+		socket_getpeersec_stream.socket_getpeersec_stream = NULL;
+		hlist_for_each_entry(hp,
+				&security_hook_heads.socket_getpeersec_stream,
+				     list) {
+			if (size >= strlen(hp->lsm) &&
+			    !strncmp(value, hp->lsm, size)) {
+				socket_getpeersec_stream = hp->hook;
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+			return -EINVAL;
+
+		/*
+		 * The named lsm is active and supplies one or more
+		 * of the relevant hooks. Switch to it.
+		 */
+		s = kmemdup(value, size + 1, GFP_KERNEL);
+		if (s == NULL)
+			return -ENOMEM;
+		s[size] = '\0';
+
+		if (loh->lsm)
+			kfree(loh->lsm);
+		loh->lsm = s;
+		loh->secid_to_secctx = secid_to_secctx;
+		loh->secctx_to_secid = secctx_to_secid;
+		loh->socket_getpeersec_stream = socket_getpeersec_stream;
+
+		return size;
+	}
 
 	hlist_for_each_entry(hp, &security_hook_heads.setprocattr, list) {
 		if (lsm != NULL && strcmp(lsm, hp->lsm))
+			continue;
+		if (lsm == NULL && loh->lsm && strcmp(loh->lsm, hp->lsm))
 			continue;
 		return hp->hook.setprocattr(name, value, size);
 	}
@@ -1946,7 +2110,7 @@ EXPORT_SYMBOL(security_ismaclabel);
 
 int security_secid_to_secctx(u32 secid, char **secdata, u32 *seclen)
 {
-	return call_int_hook(secid_to_secctx, -EOPNOTSUPP, secid, secdata,
+	return call_one_int_hook(secid_to_secctx, -EOPNOTSUPP, secid, secdata,
 				seclen);
 }
 EXPORT_SYMBOL(security_secid_to_secctx);
@@ -1954,13 +2118,13 @@ EXPORT_SYMBOL(security_secid_to_secctx);
 int security_secctx_to_secid(const char *secdata, u32 seclen, u32 *secid)
 {
 	*secid = 0;
-	return call_int_hook(secctx_to_secid, 0, secdata, seclen, secid);
+	return call_one_int_hook(secctx_to_secid, 0, secdata, seclen, secid);
 }
 EXPORT_SYMBOL(security_secctx_to_secid);
 
 void security_release_secctx(char *secdata, u32 seclen)
 {
-	call_void_hook(release_secctx, secdata, seclen);
+	call_one_void_hook(release_secctx, secdata, seclen);
 }
 EXPORT_SYMBOL(security_release_secctx);
 
@@ -2085,7 +2249,7 @@ EXPORT_SYMBOL(security_sock_rcv_skb);
 int security_socket_getpeersec_stream(struct socket *sock, char __user *optval,
 				      int __user *optlen, unsigned len)
 {
-	return call_int_hook(socket_getpeersec_stream, -ENOPROTOOPT, sock,
+	return call_one_int_hook(socket_getpeersec_stream, -ENOPROTOOPT, sock,
 				optval, optlen, len);
 }
 
@@ -2436,6 +2600,12 @@ int security_locked_down(enum lockdown_reason what)
 	return call_int_hook(locked_down, 0, what);
 }
 EXPORT_SYMBOL(security_locked_down);
+
+int security_lock_kernel_down(const char *where, enum lockdown_reason level)
+{
+	return call_int_hook(lock_kernel_down, 0, where, level);
+}
+EXPORT_SYMBOL(security_lock_kernel_down);
 
 #ifdef CONFIG_PERF_EVENTS
 int security_perf_event_open(struct perf_event_attr *attr, int type)

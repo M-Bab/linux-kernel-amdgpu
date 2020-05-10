@@ -1,0 +1,48 @@
+This is the list of patches/features which have been temporarily
+reverted or disabled for EE:
+
+UBUNTU: SAUCE: nvme: add quirk to not call disable function when suspending
+UBUNTU: SAUCE: pci/nvme: prevent WDC PC SN720 NVMe from entering D3 and being disabled
+UBUNTU: SAUCE: drm/i915: Add support for retrying hotplug
+UBUNTU: SAUCE: drm/i915: Enable hotplug retry
+UBUNTU: SAUCE: security,perf: Allow further restriction of perf_event_open
+UBUNTU: SAUCE: s390: kernel message catalog
+UBUNTU: SAUCE: (lockdown) security: lockdown: expose a hook to lock the kernel down
+UBUNTU: SAUCE: (lockdown) efi: Add an EFI_SECURE_BOOT flag to indicate secure boot mode
+UBUNTU: SAUCE: (lockdown) security: lockdown: Make CONFIG_LOCK_DOWN_IN_EFI_SECURE_BOOT more generic
+UBUNTU: SAUCE: (lockdown) efi: Lock down the kernel if booted in secure boot mode
+UBUNTU: SAUCE: (lockdown) arm64: Allow locking down the kernel under EFI secure boot
+UBUNTU: SAUCE: (lockdown) s390/ipl: lockdown kernel when booted secure
+UBUNTU: SAUCE: drm/i915: Fix audio power up sequence for gen10+ display
+UBUNTU: SAUCE: drm/i915: extend audio CDCLK>=2*BCLK constraint to more platforms
+UBUNTU: SAUCE: selftests/bpf: Comment out BPF_CORE_READ's which cause clang to segfault
+UBUNTU: SAUCE: import aufs driver
+UBUNTU: SAUCE: aufs: rwsem owner changed to atmoic_long_t in 5.3
+UBUNTU: SAUCE: aufs: add "WITH Linux-syscall-note" to SPDX tag of uapi headers
+
+UBUNTU: SAUCE: md/raid6 algorithms: scale test duration for speedier boots
+UBUNTU: SAUCE: EFI -- annotate indirect calls within firmware_restrict_branch_speculation_{start,end}
+UBUNTU: SAUCE: overlayfs: ensure mounter privileges when reading directories
+UBUNTU: SAUCE: LSM: Infrastructure management of the sock security
+UBUNTU: SAUCE: Revert "apparmor: Allow filtering based on secmark policy"
+Revert "UBUNTU: SAUCE: mfd: intel-lpss: add quirk for Dell XPS 13 7390 2-in-1"
+UBUNTU: SAUCE: (lockdown) efi: Lock down the kernel if booted in secure boot mode
+UBUNTU: SAUCE: (lockdown) security: lockdown: Make CONFIG_LOCK_DOWN_IN_EFI_SECURE_BOOT more generic
+UBUNTU: SAUCE: (lockdown) efi: Add an EFI_SECURE_BOOT flag to indicate secure boot mode
+UBUNTU: SAUCE: drm/i915: Fix eDP DPCD aux max backlight calculations
+UBUNTU: SAUCE: drm/i915: Force DPCD backlight mode on X1 Extreme 2nd Gen 4K AMOLED panel
+USUNTU: SAUCE: drm/i915: Force DPCD backlight mode on Dell Precision 4K sku
+UBUNTU: SAUCE: Fix-up af_unix mediation for sock infrastructure management
+UBUNTU: SAUCE: (no-up) trace: add trace events for open(), exec() and uselib() (for v3.7+)
+UBUNTU: SAUCE: Revert "apparmor: Parse secmark policy"
+UBUNTU: SAUCE: Revert "apparmor: Add a wildcard secid"
+UBUNTU: SAUCE: Revert "apparmor: fixup secid map conversion to using IDR"
+UBUNTU: SAUCE: Revert "apparmor: Use an IDR to allocate apparmor secids"
+UBUNTU: SAUCE: Revert "apparmor: add support for mapping secids and using secctxes"
+
+UBUNTU: SAUCE: (lockdown) Make get_cert_list() not complain about cert lists that aren't present.
+UBUNTU: SAUCE: (lockdown) Make get_cert_list() use efi_status_to_str() to print error messages.
+Revert "UBUNTU: SAUCE: (lockdown) Make get_cert_list() use efi_status_to_str() to print error messages."
+Revert "UBUNTU: SAUCE: (lockdown) Make get_cert_list() not complain about cert lists that aren't present."
+UBUNTU: SAUCE: (lockdown) Make get_cert_list() not complain about cert lists that aren't present.
+UBUNTU: SAUCE: (lockdown) Make get_cert_list() use efi_status_to_str() to print error messages.

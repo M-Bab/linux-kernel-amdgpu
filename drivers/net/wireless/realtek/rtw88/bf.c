@@ -10,7 +10,6 @@
 void rtw_bf_disassoc(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 		     struct ieee80211_bss_conf *bss_conf)
 {
-	struct rtw_chip_info *chip = rtwdev->chip;
 	struct rtw_vif *rtwvif = (struct rtw_vif *)vif->drv_priv;
 	struct rtw_bfee *bfee = &rtwvif->bfee;
 	struct rtw_bf_info *bfinfo = &rtwdev->bf_info;
@@ -23,7 +22,7 @@ void rtw_bf_disassoc(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 	else if (bfee->role == RTW_BFEE_SU)
 		bfinfo->bfer_su_cnt--;
 
-	chip->ops->config_bfee(rtwdev, rtwvif, bfee, false);
+	rtw_chip_config_bfee(rtwdev, rtwvif, bfee, false);
 
 	bfee->role = RTW_BFEE_NONE;
 }
@@ -41,7 +40,6 @@ void rtw_bf_assoc(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 	struct ieee80211_sta_vht_cap *ic_vht_cap;
 	const u8 *bssid = bss_conf->bssid;
 	u32 sound_dim;
-	u8 bfee_role = RTW_BFEE_NONE;
 	u8 i;
 
 	if (!(chip->band & RTW_BAND_5G))
@@ -67,12 +65,12 @@ void rtw_bf_assoc(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 		}
 
 		ether_addr_copy(bfee->mac_addr, bssid);
-		bfee_role = RTW_BFEE_MU;
+		bfee->role = RTW_BFEE_MU;
 		bfee->p_aid = (bssid[5] << 1) | (bssid[4] >> 7);
 		bfee->aid = bss_conf->aid;
 		bfinfo->bfer_mu_cnt++;
 
-		chip->ops->config_bfee(rtwdev, rtwvif, bfee, true);
+		rtw_chip_config_bfee(rtwdev, rtwvif, bfee, true);
 	} else if ((ic_vht_cap->cap & IEEE80211_VHT_CAP_SU_BEAMFORMEE_CAPABLE) &&
 		   (vht_cap->cap & IEEE80211_VHT_CAP_SU_BEAMFORMER_CAPABLE)) {
 		if (bfinfo->bfer_su_cnt >= chip->bfer_su_max_num) {
@@ -85,7 +83,7 @@ void rtw_bf_assoc(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 		sound_dim >>= IEEE80211_VHT_CAP_SOUNDING_DIMENSIONS_SHIFT;
 
 		ether_addr_copy(bfee->mac_addr, bssid);
-		bfee_role = RTW_BFEE_SU;
+		bfee->role = RTW_BFEE_SU;
 		bfee->sound_dim = (u8)sound_dim;
 		bfee->g_id = 0;
 		bfee->p_aid = (bssid[5] << 1) | (bssid[4] >> 7);
@@ -98,11 +96,10 @@ void rtw_bf_assoc(struct rtw_dev *rtwdev, struct ieee80211_vif *vif,
 			}
 		}
 
-		chip->ops->config_bfee(rtwdev, rtwvif, bfee, true);
+		rtw_chip_config_bfee(rtwdev, rtwvif, bfee, true);
 	}
 
 out_unlock:
-	bfee->role = bfee_role;
 	rcu_read_unlock();
 }
 

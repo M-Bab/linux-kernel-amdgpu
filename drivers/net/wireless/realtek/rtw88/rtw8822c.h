@@ -171,6 +171,8 @@ const struct rtw_table name ## _tbl = {			\
 #define REG_DFIRBW	0x810
 #define REG_ANTMAP0	0x820
 #define REG_ANTMAP	0x824
+#define REG_EDCCA_DECISION	0x844
+#define BIT_EDCCA_OPTION	GENMASK(30, 29)
 #define REG_DYMPRITH	0x86c
 #define REG_DYMENTH0	0x870
 #define REG_DYMENTH	0x874
@@ -190,6 +192,8 @@ const struct rtw_table name ## _tbl = {			\
 #define BIT_3WIRE_TX_EN		BIT(0)
 #define BIT_3WIRE_RX_EN		BIT(1)
 #define BIT_3WIRE_PI_ON		BIT(28)
+#define REG_ANAPAR_A	0x1830
+#define BIT_ANAPAR_UPDATE	BIT(29)
 #define REG_RXAGCCTL0	0x18ac
 #define BITS_RXAGC_CCK		GENMASK(15, 12)
 #define BITS_RXAGC_OFDM		GENMASK(8, 4)
@@ -223,6 +227,8 @@ const struct rtw_table name ## _tbl = {			\
 #define BIT_CCK_BLK_EN		BIT(1)
 #define BIT_CCK_OFDM_BLK_EN	(BIT(0) | BIT(1))
 #define REG_CCAMSK	0x1c80
+#define REG_RSTB	0x1c90
+#define BIT_RSTB_3WIRE		BIT(8)
 #define REG_RX_BREAK	0x1d2c
 #define BIT_COM_RX_GCK_EN	BIT(31)
 #define REG_RXFNCTL	0x1d30
@@ -243,6 +249,7 @@ const struct rtw_table name ## _tbl = {			\
 #define REG_OFDM_TXCNT	0x2de0
 #define REG_ORITXCODE2	0x4100
 #define REG_3WIRE2	0x410c
+#define REG_ANAPAR_B	0x4130
 #define REG_RXAGCCTL	0x41ac
 #define REG_DCKB_I_0	0x41bc
 #define REG_DCKB_I_1	0x41c0
