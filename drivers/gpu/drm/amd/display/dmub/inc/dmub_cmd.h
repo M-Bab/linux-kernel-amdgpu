@@ -228,6 +228,7 @@ struct dmub_cmd_psr_copy_settings_data {
 	uint8_t smu_optimizations_en;
 	uint8_t frame_delay;
 	uint8_t frame_cap_ind;
+	struct dmub_psr_debug_flags debug;
 };
 
 struct dmub_rb_cmd_psr_copy_settings {
@@ -260,6 +261,8 @@ struct dmub_rb_cmd_psr_set_version {
 struct dmub_cmd_abm_set_pipe_data {
 	uint32_t ramping_boundary;
 	uint32_t otg_inst;
+	uint32_t panel_inst;
+	uint32_t set_pipe_option;
 };
 
 struct dmub_rb_cmd_abm_set_pipe {

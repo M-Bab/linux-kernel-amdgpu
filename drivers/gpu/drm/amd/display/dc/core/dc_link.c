@@ -26,7 +26,7 @@
 #include <linux/slab.h>
 
 #include "dm_services.h"
-#include "atom.h"
+#include "atomfirmware.h"
 #include "dm_helpers.h"
 #include "dc.h"
 #include "grph_object_id.h"
@@ -46,6 +46,8 @@
 #include "dmcu.h"
 #include "hw/clk_mgr.h"
 #include "dce/dmub_psr.h"
+#include "dmub/dmub_srv.h"
+#include "inc/hw/panel_cntl.h"
 
 #define DC_LOGGER_INIT(logger)
 
@@ -85,6 +87,9 @@ static void dc_link_destruct(struct dc_link *link)
 
 	if (link->ddc)
 		dal_ddc_service_destroy(&link->ddc);
+
+	if (link->panel_cntl)
+		link->panel_cntl->funcs->destroy(&link->panel_cntl);
 
 	if (link->link_enc)
 		link->link_enc->funcs->destroy(&link->link_enc);
@@ -1354,6 +1359,7 @@ static bool dc_link_construct(struct dc_link *link,
 	struct ddc_service_init_data ddc_service_init_data = { { 0 } };
 	struct dc_context *dc_ctx = init_params->ctx;
 	struct encoder_init_data enc_init_data = { 0 };
+	struct panel_cntl_init_data panel_cntl_init_data = { 0 };
 	struct integrated_info info = {{{ 0 }}};
 	struct dc_bios *bios = init_params->dc->ctx->dc_bios;
 	const struct dc_vbios_funcs *bp_funcs = bios->funcs;
@@ -1424,6 +1430,7 @@ static bool dc_link_construct(struct dc_link *link,
 			link->irq_source_hpd_rx =
 					dal_irq_get_rx_source(link->hpd_gpio);
 		}
+
 		break;
 	case CONNECTOR_ID_LVDS:
 		link->connector_signal = SIGNAL_TYPE_LVDS;
@@ -1452,6 +1459,22 @@ static bool dc_link_construct(struct dc_link *link,
 
 	link->ddc_hw_inst =
 		dal_ddc_get_line(dal_ddc_service_get_ddc_pin(link->ddc));
+
+
+	if (link->dc->res_pool->funcs->panel_cntl_create &&
+		(link->link_id.id == CONNECTOR_ID_EDP ||
+			link->link_id.id == CONNECTOR_ID_LVDS)) {
+		panel_cntl_init_data.ctx = dc_ctx;
+		panel_cntl_init_data.inst = 0;
+		link->panel_cntl =
+			link->dc->res_pool->funcs->panel_cntl_create(
+								&panel_cntl_init_data);
+
+		if (link->panel_cntl == NULL) {
+			DC_ERROR("Failed to create link panel_cntl!\n");
+			goto panel_cntl_create_fail;
+		}
+	}
 
 	enc_init_data.ctx = dc_ctx;
 	bp_funcs->get_src_obj(dc_ctx->dc_bios, link->link_id, 0,
@@ -1529,10 +1552,15 @@ static bool dc_link_construct(struct dc_link *link,
 	 */
 	program_hpd_filter(link);
 
+	link->psr_settings.psr_version = DC_PSR_VERSION_UNSUPPORTED;
+
 	return true;
 device_tag_fail:
 	link->link_enc->funcs->destroy(&link->link_enc);
 link_enc_create_fail:
+	if (link->panel_cntl != NULL)
+		link->panel_cntl->funcs->destroy(&link->panel_cntl);
+panel_cntl_create_fail:
 	dal_ddc_service_destroy(&link->ddc);
 ddc_create_fail:
 create_fail:
@@ -2437,9 +2465,28 @@ enum dc_status dc_link_validate_mode_timing(
 	return DC_OK;
 }
 
+static struct abm *get_abm_from_stream_res(const struct dc_link *link)
+{
+	int i;
+	struct dc *dc = link->ctx->dc;
+	struct abm *abm = NULL;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		struct pipe_ctx pipe_ctx = dc->current_state->res_ctx.pipe_ctx[i];
+		struct dc_stream_state *stream = pipe_ctx.stream;
+
+		if (stream && stream->link == link) {
+			abm = pipe_ctx.stream_res.abm;
+			break;
+		}
+	}
+	return abm;
+}
+
 int dc_link_get_backlight_level(const struct dc_link *link)
 {
-	struct abm *abm = link->ctx->dc->res_pool->abm;
+
+	struct abm *abm = get_abm_from_stream_res(link);
 
 	if (abm == NULL || abm->funcs->get_current_backlight == NULL)
 		return DC_ERROR_UNEXPECTED;
@@ -2447,71 +2494,63 @@ int dc_link_get_backlight_level(const struct dc_link *link)
 	return (int) abm->funcs->get_current_backlight(abm);
 }
 
+int dc_link_get_target_backlight_pwm(const struct dc_link *link)
+{
+	struct abm *abm = get_abm_from_stream_res(link);
+
+	if (abm == NULL || abm->funcs->get_target_backlight == NULL)
+		return DC_ERROR_UNEXPECTED;
+
+	return (int) abm->funcs->get_target_backlight(abm);
+}
+
+static struct pipe_ctx *get_pipe_from_link(const struct dc_link *link)
+{
+	int i;
+	struct dc *dc = link->ctx->dc;
+	struct pipe_ctx *pipe_ctx = NULL;
+
+	for (i = 0; i < MAX_PIPES; i++) {
+		if (dc->current_state->res_ctx.pipe_ctx[i].stream) {
+			if (dc->current_state->res_ctx.pipe_ctx[i].stream->link == link) {
+				pipe_ctx = &dc->current_state->res_ctx.pipe_ctx[i];
+				break;
+			}
+		}
+	}
+
+	return pipe_ctx;
+}
+
 bool dc_link_set_backlight_level(const struct dc_link *link,
 		uint32_t backlight_pwm_u16_16,
 		uint32_t frame_ramp)
 {
 	struct dc  *dc = link->ctx->dc;
-	struct abm *abm = dc->res_pool->abm;
-	struct dmcu *dmcu = dc->res_pool->dmcu;
-	unsigned int controller_id = 0;
-	bool use_smooth_brightness = true;
-	int i;
+
 	DC_LOGGER_INIT(link->ctx->logger);
-
-	if ((dmcu == NULL) ||
-		(abm == NULL) ||
-		(abm->funcs->set_backlight_level_pwm == NULL))
-		return false;
-
-	use_smooth_brightness = dmcu->funcs->is_dmcu_initialized(dmcu);
-
 	DC_LOG_BACKLIGHT("New Backlight level: %d (0x%X)\n",
 			backlight_pwm_u16_16, backlight_pwm_u16_16);
 
 	if (dc_is_embedded_signal(link->connector_signal)) {
-		for (i = 0; i < MAX_PIPES; i++) {
-			if (dc->current_state->res_ctx.pipe_ctx[i].stream) {
-				if (dc->current_state->res_ctx.
-						pipe_ctx[i].stream->link
-						== link) {
-					/* DMCU -1 for all controller id values,
-					 * therefore +1 here
-					 */
-					controller_id =
-						dc->current_state->
-						res_ctx.pipe_ctx[i].stream_res.tg->inst +
-						1;
+		struct pipe_ctx *pipe_ctx = get_pipe_from_link(link);
 
-					/* Disable brightness ramping when the display is blanked
-					 * as it can hang the DMCU
-					 */
-					if (dc->current_state->res_ctx.pipe_ctx[i].plane_state == NULL)
-						frame_ramp = 0;
-				}
-			}
+		if (pipe_ctx) {
+			/* Disable brightness ramping when the display is blanked
+			 * as it can hang the DMCU
+			 */
+			if (pipe_ctx->plane_state == NULL)
+				frame_ramp = 0;
+		} else {
+			ASSERT(false);
+			return false;
 		}
-		abm->funcs->set_backlight_level_pwm(
-				abm,
+
+		dc->hwss.set_backlight_level(
+				pipe_ctx,
 				backlight_pwm_u16_16,
-				frame_ramp,
-				controller_id,
-				use_smooth_brightness);
+				frame_ramp);
 	}
-
-	return true;
-}
-
-bool dc_link_set_abm_disable(const struct dc_link *link)
-{
-	struct dc  *dc = link->ctx->dc;
-	struct abm *abm = dc->res_pool->abm;
-
-	if ((abm == NULL) || (abm->funcs->set_backlight_level_pwm == NULL))
-		return false;
-
-	abm->funcs->set_abm_immediate_disable(abm);
-
 	return true;
 }
 
@@ -2521,12 +2560,12 @@ bool dc_link_set_psr_allow_active(struct dc_link *link, bool allow_active, bool 
 	struct dmcu *dmcu = dc->res_pool->dmcu;
 	struct dmub_psr *psr = dc->res_pool->psr;
 
-	if (psr != NULL && link->psr_feature_enabled)
+	if (psr != NULL && link->psr_settings.psr_feature_enabled)
 		psr->funcs->psr_enable(psr, allow_active);
-	else if ((dmcu != NULL && dmcu->funcs->is_dmcu_initialized(dmcu)) && link->psr_feature_enabled)
+	else if ((dmcu != NULL && dmcu->funcs->is_dmcu_initialized(dmcu)) && link->psr_settings.psr_feature_enabled)
 		dmcu->funcs->set_psr_enable(dmcu, allow_active, wait);
 
-	link->psr_allow_active = allow_active;
+	link->psr_settings.psr_allow_active = allow_active;
 
 	return true;
 }
@@ -2537,9 +2576,9 @@ bool dc_link_get_psr_state(const struct dc_link *link, uint32_t *psr_state)
 	struct dmcu *dmcu = dc->res_pool->dmcu;
 	struct dmub_psr *psr = dc->res_pool->psr;
 
-	if (psr != NULL && link->psr_feature_enabled)
+	if (psr != NULL && link->psr_settings.psr_feature_enabled)
 		psr->funcs->psr_get_state(psr, psr_state);
-	else if (dmcu != NULL && link->psr_feature_enabled)
+	else if (dmcu != NULL && link->psr_settings.psr_feature_enabled)
 		dmcu->funcs->get_psr_state(dmcu, psr_state);
 
 	return true;
@@ -2710,14 +2749,14 @@ bool dc_link_setup_psr(struct dc_link *link,
 	psr_context->frame_delay = 0;
 
 	if (psr)
-		link->psr_feature_enabled = psr->funcs->psr_copy_settings(psr, link, psr_context);
+		link->psr_settings.psr_feature_enabled = psr->funcs->psr_copy_settings(psr, link, psr_context);
 	else
-		link->psr_feature_enabled = dmcu->funcs->setup_psr(dmcu, link, psr_context);
+		link->psr_settings.psr_feature_enabled = dmcu->funcs->setup_psr(dmcu, link, psr_context);
 
 	/* psr_enabled == 0 indicates setup_psr did not succeed, but this
 	 * should not happen since firmware should be running at this point
 	 */
-	if (link->psr_feature_enabled == 0)
+	if (link->psr_settings.psr_feature_enabled == 0)
 		ASSERT(0);
 
 	return true;
@@ -3064,7 +3103,7 @@ void core_link_enable_stream(
 	enum dc_status status;
 	DC_LOGGER_INIT(pipe_ctx->stream->ctx->logger);
 
-	if (!IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment) &&
+	if (!IS_DIAG_DC(dc->ctx->dce_environment) &&
 			dc_is_virtual_signal(pipe_ctx->stream->signal))
 		return;
 
@@ -3214,7 +3253,7 @@ void core_link_disable_stream(struct pipe_ctx *pipe_ctx)
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct dc_link *link = stream->sink->link;
 
-	if (!IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment) &&
+	if (!IS_DIAG_DC(dc->ctx->dce_environment) &&
 			dc_is_virtual_signal(pipe_ctx->stream->signal))
 		return;
 
