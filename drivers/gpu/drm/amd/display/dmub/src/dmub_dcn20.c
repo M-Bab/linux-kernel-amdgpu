@@ -275,7 +275,11 @@ void dmub_dcn20_set_inbox1_wptr(struct dmub_srv *dmub, uint32_t wptr_offset)
 
 bool dmub_dcn20_is_hw_init(struct dmub_srv *dmub)
 {
-	return REG_READ(DMCUB_REGION3_CW2_BASE_ADDRESS) != 0;
+	uint32_t is_hw_init;
+
+	REG_GET(DMCUB_CNTL, DMCUB_ENABLE, &is_hw_init);
+
+	return is_hw_init != 0;
 }
 
 bool dmub_dcn20_is_supported(struct dmub_srv *dmub)
@@ -307,4 +311,19 @@ bool dmub_dcn20_is_gpint_acked(struct dmub_srv *dmub,
 uint32_t dmub_dcn20_get_gpint_response(struct dmub_srv *dmub)
 {
 	return REG_READ(DMCUB_SCRATCH7);
+}
+
+union dmub_fw_boot_status dmub_dcn20_get_fw_boot_status(struct dmub_srv *dmub)
+{
+	union dmub_fw_boot_status status;
+
+	status.all = REG_READ(DMCUB_SCRATCH0);
+	return status;
+}
+
+void dmub_dcn20_enable_dmub_boot_options(struct dmub_srv *dmub)
+{
+	union dmub_fw_boot_options boot_options = {0};
+
+	REG_WRITE(DMCUB_SCRATCH14, boot_options.all);
 }
