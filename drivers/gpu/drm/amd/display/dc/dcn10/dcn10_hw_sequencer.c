@@ -51,6 +51,7 @@
 #include "link_hwss.h"
 #include "dpcd_defs.h"
 #include "dsc.h"
+#include "dce/dmub_hw_lock_mgr.h"
 
 #define DC_LOGGER_INIT(logger)
 
@@ -1254,6 +1255,7 @@ void dcn10_init_hw(struct dc *dc)
 	struct dc_bios *dcb = dc->ctx->dc_bios;
 	struct resource_pool *res_pool = dc->res_pool;
 	uint32_t backlight = MAX_BACKLIGHT_LEVEL;
+	bool   is_optimized_init_done = false;
 
 	if (dc->clk_mgr && dc->clk_mgr->funcs->init_clocks)
 		dc->clk_mgr->funcs->init_clocks(dc->clk_mgr);
@@ -1287,7 +1289,11 @@ void dcn10_init_hw(struct dc *dc)
 	if (!dcb->funcs->is_accelerated_mode(dcb))
 		hws->funcs.disable_vga(dc->hwseq);
 
-	hws->funcs.bios_golden_init(dc);
+	is_optimized_init_done = dc_dmub_srv_optimized_init_done(dc->ctx->dmub_srv);
+
+	if (!is_optimized_init_done)
+		hws->funcs.bios_golden_init(dc);
+
 	if (dc->ctx->dc_bios->fw_info_valid) {
 		res_pool->ref_clocks.xtalin_clock_inKhz =
 				dc->ctx->dc_bios->fw_info.pll_info.crystal_frequency;
@@ -1320,7 +1326,8 @@ void dcn10_init_hw(struct dc *dc)
 		 */
 		struct dc_link *link = dc->links[i];
 
-		link->link_enc->funcs->hw_init(link->link_enc);
+		if (!is_optimized_init_done)
+			link->link_enc->funcs->hw_init(link->link_enc);
 
 		/* Check for enabled DIG to identify enabled display */
 		if (link->link_enc->funcs->is_dig_enabled &&
@@ -1329,9 +1336,11 @@ void dcn10_init_hw(struct dc *dc)
 	}
 
 	/* Power gate DSCs */
-	for (i = 0; i < res_pool->res_cap->num_dsc; i++)
-		if (hws->funcs.dsc_pg_control != NULL)
-			hws->funcs.dsc_pg_control(hws, res_pool->dscs[i]->inst, false);
+	if (!is_optimized_init_done) {
+		for (i = 0; i < res_pool->res_cap->num_dsc; i++)
+			if (hws->funcs.dsc_pg_control != NULL)
+				hws->funcs.dsc_pg_control(hws, res_pool->dscs[i]->inst, false);
+	}
 
 	/* we want to turn off all dp displays before doing detection */
 	if (dc->config.power_down_display_on_boot) {
@@ -1376,10 +1385,12 @@ void dcn10_init_hw(struct dc *dc)
 	 * everything down.
 	 */
 	if (dcb->funcs->is_accelerated_mode(dcb) || dc->config.power_down_display_on_boot) {
-		hws->funcs.init_pipes(dc, dc->current_state);
-		if (dc->res_pool->hubbub->funcs->allow_self_refresh_control)
-			dc->res_pool->hubbub->funcs->allow_self_refresh_control(dc->res_pool->hubbub,
-					!dc->res_pool->hubbub->ctx->dc->debug.disable_stutter);
+		if (!is_optimized_init_done) {
+			hws->funcs.init_pipes(dc, dc->current_state);
+			if (dc->res_pool->hubbub->funcs->allow_self_refresh_control)
+				dc->res_pool->hubbub->funcs->allow_self_refresh_control(dc->res_pool->hubbub,
+						!dc->res_pool->hubbub->ctx->dc->debug.disable_stutter);
+		}
 	}
 
 	/* In headless boot cases, DIG may be turned
@@ -1393,10 +1404,10 @@ void dcn10_init_hw(struct dc *dc)
 		if (edp_link &&
 				edp_link->link_enc->funcs->is_dig_enabled &&
 				edp_link->link_enc->funcs->is_dig_enabled(edp_link->link_enc) &&
-				dc->hwss.edp_backlight_control &&
+				dc->hwseq->funcs.edp_backlight_control &&
 				dc->hwss.power_down &&
 				dc->hwss.edp_power_control) {
-			dc->hwss.edp_backlight_control(edp_link, false);
+			dc->hwseq->funcs.edp_backlight_control(edp_link, false);
 			dc->hwss.power_down(dc);
 			dc->hwss.edp_power_control(edp_link, false);
 		} else {
@@ -1414,30 +1425,34 @@ void dcn10_init_hw(struct dc *dc)
 		}
 	}
 
-	for (i = 0; i < res_pool->audio_count; i++) {
-		struct audio *audio = res_pool->audios[i];
+	if (!is_optimized_init_done) {
 
-		audio->funcs->hw_init(audio);
+		for (i = 0; i < res_pool->audio_count; i++) {
+			struct audio *audio = res_pool->audios[i];
+
+			audio->funcs->hw_init(audio);
+		}
+
+		for (i = 0; i < dc->link_count; i++) {
+			struct dc_link *link = dc->links[i];
+
+			if (link->panel_cntl)
+				backlight = link->panel_cntl->funcs->hw_init(link->panel_cntl);
+		}
+
+		if (abm != NULL)
+			abm->funcs->abm_init(abm, backlight);
+
+		if (dmcu != NULL && !dmcu->auto_load_dmcu)
+			dmcu->funcs->dmcu_init(dmcu);
 	}
-
-	for (i = 0; i < dc->link_count; i++) {
-		struct dc_link *link = dc->links[i];
-
-		if (link->panel_cntl)
-			backlight = link->panel_cntl->funcs->hw_init(link->panel_cntl);
-	}
-
-	if (abm != NULL)
-		abm->funcs->abm_init(abm, backlight);
-
-	if (dmcu != NULL && !dmcu->auto_load_dmcu)
-		dmcu->funcs->dmcu_init(dmcu);
 
 	if (abm != NULL && dmcu != NULL)
 		abm->dmcu_is_running = dmcu->funcs->is_dmcu_initialized(dmcu);
 
 	/* power AFMT HDMI memory TODO: may move to dis/en output save power*/
-	REG_WRITE(DIO_MEM_PWR_CTRL, 0);
+	if (!is_optimized_init_done)
+		REG_WRITE(DIO_MEM_PWR_CTRL, 0);
 
 	if (!dc->debug.disable_clock_gate) {
 		/* enable all DCN clock gating */
@@ -1452,6 +1467,11 @@ void dcn10_init_hw(struct dc *dc)
 
 	if (dc->clk_mgr->funcs->notify_wm_ranges)
 		dc->clk_mgr->funcs->notify_wm_ranges(dc->clk_mgr);
+
+#ifdef CONFIG_DRM_AMD_DC_DCN3_0
+	if (dc->clk_mgr->funcs->set_hard_max_memclk)
+		dc->clk_mgr->funcs->set_hard_max_memclk(dc->clk_mgr);
+#endif
 
 }
 
@@ -1742,6 +1762,8 @@ static void delay_cursor_until_vupdate(struct dc *dc, struct pipe_ctx *pipe_ctx)
 		return;
 
 	/* Stall out until the cursor update completes. */
+	if (vupdate_end < vupdate_start)
+		vupdate_end += stream->timing.v_total;
 	us_vupdate = (vupdate_end - vupdate_start + 1) * us_per_line;
 	udelay(us_to_vupdate + us_vupdate);
 }
@@ -1756,8 +1778,20 @@ void dcn10_cursor_lock(struct dc *dc, struct pipe_ctx *pipe, bool lock)
 	if (lock)
 		delay_cursor_until_vupdate(dc, pipe);
 
-	dc->res_pool->mpc->funcs->cursor_lock(dc->res_pool->mpc,
-			pipe->stream_res.opp->inst, lock);
+	if (pipe->stream && should_use_dmub_lock(pipe->stream->link)) {
+		union dmub_hw_lock_flags hw_locks = { 0 };
+		struct dmub_hw_lock_inst_flags inst_flags = { 0 };
+
+		hw_locks.bits.lock_cursor = 1;
+		inst_flags.opp_inst = pipe->stream_res.opp->inst;
+
+		dmub_hw_lock_mgr_cmd(dc->ctx->dmub_srv,
+					lock,
+					&hw_locks,
+					&inst_flags);
+	} else
+		dc->res_pool->mpc->funcs->cursor_lock(dc->res_pool->mpc,
+				pipe->stream_res.opp->inst, lock);
 }
 
 static bool wait_for_reset_trigger_to_occur(
@@ -2579,8 +2613,10 @@ void dcn10_blank_pixel_data(
 		}
 	} else if (blank) {
 		dc->hwss.set_abm_immediate_disable(pipe_ctx);
-		if (stream_res->tg->funcs->set_blank)
+		if (stream_res->tg->funcs->set_blank) {
+			stream_res->tg->funcs->wait_for_state(stream_res->tg, CRTC_STATE_VBLANK);
 			stream_res->tg->funcs->set_blank(stream_res->tg, blank);
+		}
 	}
 }
 

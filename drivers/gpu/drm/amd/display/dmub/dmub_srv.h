@@ -64,11 +64,7 @@
  * other component within DAL.
  */
 
-#include "inc/dmub_types.h"
 #include "inc/dmub_cmd.h"
-#include "inc/dmub_gpint_cmd.h"
-#include "inc/dmub_cmd_dal.h"
-#include "inc/dmub_rb.h"
 
 #if defined(__cplusplus)
 extern "C" {
@@ -92,6 +88,9 @@ enum dmub_asic {
 	DMUB_ASIC_NONE = 0,
 	DMUB_ASIC_DCN20,
 	DMUB_ASIC_DCN21,
+#ifdef CONFIG_DRM_AMD_DC_DCN3_0
+	DMUB_ASIC_DCN30,
+#endif
 	DMUB_ASIC_MAX,
 };
 
@@ -257,13 +256,18 @@ struct dmub_srv_hw_funcs {
 
 	void (*set_inbox1_wptr)(struct dmub_srv *dmub, uint32_t wptr_offset);
 
+	uint32_t (*emul_get_inbox1_rptr)(struct dmub_srv *dmub);
+
+	void (*emul_set_inbox1_wptr)(struct dmub_srv *dmub, uint32_t wptr_offset);
+
 	bool (*is_supported)(struct dmub_srv *dmub);
 
 	bool (*is_hw_init)(struct dmub_srv *dmub);
 
-	bool (*is_phy_init)(struct dmub_srv *dmub);
+	void (*enable_dmub_boot_options)(struct dmub_srv *dmub);
 
-	bool (*is_auto_load_done)(struct dmub_srv *dmub);
+	union dmub_fw_boot_status (*get_fw_status)(struct dmub_srv *dmub);
+
 
 	void (*set_gpint)(struct dmub_srv *dmub,
 			  union dmub_gpint_data_register reg);

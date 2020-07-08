@@ -12,6 +12,8 @@
 #include "dc_link_ddc.h"
 #include "core_status.h"
 #include "dpcd_defs.h"
+#include "dc_dmub_srv.h"
+#include "dce/dmub_hw_lock_mgr.h"
 
 #define DC_LOGGER \
 	link->ctx->logger
@@ -1102,6 +1104,10 @@ static inline enum link_training_result perform_link_training_int(
 	dpcd_pattern.v1_4.TRAINING_PATTERN_SET = DPCD_TRAINING_PATTERN_VIDEOIDLE;
 	dpcd_set_training_pattern(link, dpcd_pattern);
 
+	/* delay 5ms after notifying sink of idle pattern before switching output */
+	if (link->connector_signal != SIGNAL_TYPE_EDP)
+		msleep(5);
+
 	/* 4. mainlink output idle pattern*/
 	dp_set_hw_test_pattern(link, DP_TEST_PATTERN_VIDEO_MODE, NULL, 0);
 
@@ -1551,6 +1557,12 @@ bool perform_link_training_with_retries(
 	struct dc_link *link = stream->link;
 	enum dp_panel_mode panel_mode = dp_get_panel_mode(link);
 
+	/* We need to do this before the link training to ensure the idle pattern in SST
+	 * mode will be sent right after the link training
+	 */
+	link->link_enc->funcs->connect_dig_be_to_fe(link->link_enc,
+							pipe_ctx->stream_res.stream_enc->id, true);
+
 	for (j = 0; j < attempts; ++j) {
 
 		dp_enable_link_phy(
@@ -1566,12 +1578,6 @@ bool perform_link_training_with_retries(
 		}
 
 		dp_set_panel_mode(link, panel_mode);
-
-		/* We need to do this before the link training to ensure the idle pattern in SST
-		 * mode will be sent right after the link training
-		 */
-		link->link_enc->funcs->connect_dig_be_to_fe(link->link_enc,
-								pipe_ctx->stream_res.stream_enc->id, true);
 
 		if (link->aux_access_disabled) {
 			dc_link_dp_perform_link_training_skip_aux(link, link_setting);
@@ -2849,7 +2855,6 @@ bool dc_link_handle_hpd_rx_irq(struct dc_link *link, union hpd_irq_data *out_hpd
 	enum dc_status result;
 	bool status = false;
 	struct pipe_ctx *pipe_ctx;
-	struct dc_link_settings previous_link_settings;
 	int i;
 
 	if (out_link_loss)
@@ -2928,32 +2933,25 @@ bool dc_link_handle_hpd_rx_irq(struct dc_link *link, union hpd_irq_data *out_hpd
 		for (i = 0; i < MAX_PIPES; i++) {
 			pipe_ctx = &link->dc->current_state->res_ctx.pipe_ctx[i];
 			if (pipe_ctx && pipe_ctx->stream && pipe_ctx->stream->link == link)
-				link->dc->hwss.blank_stream(pipe_ctx);
-		}
-
-		for (i = 0; i < MAX_PIPES; i++) {
-			pipe_ctx = &link->dc->current_state->res_ctx.pipe_ctx[i];
-			if (pipe_ctx && pipe_ctx->stream && pipe_ctx->stream->link == link)
 				break;
 		}
 
 		if (pipe_ctx == NULL || pipe_ctx->stream == NULL)
 			return false;
 
-		previous_link_settings = link->cur_link_settings;
-
-		perform_link_training_with_retries(&previous_link_settings,
-			true, LINK_TRAINING_ATTEMPTS,
-			pipe_ctx,
-			pipe_ctx->stream->signal);
-
-		if (pipe_ctx->stream->signal == SIGNAL_TYPE_DISPLAY_PORT_MST)
-			dc_link_reallocate_mst_payload(link);
 
 		for (i = 0; i < MAX_PIPES; i++) {
 			pipe_ctx = &link->dc->current_state->res_ctx.pipe_ctx[i];
-			if (pipe_ctx && pipe_ctx->stream && pipe_ctx->stream->link == link)
-				link->dc->hwss.unblank_stream(pipe_ctx, &previous_link_settings);
+			if (pipe_ctx && pipe_ctx->stream && !pipe_ctx->stream->dpms_off &&
+					pipe_ctx->stream->link == link)
+				core_link_disable_stream(pipe_ctx);
+		}
+
+		for (i = 0; i < MAX_PIPES; i++) {
+			pipe_ctx = &link->dc->current_state->res_ctx.pipe_ctx[i];
+			if (pipe_ctx && pipe_ctx->stream && !pipe_ctx->stream->dpms_off &&
+					pipe_ctx->stream->link == link)
+				core_link_enable_stream(link->dc->current_state, pipe_ctx);
 		}
 
 		status = false;
@@ -3099,62 +3097,63 @@ static void get_active_converter_info(
 		uint8_t det_caps[16]; /* CTS 4.2.2.7 expects source to read Detailed Capabilities Info : 00080h-0008F.*/
 		union dwnstream_port_caps_byte0 *port_caps =
 			(union dwnstream_port_caps_byte0 *)det_caps;
-		core_link_read_dpcd(link, DP_DOWNSTREAM_PORT_0,
-				det_caps, sizeof(det_caps));
+		if (core_link_read_dpcd(link, DP_DOWNSTREAM_PORT_0,
+				det_caps, sizeof(det_caps)) == DC_OK) {
 
-		switch (port_caps->bits.DWN_STRM_PORTX_TYPE) {
-		/*Handle DP case as DONGLE_NONE*/
-		case DOWN_STREAM_DETAILED_DP:
-			link->dpcd_caps.dongle_type = DISPLAY_DONGLE_NONE;
-			break;
-		case DOWN_STREAM_DETAILED_VGA:
-			link->dpcd_caps.dongle_type =
-				DISPLAY_DONGLE_DP_VGA_CONVERTER;
-			break;
-		case DOWN_STREAM_DETAILED_DVI:
-			link->dpcd_caps.dongle_type =
-				DISPLAY_DONGLE_DP_DVI_CONVERTER;
-			break;
-		case DOWN_STREAM_DETAILED_HDMI:
-		case DOWN_STREAM_DETAILED_DP_PLUS_PLUS:
-			/*Handle DP++ active converter case, process DP++ case as HDMI case according DP1.4 spec*/
-			link->dpcd_caps.dongle_type =
-				DISPLAY_DONGLE_DP_HDMI_CONVERTER;
+			switch (port_caps->bits.DWN_STRM_PORTX_TYPE) {
+			/*Handle DP case as DONGLE_NONE*/
+			case DOWN_STREAM_DETAILED_DP:
+				link->dpcd_caps.dongle_type = DISPLAY_DONGLE_NONE;
+				break;
+			case DOWN_STREAM_DETAILED_VGA:
+				link->dpcd_caps.dongle_type =
+					DISPLAY_DONGLE_DP_VGA_CONVERTER;
+				break;
+			case DOWN_STREAM_DETAILED_DVI:
+				link->dpcd_caps.dongle_type =
+					DISPLAY_DONGLE_DP_DVI_CONVERTER;
+				break;
+			case DOWN_STREAM_DETAILED_HDMI:
+			case DOWN_STREAM_DETAILED_DP_PLUS_PLUS:
+				/*Handle DP++ active converter case, process DP++ case as HDMI case according DP1.4 spec*/
+				link->dpcd_caps.dongle_type =
+					DISPLAY_DONGLE_DP_HDMI_CONVERTER;
 
-			link->dpcd_caps.dongle_caps.dongle_type = link->dpcd_caps.dongle_type;
-			if (ds_port.fields.DETAILED_CAPS) {
+				link->dpcd_caps.dongle_caps.dongle_type = link->dpcd_caps.dongle_type;
+				if (ds_port.fields.DETAILED_CAPS) {
 
-				union dwnstream_port_caps_byte3_hdmi
-					hdmi_caps = {.raw = det_caps[3] };
-				union dwnstream_port_caps_byte2
-					hdmi_color_caps = {.raw = det_caps[2] };
-				link->dpcd_caps.dongle_caps.dp_hdmi_max_pixel_clk_in_khz =
-					det_caps[1] * 2500;
+					union dwnstream_port_caps_byte3_hdmi
+						hdmi_caps = {.raw = det_caps[3] };
+					union dwnstream_port_caps_byte2
+						hdmi_color_caps = {.raw = det_caps[2] };
+					link->dpcd_caps.dongle_caps.dp_hdmi_max_pixel_clk_in_khz =
+						det_caps[1] * 2500;
 
-				link->dpcd_caps.dongle_caps.is_dp_hdmi_s3d_converter =
-					hdmi_caps.bits.FRAME_SEQ_TO_FRAME_PACK;
-				/*YCBCR capability only for HDMI case*/
-				if (port_caps->bits.DWN_STRM_PORTX_TYPE
-						== DOWN_STREAM_DETAILED_HDMI) {
-					link->dpcd_caps.dongle_caps.is_dp_hdmi_ycbcr422_pass_through =
-							hdmi_caps.bits.YCrCr422_PASS_THROUGH;
-					link->dpcd_caps.dongle_caps.is_dp_hdmi_ycbcr420_pass_through =
-							hdmi_caps.bits.YCrCr420_PASS_THROUGH;
-					link->dpcd_caps.dongle_caps.is_dp_hdmi_ycbcr422_converter =
-							hdmi_caps.bits.YCrCr422_CONVERSION;
-					link->dpcd_caps.dongle_caps.is_dp_hdmi_ycbcr420_converter =
-							hdmi_caps.bits.YCrCr420_CONVERSION;
+					link->dpcd_caps.dongle_caps.is_dp_hdmi_s3d_converter =
+						hdmi_caps.bits.FRAME_SEQ_TO_FRAME_PACK;
+					/*YCBCR capability only for HDMI case*/
+					if (port_caps->bits.DWN_STRM_PORTX_TYPE
+							== DOWN_STREAM_DETAILED_HDMI) {
+						link->dpcd_caps.dongle_caps.is_dp_hdmi_ycbcr422_pass_through =
+								hdmi_caps.bits.YCrCr422_PASS_THROUGH;
+						link->dpcd_caps.dongle_caps.is_dp_hdmi_ycbcr420_pass_through =
+								hdmi_caps.bits.YCrCr420_PASS_THROUGH;
+						link->dpcd_caps.dongle_caps.is_dp_hdmi_ycbcr422_converter =
+								hdmi_caps.bits.YCrCr422_CONVERSION;
+						link->dpcd_caps.dongle_caps.is_dp_hdmi_ycbcr420_converter =
+								hdmi_caps.bits.YCrCr420_CONVERSION;
+					}
+
+					link->dpcd_caps.dongle_caps.dp_hdmi_max_bpc =
+						translate_dpcd_max_bpc(
+							hdmi_color_caps.bits.MAX_BITS_PER_COLOR_COMPONENT);
+
+					if (link->dpcd_caps.dongle_caps.dp_hdmi_max_pixel_clk_in_khz != 0)
+						link->dpcd_caps.dongle_caps.extendedCapValid = true;
 				}
 
-				link->dpcd_caps.dongle_caps.dp_hdmi_max_bpc =
-					translate_dpcd_max_bpc(
-						hdmi_color_caps.bits.MAX_BITS_PER_COLOR_COMPONENT);
-
-				if (link->dpcd_caps.dongle_caps.dp_hdmi_max_pixel_clk_in_khz != 0)
-					link->dpcd_caps.dongle_caps.extendedCapValid = true;
+				break;
 			}
-
-			break;
 		}
 	}
 
@@ -3256,6 +3255,7 @@ static bool retrieve_link_cap(struct dc_link *link)
 	int i;
 	struct dp_sink_hw_fw_revision dp_hw_fw_revision;
 	bool is_lttpr_present = false;
+	const uint32_t post_oui_delay = 30; // 30ms
 
 	memset(dpcd_data, '\0', sizeof(dpcd_data));
 	memset(lttpr_dpcd_data, '\0', sizeof(lttpr_dpcd_data));
@@ -3282,6 +3282,12 @@ static bool retrieve_link_cap(struct dc_link *link)
 	if (status != DC_OK || dpcd_power_state == DP_SET_POWER_D3)
 		udelay(1000);
 
+	dpcd_set_source_specific_data(link);
+	/* Sink may need to configure internals based on vendor, so allow some
+	 * time before proceeding with possibly vendor specific transactions
+	 */
+	msleep(post_oui_delay);
+
 	for (i = 0; i < read_dpcd_retry_cnt; i++) {
 		status = core_link_read_dpcd(
 				link,
@@ -3297,9 +3303,14 @@ static bool retrieve_link_cap(struct dc_link *link)
 		return false;
 	}
 
-	if (link->dc->caps.extended_aux_timeout_support) {
-		/* By reading LTTPR capability, RX assumes that we will enable LTTPR extended aux timeout if LTTPR is present.
-		 * Therefore, only query LTTPR capability when LTTPR extended aux timeout is supported by hardware */
+	if (link->dc->caps.extended_aux_timeout_support &&
+			link->dc->config.allow_lttpr_non_transparent_mode) {
+		/* By reading LTTPR capability, RX assumes that we will enable
+		 * LTTPR non transparent if LTTPR is present.
+		 * Therefore, only query LTTPR capability when both LTTPR
+		 * extended aux timeout and
+		 * non transparent mode is supported by hardware
+		 */
 		status = core_link_read_dpcd(
 				link,
 				DP_LT_TUNABLE_PHY_REPEATER_FIELD_DATA_STRUCTURE_REV,
@@ -3339,7 +3350,7 @@ static bool retrieve_link_cap(struct dc_link *link)
 	}
 
 	/* decide lttpr non transparent mode */
-	link->lttpr_non_transparent_mode = is_lttpr_present && link->dc->config.allow_lttpr_non_transparent_mode;
+	link->lttpr_non_transparent_mode = is_lttpr_present;
 
 	if (!is_lttpr_present)
 		dc_link_aux_try_to_configure_timeout(link->ddc, LINK_AUX_DEFAULT_TIMEOUT_PERIOD);
@@ -3377,7 +3388,7 @@ static bool retrieve_link_cap(struct dc_link *link)
 	link->dpcd_caps.dpcd_rev.raw =
 			dpcd_data[DP_DPCD_REV - DP_DPCD_REV];
 
-	if (link->dpcd_caps.dpcd_rev.raw >= 0x14) {
+	if (link->dpcd_caps.ext_receiver_cap_field_present) {
 		for (i = 0; i < read_dpcd_retry_cnt; i++) {
 			status = core_link_read_dpcd(
 					link,
@@ -4033,9 +4044,23 @@ bool dc_link_dp_set_test_pattern(
 			break;
 		}
 
-		if (pipe_ctx->stream_res.tg->funcs->lock_doublebuffer_enable)
-			pipe_ctx->stream_res.tg->funcs->lock_doublebuffer_enable(
-					pipe_ctx->stream_res.tg);
+		if (pipe_ctx->stream_res.tg->funcs->lock_doublebuffer_enable) {
+			if (pipe_ctx->stream && should_use_dmub_lock(pipe_ctx->stream->link)) {
+				union dmub_hw_lock_flags hw_locks = { 0 };
+				struct dmub_hw_lock_inst_flags inst_flags = { 0 };
+
+				hw_locks.bits.lock_dig = 1;
+				inst_flags.dig_inst = pipe_ctx->stream_res.tg->inst;
+
+				dmub_hw_lock_mgr_cmd(link->ctx->dmub_srv,
+							true,
+							&hw_locks,
+							&inst_flags);
+			} else
+				pipe_ctx->stream_res.tg->funcs->lock_doublebuffer_enable(
+						pipe_ctx->stream_res.tg);
+		}
+
 		pipe_ctx->stream_res.tg->funcs->lock(pipe_ctx->stream_res.tg);
 		/* update MSA to requested color space */
 		pipe_ctx->stream_res.stream_enc->funcs->dp_set_stream_attribute(pipe_ctx->stream_res.stream_enc,
@@ -4062,9 +4087,24 @@ bool dc_link_dp_set_test_pattern(
 				CRTC_STATE_VBLANK);
 		pipe_ctx->stream_res.tg->funcs->wait_for_state(pipe_ctx->stream_res.tg,
 				CRTC_STATE_VACTIVE);
-		if (pipe_ctx->stream_res.tg->funcs->lock_doublebuffer_disable)
-			pipe_ctx->stream_res.tg->funcs->lock_doublebuffer_disable(
-					pipe_ctx->stream_res.tg);
+
+		if (pipe_ctx->stream_res.tg->funcs->lock_doublebuffer_disable) {
+			if (pipe_ctx->stream && should_use_dmub_lock(pipe_ctx->stream->link)) {
+				union dmub_hw_lock_flags hw_locks = { 0 };
+				struct dmub_hw_lock_inst_flags inst_flags = { 0 };
+
+				hw_locks.bits.lock_dig = 1;
+				inst_flags.dig_inst = pipe_ctx->stream_res.tg->inst;
+
+				dmub_hw_lock_mgr_cmd(link->ctx->dmub_srv,
+							false,
+							&hw_locks,
+							&inst_flags);
+			} else
+				pipe_ctx->stream_res.tg->funcs->lock_doublebuffer_disable(
+						pipe_ctx->stream_res.tg);
+		}
+
 		/* Set Test Pattern state */
 		link->test_pattern_enabled = true;
 	}
@@ -4254,7 +4294,6 @@ void dp_set_fec_enable(struct dc_link *link, bool enable)
 
 void dpcd_set_source_specific_data(struct dc_link *link)
 {
-	const uint32_t post_oui_delay = 30; // 30ms
 	uint8_t dspc = 0;
 	enum dc_status ret;
 
@@ -4295,10 +4334,6 @@ void dpcd_set_source_specific_data(struct dc_link *link)
 				link->dc->vendor_signature.data.raw,
 				sizeof(link->dc->vendor_signature.data.raw));
 	}
-
-	// Sink may need to configure internals based on vendor, so allow some
-	// time before proceeding with possibly vendor specific transactions
-	msleep(post_oui_delay);
 }
 
 bool dc_link_set_backlight_level_nits(struct dc_link *link,
