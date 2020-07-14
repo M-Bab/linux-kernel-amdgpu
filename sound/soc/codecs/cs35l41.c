@@ -462,7 +462,7 @@ static int cs35l41_do_fast_switch(struct cs35l41_private *cs35l41)
 		return -EIO;
 	}
 
-	/* Parse number of data in file */
+	/* Parse number of data words in file */
 	for (i = 0, j = 0; (char)fw->data[i] != ','; i++) {
 		if ((char)fw->data[i] == ' ') {
 			/* Skip white space */
@@ -642,7 +642,7 @@ static const DECLARE_TLV_DB_RANGE(dig_vol_tlv,
 static DECLARE_TLV_DB_SCALE(amp_gain_tlv, 0, 1, 1);
 
 static const struct snd_kcontrol_new dre_ctrl =
-	SOC_DAPM_SINGLE("DRE Switch", CS35L41_PWR_CTRL3, 20, 1, 0);
+	SOC_DAPM_SINGLE("Switch", CS35L41_PWR_CTRL3, 20, 1, 0);
 
 static const struct snd_kcontrol_new vbstmon_out_ctrl =
 	SOC_DAPM_SINGLE("Switch", SND_SOC_NOPM, 0, 1, 0);
@@ -968,7 +968,7 @@ static int cs35l41_vol_ramp0(struct cs35l41_private *cs35l41,
 	}
 
 	step_y = 1;	/* 1/8 dB, min IC supported step */
-	step_x = delta_x / delta_y;	/* in micro-second */
+	step_x = delta_x / delta_y;	/* in micro-seconds */
 	if (step_x == 0)
 		/* Take care of case where delta_x < delta_y */
 		step_x = 1;
@@ -986,7 +986,7 @@ static int cs35l41_vol_ramp0(struct cs35l41_private *cs35l41,
 			break;
 		}
 		if (curr_y == final_y) {
-			/* Volume ramp is completed */
+			/* Volume ramp is complete */
 			usleep_range(final_x - curr_x, final_x - curr_x + 1);
 			break;
 		}
@@ -1497,8 +1497,9 @@ static int cs35l41_otp_unpack(void *data)
 	}
 
 	for (i = 0; i < otp_map_match->num_elements; i++) {
-		dev_dbg(cs35l41->dev, "bitoffset= %d, word_offset=%d, bit_sum mod 32=%d\n",
-					bit_offset, word_offset, bit_sum % 32);
+		dev_dbg(cs35l41->dev,
+			   "bitoffset= %d, word_offset=%d, bit_sum mod 32=%d\n",
+					 bit_offset, word_offset, bit_sum % 32);
 		if (bit_offset + otp_map[i].size - 1 >= 32) {
 			otp_val = (otp_mem[word_offset] &
 					GENMASK(31, bit_offset)) >>
@@ -1576,6 +1577,11 @@ static irqreturn_t cs35l41_irq(int irq, void *data)
 	if (!(status[0] & ~masks[0]) && !(status[1] & ~masks[1]) &&
 		!(status[2] & ~masks[2]) && !(status[3] & ~masks[3]))
 		return IRQ_NONE;
+
+	if (status[3] & CS35L41_OTP_BOOT_DONE) {
+		regmap_update_bits(cs35l41->regmap, CS35L41_IRQ1_MASK4,
+				CS35L41_OTP_BOOT_DONE, CS35L41_OTP_BOOT_DONE);
+	}
 
 	/*
 	 * The following interrupts require a
@@ -1670,11 +1676,6 @@ static irqreturn_t cs35l41_irq(int irq, void *data)
 					CS35L41_BST_EN_MASK,
 					CS35L41_BST_EN_DEFAULT <<
 					CS35L41_BST_EN_SHIFT);
-	}
-
-	if (status[3] & CS35L41_OTP_BOOT_DONE) {
-		regmap_update_bits(cs35l41->regmap, CS35L41_IRQ1_MASK4,
-				CS35L41_OTP_BOOT_DONE, CS35L41_OTP_BOOT_DONE);
 	}
 
 	return IRQ_HANDLED;
@@ -2023,7 +2024,7 @@ static const struct snd_soc_dapm_route cs35l41_audio_map[] = {
 
 	{"ASPRX1", NULL, "AMP Playback"},
 	{"ASPRX2", NULL, "AMP Playback"},
-	{"DRE", "DRE Switch", "CLASS H"},
+	{"DRE", "Switch", "CLASS H"},
 	{"Main AMP", NULL, "CLASS H"},
 	{"Main AMP", NULL, "DRE"},
 	{"SPK", NULL, "Main AMP"},
@@ -2047,14 +2048,14 @@ static int cs35l41_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 {
 	struct cs35l41_private *cs35l41 =
 			snd_soc_component_get_drvdata(codec_dai->component);
-	unsigned int asp_fmt, lrclk_fmt, sclk_fmt, slave_mode;
+	unsigned int asp_fmt, lrclk_fmt, sclk_fmt, clock_mode;
 
 	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
 	case SND_SOC_DAIFMT_CBM_CFM:
-		slave_mode = 1;
+		clock_mode = 1;
 		break;
 	case SND_SOC_DAIFMT_CBS_CFS:
-		slave_mode = 0;
+		clock_mode = 0;
 		break;
 	default:
 		dev_warn(cs35l41->dev,
@@ -2102,11 +2103,11 @@ static int cs35l41_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 		return -EINVAL;
 	}
 
-	cs35l41->reset_cache.slave_mode = slave_mode;
+	cs35l41->reset_cache.clock_mode = clock_mode;
 	cs35l41->reset_cache.asp_fmt = asp_fmt;
 	cs35l41->reset_cache.lrclk_fmt = lrclk_fmt;
 	cs35l41->reset_cache.sclk_fmt = sclk_fmt;
-	/* Amp is in reset. Cache values to be applied later. */
+	/* Amp is in hibernation. Cached values will be applied at wakeup. */
 	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
 		return 0;
 
@@ -2116,10 +2117,10 @@ static int cs35l41_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 
 	regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 				CS35L41_SCLK_MSTR_MASK,
-				slave_mode << CS35L41_SCLK_MSTR_SHIFT);
+				clock_mode << CS35L41_SCLK_MSTR_SHIFT);
 	regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 				CS35L41_LRCLK_MSTR_MASK,
-				slave_mode << CS35L41_LRCLK_MSTR_SHIFT);
+				clock_mode << CS35L41_LRCLK_MSTR_SHIFT);
 
 	cs35l41->lrclk_fmt = lrclk_fmt;
 	cs35l41->sclk_fmt = sclk_fmt;
@@ -2179,7 +2180,7 @@ static int cs35l41_pcm_hw_params(struct snd_pcm_substream *substream,
 	if (i < ARRAY_SIZE(cs35l41_fs_rates))
 		cs35l41->reset_cache.fs_cfg = cs35l41_fs_rates[i].fs_cfg;
 
-	/* Amp is in reset. Cache values to be applied later */
+	/* Amp is in hibernation. Cached values will be applied at wakeup. */
 	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
 		return 0;
 
@@ -2288,7 +2289,7 @@ static int cs35l41_component_set_sysclk(struct snd_soc_component *component,
 	}
 
 	cs35l41->reset_cache.extclk_cfg = true;
-	/* Amp is in reset. Set flag to restore clock config */
+	/* Amp is in hibernation. Clock config will be restored at wakeup. */
 	if (cs35l41->amp_hibernate == CS35L41_HIBERNATE_STANDBY)
 		return 0;
 
@@ -2758,7 +2759,7 @@ static int cs35l41_handle_of_data(struct device *dev,
 	ret = of_property_count_strings(np, "cirrus,fast-switch");
 	if (ret < 0) {
 		/*
-		 * device tree do not provide file name.
+		 * Device tree does not provide file name.
 		 * Use default value
 		 */
 		num_fast_switch = ARRAY_SIZE(cs35l41_fast_switch_text);
@@ -2851,7 +2852,7 @@ static int cs35l41_handle_of_data(struct device *dev,
 	if (classh_config->classh_algo_enable) {
 		classh_config->classh_bst_override =
 			of_property_read_bool(sub_node,
-				"cirrus,classh-bst-overide");
+				"cirrus,classh-bst-override");
 
 		ret = of_property_read_u32(sub_node,
 					   "cirrus,classh-bst-max-limit",
@@ -3269,7 +3270,6 @@ static int cs35l41_restore(struct cs35l41_private *cs35l41)
 	cs35l41_set_pdata(cs35l41);
 
 	/* Restore cached values set by ALSA during or before amp reset */
-
 	regmap_update_bits(cs35l41->regmap,
 			CS35L41_SP_FRAME_RX_SLOT,
 			CS35L41_ASP_RX1_SLOT_MASK,
@@ -3283,7 +3283,6 @@ static int cs35l41_restore(struct cs35l41_private *cs35l41)
 
 	if (cs35l41->reset_cache.extclk_cfg) {
 	/* These values are already cached in cs35l41_private struct */
-
 		if (cs35l41->clksrc == CS35L41_PLLSRC_SCLK)
 			regmap_update_bits(cs35l41->regmap,
 					   CS35L41_SP_RATE_CTRL, 0x3F,
@@ -3348,14 +3347,14 @@ static int cs35l41_restore(struct cs35l41_private *cs35l41)
 				cs35l41->reset_cache.sclk_fmt <<
 				CS35L41_SCLK_INV_SHIFT);
 
-	if (cs35l41->reset_cache.slave_mode >= 0) {
+	if (cs35l41->reset_cache.clock_mode >= 0) {
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 			CS35L41_SCLK_MSTR_MASK,
-			cs35l41->reset_cache.slave_mode <<
+			cs35l41->reset_cache.clock_mode <<
 			CS35L41_SCLK_MSTR_SHIFT);
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 			CS35L41_LRCLK_MSTR_MASK,
-			cs35l41->reset_cache.slave_mode <<
+			cs35l41->reset_cache.clock_mode <<
 			CS35L41_LRCLK_MSTR_SHIFT);
 	}
 
@@ -3564,7 +3563,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		cs35l41->reset_cache.asp_width = -1;
 		cs35l41->reset_cache.asp_fmt = -1;
 		cs35l41->reset_cache.sclk_fmt = -1;
-		cs35l41->reset_cache.slave_mode = -1;
+		cs35l41->reset_cache.clock_mode = -1;
 		cs35l41->reset_cache.lrclk_fmt = -1;
 		cs35l41->reset_cache.fs_cfg = -1;
 		break;

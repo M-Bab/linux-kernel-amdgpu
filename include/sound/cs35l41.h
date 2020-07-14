@@ -60,7 +60,7 @@ struct cs35l41_rst_cache {
 	int asp_fmt;
 	int lrclk_fmt;
 	int sclk_fmt;
-	int slave_mode;
+	int clock_mode;
 	int fs_cfg;
 };
 

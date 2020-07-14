@@ -148,7 +148,7 @@ Optional Class H Algorithm sub-node:
 Optional properties for the "cirrus,classh-internal-algo" Sub-node
 
   Section 7.9 Boost Control
-  - cirrus,classh-bst-overide : Boolean which will disable Class H tracking and
+  - cirrus,classh-bst-override : Boolean which will disable Class H tracking and
   set Boost voltage to the value in the 'boost-ctl-millivolt' property
 
   - cirrus,classh-bst-max-limit : Value set to the BST_CTL_LIM_EN field.
