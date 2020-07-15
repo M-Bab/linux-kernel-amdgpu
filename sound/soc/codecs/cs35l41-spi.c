@@ -24,6 +24,7 @@
 #include <linux/gpio.h>
 #include <linux/spi/spi.h>
 #include <linux/regulator/consumer.h>
+#include <linux/acpi.h>
 
 #include "wm_adsp.h"
 #include "cs35l41.h"
@@ -91,17 +92,28 @@ static int cs35l41_spi_remove(struct spi_device *spi)
 	return cs35l41_remove(cs35l41);
 }
 
+#ifdef CONFIG_OF
 static const struct of_device_id cs35l41_of_match[] = {
 	{.compatible = "cirrus,cs35l40"},
 	{.compatible = "cirrus,cs35l41"},
 	{},
 };
 MODULE_DEVICE_TABLE(of, cs35l41_of_match);
+#endif
+
+#ifdef CONFIG_ACPI
+static const struct acpi_device_id cs35l41_acpi_match[] = {
+	{ "CLSA3541", 0 }, /* Cirrus Logic PCI ID + part ID */
+	{},
+};
+MODULE_DEVICE_TABLE(acpi, cs35l41_acpi_match);
+#endif
 
 static struct spi_driver cs35l41_spi_driver = {
 	.driver = {
 		.name		= "cs35l41",
-		.of_match_table = cs35l41_of_match,
+		.of_match_table = of_match_ptr(cs35l41_of_match),
+		.acpi_match_table = ACPI_PTR(cs35l41_acpi_match),
 	},
 	.id_table	= cs35l41_id_spi,
 	.probe		= cs35l41_spi_probe,

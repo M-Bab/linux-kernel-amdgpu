@@ -3583,8 +3583,12 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 			goto err;
 		}
 	} else {
+#ifdef CONFIG_ACPI
+
+#else
 		ret = -ENODEV;
 		goto err;
+#endif
 	}
 
 	ret = regulator_bulk_enable(cs35l41->num_supplies, cs35l41->supplies);
