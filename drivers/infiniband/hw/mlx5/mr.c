@@ -1538,12 +1538,12 @@ int mlx5_ib_rereg_user_mr(struct ib_mr *ib_mr, int flags, u64 start,
 
 	atomic_sub(mr->npages, &dev->mdev->priv.reg_pages);
 
+	if (!mr->umem)
+		return -EINVAL;
+
 	/* Peer memory isn't supported */
 	if (mr->umem->is_peer)
 		return -EOPNOTSUPP;
-
-	if (!mr->umem)
-		return -EINVAL;
 
 	if (is_odp_mr(mr))
 		return -EOPNOTSUPP;
