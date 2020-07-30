@@ -125,6 +125,56 @@ static const struct cs35l41_pll_sysclk_config cs35l41_pll_sysclk[] = {
 	{ 27000000,	0x3F },
 };
 
+struct cs35l41_fs_mon_config {
+	int freq;
+	unsigned int fs1;
+	unsigned int fs2;
+};
+
+static const struct cs35l41_fs_mon_config cs35l41_fs_mon[] = {
+	{ 32768,	2254,	3754 },
+	{ 8000,		9220,	15364 },
+	{ 11025,	6148,	10244 },
+	{ 12000,	6148,	10244 },
+	{ 16000,	4612,	7684 },
+	{ 22050,	3076,	5124 },
+	{ 24000,	3076,	5124 },
+	{ 32000,	2308,	3844 },
+	{ 44100,	1540,	2564 },
+	{ 48000,	1540,	2564 },
+	{ 88200,	772,	1284 },
+	{ 96000,	772,	1284 },
+	{ 128000,	580,	964 },
+	{ 176400,	388,	644 },
+	{ 192000,	388,	644 },
+	{ 256000,	292,	484 },
+	{ 352800,	196,	324 },
+	{ 384000,	196,	324 },
+	{ 512000,	148,	244 },
+	{ 705600,	100,	164 },
+	{ 750000,	100,	164 },
+	{ 768000,	100,	164 },
+	{ 1000000,	76,	124 },
+	{ 1024000,	76,	124 },
+	{ 1200000,	64,	104 },
+	{ 1411200,	52,	84 },
+	{ 1500000,	52,	84 },
+	{ 1536000,	52,	84 },
+	{ 2000000,	40,	64 },
+	{ 2048000,	40,	64 },
+	{ 2400000,	34,	54 },
+	{ 2822400,	28,	44 },
+	{ 3000000,	28,	44 },
+	{ 3072000,	28,	44 },
+	{ 3200000,	27,	42 },
+	{ 4000000,	22,	34 },
+	{ 4096000,	22,	34 },
+	{ 4800000,	19,	29 },
+	{ 5644800,	16,	24 },
+	{ 6000000,	16,	24 },
+	{ 6144000,	16,	24 },
+};
+
 static const unsigned char cs35l41_bst_k1_table[4][5] = {
 	{0x24, 0x32, 0x32, 0x4F, 0x57},
 	{0x24, 0x32, 0x32, 0x4F, 0x57},
@@ -145,6 +195,18 @@ static const unsigned char cs35l41_bst_slope_table[4] = {
 static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41);
 static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41);
 static int cs35l41_restore(struct cs35l41_private *cs35l41);
+
+static int cs35l41_get_fs_mon_config_index(int freq)
+{
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(cs35l41_fs_mon); i++) {
+		if (cs35l41_fs_mon[i].freq == freq)
+			return i;
+	}
+
+	return -EINVAL;
+}
 
 static int cs35l41_dsp_power_ev(struct snd_soc_dapm_widget *w,
 		       struct snd_kcontrol *kcontrol, int event)
@@ -2257,11 +2319,13 @@ static int cs35l41_dai_set_sysclk(struct snd_soc_dai *dai,
 {
 	struct cs35l41_private *cs35l41 =
 				  snd_soc_component_get_drvdata(dai->component);
-	unsigned int fs1_val = 0;
-	unsigned int fs2_val = 0;
+	int fsIndex;
+	unsigned int fs1_val;
+	unsigned int fs2_val;
 	unsigned int val;
 
-	if (cs35l41_get_clk_config(freq) < 0) {
+	fsIndex = cs35l41_get_fs_mon_config_index(freq);
+	if (fsIndex < 0) {
 		dev_err(cs35l41->dev, "Invalid CLK Config freq: %u\n", freq);
 		return -EINVAL;
 	}
@@ -2270,25 +2334,19 @@ static int cs35l41_dai_set_sysclk(struct snd_soc_dai *dai,
 	cs35l41->sclk = freq;
 
 	dev_dbg(cs35l41->dev, "Set DAI sysclk %d\n", freq);
-	if (cs35l41->sclk > 6000000) {
-		fs1_val = 3 * 4 + 4;
-		fs2_val = 8 * 4 + 4;
-	}
-
-	if (cs35l41->sclk <= 6000000) {
-		fs1_val = 3 *
-			((24000000 + cs35l41->sclk - 1) / cs35l41->sclk) + 4;
-		fs2_val = 5 *
-			((24000000 + cs35l41->sclk - 1) / cs35l41->sclk) + 4;
+	if (cs35l41->sclk <= 6144000) {
+		/* Use the lookup table */
+		fs1_val = cs35l41_fs_mon[fsIndex].fs1;
+		fs2_val = cs35l41_fs_mon[fsIndex].fs2;
+	} else {
+		/* Use hard-coded values */
+		fs1_val = 0x10;
+		fs2_val = 0x24;
 	}
 
 	val = fs1_val;
 	val |= (fs2_val << CS35L41_FS2_WINDOW_SHIFT) & CS35L41_FS2_WINDOW_MASK;
-	regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x00000055);
-	regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x000000AA);
 	regmap_write(cs35l41->regmap, CS35L41_TST_FS_MON0, val);
-	regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x000000CC);
-	regmap_write(cs35l41->regmap, CS35L41_TEST_KEY_CTL, 0x00000033);
 
 	return 0;
 }
