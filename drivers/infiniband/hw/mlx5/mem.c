@@ -56,16 +56,17 @@ void mlx5_ib_cont_pages(struct ib_umem *umem, u64 addr,
 	int i = 0;
 	struct scatterlist *sg;
 	int entry;
+	int page_shift = umem->is_peer ? umem->page_shift : PAGE_SHIFT;
 
-	addr = addr >> PAGE_SHIFT;
+	addr = addr >> page_shift;
 	tmp = (unsigned long)addr;
 	m = find_first_bit(&tmp, BITS_PER_LONG);
 	if (max_page_shift)
-		m = min_t(unsigned long, max_page_shift - PAGE_SHIFT, m);
+		m = min_t(unsigned long, max_page_shift - page_shift, m);
 
 	for_each_sg(umem->sg_head.sgl, sg, umem->nmap, entry) {
-		len = sg_dma_len(sg) >> PAGE_SHIFT;
-		pfn = sg_dma_address(sg) >> PAGE_SHIFT;
+		len = sg_dma_len(sg) >> page_shift;
+		pfn = sg_dma_address(sg) >> page_shift;
 		if (base + p != pfn) {
 			/* If either the offset or the new
 			 * base are unaligned update m
@@ -97,7 +98,7 @@ void mlx5_ib_cont_pages(struct ib_umem *umem, u64 addr,
 
 		*ncont = 0;
 	}
-	*shift = PAGE_SHIFT + m;
+	*shift = page_shift + m;
 	*count = i;
 }
 

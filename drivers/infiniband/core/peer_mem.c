@@ -413,6 +413,9 @@ struct ib_umem *ib_peer_umem_get(struct ib_umem *old_umem, int old_ret,
 	if (ret)
 		goto err_xa;
 
+	umem_p->umem.page_shift =
+		ilog2(ib_peer_client->peer_mem->get_page_size(peer_client_context));
+
 	ret = ib_peer_client->peer_mem->dma_map(&umem_p->umem.sg_head,
 						peer_client_context,
 						umem_p->umem.ibdev->dma_device,

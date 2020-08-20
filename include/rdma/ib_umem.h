@@ -27,6 +27,7 @@ struct ib_umem {
 	struct sg_table sg_head;
 	int             nmap;
 	unsigned int    sg_nents;
+	unsigned int    page_shift;
 };
 
 typedef void (*umem_invalidate_func_t)(struct ib_umem *umem, void *priv);
