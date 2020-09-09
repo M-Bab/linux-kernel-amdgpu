@@ -79,10 +79,46 @@ Optional properties:
   2 = 125C (Default)
   3 = 135C
 
-  - cirrus,noise-gate-enable : DSP Noise Gate feature. If present, noise
+  - cirrus,hw-noise-gate-select : Hardware Noise Gate feature. Each bit selects
+  a different block for detection.
+
+  000000 - All noise gating functionality disabled
+  xxxxx1 - Amplifier noise gating detection enabled
+  xxxx1x - Boost converter DCM detection enabled
+  xxx1xx - VMON low power mode detection enabled
+  xx1xxx - IMON low power mode detection enabled
+  x1xxxx - VP brownout prevention detection enabled
+  1xxxxx - VBST brownout prevention detection enabled
+
+  - cirrus,hw-noise-gate-delay : Time that the incoming audio signal must be
+  below the noise gate threshold prior to entering a noise gated state
+
+  0 = 5 ms
+  1 = 10 ms
+  2 = 25 ms
+  3 = 50 ms (default)
+  4 = 100 ms
+  5 = 250 ms
+  6 = 500 ms
+  7 = 1 s
+
+  - cirrus,hw-noise-gate-threshold : Threshold of audio signal input which the
+  noise gate considers the input audio to be at a low enough level to be
+  valid to enter a noise gating state of operation.
+
+  0 = 0.654 mVpk
+  1 = 0.328 mVpk
+  2 = 0.164 mVpk
+  3 = 0.082 mVpk (default)
+  4 = 0.041 mVpk
+  5 = 0.021 mVpk
+  6 = 0.010 mVpk
+  7 = True zero data (no LSB dither)
+
+  - cirrus,dsp-noise-gate-enable : DSP Noise Gate feature. If present, noise
   gate feature will be enabled.
 
-  - cirrus,noise-gate-threshold : Threshold of audio signal input which the
+  - cirrus,dsp-noise-gate-threshold : Threshold of audio signal input which the
   noise gate considers the input audio to be at a low enough level to be
   valid to enter a noise gating state of operation.
 
@@ -95,7 +131,7 @@ Optional properties:
   6 = -102 dBFS
   7 = -108 dBFS
 
-  - cirrus,noise-gate-delay : Time that the incoming audio signal must be
+  - cirrus,dsp-noise-gate-delay : Time that the incoming audio signal must be
   below the noise gate threshold prior to entering a noise gated state
 
   0 = 5 ms
