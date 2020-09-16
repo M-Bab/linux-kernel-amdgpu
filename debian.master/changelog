@@ -6,7 +6,7 @@ linux-5.9 (5.9.0-0.1) UNRELEASED; urgency=medium
 
   [ Upstream Kernel Changes ]
 
-  * Rebase to v5.9-rc1
+  * Rebase to v5.9-rc5
 
  -- Seth Forshee <seth.forshee@canonical.com>  Tue, 18 Aug 2020 16:48:03 -0500
 
