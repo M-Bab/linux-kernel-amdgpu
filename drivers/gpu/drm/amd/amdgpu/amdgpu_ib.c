@@ -236,8 +236,7 @@ int amdgpu_ib_schedule(struct amdgpu_ring *ring, unsigned num_ibs,
 
 	for (i = 0; i < num_ibs; ++i) {
 		ib = &ibs[i];
-		if (!amdgpu_sriov_mcbp)
-			ib->flags &= ~AMDGPU_IB_FLAG_PREEMPT;
+
 		/* drop preamble IBs if we don't have a context switch */
 		if ((ib->flags & AMDGPU_IB_FLAG_PREAMBLE) &&
 		    skip_preamble &&
