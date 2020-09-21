@@ -223,7 +223,7 @@ static int cs35l41_dsp_power_ev(struct snd_soc_dapm_widget *w,
 		else
 			cs35l41->dsp.booted = true;
 
-		return 0;
+		break;
 	case SND_SOC_DAPM_PRE_PMD:
 		if (cs35l41->halo_booted == false) {
 			cancel_delayed_work(&cs35l41->hb_work);
@@ -239,9 +239,13 @@ static int cs35l41_dsp_power_ev(struct snd_soc_dapm_widget *w,
 			wm_adsp_early_event(w, kcontrol, event);
 			wm_adsp_event(w, kcontrol, event);
 		}
+
+		break;
 	default:
-		return 0;
+		break;
 	}
+
+	return 0;
 }
 
 static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
@@ -258,9 +262,12 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 			wm_adsp_event(w, kcontrol, event);
 			cs35l41->halo_booted = true;
 		}
+		break;
 	default:
-		return 0;
+		break;
 	}
+
+	return 0;
 }
 
 static int cs35l41_halo_booted_get(struct snd_kcontrol *kcontrol,
