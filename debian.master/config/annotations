@@ -1821,7 +1821,6 @@ CONFIG_LOGO                                     policy<{'amd64': 'n', 'arm64': '
 
 # Menu: Device Drivers >> Graphics support >> Console display driver support
 CONFIG_VGA_CONSOLE                              policy<{'amd64': 'y', 'ppc64el': 'y'}>
-CONFIG_VGACON_SOFT_SCROLLBACK                   policy<{'amd64': 'n', 'ppc64el': 'n'}>
 CONFIG_DUMMY_CONSOLE_COLUMNS                    policy<{'amd64': '80', 'arm64': '80', 'ppc64el': '80', 's390x': '80'}>
 CONFIG_DUMMY_CONSOLE_ROWS                       policy<{'amd64': '25', 'arm64': '25', 'ppc64el': '25', 's390x': '25'}>
 
@@ -11002,6 +11001,8 @@ CONFIG_DEBUG_FS_ALLOW_ALL                       policy<{'amd64': 'y', 'arm64': '
 CONFIG_DEBUG_FS_DISALLOW_MOUNT                  policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_DEBUG_FS_ALLOW_NONE                      policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 
+# Menu: Kernel hacking >> Generic Kernel Debugging Instruments >> KCSAN: dynamic data race detector
+
 # Menu: Kernel hacking >> Generic Kernel Debugging Instruments >> KGDB: kernel debugger
 CONFIG_KGDB                                     policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'ppc64el': 'y'}>
 CONFIG_KGDB_SERIAL_CONSOLE                      policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'ppc64el': 'y'}>
@@ -11143,8 +11144,6 @@ CONFIG_LATENCYTOP                               policy<{'amd64-generic': 'n', 'a
 #
 CONFIG_LATENCYTOP                               mark<ENFORCED> note<https://lists.ubuntu.com/archives/kernel-team/2014-July/045006.html, LP#1655986>
 
-# Menu: Kernel hacking >> Kernel debugging >> KCSAN: dynamic data race detector
-
 # Menu: Kernel hacking >> Lock Debugging (spinlocks, mutexes, etc...)
 CONFIG_PROVE_LOCKING                            policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_LOCK_STAT                                policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'ppc64el': 'n', 's390x': 'n'}>
@@ -11173,7 +11172,7 @@ CONFIG_SLUB_DEBUG_ON                            policy<{'amd64': 'n', 'arm64': '
 CONFIG_SLUB_STATS                               policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_DEBUG_STACK_USAGE                        policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_SCHED_STACK_END_CHECK                    policy<{'amd64': 'y', 'arm64': 'y', 'armhf': 'y', 'ppc64el': 'y', 's390x': 'y'}>
-CONFIG_DEBUG_VM_PGTABLE                         policy<{'amd64': 'n', 'arm64': 'n', 'ppc64el': 'n', 's390x': 'n'}>
+CONFIG_DEBUG_VM_PGTABLE                         policy<{'amd64': 'n', 'arm64': 'n', 's390x': 'n'}>
 CONFIG_DEBUG_VIRTUAL                            policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'ppc64el': 'n'}>
 CONFIG_DEBUG_MEMORY_INIT                        policy<{'amd64': 'n', 'arm64': 'n', 'armhf': 'n', 'ppc64el': 'n', 's390x': 'n'}>
 CONFIG_MEMORY_NOTIFIER_ERROR_INJECT             policy<{'amd64': 'm', 'arm64': 'm', 'ppc64el': 'm', 's390x': 'm'}>
