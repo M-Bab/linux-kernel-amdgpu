@@ -47,6 +47,7 @@
 #include "wm_adsp.h"
 #include "cs35l41.h"
 #include <sound/cs35l41.h>
+#include "cs35l41_dsp_events.h"
 
 static const char * const cs35l41_supplies[] = {
 	"VA",
@@ -1444,6 +1445,20 @@ static int cs35l41_put_ramp_knee_time(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int cs35l41_get_port_blocked_status(struct snd_kcontrol *kcontrol,
+					 struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private *cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = cs35l41->speaker_port_blocked;
+
+	return 0;
+}
+
 static const char * const cs35l41_output_dev_text[] = {
 	"Speaker",
 	"Receiver",
@@ -1524,6 +1539,8 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 		       cs35l41_put_auto_ramp_timeout),
 	SOC_VALUE_ENUM_EXT("Audio Output Device", cs35l41_output_dev,
 			   cs35l41_get_output_dev, cs35l41_put_output_dev),
+	SOC_SINGLE_BOOL_EXT("Speaker Port Blocked Status", 0,
+			    cs35l41_get_port_blocked_status, NULL),
 };
 
 static const struct cs35l41_otp_map_element_t *cs35l41_find_otp_map(u32 otp_id)
@@ -1671,12 +1688,31 @@ err_otp_unpack:
 	return ret;
 }
 
+/* This is currently called in INTERRUPT CONTEXT. Be careful */
+static int cs35l41_handle_dsp_event(struct cs35l41_private *cs35l41,
+				    char cmd, unsigned int data)
+{
+	int ret = 0;
+
+	switch (cmd) {
+	case CMD_PORT_BLOCKED:
+		cs35l41->speaker_port_blocked = data;
+		break;
+	default:
+		ret = -EINVAL;
+	}
+
+	return ret;
+}
+
 static irqreturn_t cs35l41_irq(int irq, void *data)
 {
 	struct cs35l41_private *cs35l41 = data;
 	unsigned int status[4] = {0, 0, 0, 0};
 	unsigned int masks[4] = {0, 0, 0, 0};
 	unsigned int i;
+	unsigned int mbox_3_val, mbox_3_cmd, mbox_3_data;
+	int ret;
 
 	for (i = 0; i < ARRAY_SIZE(status); i++) {
 		regmap_read(cs35l41->regmap,
@@ -1790,6 +1826,21 @@ static irqreturn_t cs35l41_irq(int irq, void *data)
 					CS35L41_BST_EN_MASK,
 					CS35L41_BST_EN_DEFAULT <<
 					CS35L41_BST_EN_SHIFT);
+	}
+
+	if (status[1] & CS35L41_INT2_VIRT2_MBOX_WR) {
+		regmap_read(cs35l41->regmap,
+			    CS35L41_DSP_VIRT2_MBOX_3,
+			    &mbox_3_val);
+		mbox_3_cmd = mbox_3_val & CS35L41_MBOX3_CMD_MASK;
+		mbox_3_data = (mbox_3_val & CS35L41_MBOX3_DATA_MASK) >>
+			      CS35L41_MBOX3_DATA_SHIFT;
+
+		ret = cs35l41_handle_dsp_event(cs35l41, mbox_3_cmd,
+					       mbox_3_data);
+
+		regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS2,
+			     CS35L41_INT2_VIRT2_MBOX_WR);
 	}
 
 	return IRQ_HANDLED;

@@ -700,6 +700,8 @@
 #define CS35L41_INT1_UNMASK_PDN		0xFF7FFFFF
 #define CS35L41_INT1_MASK_FORCE		0xFFFFFFFE
 
+#define CS35L41_INT2_VIRT2_MBOX_WR	0x00200000
+
 #define CS35L41_GPIO_DIR_MASK		0x80000000
 #define CS35L41_GPIO1_CTRL_MASK		0x00030000
 #define CS35L41_GPIO1_CTRL_SHIFT	16
@@ -743,6 +745,11 @@
 #define CS35L41_ZERO_PCM_VOL		817
 #define CS35L41_OUTPUT_DEV_SPK		0
 #define CS35L41_OUTPUT_DEV_RCV		1
+
+#define CS35L41_MBOX3_CMD_MASK		0xFF
+#define CS35L41_MBOX3_CMD_SHIFT		0
+#define CS35L41_MBOX3_DATA_MASK		0xFFFFFF00
+#define CS35L41_MBOX3_DATA_SHIFT	8
 
 bool cs35l41_readable_reg(struct device *dev, unsigned int reg);
 bool cs35l41_precious_reg(struct device *dev, unsigned int reg);
