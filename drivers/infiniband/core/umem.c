@@ -299,10 +299,6 @@ struct ib_umem *__ib_umem_get(struct ib_device *device, unsigned long addr,
 
 umem_release:
 	__ib_umem_release(device, umem, 0);
-vma:
-	atomic64_sub(ib_umem_num_pages(umem), &mm->pinned_vm);
-out:
-	free_page((unsigned long) page_list);
 	/*
 	 * If the address belongs to peer memory client, then the first
 	 * call to get_user_pages will fail. In this case, try to get
@@ -315,11 +311,16 @@ out:
 		new_umem = ib_peer_umem_get(umem, ret, peer_mem_flags);
 		if (IS_ERR(new_umem)) {
 			ret = PTR_ERR(new_umem);
-		} else {
-			umem = new_umem;
-			ret = 0;
+			goto vma;
 		}
+		umem = new_umem;
+		ret = 0;
+		goto out;
 	}
+vma:
+	atomic64_sub(ib_umem_num_pages(umem), &mm->pinned_vm);
+out:
+	free_page((unsigned long) page_list);
 umem_kfree:
 	if (ret) {
 		mmdrop(umem->owning_mm);
