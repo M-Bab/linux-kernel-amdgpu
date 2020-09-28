@@ -39,6 +39,8 @@ if [ "$mode" = "genconfigs" ]; then
 	test -d CONFIGS || mkdir CONFIGS
 fi
 
+warning_partial=
+
 for arch in $archs; do
 	rm -rf build
 	mkdir build
@@ -64,9 +66,15 @@ for arch in $archs; do
 	# Environment variables for 'make *config'. We omit CROSS_COMPILE
 	# for i386 since it is no longer supported after 19.04, however
 	# we maintain the configs for hwe.
+	modify_config=true
 	env="ARCH=$kernarch"
-	if [ "$arch" != "i386" ]; then
+	compiler_path=$(which "${cross_compile}gcc" || true)
+	if [ "$compiler_path" != '' ]; then
 		env="$env CROSS_COMPILE=$cross_compile"
+	else
+		echo "WARNING: ${cross_compile}gcc not installed"
+		modify_config=
+		warning_partial="$warning_partial $arch"
 	fi
 
 	archconfdir=$confdir/$arch
@@ -100,38 +108,39 @@ for arch in $archs; do
 			fullconf="$tmpdir/$arch-$config-full"
 			cat "$fullconf" > build/.config
 			# Call oldconfig or menuconfig
-			case "$mode" in
-			    editconfigs)
-				# Interactively edit config parameters
-				while : ; do
-					echo -n "Do you want to edit config: $arch/$config? [Y/n] "
-					read choice
-					
-					case "$choice" in
-					y* | Y* | "" )
-						make O=`pwd`/build $env menuconfig
-						break ;;
-					n* | N* )
-						# 'syncconfig' prevents
-						# errors for '-' options set
-						# in common config fragments
-						make O=`pwd`/build $env syncconfig
-						break ;;
-					*)
-						echo "Entry not valid"
-					esac
-				done
-				;;
-			    *)
-				echo "* Run $mode (yes=$yes) on $arch/$config ..."
-				if [ "$yes" -eq 1 ]; then
-					yes "" | make O=`pwd`/build $env "$mode"
-				else
-					make O=`pwd`/build $env "$mode"
-				fi ;;
-			esac
+			if [ "$modify_config" ]; then
+				case "$mode" in
+				    editconfigs)
+					# Interactively edit config parameters
+					while : ; do
+						echo -n "Do you want to edit config: $arch/$config? [Y/n] "
+						read choice
+						case "$choice" in
+						y* | Y* | "" )
+							make O=`pwd`/build $env menuconfig
+							break ;;
+						n* | N* )
+							# 'syncconfig' prevents
+							# errors for '-' options set
+							# in common config fragments
+							make O=`pwd`/build $env syncconfig
+							break ;;
+						*)
+							echo "Entry not valid"
+						esac
+					done
+					;;
+				    *)
+					echo "* Run $mode (yes=$yes) on $arch/$config ..."
+					if [ "$yes" -eq 1 ]; then
+						yes "" | make O=`pwd`/build $env "$mode"
+					else
+						make O=`pwd`/build $env "$mode"
+					fi ;;
+				esac
+			fi
 			cat build/.config > $archconfdir/$config
-			cat build/.config > "$tmpdir/CONFIGS/$arch-$config"
+			[ "$modify_config" ] && cat build/.config >"$tmpdir/CONFIGS/$arch-$config"
 			if [ "$keep" = "1" ]; then
 				cat build/.config > CONFIGS/$arch-$config
 			fi
@@ -176,6 +185,7 @@ for arch in $archs; do
 		flavour="${config##*.}"
 		if [ -f $archconfdir/$config ]; then
 			fullconf="$tmpdir/CONFIGS/$arch-$config"
+			[ ! -f "$fullconf" ] && continue
 			"$bindir/../config-check" "$fullconf" "$arch" "$flavour" "$confdir" "0" "0" || let "fail=$fail+1"
 		fi
 	done
@@ -189,3 +199,8 @@ fi
 
 rm -rf build
 
+if [ "$warning_partial" ]; then
+	echo ""
+	echo "WARNING: configuration operation applied only to a subset of architectures (skipped$warning_partial)" 1>&2
+	echo ""
+fi
