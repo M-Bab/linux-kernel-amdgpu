@@ -1705,6 +1705,14 @@ enum drm_dp_quirk {
 	 * the DP_MAX_LINK_RATE register reporting a lower max multiplier.
 	 */
 	DP_DPCD_QUIRK_CAN_DO_MAX_LINK_RATE_3_24_GBPS,
+	/**
+	 * @DP_QUIRK_FORCE_PSR_CHIP_DEFAULT
+	 *
+	 * PSR was disabled by default in Ubuntu 5.0 kernels and on, but some
+	 * platforms might be depending on them. If so, use per-chip default to
+	 * probe that automatically.
+	 */
+	DP_QUIRK_FORCE_PSR_CHIP_DEFAULT,
 };
 
 /**
