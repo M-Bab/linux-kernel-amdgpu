@@ -12766,7 +12766,7 @@ CONFIG_HARDEN_BRANCH_PREDICTOR                  policy<{'arm64': 'y', 'armhf': '
 CONFIG_HIGHPTE                                  policy<{'armhf': 'y'}>
 CONFIG_COMPAT_VDSO                              policy<{'amd64': 'n'}>
 CONFIG_HIGHMEM                                  policy<{'armhf': 'y'}>
-CONFIG_FORCE_MAX_ZONEORDER                      policy<{'arm64-generic': '13', 'arm64-generic-64k': '14', 'armhf-generic': '12', 'armhf-generic-lpae': '11', 'ppc64el': '9', 's390x': '9'}>
+CONFIG_FORCE_MAX_ZONEORDER                      policy<{'arm64-generic': '13', 'arm64-generic-64k': '14', 'armhf-generic': '12', 'armhf-generic-lpae': '11', 'ppc64el': '9'}>
 #
 CONFIG_RELOCATABLE                              flag<REVIEW>
 CONFIG_HOTPLUG_CPU                              flag<REVIEW>
@@ -13045,6 +13045,7 @@ CONFIG_PERF_EVENTS_AMD_POWER                    policy<{'amd64': 'n'}>
 
 # Menu: Processor type and features >> Physical address space size >> Architecture: arm64
 CONFIG_ARM64_PA_BITS_48                         policy<{'arm64': 'y'}>
+CONFIG_ARM64_PA_BITS_52                         policy<{'arm64-generic-64k': 'n'}>
 
 # Menu: Processor type and features >> Power Management Debug Support
 #
@@ -13144,7 +13145,9 @@ CONFIG_TUNE_Z15                                 policy<{'s390x': 'y'}>
 
 # Menu: Processor type and features >> Virtual address space size >> Architecture: arm64
 CONFIG_ARM64_VA_BITS_39                         policy<{'arm64-generic': 'n'}>
+CONFIG_ARM64_VA_BITS_42                         policy<{'arm64-generic-64k': 'n'}>
 CONFIG_ARM64_VA_BITS_48                         policy<{'arm64': 'y'}>
+CONFIG_ARM64_VA_BITS_52                         policy<{'arm64-generic-64k': 'n'}>
 #
 CONFIG_ARM64_VA_BITS_48                         mark<ENFORCED> note<Cavium ThunderX 2-socket needs a minimum of 41 bits of VA>
 
