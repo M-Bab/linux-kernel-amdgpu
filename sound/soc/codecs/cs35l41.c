@@ -2763,6 +2763,9 @@ static int cs35l41_handle_of_data(struct device *dev,
 	if (!np)
 		return 0;
 
+	cs35l41->dt_name = devm_kstrdup_const(cs35l41->dev, np->name,
+					      GFP_KERNEL);
+
 	ret = of_property_count_strings(np, "cirrus,fast-switch");
 	if (ret < 0) {
 		/*
@@ -2999,10 +3002,6 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 	dsp->fw = 9; /* 9 is WM_ADSP_FW_SPK_PROT in wm_adsp.c */
 	dsp->dev = cs35l41->dev;
 	dsp->regmap = cs35l41->regmap;
-
-	if (!cs35l41->pdata.fwname_use_revid)
-		dsp->part = "cs35l41";
-
 	dsp->base = CS35L41_DSP1_CTRL_BASE;
 	dsp->base_sysinfo = CS35L41_DSP1_SYS_ID;
 	dsp->mem = cs35l41_dsp1_regions;
@@ -3521,11 +3520,17 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	mutex_init(&cs35l41->force_int_lock);
 
+	if (!cs35l41->pdata.fwname_use_revid)
+		cs35l41->dsp.part = cs35l41->dt_name;
+
 	switch (reg_revid) {
 	case CS35L41_REVID_A0:
 		cs35l41->amp_hibernate = CS35L41_HIBERNATE_INCOMPATIBLE;
 		if (cs35l41->pdata.fwname_use_revid)
-			cs35l41->dsp.part = "cs35l41-revA";
+			cs35l41->dsp.part = devm_kasprintf(cs35l41->dev,
+				GFP_KERNEL,
+				"%s-%s",
+				cs35l41->dt_name, "revA");
 		ret = regmap_multi_reg_write(cs35l41->regmap,
 				cs35l41_reva0_errata_patch,
 				ARRAY_SIZE(cs35l41_reva0_errata_patch));
@@ -3538,7 +3543,10 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	case CS35L41_REVID_B0:
 		cs35l41->amp_hibernate = CS35L41_HIBERNATE_INCOMPATIBLE;
 		if (cs35l41->pdata.fwname_use_revid)
-			cs35l41->dsp.part = "cs35l41-revB0";
+			cs35l41->dsp.part = devm_kasprintf(cs35l41->dev,
+				GFP_KERNEL,
+				"%s-%s",
+				cs35l41->dt_name, "revB0");
 		ret = regmap_multi_reg_write(cs35l41->regmap,
 				cs35l41_revb0_errata_patch,
 				ARRAY_SIZE(cs35l41_revb0_errata_patch));
@@ -3550,7 +3558,10 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 		break;
 	case CS35L41_REVID_B2:
 		if (cs35l41->pdata.fwname_use_revid)
-			cs35l41->dsp.part = "cs35l41-revB2";
+			cs35l41->dsp.part = devm_kasprintf(cs35l41->dev,
+				GFP_KERNEL,
+				"%s-%s",
+				cs35l41->dt_name, "revB2");
 		ret = regmap_multi_reg_write(cs35l41->regmap,
 				cs35l41_revb2_errata_patch,
 				ARRAY_SIZE(cs35l41_revb2_errata_patch));

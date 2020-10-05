@@ -124,6 +124,7 @@ struct cs35l41_private {
 	struct cs35l41_vol_ctl vol_ctl;
 	unsigned int ctl_cache[CS35L41_CTRL_CACHE_SIZE];
 	u32 trim_cache[CS35L41_TRIM_CACHE_SIZE];
+	const char *dt_name;
 };
 
 int cs35l41_probe(struct cs35l41_private *cs35l41,
