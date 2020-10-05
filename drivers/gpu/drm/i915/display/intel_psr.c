@@ -1500,6 +1500,14 @@ void intel_psr_init(struct drm_i915_private *dev_priv)
 		 */
 		dev_priv->hsw_psr_mmio_adjust = _SRD_CTL_EDP - _HSW_EDP_PSR_BASE;
 
+	/*
+	 * PSR was disabled by module parameters but the underlying panel is
+	 * depending on it, so use per-chip default to probe that automatically.
+	 */
+	if ((dev_priv->psr.dp->edid_quirks & BIT(DP_QUIRK_FORCE_PSR_CHIP_DEFAULT)) &&
+	    dev_priv->params.enable_psr == 0)
+		dev_priv->params.enable_psr = -1;
+
 	if (dev_priv->params.enable_psr == -1)
 		if (INTEL_GEN(dev_priv) < 9 || !dev_priv->vbt.psr.enable)
 			dev_priv->params.enable_psr = 0;
@@ -1673,7 +1681,7 @@ void intel_psr_atomic_check(struct drm_connector *connector,
 
 	intel_connector = to_intel_connector(connector);
 	dig_port = enc_to_dig_port(intel_attached_encoder(intel_connector));
-	if (dev_priv->psr.dp != &dig_port->dp)
+	if (!dig_port || dev_priv->psr.dp != &dig_port->dp)
 		return;
 
 	crtc_state = drm_atomic_get_new_crtc_state(new_state->state,
