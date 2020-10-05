@@ -32,6 +32,7 @@
 #define SMU11_DRIVER_IF_VERSION_NV14 0x36
 #define SMU11_DRIVER_IF_VERSION_Sienna_Cichlid 0x39
 #define SMU11_DRIVER_IF_VERSION_Navy_Flounder 0x5
+#define SMU11_DRIVER_IF_VERSION_VANGOGH 0x01
 
 /* MP Apertures */
 #define MP0_Public			0x03800000
@@ -279,6 +280,8 @@ int smu_v11_0_gfx_ulv_control(struct smu_context *smu,
 
 int smu_v11_0_deep_sleep_control(struct smu_context *smu,
 				 bool enablement);
+
+void smu_v11_0_interrupt_work(struct smu_context *smu);
 
 #endif
 #endif
