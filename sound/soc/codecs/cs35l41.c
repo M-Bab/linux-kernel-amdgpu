@@ -2227,12 +2227,10 @@ static int cs35l41_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 	case SND_SOC_DAIFMT_DSP_A:
 		asp_fmt = 0;
 		cs35l41->i2s_mode = false;
-		cs35l41->dspa_mode = true;
 		break;
 	case SND_SOC_DAIFMT_I2S:
 		asp_fmt = 2;
 		cs35l41->i2s_mode = true;
-		cs35l41->dspa_mode = false;
 		break;
 	default:
 		dev_warn(cs35l41->dev,
@@ -2790,36 +2788,32 @@ static int cs35l41_component_probe(struct snd_soc_component *component)
 
 	cs35l41_set_pdata(cs35l41);
 
-	/* These should only run once, not every hibernate cycle */
-	if (!(cs35l41->skip_codec_probe)) {
-		wm_adsp2_component_probe(&cs35l41->dsp, component);
-		cs35l41->skip_codec_probe = true;
+	wm_adsp2_component_probe(&cs35l41->dsp, component);
 
-		/* Add run-time mixer control for fast use case switch */
-		kcontrol = kzalloc(sizeof(*kcontrol), GFP_KERNEL);
-		if (!kcontrol) {
-			ret = -ENOMEM;
-			goto exit;
-		}
-
-		kcontrol->name = "Fast Use Case Delta File";
-		kcontrol->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-		kcontrol->info = snd_soc_info_enum_double;
-		kcontrol->get = cs35l41_fast_switch_file_get;
-		kcontrol->put = cs35l41_fast_switch_file_put;
-		kcontrol->private_value =
-				  (unsigned long)&cs35l41->fast_switch_enum;
-		ret = snd_soc_add_component_controls(component, kcontrol, 1);
-		if (ret < 0)
-			dev_err(cs35l41->dev,
-			       "snd_soc_add_codec_controls failed (%d)\n", ret);
-		kfree(kcontrol);
-
-		/* Move to the extended standby state */
-		regmap_multi_reg_write_bypassed(cs35l41->regmap,
-					cs35l41_pdn_patch,
-					ARRAY_SIZE(cs35l41_pdn_patch));
+	/* Add run-time mixer control for fast use case switch */
+	kcontrol = kzalloc(sizeof(*kcontrol), GFP_KERNEL);
+	if (!kcontrol) {
+		ret = -ENOMEM;
+		goto exit;
 	}
+
+	kcontrol->name = "Fast Use Case Delta File";
+	kcontrol->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+	kcontrol->info = snd_soc_info_enum_double;
+	kcontrol->get = cs35l41_fast_switch_file_get;
+	kcontrol->put = cs35l41_fast_switch_file_put;
+	kcontrol->private_value =
+			  (unsigned long)&cs35l41->fast_switch_enum;
+	ret = snd_soc_add_component_controls(component, kcontrol, 1);
+	if (ret < 0)
+		dev_err(cs35l41->dev,
+		       "snd_soc_add_codec_controls failed (%d)\n", ret);
+	kfree(kcontrol);
+
+	/* Move to the extended standby state */
+	regmap_multi_reg_write_bypassed(cs35l41->regmap,
+				cs35l41_pdn_patch,
+				ARRAY_SIZE(cs35l41_pdn_patch));
 exit:
 	return ret;
 }
