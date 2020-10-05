@@ -3274,10 +3274,29 @@ static const struct reg_sequence cs35l41_revb2_errata_patch[] = {
 	{0x00000040,			0x00003333},
 };
 
+static const struct reg_sequence cs35l41_fs_errata_patch[] = {
+	{0x02B80080,			0x00000001},
+	{0x02B80088,			0x00000001},
+	{0x02B80090,			0x00000001},
+	{0x02B80098,			0x00000001},
+	{0x02B800A0,			0x00000001},
+	{0x02B800A8,			0x00000001},
+	{0x02B800B0,			0x00000001},
+	{0x02B800B8,			0x00000001},
+	{0x02B80280,			0x00000001},
+	{0x02B80288,			0x00000001},
+	{0x02B80290,			0x00000001},
+	{0x02B80298,			0x00000001},
+	{0x02B802A0,			0x00000001},
+	{0x02B802A8,			0x00000001},
+	{0x02B802B0,			0x00000001},
+	{0x02B802B8,			0x00000001},
+};
+
 static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 {
 	struct wm_adsp *dsp;
-	int ret, i;
+	int ret;
 
 	dsp = &cs35l41->dsp;
 	dsp->num = 1;
@@ -3292,22 +3311,17 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 	dsp->num_mems = ARRAY_SIZE(cs35l41_dsp1_regions);
 	dsp->lock_regions = 0xFFFFFFFF;
 
-	dsp->n_rx_channels = CS35L41_DSP_N_RX_RATES;
-	dsp->n_tx_channels = CS35L41_DSP_N_TX_RATES;
+	regmap_multi_reg_write(cs35l41->regmap,
+			cs35l41_fs_errata_patch,
+			ARRAY_SIZE(cs35l41_fs_errata_patch));
 
-	mutex_init(&cs35l41->rate_lock);
-	ret = wm_halo_init(dsp, &cs35l41->rate_lock);
+	ret = wm_halo_init(dsp);
 	if (ret != 0) {
 		dev_err(cs35l41->dev, "wm_halo_init failed\n");
-		goto err;
+		return ret;
 	}
 
 	cs35l41->halo_booted = false;
-
-	for (i = 0; i < CS35L41_DSP_N_RX_RATES; i++)
-		dsp->rx_rate_cache[i] = 0x1;
-	for (i = 0; i < CS35L41_DSP_N_TX_RATES; i++)
-		dsp->tx_rate_cache[i] = 0x1;
 
 	ret = regmap_write(cs35l41->regmap, CS35L41_DSP1_RX5_SRC,
 					CS35L41_INPUT_SRC_VPMON);
@@ -3338,8 +3352,6 @@ static int cs35l41_dsp_init(struct cs35l41_private *cs35l41)
 
 err_dsp:
 	wm_adsp2_remove(dsp);
-err:
-	mutex_destroy(&cs35l41->rate_lock);
 	return ret;
 }
 
@@ -3984,7 +3996,6 @@ int cs35l41_remove(struct cs35l41_private *cs35l41)
 			     CS35L41_INT3_MASK_DEFAULT);
 	mutex_destroy(&cs35l41->force_int_lock);
 	wm_adsp2_remove(&cs35l41->dsp);
-	mutex_destroy(&cs35l41->rate_lock);
 	regulator_bulk_disable(cs35l41->num_supplies, cs35l41->supplies);
 	snd_soc_unregister_component(cs35l41->dev);
 	return 0;
