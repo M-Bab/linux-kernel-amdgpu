@@ -33,6 +33,7 @@
 #include "navi10_ppt.h"
 #include "sienna_cichlid_ppt.h"
 #include "renoir_ppt.h"
+#include "vangogh_ppt.h"
 #include "amd_pcie.h"
 
 /*
@@ -401,6 +402,9 @@ static int smu_set_funcs(struct amdgpu_device *adev)
 	case CHIP_RENOIR:
 		renoir_set_ppt_funcs(smu);
 		break;
+	case CHIP_VANGOGH:
+		vangogh_set_ppt_funcs(smu);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -465,6 +469,9 @@ static int smu_late_init(void *handle)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	struct smu_context *smu = &adev->smu;
 	int ret = 0;
+
+	if (adev->asic_type == CHIP_VANGOGH)
+		return 0;
 
 	if (!smu->pm_enabled)
 		return 0;
@@ -780,6 +787,19 @@ static void smu_throttling_logging_work_fn(struct work_struct *work)
 	smu_log_thermal_throttling(smu);
 }
 
+static void smu_interrupt_work_fn(struct work_struct *work)
+{
+	struct smu_context *smu = container_of(work, struct smu_context,
+					       interrupt_work);
+
+	mutex_lock(&smu->mutex);
+
+	if (smu->ppt_funcs && smu->ppt_funcs->interrupt_work)
+		smu->ppt_funcs->interrupt_work(smu);
+
+	mutex_unlock(&smu->mutex);
+}
+
 static int smu_sw_init(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
@@ -802,6 +822,7 @@ static int smu_sw_init(void *handle)
 	mutex_init(&smu->message_lock);
 
 	INIT_WORK(&smu->throttling_logging_work, smu_throttling_logging_work_fn);
+	INIT_WORK(&smu->interrupt_work, smu_interrupt_work_fn);
 	atomic64_set(&smu->throttle_int_counter, 0);
 	smu->watermarks_bitmap = 0;
 	smu->power_profile_mode = PP_SMC_POWER_PROFILE_BOOTUP_DEFAULT;
@@ -1090,6 +1111,9 @@ static int smu_hw_init(void *handle)
 		smu_set_gfx_cgpg(&adev->smu, true);
 	}
 
+	if (adev->asic_type == CHIP_VANGOGH)
+		return 0;
+
 	if (!smu->pm_enabled)
 		return 0;
 
@@ -1197,6 +1221,7 @@ static int smu_smc_hw_cleanup(struct smu_context *smu)
 	int ret = 0;
 
 	cancel_work_sync(&smu->throttling_logging_work);
+	cancel_work_sync(&smu->interrupt_work);
 
 	ret = smu_disable_thermal_alert(smu);
 	if (ret) {
