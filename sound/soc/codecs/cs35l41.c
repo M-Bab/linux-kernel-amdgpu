@@ -702,7 +702,7 @@ static int cs35l41_do_fast_switch(struct cs35l41_private *cs35l41)
 			break;
 		}
 
-		usleep_range(100, 110);
+		usleep_range(100, 200);
 	}
 
 	if (!fw_running) {
@@ -850,7 +850,7 @@ static int cs35l41_set_cspl_mbox_cmd(struct cs35l41_private *cs35l41,
 
 	// Read mailbox status and verify it is appropriate for the given cmd
 	for (i = 0; i < 5; i++) {
-		usleep_range(1000, 1010);
+		usleep_range(1000, 1100);
 		ret = regmap_read(cs35l41->regmap, CS35L41_DSP_MBOX_2, &sts);
 		if (ret < 0) {
 			dev_err(cs35l41->dev,
@@ -2020,7 +2020,7 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 					pdn = true;
 					break;
 				}
-				usleep_range(1000, 1010);
+				usleep_range(1000, 1100);
 			}
 
 			if (!pdn)
@@ -3328,7 +3328,7 @@ static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41)
 				dev_dbg(cs35l41->dev,
 					"%s: wakeup write fail\n", __func__);
 
-			usleep_range(100, 110);
+			usleep_range(100, 200);
 
 			ret = regmap_read(cs35l41->regmap,
 					  CS35L41_CSPL_MBOX_STS, &status);
