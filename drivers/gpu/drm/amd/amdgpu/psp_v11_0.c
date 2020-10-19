@@ -61,6 +61,8 @@ MODULE_FIRMWARE("amdgpu/navy_flounder_sos.bin");
 MODULE_FIRMWARE("amdgpu/navy_flounder_ta.bin");
 MODULE_FIRMWARE("amdgpu/vangogh_asd.bin");
 MODULE_FIRMWARE("amdgpu/vangogh_toc.bin");
+MODULE_FIRMWARE("amdgpu/dimgrey_cavefish_sos.bin");
+MODULE_FIRMWARE("amdgpu/dimgrey_cavefish_asd.bin");
 
 /* address block */
 #define smnMP1_FIRMWARE_FLAGS		0x3010024
@@ -79,7 +81,7 @@ static int psp_v11_0_init_microcode(struct psp_context *psp)
 {
 	struct amdgpu_device *adev = psp->adev;
 	const char *chip_name;
-	char fw_name[30];
+	char fw_name[PSP_FW_NAME_LEN];
 	int err = 0;
 	const struct ta_firmware_header_v1_0 *ta_hdr;
 
@@ -109,6 +111,9 @@ static int psp_v11_0_init_microcode(struct psp_context *psp)
 		break;
 	case CHIP_VANGOGH:
 		chip_name = "vangogh";
+		break;
+	case CHIP_DIMGREY_CAVEFISH:
+		chip_name = "dimgrey_cavefish";
 		break;
 	default:
 		BUG();
@@ -191,6 +196,11 @@ static int psp_v11_0_init_microcode(struct psp_context *psp)
 		if (err)
 			return err;
 		err = psp_init_ta_microcode(&adev->psp, chip_name);
+		if (err)
+			return err;
+		break;
+	case CHIP_DIMGREY_CAVEFISH:
+		err = psp_init_sos_microcode(psp, chip_name);
 		if (err)
 			return err;
 		break;
@@ -425,8 +435,8 @@ static int psp_v11_0_ring_init(struct psp_context *psp,
 	struct amdgpu_device *adev = psp->adev;
 
 	if ((!amdgpu_sriov_vf(adev)) &&
-	    (adev->asic_type != CHIP_SIENNA_CICHLID) &&
-	    (adev->asic_type != CHIP_NAVY_FLOUNDER))
+	    !(adev->asic_type >= CHIP_SIENNA_CICHLID &&
+	    adev->asic_type <= CHIP_DIMGREY_CAVEFISH))
 		psp_v11_0_reroute_ih(psp);
 
 	ring = &psp->km_ring;

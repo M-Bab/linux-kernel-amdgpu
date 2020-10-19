@@ -100,9 +100,17 @@ MODULE_FIRMWARE(FIRMWARE_SIENNA_CICHLID_DMUB);
 #define FIRMWARE_NAVY_FLOUNDER_DMUB "amdgpu/navy_flounder_dmcub.bin"
 MODULE_FIRMWARE(FIRMWARE_NAVY_FLOUNDER_DMUB);
 #endif
+#if defined(CONFIG_DRM_AMD_DC_GREEN_SARDINE)
+#define FIRMWARE_GREEN_SARDINE_DMUB "amdgpu/green_sardine_dmcub.bin"
+MODULE_FIRMWARE(FIRMWARE_GREEN_SARDINE_DMUB);
+#endif
 #if defined(CONFIG_DRM_AMD_DC_DCN3_01)
 #define FIRMWARE_VANGOGH_DMUB "amdgpu/vangogh_dmcub.bin"
 MODULE_FIRMWARE(FIRMWARE_VANGOGH_DMUB);
+#endif
+#if defined(CONFIG_DRM_AMD_DC_DCN3_02)
+#define FIRMWARE_DIMGREY_CAVEFISH_DMUB "amdgpu/dimgrey_cavefish_dmcub.bin"
+MODULE_FIRMWARE(FIRMWARE_DIMGREY_CAVEFISH_DMUB);
 #endif
 
 #define FIRMWARE_RAVEN_DMCU		"amdgpu/raven_dmcu.bin"
@@ -887,12 +895,67 @@ static void amdgpu_check_debugfs_connector_property_change(struct amdgpu_device 
 	}
 }
 
+static void mmhub_read_system_context(struct amdgpu_device *adev, struct dc_phy_addr_space_config *pa_config)
+{
+	uint64_t pt_base;
+	uint32_t logical_addr_low;
+	uint32_t logical_addr_high;
+	uint32_t agp_base, agp_bot, agp_top;
+	PHYSICAL_ADDRESS_LOC page_table_start, page_table_end, page_table_base;
+
+	logical_addr_low  = min(adev->gmc.fb_start, adev->gmc.agp_start) >> 18;
+	pt_base = amdgpu_gmc_pd_addr(adev->gart.bo);
+
+	if (adev->apu_flags & AMD_APU_IS_RAVEN2)
+		/*
+		 * Raven2 has a HW issue that it is unable to use the vram which
+		 * is out of MC_VM_SYSTEM_APERTURE_HIGH_ADDR. So here is the
+		 * workaround that increase system aperture high address (add 1)
+		 * to get rid of the VM fault and hardware hang.
+		 */
+		logical_addr_high = max((adev->gmc.fb_end >> 18) + 0x1, adev->gmc.agp_end >> 18);
+	else
+		logical_addr_high = max(adev->gmc.fb_end, adev->gmc.agp_end) >> 18;
+
+	agp_base = 0;
+	agp_bot = adev->gmc.agp_start >> 24;
+	agp_top = adev->gmc.agp_end >> 24;
+
+
+	page_table_start.high_part = (u32)(adev->gmc.gart_start >> 44) & 0xF;
+	page_table_start.low_part = (u32)(adev->gmc.gart_start >> 12);
+	page_table_end.high_part = (u32)(adev->gmc.gart_end >> 44) & 0xF;
+	page_table_end.low_part = (u32)(adev->gmc.gart_end >> 12);
+	page_table_base.high_part = upper_32_bits(pt_base) & 0xF;
+	page_table_base.low_part = lower_32_bits(pt_base);
+
+	pa_config->system_aperture.start_addr = (uint64_t)logical_addr_low << 18;
+	pa_config->system_aperture.end_addr = (uint64_t)logical_addr_high << 18;
+
+	pa_config->system_aperture.agp_base = (uint64_t)agp_base << 24 ;
+	pa_config->system_aperture.agp_bot = (uint64_t)agp_bot << 24;
+	pa_config->system_aperture.agp_top = (uint64_t)agp_top << 24;
+
+	pa_config->system_aperture.fb_base = adev->gmc.fb_start;
+	pa_config->system_aperture.fb_offset = adev->gmc.aper_base;
+	pa_config->system_aperture.fb_top = adev->gmc.fb_end;
+
+	pa_config->gart_config.page_table_start_addr = page_table_start.quad_part << 12;
+	pa_config->gart_config.page_table_end_addr = page_table_end.quad_part << 12;
+	pa_config->gart_config.page_table_base_addr = page_table_base.quad_part;
+
+	pa_config->is_hvm_enabled = 0;
+
+}
+
+
 static int amdgpu_dm_init(struct amdgpu_device *adev)
 {
 	struct dc_init_data init_data;
 #ifdef CONFIG_DRM_AMD_DC_HDCP
 	struct dc_callback_init init_params;
 #endif
+	struct dc_phy_addr_space_config pa_config;
 	int r;
 
 	adev->dm.ddev = adev_to_drm(adev);
@@ -941,6 +1004,10 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 	case CHIP_RAVEN:
 	case CHIP_RENOIR:
 		init_data.flags.gpu_vm_support = true;
+#if defined(CONFIG_DRM_AMD_DC_GREEN_SARDINE)
+		if (ASICREV_IS_GREEN_SARDINE(adev->external_rev_id))
+			init_data.flags.disable_dmcu = true;
+#endif
 		break;
 	default:
 		break;
@@ -994,6 +1061,11 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 
 	dc_hardware_init(adev->dm.dc);
 
+	mmhub_read_system_context(adev, &pa_config);
+
+	// Call the DC init_memory func
+	dc_setup_system_context(adev->dm.dc, &pa_config);
+
 	adev->dm.freesync_module = mod_freesync_create(adev->dm.dc);
 	if (!adev->dm.freesync_module) {
 		DRM_ERROR(
@@ -1039,6 +1111,7 @@ static int amdgpu_dm_init(struct amdgpu_device *adev)
 		"amdgpu: failed to initialize sw for display support.\n");
 		goto error;
 	}
+
 
 	DRM_DEBUG_DRIVER("KMS initialized.\n");
 
@@ -1140,6 +1213,9 @@ static int load_dmcu_fw(struct amdgpu_device *adev)
 	case CHIP_SIENNA_CICHLID:
 	case CHIP_NAVY_FLOUNDER:
 #endif
+#if defined(CONFIG_DRM_AMD_DC_DCN3_02)
+	case CHIP_DIMGREY_CAVEFISH:
+#endif
 #if defined(CONFIG_DRM_AMD_DC_DCN3_01)
 	case CHIP_VANGOGH:
 #endif
@@ -1238,6 +1314,10 @@ static int dm_dmub_sw_init(struct amdgpu_device *adev)
 	case CHIP_RENOIR:
 		dmub_asic = DMUB_ASIC_DCN21;
 		fw_name_dmub = FIRMWARE_RENOIR_DMUB;
+#if defined(CONFIG_DRM_AMD_DC_GREEN_SARDINE)
+		if (ASICREV_IS_GREEN_SARDINE(adev->external_rev_id))
+			fw_name_dmub = FIRMWARE_GREEN_SARDINE_DMUB;
+#endif
 		break;
 #if defined(CONFIG_DRM_AMD_DC_DCN3_0)
 	case CHIP_SIENNA_CICHLID:
@@ -1253,6 +1333,12 @@ static int dm_dmub_sw_init(struct amdgpu_device *adev)
 	case CHIP_VANGOGH:
 		dmub_asic = DMUB_ASIC_DCN301;
 		fw_name_dmub = FIRMWARE_VANGOGH_DMUB;
+		break;
+#endif
+#if defined(CONFIG_DRM_AMD_DC_DCN3_02)
+	case CHIP_DIMGREY_CAVEFISH:
+		dmub_asic = DMUB_ASIC_DCN302;
+		fw_name_dmub = FIRMWARE_DIMGREY_CAVEFISH_DMUB;
 		break;
 #endif
 
@@ -3376,6 +3462,9 @@ static int amdgpu_dm_initialize_drm_device(struct amdgpu_device *adev)
 	case CHIP_SIENNA_CICHLID:
 	case CHIP_NAVY_FLOUNDER:
 #endif
+#if defined(CONFIG_DRM_AMD_DC_DCN3_02)
+	case CHIP_DIMGREY_CAVEFISH:
+#endif
 #if defined(CONFIG_DRM_AMD_DC_DCN3_01)
 	case CHIP_VANGOGH:
 #endif
@@ -3633,6 +3722,9 @@ static int dm_early_init(void *handle)
 		break;
 #endif
 	case CHIP_NAVI14:
+#if defined(CONFIG_DRM_AMD_DC_DCN3_02)
+	case CHIP_DIMGREY_CAVEFISH:
+#endif
 		adev->mode_info.num_crtc = 5;
 		adev->mode_info.num_hpd = 5;
 		adev->mode_info.num_dig = 5;
@@ -3952,6 +4044,9 @@ fill_plane_buffer_attributes(struct amdgpu_device *adev,
 		adev->asic_type == CHIP_SIENNA_CICHLID ||
 		adev->asic_type == CHIP_NAVY_FLOUNDER ||
 #endif
+#if defined(CONFIG_DRM_AMD_DC_DCN3_02)
+		adev->asic_type == CHIP_DIMGREY_CAVEFISH ||
+#endif
 #if defined(CONFIG_DRM_AMD_DC_DCN3_01)
 		adev->asic_type == CHIP_VANGOGH ||
 #endif
@@ -3976,7 +4071,8 @@ fill_plane_buffer_attributes(struct amdgpu_device *adev,
 
 #ifdef CONFIG_DRM_AMD_DC_DCN3_0
 		if (adev->asic_type == CHIP_SIENNA_CICHLID ||
-		    adev->asic_type == CHIP_NAVY_FLOUNDER)
+		    adev->asic_type == CHIP_NAVY_FLOUNDER ||
+		    adev->asic_type == CHIP_DIMGREY_CAVEFISH)
 			tiling_info->gfx9.num_pkrs = adev->gfx.config.gb_addr_config_fields.num_pkrs;
 #endif
 		ret = fill_plane_dcc_attributes(adev, afb, format, rotation,
@@ -5135,7 +5231,13 @@ static void amdgpu_dm_connector_destroy(struct drm_connector *connector)
 	struct amdgpu_device *adev = drm_to_adev(connector->dev);
 	struct amdgpu_display_manager *dm = &adev->dm;
 
-	drm_atomic_private_obj_fini(&aconnector->mst_mgr.base);
+	/*
+	 * Call only if mst_mgr was iniitalized before since it's not done
+	 * for all connector types.
+	 */
+	if (aconnector->mst_mgr.dev)
+		drm_dp_mst_topology_mgr_destroy(&aconnector->mst_mgr);
+
 #if defined(CONFIG_BACKLIGHT_CLASS_DEVICE) ||\
 	defined(CONFIG_BACKLIGHT_CLASS_DEVICE_MODULE)
 

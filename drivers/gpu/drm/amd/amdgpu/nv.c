@@ -482,6 +482,9 @@ legacy_init:
 	case CHIP_VANGOGH:
 		vangogh_reg_base_init(adev);
 		break;
+	case CHIP_DIMGREY_CAVEFISH:
+		dimgrey_cavefish_reg_base_init(adev);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -618,6 +621,30 @@ int nv_set_ip_blocks(struct amdgpu_device *adev)
 		amdgpu_device_ip_block_add(adev, &smu_v11_0_ip_block);
 		if (adev->enable_virtual_display || amdgpu_sriov_vf(adev))
 			amdgpu_device_ip_block_add(adev, &dce_virtual_ip_block);
+#if defined(CONFIG_DRM_AMD_DC)
+		else if (amdgpu_device_has_dc_support(adev))
+			amdgpu_device_ip_block_add(adev, &dm_ip_block);
+#endif
+		amdgpu_device_ip_block_add(adev, &gfx_v10_0_ip_block);
+		amdgpu_device_ip_block_add(adev, &sdma_v5_2_ip_block);
+		amdgpu_device_ip_block_add(adev, &vcn_v3_0_ip_block);
+		amdgpu_device_ip_block_add(adev, &jpeg_v3_0_ip_block);
+		break;
+	case CHIP_DIMGREY_CAVEFISH:
+		amdgpu_device_ip_block_add(adev, &nv_common_ip_block);
+		amdgpu_device_ip_block_add(adev, &gmc_v10_0_ip_block);
+		amdgpu_device_ip_block_add(adev, &navi10_ih_ip_block);
+		if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
+			amdgpu_device_ip_block_add(adev, &psp_v11_0_ip_block);
+		if (adev->firmware.load_type == AMDGPU_FW_LOAD_PSP &&
+		    is_support_sw_smu(adev))
+			amdgpu_device_ip_block_add(adev, &smu_v11_0_ip_block);
+		if (adev->enable_virtual_display || amdgpu_sriov_vf(adev))
+			amdgpu_device_ip_block_add(adev, &dce_virtual_ip_block);
+#if defined(CONFIG_DRM_AMD_DC)
+                else if (amdgpu_device_has_dc_support(adev))
+                        amdgpu_device_ip_block_add(adev, &dm_ip_block);
+#endif
 		amdgpu_device_ip_block_add(adev, &gfx_v10_0_ip_block);
 		amdgpu_device_ip_block_add(adev, &sdma_v5_2_ip_block);
 		amdgpu_device_ip_block_add(adev, &vcn_v3_0_ip_block);
@@ -719,6 +746,29 @@ static void nv_pre_asic_init(struct amdgpu_device *adev)
 {
 }
 
+static int nv_update_umd_stable_pstate(struct amdgpu_device *adev,
+				       bool enter)
+{
+	if (enter)
+		amdgpu_gfx_rlc_enter_safe_mode(adev);
+	else
+		amdgpu_gfx_rlc_exit_safe_mode(adev);
+
+	if (adev->gfx.funcs->update_perfmon_mgcg)
+		adev->gfx.funcs->update_perfmon_mgcg(adev, !enter);
+
+	/*
+	 * The ASPM function is not fully enabled and verified on
+	 * Navi yet. Temporarily skip this until ASPM enabled.
+	 */
+#if 0
+	if (adev->nbio.funcs->enable_aspm)
+		adev->nbio.funcs->enable_aspm(adev, !enter);
+#endif
+
+	return 0;
+}
+
 static const struct amdgpu_asic_funcs nv_asic_funcs =
 {
 	.read_disabled_bios = &nv_read_disabled_bios,
@@ -739,6 +789,7 @@ static const struct amdgpu_asic_funcs nv_asic_funcs =
 	.get_pcie_replay_count = &nv_get_pcie_replay_count,
 	.supports_baco = &nv_asic_supports_baco,
 	.pre_asic_init = &nv_pre_asic_init,
+	.update_umd_stable_pstate = &nv_update_umd_stable_pstate,
 };
 
 static int nv_common_early_init(void *handle)
@@ -890,6 +941,24 @@ static int nv_common_early_init(void *handle)
 			AMD_CG_SUPPORT_GFX_3D_CGLS;
 		adev->pg_flags = AMD_PG_SUPPORT_GFX_PG;
 		adev->external_rev_id = adev->rev_id + 0x01;
+		break;
+	case CHIP_DIMGREY_CAVEFISH:
+		adev->cg_flags = AMD_CG_SUPPORT_GFX_MGCG |
+			AMD_CG_SUPPORT_GFX_CGCG |
+			AMD_CG_SUPPORT_GFX_3D_CGCG |
+			AMD_CG_SUPPORT_VCN_MGCG |
+			AMD_CG_SUPPORT_JPEG_MGCG |
+			AMD_CG_SUPPORT_MC_MGCG |
+			AMD_CG_SUPPORT_MC_LS |
+			AMD_CG_SUPPORT_HDP_MGCG |
+			AMD_CG_SUPPORT_HDP_LS |
+			AMD_CG_SUPPORT_IH_CG;
+		adev->pg_flags = AMD_PG_SUPPORT_VCN |
+			AMD_PG_SUPPORT_VCN_DPG |
+			AMD_PG_SUPPORT_JPEG |
+			AMD_PG_SUPPORT_ATHUB |
+			AMD_PG_SUPPORT_MMHUB;
+		adev->external_rev_id = adev->rev_id + 0x3c;
 		break;
 	default:
 		/* FIXME: not supported yet */
@@ -1118,6 +1187,7 @@ static int nv_common_set_clockgating_state(void *handle,
 	case CHIP_NAVI12:
 	case CHIP_SIENNA_CICHLID:
 	case CHIP_NAVY_FLOUNDER:
+	case CHIP_DIMGREY_CAVEFISH:
 		adev->nbio.funcs->update_medium_grain_clock_gating(adev,
 				state == AMD_CG_STATE_GATE);
 		adev->nbio.funcs->update_medium_grain_light_sleep(adev,

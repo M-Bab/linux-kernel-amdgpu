@@ -184,6 +184,7 @@
 	__SMU_DUMMY_MAP(SetSoftMinSocclkByFreq),         \
 	__SMU_DUMMY_MAP(PowerUpCvip),                    \
 	__SMU_DUMMY_MAP(PowerDownCvip),                  \
+	__SMU_DUMMY_MAP(SetGpoFeaturePMask),             \
 
 #undef __SMU_DUMMY_MAP
 #define __SMU_DUMMY_MAP(type)	SMU_MSG_##type
@@ -227,6 +228,7 @@ enum smu_clk_type {
        __SMU_DUMMY_MAP(DPM_MP0CLK),                    	\
        __SMU_DUMMY_MAP(DPM_LINK),                      	\
        __SMU_DUMMY_MAP(DPM_DCEFCLK),                   	\
+       __SMU_DUMMY_MAP(DPM_XGMI),			\
        __SMU_DUMMY_MAP(DS_GFXCLK),                     	\
        __SMU_DUMMY_MAP(DS_SOCCLK),                     	\
        __SMU_DUMMY_MAP(DS_LCLK),                       	\
