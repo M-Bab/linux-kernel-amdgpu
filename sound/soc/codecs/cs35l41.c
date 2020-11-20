@@ -195,6 +195,8 @@ static const unsigned char cs35l41_bst_slope_table[4] = {
 static int cs35l41_enter_hibernate(struct cs35l41_private *cs35l41);
 static int cs35l41_exit_hibernate(struct cs35l41_private *cs35l41);
 static int cs35l41_restore(struct cs35l41_private *cs35l41);
+static int cs35l41_set_cspl_mbox_cmd(struct cs35l41_private *cs35l41,
+				   enum cs35l41_cspl_mbox_cmd cmd);
 
 static int cs35l41_get_fs_mon_config_index(int freq)
 {
@@ -248,8 +250,6 @@ static int cs35l41_dsp_power_ev(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
-static int cs35l41_set_csplmboxcmd(struct cs35l41_private *cs35l41,
-				   enum cs35l41_cspl_mboxcmd cmd);
 
 static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 		       struct snd_kcontrol *kcontrol, int event)
@@ -258,8 +258,8 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 		snd_soc_dapm_to_component(w->dapm);
 	struct cs35l41_private *cs35l41 =
 		snd_soc_component_get_drvdata(component);
-	enum cs35l41_cspl_mboxcmd mboxcmd = CSPL_MBOX_CMD_NONE;
-	enum cs35l41_cspl_mboxstate fw_status = CSPL_MBOX_STS_RUNNING;
+	enum cs35l41_cspl_mbox_cmd mboxcmd = CSPL_MBOX_CMD_NONE;
+	enum cs35l41_cspl_mbox_status fw_status = CSPL_MBOX_STS_RUNNING;
 	int ret = 0;
 
 	switch (event) {
@@ -292,7 +292,7 @@ static int cs35l41_dsp_load_ev(struct snd_soc_dapm_widget *w,
 					fw_status);
 				break;
 			}
-			ret = cs35l41_set_csplmboxcmd(cs35l41, mboxcmd);
+			ret = cs35l41_set_cspl_mbox_cmd(cs35l41, mboxcmd);
 		}
 		break;
 	default:
@@ -817,8 +817,8 @@ static int cs35l41_reload_tuning_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-static bool cs35l41_is_csplmboxsts_correct(enum cs35l41_cspl_mboxcmd cmd,
-					   enum cs35l41_cspl_mboxstate sts)
+static bool cs35l41_check_cspl_mbox_sts(enum cs35l41_cspl_mbox_cmd cmd,
+					   enum cs35l41_cspl_mbox_status sts)
 {
 	switch (cmd) {
 	case CSPL_MBOX_CMD_NONE:
@@ -837,70 +837,42 @@ static bool cs35l41_is_csplmboxsts_correct(enum cs35l41_cspl_mboxcmd cmd,
 	}
 }
 
-static int cs35l41_set_csplmboxcmd(struct cs35l41_private *cs35l41,
-				   enum cs35l41_cspl_mboxcmd cmd)
+static int cs35l41_set_cspl_mbox_cmd(struct cs35l41_private *cs35l41,
+				   enum cs35l41_cspl_mbox_cmd cmd)
 {
 	int ret = 0;
 	unsigned int sts, i;
-	bool ack = false;
+	bool status_ok = false;
 
-	/* Reset DSP sticky bit */
-	regmap_write(cs35l41->regmap, CS35L41_IRQ2_STATUS2,
-		     1 << CS35L41_CSPL_MBOX_CMD_DRV_SHIFT);
+	// Set mailbox cmd
+	regmap_write(cs35l41->regmap, CS35L41_DSP_VIRT1_MBOX_1, cmd);
 
-	/* Reset AP sticky bit */
-	regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS2,
-		     1 << CS35L41_CSPL_MBOX_CMD_FW_SHIFT);
-
-	/*
-	 * Set mailbox cmd
-	 */
-	/* Unmask DSP INT */
-	regmap_update_bits(cs35l41->regmap, CS35L41_IRQ2_MASK2,
-			   1 << CS35L41_CSPL_MBOX_CMD_DRV_SHIFT, 0);
-	regmap_write(cs35l41->regmap, CS35L41_CSPL_MBOX_CMD_DRV, cmd);
-
-	/* Poll for DSP ACK */
+	// Read mailbox status and verify it is appropriate for the given cmd
 	for (i = 0; i < 5; i++) {
 		usleep_range(1000, 1010);
-		ret = regmap_read(cs35l41->regmap, CS35L41_IRQ1_STATUS2, &sts);
+		ret = regmap_read(cs35l41->regmap, CS35L41_DSP_MBOX_2, &sts);
 		if (ret < 0) {
-			dev_err(cs35l41->dev, "regmap_read failed (%d)\n", ret);
+			dev_err(cs35l41->dev,
+				"%s: regmap_read failed (%d)\n",
+				__func__, ret);
 			continue;
 		}
-		if (sts & (1 << CS35L41_CSPL_MBOX_CMD_FW_SHIFT)) {
+
+		if (!cs35l41_check_cspl_mbox_sts(cmd,
+			(enum cs35l41_cspl_mbox_status)sts)) {
 			dev_dbg(cs35l41->dev,
-				"%u: Received ACK in EINT for mbox cmd (%d)\n",
-				i, cmd);
-			regmap_write(cs35l41->regmap, CS35L41_IRQ1_STATUS2,
-			     1 << CS35L41_CSPL_MBOX_CMD_FW_SHIFT);
-			ack = true;
+				"%s: [%u] cmd %u returned invalid sts %u",
+				__func__, i, cmd, sts);
+		} else {
+			status_ok = true;
 			break;
 		}
 	}
 
-	if (!ack) {
+	if (!status_ok) {
 		dev_err(cs35l41->dev,
-			"Timeout waiting for DSP to set mbox cmd\n");
-		ret = -ETIMEDOUT;
-	}
-
-	/* Mask DSP INT */
-	regmap_update_bits(cs35l41->regmap, CS35L41_IRQ2_MASK2,
-			   1 << CS35L41_CSPL_MBOX_CMD_DRV_SHIFT,
-			   1 << CS35L41_CSPL_MBOX_CMD_DRV_SHIFT);
-
-	if (regmap_read(cs35l41->regmap,
-			CS35L41_CSPL_MBOX_STS, &sts) < 0) {
-		dev_err(cs35l41->dev, "Failed to read %u\n",
-			CS35L41_CSPL_MBOX_STS);
-		ret = -EACCES;
-	}
-
-	if (!cs35l41_is_csplmboxsts_correct(cmd,
-					    (enum cs35l41_cspl_mboxstate)sts)) {
-		dev_err(cs35l41->dev,
-			"Failed to set mailbox(cmd: %u, sts: %u)\n", cmd, sts);
+			"Failed to set mailbox cmd %u (status %u)\n",
+			cmd, sts);
 		ret = -ENOMSG;
 	}
 
@@ -1923,7 +1895,7 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 		snd_soc_dapm_to_component(w->dapm);
 	struct cs35l41_private *cs35l41 =
 		snd_soc_component_get_drvdata(component);
-	enum cs35l41_cspl_mboxcmd mboxcmd = CSPL_MBOX_CMD_NONE;
+	enum cs35l41_cspl_mbox_cmd mboxcmd = CSPL_MBOX_CMD_NONE;
 	int ret = 0;
 	int i;
 	bool pdn;
@@ -1960,7 +1932,7 @@ static int cs35l41_main_amp_event(struct snd_soc_dapm_widget *w,
 			} else {
 				mboxcmd = CSPL_MBOX_CMD_PAUSE;
 			}
-			ret = cs35l41_set_csplmboxcmd(cs35l41, mboxcmd);
+			ret = cs35l41_set_cspl_mbox_cmd(cs35l41, mboxcmd);
 		}
 
 		regmap_read(cs35l41->regmap, CS35L41_PWR_CTRL1, &val);

@@ -792,14 +792,14 @@ extern const unsigned int cs35l41_ctl_cache_regs[CS35L41_CTRL_CACHE_SIZE];
 extern const struct cs35l41_otp_trim_region_t
 			cs35l41_trim_cache_regs[CS35L41_TRIM_CACHE_REGIONS];
 
-enum cs35l41_cspl_mboxstate {
+enum cs35l41_cspl_mbox_status {
 	CSPL_MBOX_STS_RUNNING = 0,
 	CSPL_MBOX_STS_PAUSED = 1,
 	CSPL_MBOX_STS_RDY_FOR_REINIT = 2,
 	CSPL_MBOX_STS_HIBERNATE = 3,
 };
 
-enum cs35l41_cspl_mboxcmd {
+enum cs35l41_cspl_mbox_cmd {
 	CSPL_MBOX_CMD_NONE = 0,
 	CSPL_MBOX_CMD_PAUSE = 1,
 	CSPL_MBOX_CMD_RESUME = 2,
