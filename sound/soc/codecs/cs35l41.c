@@ -1459,6 +1459,20 @@ static int cs35l41_get_port_blocked_status(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int cs35l41_get_open_short_status(struct snd_kcontrol *kcontrol,
+					 struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component;
+	struct cs35l41_private *cs35l41;
+
+	component = snd_soc_kcontrol_component(kcontrol);
+	cs35l41 = snd_soc_component_get_drvdata(component);
+
+	ucontrol->value.integer.value[0] = cs35l41->speaker_open_short_status;
+
+	return 0;
+}
+
 static const char * const cs35l41_output_dev_text[] = {
 	"Speaker",
 	"Receiver",
@@ -1541,6 +1555,9 @@ static const struct snd_kcontrol_new cs35l41_aud_controls[] = {
 			   cs35l41_get_output_dev, cs35l41_put_output_dev),
 	SOC_SINGLE_BOOL_EXT("Speaker Port Blocked Status", 0,
 			    cs35l41_get_port_blocked_status, NULL),
+	SOC_SINGLE_EXT("Speaker Open / Short Status", SND_SOC_NOPM, 0,
+		       SPK_STATUS_SHORT_CIRCUIT, 0,
+		       cs35l41_get_open_short_status, NULL),
 };
 
 static const struct cs35l41_otp_map_element_t *cs35l41_find_otp_map(u32 otp_id)
@@ -1695,8 +1712,11 @@ static int cs35l41_handle_dsp_event(struct cs35l41_private *cs35l41,
 	int ret = 0;
 
 	switch (cmd) {
-	case CMD_PORT_BLOCKED:
+	case EVENT_PORT_BLOCKED:
 		cs35l41->speaker_port_blocked = data;
+		break;
+	case EVENT_SPEAKER_OPEN_SHORT_STATUS:
+		cs35l41->speaker_open_short_status = data;
 		break;
 	default:
 		ret = -EINVAL;
@@ -3581,6 +3601,7 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 	cs35l41->fast_switch_en = false;
 	cs35l41->fast_switch_file_idx = 0;
 	cs35l41->reload_tuning = false;
+	cs35l41->speaker_open_short_status = SPK_STATUS_ALL_CLEAR;
 
 	for (i = 0; i < ARRAY_SIZE(cs35l41_supplies); i++)
 		cs35l41->supplies[i].supply = cs35l41_supplies[i];

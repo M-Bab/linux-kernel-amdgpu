@@ -113,6 +113,7 @@ struct cs35l41_private {
 	bool force_int;
 	bool hibernate_force_wake;
 	bool speaker_port_blocked;
+	u32 speaker_open_short_status;
 	/* GPIO for /RST */
 	struct gpio_desc *reset_gpio;
 	/* Run-time mixer */

@@ -13,6 +13,13 @@
 #ifndef __CS35L41_DSP_EVENTS_H
 #define __CS35L41_DSP_EVENTS_H
 
-#define CMD_PORT_BLOCKED 0x65
+// Event definitions
+#define EVENT_PORT_BLOCKED 0x65
+#define EVENT_SPEAKER_OPEN_SHORT_STATUS 0x66
+
+// Data definitions
+#define SPK_STATUS_ALL_CLEAR     (1 << 0)
+#define SPK_STATUS_OPEN_CIRCUIT  (1 << 1)
+#define SPK_STATUS_SHORT_CIRCUIT (1 << 2)
 
 #endif /* __CS35L41_DSP_EVENTS_H */
