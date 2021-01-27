@@ -2814,6 +2814,11 @@ static int cs35l41_component_probe(struct snd_soc_component *component)
 			dev_err(cs35l41->dev,
 			       "snd_soc_add_codec_controls failed (%d)\n", ret);
 		kfree(kcontrol);
+
+		/* Move to the extended standby state */
+		regmap_multi_reg_write_bypassed(cs35l41->regmap,
+					cs35l41_pdn_patch,
+					ARRAY_SIZE(cs35l41_pdn_patch));
 	}
 exit:
 	return ret;
