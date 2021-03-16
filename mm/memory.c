@@ -4901,7 +4901,7 @@ int generic_access_phys(struct vm_area_struct *vma, unsigned long addr,
 		return -EINVAL;
 
 retry:
-	if (follow_pte(vma->vm_mm, addr, NULL, &ptep, NULL, &ptl))
+	if (follow_pte(vma->vm_mm, addr, &ptep, &ptl))
 		return -EINVAL;
 	pte = *ptep;
 	pte_unmap_unlock(ptep, ptl);
@@ -4916,7 +4916,7 @@ retry:
 	if (!maddr)
 		return -ENOMEM;
 
-	if (follow_pte(vma->vm_mm, addr, NULL, &ptep, NULL, &ptl))
+	if (follow_pte(vma->vm_mm, addr, &ptep, &ptl))
 		goto out_unmap;
 
 	if (!pte_same(pte, *ptep)) {
