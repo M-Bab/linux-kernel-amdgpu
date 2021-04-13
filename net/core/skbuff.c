@@ -3292,7 +3292,19 @@ EXPORT_SYMBOL(skb_split);
  */
 static int skb_prepare_for_shift(struct sk_buff *skb)
 {
-	return skb_cloned(skb) && pskb_expand_head(skb, 0, 0, GFP_ATOMIC);
+	int ret = 0;
+
+	if (skb_cloned(skb)) {
+		/* Save and restore truesize: pskb_expand_head() may reallocate
+		 * memory where ksize(kmalloc(S)) != ksize(kmalloc(S)), but we
+		 * cannot change truesize at this point.
+		 */
+		unsigned int save_truesize = skb->truesize;
+
+		ret = pskb_expand_head(skb, 0, 0, GFP_ATOMIC);
+		skb->truesize = save_truesize;
+	}
+	return ret;
 }
 
 /**
@@ -3609,6 +3621,8 @@ unsigned int skb_find_text(struct sk_buff *skb, unsigned int from,
 {
 	struct ts_state state;
 	unsigned int ret;
+
+	BUILD_BUG_ON(sizeof(struct skb_seq_state) > sizeof(state.cb));
 
 	config->get_next_block = skb_ts_get_next_block;
 	config->finish = skb_ts_finish;

@@ -548,12 +548,17 @@ nouveau_bo_sync_for_device(struct nouveau_bo *nvbo)
 
 	if (!ttm_dma)
 		return;
+	if (!ttm_dma->pages) {
+		NV_DEBUG(drm, "ttm_dma 0x%p: pages NULL\n", ttm_dma);
+		return;
+	}
 
 	/* Don't waste time looping if the object is coherent */
 	if (nvbo->force_coherent)
 		return;
 
-	for (i = 0; i < ttm_dma->num_pages; ++i) {
+	i = 0;
+	while (i < ttm_dma->num_pages) {
 		struct page *p = ttm_dma->pages[i];
 		size_t num_pages = 1;
 
@@ -579,12 +584,17 @@ nouveau_bo_sync_for_cpu(struct nouveau_bo *nvbo)
 
 	if (!ttm_dma)
 		return;
+	if (!ttm_dma->pages) {
+		NV_DEBUG(drm, "ttm_dma 0x%p: pages NULL\n", ttm_dma);
+		return;
+	}
 
 	/* Don't waste time looping if the object is coherent */
 	if (nvbo->force_coherent)
 		return;
 
-	for (i = 0; i < ttm_dma->num_pages; ++i) {
+	i = 0;
+	while (i < ttm_dma->num_pages) {
 		struct page *p = ttm_dma->pages[i];
 		size_t num_pages = 1;
 

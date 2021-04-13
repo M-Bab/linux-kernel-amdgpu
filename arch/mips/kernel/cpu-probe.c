@@ -26,6 +26,7 @@
 #include <asm/elf.h>
 #include <asm/pgtable-bits.h>
 #include <asm/spram.h>
+#include <asm/traps.h>
 #include <linux/uaccess.h>
 
 #include "fpu-probe.h"
@@ -1619,6 +1620,7 @@ static inline void cpu_probe_broadcom(struct cpuinfo_mips *c, unsigned int cpu)
 		c->cputype = CPU_BMIPS3300;
 		__cpu_name[cpu] = "Broadcom BMIPS3300";
 		set_elf_platform(cpu, "bmips3300");
+		reserve_exception_space(0x400, VECTORSPACING * 64);
 		break;
 	case PRID_IMP_BMIPS43XX: {
 		int rev = c->processor_id & PRID_REV_MASK;
@@ -1629,6 +1631,7 @@ static inline void cpu_probe_broadcom(struct cpuinfo_mips *c, unsigned int cpu)
 			__cpu_name[cpu] = "Broadcom BMIPS4380";
 			set_elf_platform(cpu, "bmips4380");
 			c->options |= MIPS_CPU_RIXI;
+			reserve_exception_space(0x400, VECTORSPACING * 64);
 		} else {
 			c->cputype = CPU_BMIPS4350;
 			__cpu_name[cpu] = "Broadcom BMIPS4350";
@@ -1645,6 +1648,7 @@ static inline void cpu_probe_broadcom(struct cpuinfo_mips *c, unsigned int cpu)
 			__cpu_name[cpu] = "Broadcom BMIPS5000";
 		set_elf_platform(cpu, "bmips5000");
 		c->options |= MIPS_CPU_ULRI | MIPS_CPU_RIXI;
+		reserve_exception_space(0x1000, VECTORSPACING * 64);
 		break;
 	}
 }
@@ -1830,16 +1834,17 @@ static inline void cpu_probe_ingenic(struct cpuinfo_mips *c, unsigned int cpu)
 		 */
 		case PRID_COMP_INGENIC_D0:
 			c->isa_level &= ~MIPS_CPU_ISA_M32R2;
-			break;
+			fallthrough;
 
 		/*
 		 * The config0 register in the XBurst CPUs with a processor ID of
-		 * PRID_COMP_INGENIC_D1 has an abandoned huge page tlb mode, this
-		 * mode is not compatible with the MIPS standard, it will cause
-		 * tlbmiss and into an infinite loop (line 21 in the tlb-funcs.S)
-		 * when starting the init process. After chip reset, the default
-		 * is HPTLB mode, Write 0xa9000000 to cp0 register 5 sel 4 to
-		 * switch back to VTLB mode to prevent getting stuck.
+		 * PRID_COMP_INGENIC_D0 or PRID_COMP_INGENIC_D1 has an abandoned
+		 * huge page tlb mode, this mode is not compatible with the MIPS
+		 * standard, it will cause tlbmiss and into an infinite loop
+		 * (line 21 in the tlb-funcs.S) when starting the init process.
+		 * After chip reset, the default is HPTLB mode, Write 0xa9000000
+		 * to cp0 register 5 sel 4 to switch back to VTLB mode to prevent
+		 * getting stuck.
 		 */
 		case PRID_COMP_INGENIC_D1:
 			write_c0_page_ctrl(XBURST_PAGECTRL_HPTLB_DIS);
@@ -2123,6 +2128,8 @@ void cpu_probe(void)
 	if (cpu == 0)
 		__ua_limit = ~((1ull << cpu_vmbits) - 1);
 #endif
+
+	reserve_exception_space(0, 0x1000);
 }
 
 void cpu_report(void)

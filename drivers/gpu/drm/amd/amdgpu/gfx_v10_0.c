@@ -102,10 +102,6 @@
 #define mmGCR_GENERAL_CNTL_Sienna_Cichlid			0x1580
 #define mmGCR_GENERAL_CNTL_Sienna_Cichlid_BASE_IDX	0
 
-#define mmCGTS_TCC_DISABLE_Vangogh                0x5006
-#define mmCGTS_TCC_DISABLE_Vangogh_BASE_IDX       1
-#define mmCGTS_USER_TCC_DISABLE_Vangogh                0x5007
-#define mmCGTS_USER_TCC_DISABLE_Vangogh_BASE_IDX       1
 #define mmGOLDEN_TSC_COUNT_UPPER_Vangogh                0x0025
 #define mmGOLDEN_TSC_COUNT_UPPER_Vangogh_BASE_IDX       1
 #define mmGOLDEN_TSC_COUNT_LOWER_Vangogh                0x0026
