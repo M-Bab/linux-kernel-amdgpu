@@ -821,9 +821,9 @@ static void hub_tt_work(struct work_struct *work)
  *
  * Return: 0 if successful. A negative error code otherwise.
  */
-int usb_hub_set_port_power(struct usb_device *hdev, struct usb_hub *hub,
-			   int port1, bool set)
+int usb_hub_set_port_power(struct usb_hub *hub, int port1, bool set)
 {
+	struct usb_device *hdev = hub->hdev;
 	int ret;
 
 	if (set)
@@ -2773,6 +2773,39 @@ static bool hub_port_warm_reset_required(struct usb_hub *hub, int port1,
 		|| link_state == USB_SS_PORT_LS_COMP_MOD;
 }
 
+static bool hub_port_power_cycle_required(struct usb_hub *hub, int port1,
+		u16 portstatus)
+{
+	u16 link_state;
+
+	if (!hub_is_superspeed(hub->hdev))
+		return false;
+
+	link_state = portstatus & USB_PORT_STAT_LINK_STATE;
+	return link_state == USB_SS_PORT_LS_SS_DISABLED;
+}
+
+static void hub_port_power_cycle(struct usb_hub *hub, int port1)
+{
+	struct usb_port *port_dev = hub->ports[port1  - 1];
+	int ret;
+
+	ret = usb_hub_set_port_power(hub, port1, false);
+	if (ret) {
+		dev_info(&port_dev->dev, "failed to disable port power\n");
+		return;
+	}
+
+	msleep(2 * hub_power_on_good_delay(hub));
+	ret = usb_hub_set_port_power(hub, port1, true);
+	if (ret) {
+		dev_info(&port_dev->dev, "failed to enable port power\n");
+		return;
+	}
+
+	msleep(hub_power_on_good_delay(hub));
+}
+
 static int hub_port_wait_reset(struct usb_hub *hub, int port1,
 			struct usb_device *udev, unsigned int delay, bool warm)
 {
@@ -3623,6 +3656,10 @@ int usb_port_resume(struct usb_device *udev, pm_message_t msg)
 	if (status < 0) {
 		dev_dbg(&udev->dev, "can't resume, status %d\n", status);
 		hub_port_logical_disconnect(hub, port1);
+		if (hub_port_power_cycle_required(hub, port1, portstatus)) {
+			dev_dbg(&udev->dev, "device in disabled state, attempt power cycle\n");
+			hub_port_power_cycle(hub, port1);
+		}
 	} else  {
 		/* Try to enable USB2 hardware LPM */
 		usb_enable_usb2_hardware_lpm(udev);
@@ -5256,10 +5293,7 @@ loop:
 		/* When halfway through our retry count, power-cycle the port */
 		if (i == (PORT_INIT_TRIES - 1) / 2) {
 			dev_info(&port_dev->dev, "attempt power cycle\n");
-			usb_hub_set_port_power(hdev, hub, port1, false);
-			msleep(2 * hub_power_on_good_delay(hub));
-			usb_hub_set_port_power(hdev, hub, port1, true);
-			msleep(hub_power_on_good_delay(hub));
+			hub_port_power_cycle(hub, port1);
 		}
 	}
 	if (hub->hdev->parent ||
