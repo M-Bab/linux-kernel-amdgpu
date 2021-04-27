@@ -177,20 +177,15 @@ Optional properties:
     Active amp contains inductor for boost circuit, whereas passive amp does
     not have inductor.
 
-Optional Class H Algorithm sub-node:
-
-  The cs35l41 node can have a single "cirrus,classh-internal-algo" sub-node
-  that will disable automatic control of the internal Class H Algorithm.
+Optional Class H Algorithm properties:
 
   It is strongly recommended that the Datasheet be referenced when adjusting
   or using these Class H Algorithm controls over the internal Algorithm.
   Serious damage can occur to the Device and surrounding components.
 
-  - cirrus,classh-internal-algo : Sub-node for the Internal Class H Algorithm
+  - cirrus,classh-internal-algo : Boolean to enable optional properties.
   See Section 4.4 Internal Class H Algorithm in the Datasheet.
   If not used, the device manages the ClassH Algorithm internally.
-
-Optional properties for the "cirrus,classh-internal-algo" Sub-node
 
   Section 7.9 Boost Control
   - cirrus,classh-bst-override : Boolean which will disable Class H tracking and
@@ -266,48 +261,42 @@ Optional properties for the "cirrus,classh-internal-algo" Sub-node
   6 = 500ms
   7 = 1000ms
 
-Optional GPIO1 sub-node:
+Optional GPIO1 properties:
 
-The cs35l41 node can have an single "cirrus,gpio-config1" sub-node for
-configuring the GPIO1 pin.
+  - cirrus,gpio1-polarity-invert : Boolean which specifies whether the GPIO1
+  level is inverted. If this property is not present the level is not inverted.
 
-- cirrus,gpio-polarity-invert : Boolean which specifies whether the GPIO1
-level is inverted. If this property is not present the level is not inverted.
+  - cirrus,gpio1-output-enable : Boolean which specifies whether the GPIO1 pin
+  is configured as an output. If this property is not present the
+  pin will be configured as an input.
 
-- cirrus,gpio-output-enable : Boolean which specifies whether the GPIO1 pin
-is configured as an output. If this property is not present the
-pin will be configured as an input.
+  - cirrus,gpio1-src-select : Configures the function of the GPIO1 pin.
+  Note that the options are different from the GPIO2 pin.
 
-- cirrus,gpio-src-select : Configures the function of the GPIO1 pin.
-Note that the options are different from the GPIO2 pin.
-
-0 = High Impedance (Default)
-1 = GPIO
-2 = Sync
-3 = MCLK input
+  0 = High Impedance (Default)
+  1 = GPIO
+  2 = Sync
+  3 = MCLK input
 
 
-Optional GPIO2 sub-node:
+Optional GPIO2 properties:
 
-The cs35l41 node can have an single "cirrus,gpio-config2" sub-node for
-configuring the GPIO1 pin.
+  - cirrus,gpio2-polarity-invert : Boolean which specifies whether the GPIO2
+  level is inverted. If this property is not present the level is not inverted.
 
-- cirrus,gpio-polarity-invert : Boolean which specifies whether the GPIO2
-level is inverted. If this property is not present the level is not inverted.
+  - cirrus,gpio2-output-enable : Boolean which specifies whether the GPIO2 pin
+  is configured as an output. If this property is not present the
+  pin will be configured as an input.
 
-- cirrus,gpio-output-enable : Boolean which specifies whether the GPIO2 pin
-is configured as an output. If this property is not present the
-pin will be configured as an input.
+  - cirrus,gpio2-src-select : Configures the function of the GPIO2 pin.
+  Note that the options are different from the GPIO1 pin.
 
-- cirrus,gpio-src-select : Configures the function of the GPIO2 pin.
-Note that the options are different from the GPIO1 pin.
-
-0 = High Impedance (Default)
-1 = GPIO
-2 = Open Drain INTB
-3 = MCLK input
-4 = Push-pull INTB (active low)
-5 = Push-pull INT (active high)
+  0 = High Impedance (Default)
+  1 = GPIO
+  2 = Open Drain INTB
+  3 = MCLK input
+  4 = Push-pull INTB (active low)
+  5 = Push-pull INT (active high)
 
 
 Example:
@@ -322,4 +311,7 @@ cs35l41: cs35l41@2 {
 	cirrus,boost-ind-nanohenry = <1000>;
 	cirrus,boost-cap-microfarad = <15>;
 	cirrus,fast-switch = "sample_fast_switch1.txt", "sample_fast_switch2.txt";
+
+  cirrus,gpio1-src-select = <2>;
+  cirrus,gpio2-src-select = <2>;
 };
