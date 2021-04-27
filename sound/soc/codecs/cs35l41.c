@@ -26,9 +26,9 @@
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/gpio/consumer.h>
-#include <linux/of_device.h>
-#include <linux/of_gpio.h>
 #include <linux/regmap.h>
+#include <linux/property.h>
+#include <linux/of_device.h>
 #include <sound/core.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
@@ -37,7 +37,6 @@
 #include <linux/gpio.h>
 #include <sound/initval.h>
 #include <sound/tlv.h>
-#include <linux/of_irq.h>
 #include <linux/completion.h>
 #include <linux/spi/spi.h>
 #include <linux/err.h>
@@ -2930,43 +2929,39 @@ static int cs35l41_irq_gpio_config(struct cs35l41_private *cs35l41)
 	struct cs35l41_irq_cfg *irq_gpio_cfg2 = &cs35l41->pdata.irq_config2;
 	int irq_pol = IRQF_TRIGGER_NONE;
 
-	if (irq_gpio_cfg1->is_present) {
-		if (irq_gpio_cfg1->irq_pol_inv)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO1_CTRL1,
-						CS35L41_GPIO_POL_MASK,
-						CS35L41_GPIO_POL_MASK);
-		if (irq_gpio_cfg1->irq_out_en)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO1_CTRL1,
-						CS35L41_GPIO_DIR_MASK,
-						0);
-		if (irq_gpio_cfg1->irq_src_sel)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO_PAD_CONTROL,
-						CS35L41_GPIO1_CTRL_MASK,
-						irq_gpio_cfg1->irq_src_sel <<
-						CS35L41_GPIO1_CTRL_SHIFT);
-	}
+	if (irq_gpio_cfg1->irq_pol_inv)
+		regmap_update_bits(cs35l41->regmap,
+					CS35L41_GPIO1_CTRL1,
+					CS35L41_GPIO_POL_MASK,
+					CS35L41_GPIO_POL_MASK);
+	if (irq_gpio_cfg1->irq_out_en)
+		regmap_update_bits(cs35l41->regmap,
+					CS35L41_GPIO1_CTRL1,
+					CS35L41_GPIO_DIR_MASK,
+					0);
+	if (irq_gpio_cfg1->irq_src_sel)
+		regmap_update_bits(cs35l41->regmap,
+					CS35L41_GPIO_PAD_CONTROL,
+					CS35L41_GPIO1_CTRL_MASK,
+					irq_gpio_cfg1->irq_src_sel <<
+					CS35L41_GPIO1_CTRL_SHIFT);
 
-	if (irq_gpio_cfg2->is_present) {
-		if (irq_gpio_cfg2->irq_pol_inv)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO2_CTRL1,
-						CS35L41_GPIO_POL_MASK,
-						CS35L41_GPIO_POL_MASK);
-		if (irq_gpio_cfg2->irq_out_en)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO2_CTRL1,
-						CS35L41_GPIO_DIR_MASK,
-						0);
-		if (irq_gpio_cfg2->irq_src_sel)
-			regmap_update_bits(cs35l41->regmap,
-						CS35L41_GPIO_PAD_CONTROL,
-						CS35L41_GPIO2_CTRL_MASK,
-						irq_gpio_cfg2->irq_src_sel <<
-						CS35L41_GPIO2_CTRL_SHIFT);
-	}
+	if (irq_gpio_cfg2->irq_pol_inv)
+		regmap_update_bits(cs35l41->regmap,
+					CS35L41_GPIO2_CTRL1,
+					CS35L41_GPIO_POL_MASK,
+					CS35L41_GPIO_POL_MASK);
+	if (irq_gpio_cfg2->irq_out_en)
+		regmap_update_bits(cs35l41->regmap,
+					CS35L41_GPIO2_CTRL1,
+					CS35L41_GPIO_DIR_MASK,
+					0);
+	if (irq_gpio_cfg2->irq_src_sel)
+		regmap_update_bits(cs35l41->regmap,
+					CS35L41_GPIO_PAD_CONTROL,
+					CS35L41_GPIO2_CTRL_MASK,
+					irq_gpio_cfg2->irq_src_sel <<
+					CS35L41_GPIO2_CTRL_SHIFT);
 
 	if (irq_gpio_cfg2->irq_src_sel ==
 			(CS35L41_GPIO_CTRL_ACTV_LO | CS35L41_VALID_PDATA))
@@ -3032,7 +3027,7 @@ static const struct snd_soc_component_driver soc_component_dev_cs35l41 = {
 
 
 
-static int cs35l41_handle_of_data(struct device *dev,
+static int cs35l41_handle_pdata(struct device *dev,
 				  struct cs35l41_platform_data *pdata,
 				  struct cs35l41_private *cs35l41)
 {
@@ -3040,47 +3035,45 @@ static int cs35l41_handle_of_data(struct device *dev,
 	unsigned int val;
 	int ret;
 	size_t	num_fast_switch;
-	struct device_node *sub_node;
 	struct cs35l41_classh_cfg *classh_config = &pdata->classh_config;
 	struct cs35l41_irq_cfg *irq_gpio1_config = &pdata->irq_config1;
 	struct cs35l41_irq_cfg *irq_gpio2_config = &pdata->irq_config2;
 	unsigned int i;
 
-	if (!np)
-		return 0;
-
-	cs35l41->dt_name = devm_kstrdup_const(cs35l41->dev, np->name,
+	if (np) {
+		cs35l41->dt_name = devm_kstrdup_const(cs35l41->dev, np->name,
 					      GFP_KERNEL);
 
-	ret = of_property_count_strings(np, "cirrus,fast-switch");
-	if (ret < 0) {
-		/*
-		 * Device tree does not provide file name.
-		 * Use default value
-		 */
-		num_fast_switch = ARRAY_SIZE(cs35l41_fast_switch_text);
-		cs35l41->fast_switch_enum.items	=
-			ARRAY_SIZE(cs35l41_fast_switch_text);
-		cs35l41->fast_switch_enum.texts	= cs35l41_fast_switch_text;
-		cs35l41->fast_switch_names = cs35l41_fast_switch_text;
-	} else {
-		/* Device tree provides file name */
-		num_fast_switch = (size_t)ret;
-		dev_info(dev, "num_fast_switch:%zu\n", num_fast_switch);
-		cs35l41->fast_switch_names =
-			devm_kmalloc(dev, num_fast_switch * sizeof(char *),
-				     GFP_KERNEL);
-		if (!cs35l41->fast_switch_names)
-			return -ENOMEM;
-		of_property_read_string_array(np, "cirrus,fast-switch",
-					      cs35l41->fast_switch_names,
-					      num_fast_switch);
-		for (i = 0; i < num_fast_switch; i++) {
-			dev_info(dev, "%d:%s\n", i,
-				 cs35l41->fast_switch_names[i]);
+		ret = of_property_count_strings(np, "cirrus,fast-switch");
+		if (ret < 0) {
+			/*
+			 * Device tree does not provide file name.
+			 * Use default value
+			 */
+			num_fast_switch = ARRAY_SIZE(cs35l41_fast_switch_text);
+			cs35l41->fast_switch_enum.items	=
+				ARRAY_SIZE(cs35l41_fast_switch_text);
+			cs35l41->fast_switch_enum.texts	= cs35l41_fast_switch_text;
+			cs35l41->fast_switch_names = cs35l41_fast_switch_text;
+		} else {
+			/* Device tree provides file name */
+			num_fast_switch = (size_t)ret;
+			dev_info(dev, "num_fast_switch:%zu\n", num_fast_switch);
+			cs35l41->fast_switch_names =
+				devm_kmalloc(dev, num_fast_switch * sizeof(char *),
+					     GFP_KERNEL);
+			if (!cs35l41->fast_switch_names)
+				return -ENOMEM;
+			of_property_read_string_array(np, "cirrus,fast-switch",
+						      cs35l41->fast_switch_names,
+						      num_fast_switch);
+			for (i = 0; i < num_fast_switch; i++) {
+				dev_info(dev, "%d:%s\n", i,
+					 cs35l41->fast_switch_names[i]);
+			}
+			cs35l41->fast_switch_enum.items	= num_fast_switch;
+			cs35l41->fast_switch_enum.texts	= cs35l41->fast_switch_names;
 		}
-		cs35l41->fast_switch_enum.items	= num_fast_switch;
-		cs35l41->fast_switch_enum.texts	= cs35l41->fast_switch_names;
 	}
 
 	cs35l41->fast_switch_enum.reg = SND_SOC_NOPM;
@@ -3089,30 +3082,30 @@ static int cs35l41_handle_of_data(struct device *dev,
 	cs35l41->fast_switch_enum.mask =
 		roundup_pow_of_two(num_fast_switch) - 1;
 
-	pdata->right_channel = of_property_read_bool(np,
+	pdata->right_channel = device_property_read_bool(dev,
 					"cirrus,right-channel-amp");
-	pdata->sclk_frc = of_property_read_bool(np,
+	pdata->sclk_frc = device_property_read_bool(dev,
 					"cirrus,sclk-force-output");
-	pdata->lrclk_frc = of_property_read_bool(np,
+	pdata->lrclk_frc = device_property_read_bool(dev,
 					"cirrus,lrclk-force-output");
-	pdata->amp_gain_zc = of_property_read_bool(np,
+	pdata->amp_gain_zc = device_property_read_bool(dev,
 					"cirrus,amp-gain-zc");
 
-	pdata->invert_pcm = of_property_read_bool(np,
+	pdata->invert_pcm = device_property_read_bool(dev,
 					"cirrus,invert-pcm");
 	pdata->shared_boost = SHARED_BOOST_DISABLED;
-	if (of_property_read_bool(np, "cirrus,shared-boost-active"))
+	if (device_property_read_bool(dev, "cirrus,shared-boost-active"))
 		pdata->shared_boost = SHARED_BOOST_ACTIVE;
-	if (of_property_read_bool(np, "cirrus,shared-boost-passive"))
+	if (device_property_read_bool(dev, "cirrus,shared-boost-passive"))
 		pdata->shared_boost = SHARED_BOOST_PASSIVE;
 
-	pdata->fwname_use_revid = of_property_read_bool(np,
+	pdata->fwname_use_revid = device_property_read_bool(dev,
 					"cirrus,fwname-use-revid");
 
-	if (of_property_read_u32(np, "cirrus,temp-warn_threshold", &val) >= 0)
+	if (device_property_read_u32(dev, "cirrus,temp-warn_threshold", &val) >= 0)
 		pdata->temp_warn_thld = val | CS35L41_VALID_PDATA;
 
-	ret = of_property_read_u32(np, "cirrus,boost-ctl-millivolt", &val);
+	ret = device_property_read_u32(dev, "cirrus,boost-ctl-millivolt", &val);
 	if (ret >= 0) {
 		if (val < 2550 || val > 11000) {
 			dev_err(dev,
@@ -3122,49 +3115,49 @@ static int cs35l41_handle_of_data(struct device *dev,
 		pdata->bst_vctrl = ((val - 2550) / 100) + 1;
 	}
 
-	ret = of_property_read_u32(np, "cirrus,boost-peak-milliamp", &val);
+	ret = device_property_read_u32(dev, "cirrus,boost-peak-milliamp", &val);
 	if (ret >= 0)
 		pdata->bst_ipk = val;
 
-	ret = of_property_read_u32(np, "cirrus,boost-ind-nanohenry", &val);
+	ret = device_property_read_u32(dev, "cirrus,boost-ind-nanohenry", &val);
 	if (ret >= 0)
 		pdata->bst_ind = val;
 
-	ret = of_property_read_u32(np, "cirrus,boost-cap-microfarad", &val);
+	ret = device_property_read_u32(dev, "cirrus,boost-cap-microfarad", &val);
 	if (ret >= 0)
 		pdata->bst_cap = val;
 
-	ret = of_property_read_u32(np, "cirrus,asp-sdout-hiz", &val);
+	ret = device_property_read_u32(dev, "cirrus,asp-sdout-hiz", &val);
 	if (ret >= 0)
 		pdata->dout_hiz = val;
 	else
 		pdata->dout_hiz = -1;
 
-	pdata->dsp_ng_enable = of_property_read_bool(np,
+	pdata->dsp_ng_enable = device_property_read_bool(dev,
 					"cirrus,dsp-noise-gate-enable");
-	if (of_property_read_u32(np,
+	if (device_property_read_u32(dev,
 				"cirrus,dsp-noise-gate-threshold", &val) >= 0)
 		pdata->dsp_ng_pcm_thld = val | CS35L41_VALID_PDATA;
-	if (of_property_read_u32(np, "cirrus,dsp-noise-gate-delay", &val) >= 0)
+	if (device_property_read_u32(dev, "cirrus,dsp-noise-gate-delay", &val) >= 0)
 		pdata->dsp_ng_delay = val | CS35L41_VALID_PDATA;
 
-	if (of_property_read_u32(np, "cirrus,hw-noise-gate-select", &val) >= 0)
+	if (device_property_read_u32(dev, "cirrus,hw-noise-gate-select", &val) >= 0)
 		pdata->hw_ng_sel = val | CS35L41_VALID_PDATA;
-	if (of_property_read_u32(np,
+	if (device_property_read_u32(dev,
 				"cirrus,hw-noise-gate-threshold", &val) >= 0)
 		pdata->hw_ng_thld = val | CS35L41_VALID_PDATA;
-	if (of_property_read_u32(np, "cirrus,hw-noise-gate-delay", &val) >= 0)
+	if (device_property_read_u32(dev, "cirrus,hw-noise-gate-delay", &val) >= 0)
 		pdata->hw_ng_delay = val | CS35L41_VALID_PDATA;
 
-	sub_node = of_get_child_by_name(np, "cirrus,classh-internal-algo");
-	classh_config->classh_algo_enable = sub_node ? true : false;
+	classh_config->classh_algo_enable =
+				device_property_read_bool(dev, "cirrus,classh-internal-algo");
 
 	if (classh_config->classh_algo_enable) {
 		classh_config->classh_bst_override =
-			of_property_read_bool(sub_node,
+			device_property_read_bool(dev,
 				"cirrus,classh-bst-override");
 
-		ret = of_property_read_u32(sub_node,
+		ret = device_property_read_u32(dev,
 					   "cirrus,classh-bst-max-limit",
 					   &val);
 		if (ret >= 0) {
@@ -3172,74 +3165,63 @@ static int cs35l41_handle_of_data(struct device *dev,
 			classh_config->classh_bst_max_limit = val;
 		}
 
-		ret = of_property_read_u32(sub_node, "cirrus,classh-mem-depth",
+		ret = device_property_read_u32(dev, "cirrus,classh-mem-depth",
 					   &val);
 		if (ret >= 0) {
 			val |= CS35L41_VALID_PDATA;
 			classh_config->classh_mem_depth = val;
 		}
 
-		ret = of_property_read_u32(sub_node,
+		ret = device_property_read_u32(dev,
 					"cirrus,classh-release-rate", &val);
 		if (ret >= 0)
 			classh_config->classh_release_rate = val;
 
-		ret = of_property_read_u32(sub_node, "cirrus,classh-headroom",
+		ret = device_property_read_u32(dev, "cirrus,classh-headroom",
 					   &val);
 		if (ret >= 0) {
 			val |= CS35L41_VALID_PDATA;
 			classh_config->classh_headroom = val;
 		}
 
-		ret = of_property_read_u32(sub_node,
+		ret = device_property_read_u32(dev,
 					"cirrus,classh-wk-fet-delay", &val);
 		if (ret >= 0) {
 			val |= CS35L41_VALID_PDATA;
 			classh_config->classh_wk_fet_delay = val;
 		}
 
-		ret = of_property_read_u32(sub_node,
+		ret = device_property_read_u32(dev,
 					"cirrus,classh-wk-fet-thld", &val);
 		if (ret >= 0)
 			classh_config->classh_wk_fet_thld = val;
 	}
-	of_node_put(sub_node);
 
 	/* GPIO1 Pin Config */
-	sub_node = of_get_child_by_name(np, "cirrus,gpio-config1");
-	irq_gpio1_config->is_present = sub_node ? true : false;
-	if (irq_gpio1_config->is_present) {
-		irq_gpio1_config->irq_pol_inv = of_property_read_bool(sub_node,
-						"cirrus,gpio-polarity-invert");
-		irq_gpio1_config->irq_out_en = of_property_read_bool(sub_node,
-						"cirrus,gpio-output-enable");
-		ret = of_property_read_u32(sub_node, "cirrus,gpio-src-select",
-					&val);
-		if (ret >= 0) {
-			val |= CS35L41_VALID_PDATA;
-			irq_gpio1_config->irq_src_sel = val;
-		}
+	irq_gpio1_config->irq_pol_inv = device_property_read_bool(dev,
+					"cirrus,gpio1-polarity-invert");
+	irq_gpio1_config->irq_out_en = device_property_read_bool(dev,
+					"cirrus,gpio1-output-enable");
+	ret = device_property_read_u32(dev, "cirrus,gpio1-src-select",
+				&val);
+	if (ret >= 0) {
+		val |= CS35L41_VALID_PDATA;
+		irq_gpio1_config->irq_src_sel = val;
 	}
-	of_node_put(sub_node);
 
 	/* GPIO2 Pin Config */
-	sub_node = of_get_child_by_name(np, "cirrus,gpio-config2");
-	irq_gpio2_config->is_present = sub_node ? true : false;
-	if (irq_gpio2_config->is_present) {
-		irq_gpio2_config->irq_pol_inv = of_property_read_bool(sub_node,
-						"cirrus,gpio-polarity-invert");
-		irq_gpio2_config->irq_out_en = of_property_read_bool(sub_node,
-						"cirrus,gpio-output-enable");
-		ret = of_property_read_u32(sub_node, "cirrus,gpio-src-select",
-					&val);
-		if (ret >= 0) {
-			val |= CS35L41_VALID_PDATA;
-			irq_gpio2_config->irq_src_sel = val;
-		}
+	irq_gpio2_config->irq_pol_inv = device_property_read_bool(dev,
+					"cirrus,gpio2-polarity-invert");
+	irq_gpio2_config->irq_out_en = device_property_read_bool(dev,
+					"cirrus,gpio2-output-enable");
+	ret = device_property_read_u32(dev, "cirrus,gpio2-src-select",
+				&val);
+	if (ret >= 0) {
+		val |= CS35L41_VALID_PDATA;
+		irq_gpio2_config->irq_src_sel = val;
 	}
-	of_node_put(sub_node);
 
-	pdata->hibernate_enable = of_property_read_bool(np,
+	pdata->hibernate_enable = device_property_read_bool(dev,
 					"cirrus,hibernate-enable");
 
 	return 0;
@@ -3737,20 +3719,13 @@ int cs35l41_probe(struct cs35l41_private *cs35l41,
 
 	if (pdata) {
 		cs35l41->pdata = *pdata;
-	} else if (cs35l41->dev->of_node) {
-		ret = cs35l41_handle_of_data(cs35l41->dev, &cs35l41->pdata,
+	} else {
+		ret = cs35l41_handle_pdata(cs35l41->dev, &cs35l41->pdata,
 					     cs35l41);
 		if (ret != 0) {
 			ret = -ENODEV;
 			goto err;
 		}
-	} else {
-#ifdef CONFIG_ACPI
-
-#else
-		ret = -ENODEV;
-		goto err;
-#endif
 	}
 
 	ret = regulator_bulk_enable(cs35l41->num_supplies, cs35l41->supplies);

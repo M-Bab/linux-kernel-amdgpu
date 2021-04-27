@@ -25,7 +25,6 @@ struct cs35l41_classh_cfg {
 };
 
 struct cs35l41_irq_cfg {
-	bool is_present;
 	bool irq_pol_inv;
 	bool irq_out_en;
 	int irq_src_sel;
