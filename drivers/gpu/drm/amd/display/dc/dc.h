@@ -45,7 +45,7 @@
 /* forward declaration */
 struct aux_payload;
 
-#define DC_VER "3.2.131"
+#define DC_VER "3.2.133"
 
 #define MAX_SURFACES 3
 #define MAX_PLANES 6
@@ -308,6 +308,8 @@ struct dc_config {
 #endif
 	uint64_t vblank_alignment_dto_params;
 	uint8_t  vblank_alignment_max_frame_time_diff;
+	bool is_asymmetric_memory;
+	bool is_single_rank_dimm;
 };
 
 enum visual_confirm {
@@ -717,7 +719,6 @@ void dc_init_callbacks(struct dc *dc,
 void dc_deinit_callbacks(struct dc *dc);
 void dc_destroy(struct dc **dc);
 
-void dc_wait_for_vblank(struct dc *dc, struct dc_stream_state *stream);
 /*******************************************************************************
  * Surface Interfaces
  ******************************************************************************/
@@ -905,6 +906,8 @@ struct dc_plane_state {
 
 	union surface_update_flags update_flags;
 	bool flip_int_enabled;
+	bool skip_manual_trigger;
+
 	/* private to DC core */
 	struct dc_plane_status status;
 	struct dc_context *ctx;

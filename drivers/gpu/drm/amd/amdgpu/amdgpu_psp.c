@@ -414,36 +414,6 @@ static int psp_tmr_init(struct psp_context *psp)
 				      AMDGPU_GEM_DOMAIN_VRAM,
 				      &psp->tmr_bo, &psp->tmr_mc_addr, pptr);
 
-	/* workaround the tmr_mc_addr:
-	 * PSP requires an address in FB aperture. Right now driver produce
-	 * tmr_mc_addr in the GART aperture. Convert it back to FB aperture
-	 * for PSP. Will revert it after we get a fix from PSP FW.
-	 */
-	if (psp->adev->asic_type == CHIP_ALDEBARAN) {
-		psp->tmr_mc_addr -= psp->adev->gmc.fb_start;
-		psp->tmr_mc_addr += psp->adev->gmc.fb_start_original;
-	}
-
-	return ret;
-}
-
-static int psp_clear_vf_fw(struct psp_context *psp)
-{
-	int ret;
-	struct psp_gfx_cmd_resp *cmd;
-
-	if (!amdgpu_sriov_vf(psp->adev) || psp->adev->asic_type != CHIP_NAVI12)
-		return 0;
-
-	cmd = kzalloc(sizeof(struct psp_gfx_cmd_resp), GFP_KERNEL);
-	if (!cmd)
-		return -ENOMEM;
-
-	cmd->cmd_id = GFX_CMD_ID_CLEAR_VF_FW;
-
-	ret = psp_cmd_submit_buf(psp, NULL, cmd, psp->fence_buf_mc_addr);
-	kfree(cmd);
-
 	return ret;
 }
 
@@ -1047,6 +1017,13 @@ static int psp_ras_load(struct psp_context *psp)
 	memset(psp->fw_pri_buf, 0, PSP_1_MEG);
 	memcpy(psp->fw_pri_buf, psp->ta_ras_start_addr, psp->ta_ras_ucode_size);
 
+	ras_cmd = (struct ta_ras_shared_memory *)psp->ras.ras_shared_buf;
+
+	if (psp->adev->gmc.xgmi.connected_to_cpu)
+		ras_cmd->ras_in_message.init_flags.poison_mode_en = 1;
+	else
+		ras_cmd->ras_in_message.init_flags.dgpu_mode = 1;
+
 	psp_prep_ta_load_cmd_buf(cmd,
 				 psp->fw_pri_mc_addr,
 				 psp->ta_ras_ucode_size,
@@ -1055,8 +1032,6 @@ static int psp_ras_load(struct psp_context *psp)
 
 	ret = psp_cmd_submit_buf(psp, NULL, cmd,
 			psp->fence_buf_mc_addr);
-
-	ras_cmd = (struct ta_ras_shared_memory *)psp->ras.ras_shared_buf;
 
 	if (!ret) {
 		psp->ras.session_id = cmd->resp.session_id;
@@ -1930,12 +1905,6 @@ static int psp_hw_start(struct psp_context *psp)
 		return ret;
 	}
 
-	ret = psp_clear_vf_fw(psp);
-	if (ret) {
-		DRM_ERROR("PSP clear vf fw!\n");
-		return ret;
-	}
-
 	ret = psp_boot_config_set(adev);
 	if (ret) {
 		DRM_WARN("PSP set boot config@\n");
@@ -2444,7 +2413,6 @@ static int psp_hw_fini(void *handle)
 {
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 	struct psp_context *psp = &adev->psp;
-	int ret;
 
 	if (psp->adev->psp.ta_fw) {
 		psp_ras_terminate(psp);
@@ -2455,11 +2423,6 @@ static int psp_hw_fini(void *handle)
 	}
 
 	psp_asd_unload(psp);
-	ret = psp_clear_vf_fw(psp);
-	if (ret) {
-		DRM_ERROR("PSP clear vf fw!\n");
-		return ret;
-	}
 
 	psp_tmr_terminate(psp);
 	psp_ring_destroy(psp, PSP_RING_TYPE__KM);
