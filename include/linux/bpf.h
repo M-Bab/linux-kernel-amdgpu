@@ -41,6 +41,7 @@ struct bpf_local_storage;
 struct bpf_local_storage_map;
 struct kobject;
 struct mem_cgroup;
+struct module;
 
 extern struct idr btf_idr;
 extern spinlock_t btf_idr_lock;
@@ -630,6 +631,7 @@ struct bpf_trampoline {
 	/* Executable image of trampoline */
 	struct bpf_tramp_image *cur_image;
 	u64 selector;
+	struct module *mod;
 };
 
 struct bpf_attach_target_info {
@@ -1282,6 +1284,11 @@ bpf_map_alloc_percpu(const struct bpf_map *map, size_t size, size_t align,
 extern int sysctl_unprivileged_bpf_disabled;
 
 static inline bool bpf_allow_ptr_leaks(void)
+{
+	return perfmon_capable();
+}
+
+static inline bool bpf_allow_uninit_stack(void)
 {
 	return perfmon_capable();
 }
