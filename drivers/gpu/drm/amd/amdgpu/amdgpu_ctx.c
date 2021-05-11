@@ -698,27 +698,16 @@ ktime_t amdgpu_ctx_mgr_fence_usage(struct amdgpu_ctx_mgr *mgr, uint32_t hwip,
 	struct amdgpu_ctx_entity *centity;
 	ktime_t total = 0, max = 0;
 
-
 	if (idx >= AMDGPU_MAX_ENTITY_NUM)
 		return 0;
 	idp = &mgr->ctx_handles;
 	mutex_lock(&mgr->lock);
 	idr_for_each_entry(idp, ctx, id) {
-		ktime_t ttotal = tmax = ktime_set(0, 0);
 		if (!ctx->entities[hwip][idx])
 			continue;
 
 		centity = ctx->entities[hwip][idx];
-		amdgpu_ctx_fence_time(ctx, centity, &ttotal, &tmax);
-
-		/* Harmonic mean approximation diverges for very small
-		 * values. If ratio < 0.01% ignore
-		 */
-		if (AMDGPU_CTX_FENCE_USAGE_MIN_RATIO(tmax, ttotal))
-			continue;
-
-		total = ktime_add(total, ttotal);
-		max = ktime_after(tmax, max) ? tmax : max;
+		amdgpu_ctx_fence_time(ctx, centity, &total, &max);
 	}
 
 	mutex_unlock(&mgr->lock);
