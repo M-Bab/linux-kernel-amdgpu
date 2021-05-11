@@ -2646,7 +2646,7 @@ static ssize_t navi10_get_legacy_gpu_metrics(struct smu_context *smu,
 
 	mutex_unlock(&smu->metrics_lock);
 
-	smu_cmn_init_soft_gpu_metrics(gpu_metrics, 1, 1);
+	smu_cmn_init_soft_gpu_metrics(gpu_metrics, 1, 3);
 
 	gpu_metrics->temperature_edge = metrics.TemperatureEdge;
 	gpu_metrics->temperature_hotspot = metrics.TemperatureHotspot;
@@ -2681,6 +2681,74 @@ static ssize_t navi10_get_legacy_gpu_metrics(struct smu_context *smu,
 
 	gpu_metrics->system_clock_counter = ktime_get_boottime_ns();
 
+	gpu_metrics->voltage_gfx = (155000 - 625 * metrics.CurrGfxVoltageOffset) / 100;
+	gpu_metrics->voltage_mem = (155000 - 625 * metrics.CurrMemVidOffset) / 100;
+	gpu_metrics->voltage_soc = (155000 - 625 * metrics.CurrSocVoltageOffset) / 100;
+
+	gpu_metrics->max_socket_power = smu->max_power_limit;
+
+	/* Frequency and DPM ranges */
+
+	ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_GFXCLK, 0, &gpu_metrics->min_gfxclk_frequency);
+	if (ret)
+		goto out;
+	ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_SOCCLK, 0, &gpu_metrics->min_socclk_frequency);
+	if (ret)
+		goto out;
+	ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_UCLK, 0, &gpu_metrics->min_uclk_frequency);
+	if (ret)
+		goto out;
+
+	if (!navi10_is_support_fine_grained_dpm(smu, SMU_GFXCLK)) {
+		ret = smu_v11_0_get_dpm_level_count(smu, SMU_GFXCLK, &gpu_metrics->max_gfxclk_dpm);
+		if (ret)
+			goto out;
+
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_GFXCLK, gpu_metrics->max_gfxclk_dpm - 1,
+				&gpu_metrics->max_gfxclk_frequency);
+		if (ret)
+			goto out;
+
+	} else {
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_GFXCLK, 2,
+				&gpu_metrics->max_gfxclk_frequency);
+
+		gpu_metrics->max_gfxclk_dpm = 2;
+	}
+
+	if (!navi10_is_support_fine_grained_dpm(smu, SMU_SOCCLK)) {
+		ret = smu_v11_0_get_dpm_level_count(smu, SMU_SOCCLK, &gpu_metrics->max_socclk_dpm);
+		if (ret)
+			goto out;
+
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_GFXCLK, gpu_metrics->max_socclk_dpm - 1,
+				&gpu_metrics->max_soclk_frequency);
+		if (ret)
+			goto out;
+
+	} else {
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_SOCCLK, 2,
+				&gpu_metrics->max_socclk_frequency);
+
+		gpu_metrics->max_socclk_dpm = 2;
+	}
+
+	if (!navi10_is_support_fine_grained_dpm(smu, SMU_UCLK)) {
+		ret = smu_v11_0_get_dpm_level_count(smu, SMU_UCCLK, &gpu_metrics->max_uclk_dpm);
+		if (ret)
+			goto out;
+
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_UCLK, gpu_metrics->max_uclk_dpm - 1,
+				&gpu_metrics->max_uclk_frequency);
+		if (ret)
+			goto out;
+
+	} else {
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_SOCCLK, 2,
+				&gpu_metrics->max_uclk_frequency);
+
+		gpu_metrics->max_uclk_dpm = 2;
+	}
 	*table = (void *)gpu_metrics;
 
 	return sizeof(struct gpu_metrics_v1_1);
@@ -2709,7 +2777,7 @@ static ssize_t navi10_get_gpu_metrics(struct smu_context *smu,
 
 	mutex_unlock(&smu->metrics_lock);
 
-	smu_cmn_init_soft_gpu_metrics(gpu_metrics, 1, 1);
+	smu_cmn_init_soft_gpu_metrics(gpu_metrics, 1, 3);
 
 	gpu_metrics->temperature_edge = metrics.TemperatureEdge;
 	gpu_metrics->temperature_hotspot = metrics.TemperatureHotspot;
@@ -2746,9 +2814,79 @@ static ssize_t navi10_get_gpu_metrics(struct smu_context *smu,
 
 	gpu_metrics->system_clock_counter = ktime_get_boottime_ns();
 
+	gpu_metrics->voltage_gfx = (155000 - 625 * metrics.CurrGfxVoltageOffset) / 100;
+	gpu_metrics->voltage_mem = (155000 - 625 * metrics.CurrMemVidOffset) / 100;
+	gpu_metrics->voltage_soc = (155000 - 625 * metrics.CurrSocVoltageOffset) / 100;
+
+	gpu_metrics->max_socket_power = smu->max_power_limit;
+
+	/* Frequency and DPM ranges */
+
+	ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_GFXCLK, 0, &gpu_metrics->min_gfxclk_frequency);
+	if (ret)
+		goto out;
+	ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_SOCCLK, 0, &gpu_metrics->min_socclk_frequency);
+	if (ret)
+		goto out;
+	ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_UCLK, 0, &gpu_metrics->min_uclk_frequency);
+	if (ret)
+		goto out;
+
+	if (!navi10_is_support_fine_grained_dpm(smu, SMU_GFXCLK)) {
+		ret = smu_v11_0_get_dpm_level_count(smu, SMU_GFXCLK, &gpu_metrics->max_gfxclk_dpm);
+		if (ret)
+			goto out;
+
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_GFXCLK, gpu_metrics->max_gfxclk_dpm - 1,
+				&gpu_metrics->max_gfxclk_frequency);
+		if (ret)
+			goto out;
+
+	} else {
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_GFXCLK, 2,
+				&gpu_metrics->max_gfxclk_frequency);
+
+		gpu_metrics->max_gfxclk_dpm = 2;
+	}
+
+	if (!navi10_is_support_fine_grained_dpm(smu, SMU_SOCCLK)) {
+		ret = smu_v11_0_get_dpm_level_count(smu, SMU_SOCCLK, &gpu_metrics->max_socclk_dpm);
+		if (ret)
+			goto out;
+
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_GFXCLK, gpu_metrics->max_socclk_dpm - 1,
+				&gpu_metrics->max_soclk_frequency);
+		if (ret)
+			goto out;
+
+	} else {
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_SOCCLK, 2,
+				&gpu_metrics->max_socclk_frequency);
+
+		gpu_metrics->max_socclk_dpm = 2;
+	}
+
+	if (!navi10_is_support_fine_grained_dpm(smu, SMU_UCLK)) {
+		ret = smu_v11_0_get_dpm_level_count(smu, SMU_UCCLK, &gpu_metrics->max_uclk_dpm);
+		if (ret)
+			goto out;
+
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_UCLK, gpu_metrics->max_uclk_dpm - 1,
+				&gpu_metrics->max_uclk_frequency);
+		if (ret)
+			goto out;
+
+	} else {
+		ret = smu_v11_0_get_dpm_freq_by_index(smu, SMU_SOCCLK, 2,
+				&gpu_metrics->max_uclk_frequency);
+
+		gpu_metrics->max_uclk_dpm = 2;
+	}
+
+out:
 	*table = (void *)gpu_metrics;
 
-	return sizeof(struct gpu_metrics_v1_1);
+	return sizeof(struct gpu_metrics_v1_3);
 }
 
 static ssize_t navi12_get_legacy_gpu_metrics(struct smu_context *smu,
