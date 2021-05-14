@@ -422,6 +422,7 @@ static bool psp_skip_tmr(struct psp_context *psp)
 	switch (psp->adev->asic_type) {
 	case CHIP_NAVI12:
 	case CHIP_SIENNA_CICHLID:
+	case CHIP_ALDEBARAN:
 		return true;
 	default:
 		return false;
@@ -1113,6 +1114,31 @@ int psp_ras_invoke(struct psp_context *psp, uint32_t ta_cmd_id)
 	return ret;
 }
 
+static int psp_ras_status_to_errno(struct amdgpu_device *adev,
+					 enum ta_ras_status ras_status)
+{
+	int ret = -EINVAL;
+
+	switch (ras_status) {
+	case TA_RAS_STATUS__SUCCESS:
+		ret = 0;
+		break;
+	case TA_RAS_STATUS__RESET_NEEDED:
+		ret = -EAGAIN;
+		break;
+	case TA_RAS_STATUS__ERROR_RAS_NOT_AVAILABLE:
+		dev_warn(adev->dev, "RAS WARN: ras function unavailable\n");
+		break;
+	case TA_RAS_STATUS__ERROR_ASD_READ_WRITE:
+		dev_warn(adev->dev, "RAS WARN: asd read or write failed\n");
+		break;
+	default:
+		dev_err(adev->dev, "RAS ERROR: ras function failed ret 0x%X\n", ret);
+	}
+
+	return ret;
+}
+
 int psp_ras_enable_features(struct psp_context *psp,
 		union ta_ras_cmd_input *info, bool enable)
 {
@@ -1136,7 +1162,7 @@ int psp_ras_enable_features(struct psp_context *psp,
 	if (ret)
 		return -EINVAL;
 
-	return ras_cmd->ras_status;
+	return psp_ras_status_to_errno(psp->adev, ras_cmd->ras_status);
 }
 
 static int psp_ras_terminate(struct psp_context *psp)
@@ -1219,7 +1245,7 @@ int psp_ras_trigger_error(struct psp_context *psp,
 	if (amdgpu_ras_intr_triggered())
 		return 0;
 
-	return ras_cmd->ras_status;
+	return psp_ras_status_to_errno(psp->adev, ras_cmd->ras_status);
 }
 // ras end
 
@@ -2145,7 +2171,7 @@ static int psp_load_smu_fw(struct psp_context *psp)
 		return 0;
 
 	if ((amdgpu_in_reset(adev) &&
-	     ras && ras->supported &&
+	     ras && adev->ras_enabled &&
 	     (adev->asic_type == CHIP_ARCTURUS ||
 	      adev->asic_type == CHIP_VEGA20)) ||
 	     (adev->in_runpm &&

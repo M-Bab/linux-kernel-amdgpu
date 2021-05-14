@@ -1,5 +1,5 @@
-/*
- * Copyright 2018 Advanced Micro Devices, Inc.
+/* SPDX-License-Identifier: MIT
+ * Copyright 2021 Advanced Micro Devices, Inc.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),
@@ -19,19 +19,25 @@
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
  * OTHER DEALINGS IN THE SOFTWARE.
  *
+ * Authors: David Nieto
+ *          Roy Sun
  */
+#ifndef __AMDGPU_SMI_H__
+#define __AMDGPU_SMI_H__
 
-#ifndef __AMDGPU_DISCOVERY__
-#define __AMDGPU_DISCOVERY__
+#include <linux/idr.h>
+#include <linux/kfifo.h>
+#include <linux/rbtree.h>
+#include <drm/gpu_scheduler.h>
+#include <drm/drm_file.h>
+#include <drm/ttm/ttm_bo_driver.h>
+#include <linux/sched/mm.h>
 
-#define DISCOVERY_TMR_SIZE      (4 << 10)
-#define DISCOVERY_TMR_OFFSET    (64 << 10)
+#include "amdgpu_sync.h"
+#include "amdgpu_ring.h"
+#include "amdgpu_ids.h"
 
-void amdgpu_discovery_fini(struct amdgpu_device *adev);
-int amdgpu_discovery_reg_base_init(struct amdgpu_device *adev);
-void amdgpu_discovery_harvest_ip(struct amdgpu_device *adev);
-int amdgpu_discovery_get_ip_version(struct amdgpu_device *adev, int hw_id,
-                                    int *major, int *minor, int *revision);
-int amdgpu_discovery_get_gfx_info(struct amdgpu_device *adev);
+uint32_t amdgpu_get_ip_count(struct amdgpu_device *adev, int id);
+void amdgpu_show_fdinfo(struct seq_file *m, struct file *f);
 
-#endif /* __AMDGPU_DISCOVERY__ */
+#endif
