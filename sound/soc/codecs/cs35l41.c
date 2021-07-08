@@ -2535,18 +2535,18 @@ static int cs35l41_dai_set_sysclk(struct snd_soc_dai *dai,
 	unsigned int fs2_val;
 	unsigned int val;
 
-	fsIndex = cs35l41_get_fs_mon_config_index(freq);
-	if (fsIndex < 0) {
-		dev_err(cs35l41->dev, "Invalid CLK Config freq: %u\n", freq);
-		return -EINVAL;
-	}
-
 	/* Need the SCLK Frequency regardless of sysclk source */
 	cs35l41->sclk = freq;
 
 	dev_dbg(cs35l41->dev, "Set DAI sysclk %d\n", freq);
 	if (cs35l41->sclk <= 6144000) {
 		/* Use the lookup table */
+		fsIndex = cs35l41_get_fs_mon_config_index(freq);
+		if (fsIndex < 0) {
+			dev_err(cs35l41->dev, "Invalid CLK Config freq: %u\n", freq);
+			return -EINVAL;
+		}
+
 		fs1_val = cs35l41_fs_mon[fsIndex].fs1;
 		fs2_val = cs35l41_fs_mon[fsIndex].fs2;
 	} else {
