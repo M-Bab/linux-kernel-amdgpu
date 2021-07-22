@@ -503,6 +503,7 @@ typedef void (*regmap_hw_free_context)(void *context);
  * @max_raw_read: Max raw read size that can be used on the bus.
  * @max_raw_write: Max raw write size that can be used on the bus.
  * @free_on_exit: kfree this on exit of regmap
+ * @addr_affects_max_raw_rw: max_raw_[read|write] must include the address and padding preamble
  */
 struct regmap_bus {
 	bool fast_io;
@@ -521,6 +522,7 @@ struct regmap_bus {
 	size_t max_raw_read;
 	size_t max_raw_write;
 	bool free_on_exit;
+	bool addr_affects_max_raw_rw;
 };
 
 /*

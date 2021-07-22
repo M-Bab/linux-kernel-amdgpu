@@ -115,12 +115,22 @@ static const struct regmap_bus *regmap_get_spi_bus(struct spi_device *spi,
 	struct spi_master *master = spi->master;
 	struct regmap_bus *bus = NULL;
 
-	if (master->max_transfer_size) {
+	if (master->max_transfer_size || (master->flags & SPI_CONTROLLER_CS_PER_TRANSFER)) {
 		bus = kmemdup(&regmap_spi, sizeof(*bus), GFP_KERNEL);
 		if (!bus)
 			return ERR_PTR(-ENOMEM);
 		bus->free_on_exit = true;
-		bus->max_raw_read = bus->max_raw_write = master->max_transfer_size(spi);
+
+		/* regmap-spi will split data and address between two transfers in the same message
+		 * so use addr_affects_max_raw_rw to flag that the number bytes to read or write
+		 * should be a little less (address + padding size), so the controller can
+		 * fit both transfers in a single CS period
+		 */
+		bus->addr_affects_max_raw_rw = master->flags & SPI_CONTROLLER_CS_PER_TRANSFER;
+
+		if (master->max_transfer_size)
+			bus->max_raw_read = bus->max_raw_write = master->max_transfer_size(spi);
+
 		return bus;
 	}
 
