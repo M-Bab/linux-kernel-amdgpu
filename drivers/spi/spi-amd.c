@@ -110,11 +110,17 @@ static int amd_spi_busy_wait(struct amd_spi *amd_spi)
 				 !(val & AMD_SPI_BUSY), 10, 100000);
 }
 
-static void amd_spi_execute_opcode(struct amd_spi *amd_spi)
+static int amd_spi_execute_opcode(struct amd_spi *amd_spi)
 {
+	int ret = amd_spi_busy_wait(amd_spi);
+
+	if (ret)
+		return ret;
+
 	/* Set ExecuteOpCode bit in the CTRL0 register */
 	amd_spi_setclear_reg32(amd_spi, AMD_SPI_CTRL0_REG, AMD_SPI_EXEC_CMD, AMD_SPI_EXEC_CMD);
-	amd_spi_busy_wait(amd_spi);
+
+	return amd_spi_busy_wait(amd_spi);
 }
 
 static int amd_spi_master_setup(struct spi_device *spi)
