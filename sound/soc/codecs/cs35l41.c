@@ -3074,6 +3074,8 @@ static int cs35l41_handle_pdata(struct device *dev,
 			cs35l41->fast_switch_enum.items	= num_fast_switch;
 			cs35l41->fast_switch_enum.texts	= cs35l41->fast_switch_names;
 		}
+	} else {
+		cs35l41->dt_name = "cs35l41";
 	}
 
 	cs35l41->fast_switch_enum.reg = SND_SOC_NOPM;
