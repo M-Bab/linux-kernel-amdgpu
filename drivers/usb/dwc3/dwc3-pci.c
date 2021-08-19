@@ -45,6 +45,9 @@
 #define PCI_DEVICE_ID_INTEL_ADLS		0x7ae1
 #define PCI_DEVICE_ID_INTEL_TGL			0x9a15
 
+#define PCI_DEVICE_ID_AMD_MR_0			0x163a
+#define PCI_DEVICE_ID_AMD_MR_1			0x163c
+
 #define PCI_INTEL_BXT_DSM_GUID		"732b85d5-b7a7-4a1b-9ba0-4bbd00ffd511"
 #define PCI_INTEL_BXT_FUNC_PMU_PWR	4
 #define PCI_INTEL_BXT_STATE_D0		0
@@ -158,6 +161,28 @@ static const struct software_node dwc3_pci_intel_mrfld_swnode = {
 
 static const struct software_node dwc3_pci_amd_swnode = {
 	.properties = dwc3_pci_amd_properties,
+};
+
+static const struct property_entry dwc3_pci_amd_mr_properties[] = {
+	PROPERTY_ENTRY_STRING("dr_mode", "otg"),
+	PROPERTY_ENTRY_BOOL("usb-role-switch"),
+	PROPERTY_ENTRY_STRING("role-switch-default-mode", "host"),
+	PROPERTY_ENTRY_BOOL("linux,sysdev_is_parent"),
+	{}
+};
+
+static const struct property_entry dwc3_pci_amd_mr1_properties[] = {
+	PROPERTY_ENTRY_STRING("dr_mode", "host"),
+	PROPERTY_ENTRY_BOOL("linux,sysdev_is_parent"),
+	{}
+};
+
+static const struct software_node dwc3_pci_amd_mr_swnode = {
+	.properties = dwc3_pci_amd_mr_properties,
+};
+
+static const struct software_node dwc3_pci_amd_mr1_swnode = {
+	.properties = dwc3_pci_amd_mr1_properties,
 };
 
 static int dwc3_pci_quirks(struct dwc3_pci *dwc)
@@ -401,6 +426,12 @@ static const struct pci_device_id dwc3_pci_id_table[] = {
 
 	{ PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_NL_USB),
 	  (kernel_ulong_t) &dwc3_pci_amd_swnode, },
+
+	{ PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_MR_0),
+	 (kernel_ulong_t) &dwc3_pci_amd_mr_swnode, },
+
+	{ PCI_VDEVICE(AMD, PCI_DEVICE_ID_AMD_MR_1),
+	 (kernel_ulong_t) &dwc3_pci_amd_mr1_swnode, },
 	{  }	/* Terminating Entry */
 };
 MODULE_DEVICE_TABLE(pci, dwc3_pci_id_table);
