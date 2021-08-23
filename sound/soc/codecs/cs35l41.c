@@ -38,7 +38,6 @@
 #include <sound/initval.h>
 #include <sound/tlv.h>
 #include <linux/completion.h>
-#include <linux/spi/spi.h>
 #include <linux/err.h>
 #include <linux/firmware.h>
 #include <linux/timekeeping.h>
@@ -1614,8 +1613,6 @@ static int cs35l41_otp_unpack(void *data)
 	const struct cs35l41_otp_map_element_t *otp_map_match = NULL;
 	const struct cs35l41_otp_packed_element_t *otp_map = NULL;
 	int ret;
-	struct spi_device *spi = NULL;
-	u32 orig_spi_freq = 0;
 
 	otp_mem = kmalloc_array(32, sizeof(*otp_mem), GFP_KERNEL);
 	if (!otp_mem)
@@ -1637,24 +1634,12 @@ static int cs35l41_otp_unpack(void *data)
 		goto err_otp_unpack;
 	}
 
-	if (cs35l41->bus_spi) {
-		spi = to_spi_device(cs35l41->dev);
-		orig_spi_freq = spi->max_speed_hz;
-		spi->max_speed_hz = CS35L41_SPI_MAX_FREQ_OTP;
-		spi_setup(spi);
-	}
-
 	ret = regmap_bulk_read(cs35l41->regmap, CS35L41_OTP_MEM0, otp_mem,
 						CS35L41_OTP_SIZE_WORDS);
 	if (ret < 0) {
 		dev_err(cs35l41->dev, "Read OTP Mem failed\n");
 		ret = -EINVAL;
 		goto err_otp_unpack;
-	}
-
-	if (cs35l41->bus_spi) {
-		spi->max_speed_hz = orig_spi_freq;
-		spi_setup(spi);
 	}
 
 	otp_map = otp_map_match->map;
