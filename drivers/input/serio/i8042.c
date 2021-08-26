@@ -22,6 +22,7 @@
 #include <linux/slab.h>
 #include <linux/suspend.h>
 #include <linux/property.h>
+#include <linux/dmi.h>
 
 #include <asm/io.h>
 
@@ -173,6 +174,24 @@ static struct notifier_block i8042_kbd_bind_notifier_block;
 static irqreturn_t i8042_interrupt(int irq, void *dev_id);
 static bool (*i8042_platform_filter)(unsigned char data, unsigned char str,
 				     struct serio *serio);
+
+static int __init i8042_set_noaux(const struct dmi_system_id *dmi)
+{
+	i8042_noaux = true;
+	return 1;
+}
+
+static const struct dmi_system_id i8042_quirks[] __initconst = {
+	{
+		.callback = i8042_set_noaux,
+		.ident = "Dell laptop",
+		.matches = {
+			DMI_MATCH(DMI_SYS_VENDOR, "Dell Inc."),
+			DMI_MATCH(DMI_PRODUCT_NAME, "Precision 5550"),
+		},
+	},
+	{},
+};
 
 void i8042_lock_chip(void)
 {
@@ -617,7 +636,7 @@ static int i8042_enable_kbd_port(void)
 	if (i8042_command(&i8042_ctr, I8042_CMD_CTL_WCTR)) {
 		i8042_ctr &= ~I8042_CTR_KBDINT;
 		i8042_ctr |= I8042_CTR_KBDDIS;
-		pr_err("Failed to enable KBD port\n");
+		pr_info("Failed to enable KBD port\n");
 		return -EIO;
 	}
 
@@ -636,7 +655,7 @@ static int i8042_enable_aux_port(void)
 	if (i8042_command(&i8042_ctr, I8042_CMD_CTL_WCTR)) {
 		i8042_ctr &= ~I8042_CTR_AUXINT;
 		i8042_ctr |= I8042_CTR_AUXDIS;
-		pr_err("Failed to enable AUX port\n");
+		pr_info("Failed to enable AUX port\n");
 		return -EIO;
 	}
 
@@ -728,7 +747,7 @@ static int __init i8042_check_mux(void)
 	i8042_ctr &= ~I8042_CTR_AUXINT;
 
 	if (i8042_command(&i8042_ctr, I8042_CMD_CTL_WCTR)) {
-		pr_err("Failed to disable AUX port, can't use MUX\n");
+		pr_info("Failed to disable AUX port, can't use MUX\n");
 		return -EIO;
 	}
 
@@ -943,25 +962,28 @@ static int i8042_controller_selftest(void)
 {
 	unsigned char param;
 	int i = 0;
+	int ret;
 
 	/*
 	 * We try this 5 times; on some really fragile systems this does not
 	 * take the first time...
 	 */
-	do {
+	while (i++ < 5) {
 
-		if (i8042_command(&param, I8042_CMD_CTL_TEST)) {
-			pr_err("i8042 controller selftest timeout\n");
-			return -ENODEV;
-		}
-
-		if (param == I8042_RET_CTL_TEST)
+		ret = i8042_command(&param, I8042_CMD_CTL_TEST);
+		if (ret)
+			pr_info("i8042 controller selftest timeout (%d/5)\n", i);
+		else if (param == I8042_RET_CTL_TEST)
 			return 0;
+		else
+			dbg("i8042 controller selftest: %#x != %#x\n",
+			    param, I8042_RET_CTL_TEST);
 
-		dbg("i8042 controller selftest: %#x != %#x\n",
-		    param, I8042_RET_CTL_TEST);
 		msleep(50);
-	} while (i++ < 5);
+	}
+
+	if (ret)
+		return -ENODEV;
 
 #ifdef CONFIG_X86
 	/*
@@ -973,7 +995,7 @@ static int i8042_controller_selftest(void)
 	pr_info("giving up on controller selftest, continuing anyway...\n");
 	return 0;
 #else
-	pr_err("i8042 controller selftest failed\n");
+	pr_info("i8042 controller selftest failed\n");
 	return -EIO;
 #endif
 }
@@ -1555,6 +1577,8 @@ static int __init i8042_probe(struct platform_device *dev)
 	if (i8042_dritek)
 		i8042_dritek_enable();
 #endif
+
+	dmi_check_system(i8042_quirks);
 
 	if (!i8042_noaux) {
 		error = i8042_setup_aux();

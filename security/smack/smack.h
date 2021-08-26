@@ -303,6 +303,7 @@ int smack_populate_secattr(struct smack_known *skp);
  * Shared data.
  */
 extern int smack_enabled;
+extern struct lsm_id smack_lsmid;
 extern int smack_cipso_direct;
 extern int smack_cipso_mapped;
 extern struct smack_known *smack_net_ambient;
@@ -361,6 +362,11 @@ static inline struct superblock_smack *smack_superblock(
 					const struct super_block *superblock)
 {
 	return superblock->s_security + smack_blob_sizes.lbs_superblock;
+}
+
+static inline struct socket_smack *smack_sock(const struct sock *sock)
+{
+	return sock->sk_security + smack_blob_sizes.lbs_sock;
 }
 
 /*
