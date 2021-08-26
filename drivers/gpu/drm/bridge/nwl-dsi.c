@@ -869,7 +869,14 @@ nwl_dsi_bridge_mode_set(struct drm_bridge *bridge,
 	memcpy(&dsi->mode, adjusted_mode, sizeof(dsi->mode));
 	drm_mode_debug_printmodeline(adjusted_mode);
 
-	pm_runtime_get_sync(dev);
+static void
+nwl_dsi_bridge_atomic_pre_enable(struct drm_bridge *bridge,
+				 struct drm_bridge_state *old_bridge_state)
+{
+	struct nwl_dsi *dsi = bridge_to_dsi(bridge);
+	int ret;
+
+	pm_runtime_get_sync(dsi->dev);
 
 	if (clk_prepare_enable(dsi->lcdif_clk) < 0)
 		return;
@@ -946,16 +953,14 @@ static void nwl_dsi_bridge_detach(struct drm_bridge *bridge)
 }
 
 static const struct drm_bridge_funcs nwl_dsi_bridge_funcs = {
-	.atomic_duplicate_state	= drm_atomic_helper_bridge_duplicate_state,
-	.atomic_destroy_state	= drm_atomic_helper_bridge_destroy_state,
-	.atomic_reset		= drm_atomic_helper_bridge_reset,
-	.atomic_check		= nwl_dsi_bridge_atomic_check,
-	.atomic_enable		= nwl_dsi_bridge_atomic_enable,
-	.atomic_disable		= nwl_dsi_bridge_atomic_disable,
-	.mode_set		= nwl_dsi_bridge_mode_set,
-	.mode_valid		= nwl_dsi_bridge_mode_valid,
-	.attach			= nwl_dsi_bridge_attach,
-	.detach			= nwl_dsi_bridge_detach,
+(??)	.pre_enable = nwl_dsi_bridge_pre_enable,
+(??)	.enable     = nwl_dsi_bridge_enable,
+(??)	.disable    = nwl_dsi_bridge_disable,
+(??)	.mode_fixup = nwl_dsi_bridge_mode_fixup,
+(??)	.mode_set   = nwl_dsi_bridge_mode_set,
+(??)	.mode_valid = nwl_dsi_bridge_mode_valid,
+(??)	.attach	    = nwl_dsi_bridge_attach,
+(??)	.detach	    = nwl_dsi_bridge_detach,
 };
 
 static int nwl_dsi_parse_dt(struct nwl_dsi *dsi)
