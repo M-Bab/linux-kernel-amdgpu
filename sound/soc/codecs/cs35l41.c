@@ -2881,24 +2881,26 @@ static int cs35l41_component_probe(struct snd_soc_component *component)
 	wm_adsp2_component_probe(&cs35l41->dsp, component);
 
 	/* Add run-time mixer control for fast use case switch */
-	kcontrol = kzalloc(sizeof(*kcontrol), GFP_KERNEL);
-	if (!kcontrol) {
-		ret = -ENOMEM;
-		goto exit;
-	}
+	if (cs35l41->fast_switch_enum.items) {
+		kcontrol = kzalloc(sizeof(*kcontrol), GFP_KERNEL);
+		if (!kcontrol) {
+			ret = -ENOMEM;
+			goto exit;
+		}
 
-	kcontrol->name = "Fast Use Case Delta File";
-	kcontrol->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
-	kcontrol->info = snd_soc_info_enum_double;
-	kcontrol->get = cs35l41_fast_switch_file_get;
-	kcontrol->put = cs35l41_fast_switch_file_put;
-	kcontrol->private_value =
-			  (unsigned long)&cs35l41->fast_switch_enum;
-	ret = snd_soc_add_component_controls(component, kcontrol, 1);
-	if (ret < 0)
-		dev_err(cs35l41->dev,
-		       "snd_soc_add_codec_controls failed (%d)\n", ret);
-	kfree(kcontrol);
+		kcontrol->name = "Fast Use Case Delta File";
+		kcontrol->iface = SNDRV_CTL_ELEM_IFACE_MIXER;
+		kcontrol->info = snd_soc_info_enum_double;
+		kcontrol->get = cs35l41_fast_switch_file_get;
+		kcontrol->put = cs35l41_fast_switch_file_put;
+		kcontrol->private_value =
+				  (unsigned long)&cs35l41->fast_switch_enum;
+		ret = snd_soc_add_component_controls(component, kcontrol, 1);
+		if (ret < 0)
+			dev_err(cs35l41->dev,
+			       "snd_soc_add_codec_controls failed (%d)\n", ret);
+		kfree(kcontrol);
+	}
 
 	/* Move to the extended standby state */
 	regmap_multi_reg_write_bypassed(cs35l41->regmap,
@@ -3059,15 +3061,14 @@ static int cs35l41_handle_pdata(struct device *dev,
 			cs35l41->fast_switch_enum.items	= num_fast_switch;
 			cs35l41->fast_switch_enum.texts	= cs35l41->fast_switch_names;
 		}
+		cs35l41->fast_switch_enum.reg = SND_SOC_NOPM;
+		cs35l41->fast_switch_enum.shift_l = 0;
+		cs35l41->fast_switch_enum.shift_r = 0;
+		cs35l41->fast_switch_enum.mask = roundup_pow_of_two(num_fast_switch) - 1;
 	} else {
 		cs35l41->dt_name = "cs35l41";
+		cs35l41->fast_switch_enum.items	= 0;
 	}
-
-	cs35l41->fast_switch_enum.reg = SND_SOC_NOPM;
-	cs35l41->fast_switch_enum.shift_l = 0;
-	cs35l41->fast_switch_enum.shift_r = 0;
-	cs35l41->fast_switch_enum.mask =
-		roundup_pow_of_two(num_fast_switch) - 1;
 
 	pdata->right_channel = device_property_read_bool(dev,
 					"cirrus,right-channel-amp");
