@@ -33,7 +33,6 @@ struct cs35l41_irq_cfg {
 struct cs35l41_platform_data {
 	bool sclk_frc;
 	bool lrclk_frc;
-	bool right_channel;
 	bool amp_gain_zc;
 	bool dsp_ng_enable;
 	bool invert_pcm;

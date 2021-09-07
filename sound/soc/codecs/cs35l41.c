@@ -2410,18 +2410,6 @@ static int cs35l41_pcm_hw_params(struct snd_pcm_substream *substream,
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_RX_WL,
 				CS35L41_ASP_RX_WL_MASK,
 				asp_wl << CS35L41_ASP_RX_WL_SHIFT);
-		if (cs35l41->i2s_mode) {
-			regmap_update_bits(cs35l41->regmap,
-					CS35L41_SP_FRAME_RX_SLOT,
-					CS35L41_ASP_RX1_SLOT_MASK,
-					((cs35l41->pdata.right_channel) ? 1 : 0)
-					 << CS35L41_ASP_RX1_SLOT_SHIFT);
-			regmap_update_bits(cs35l41->regmap,
-					CS35L41_SP_FRAME_RX_SLOT,
-					CS35L41_ASP_RX2_SLOT_MASK,
-					((cs35l41->pdata.right_channel) ? 0 : 1)
-					 << CS35L41_ASP_RX2_SLOT_SHIFT);
-		}
 	} else {
 		regmap_update_bits(cs35l41->regmap, CS35L41_SP_FORMAT,
 				CS35L41_ASP_WIDTH_TX_MASK,
@@ -3070,8 +3058,6 @@ static int cs35l41_handle_pdata(struct device *dev,
 		cs35l41->fast_switch_enum.items	= 0;
 	}
 
-	pdata->right_channel = device_property_read_bool(dev,
-					"cirrus,right-channel-amp");
 	pdata->sclk_frc = device_property_read_bool(dev,
 					"cirrus,sclk-force-output");
 	pdata->lrclk_frc = device_property_read_bool(dev,
@@ -3589,18 +3575,6 @@ static int cs35l41_restore(struct cs35l41_private *cs35l41)
 		regid, reg_revid);
 
 	cs35l41_set_pdata(cs35l41);
-
-	/* Restore cached values set by ALSA during or before amp reset */
-	regmap_update_bits(cs35l41->regmap,
-			CS35L41_SP_FRAME_RX_SLOT,
-			CS35L41_ASP_RX1_SLOT_MASK,
-			((cs35l41->pdata.right_channel) ? 1 : 0)
-			<< CS35L41_ASP_RX1_SLOT_SHIFT);
-	regmap_update_bits(cs35l41->regmap,
-			CS35L41_SP_FRAME_RX_SLOT,
-			CS35L41_ASP_RX2_SLOT_MASK,
-			((cs35l41->pdata.right_channel) ? 0 : 1)
-			<< CS35L41_ASP_RX2_SLOT_SHIFT);
 
 	if (cs35l41->reset_cache.extclk_cfg) {
 	/* These values are already cached in cs35l41_private struct */

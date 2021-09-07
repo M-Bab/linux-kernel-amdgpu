@@ -967,6 +967,7 @@ const struct cs35l41_otp_map_element_t
 
 
 const unsigned int cs35l41_ctl_cache_regs[CS35L41_CTRL_CACHE_SIZE] = {
+	CS35L41_SP_FRAME_RX_SLOT,
 	CS35L41_DAC_PCM1_SRC,
 	CS35L41_DSP1_RX1_SRC,
 	CS35L41_DSP1_RX2_SRC,
