@@ -74,7 +74,7 @@ static int acp5x_cs35l41_init(struct snd_soc_pcm_runtime *rtd)
 }
 
 static const unsigned int rates[] = {
-	44100, 48000,
+	48000,
 };
 
 static const struct snd_pcm_hw_constraint_list constraints_rates = {
@@ -165,9 +165,6 @@ static int acp5x_cs35l41_hw_params(struct snd_pcm_substream *substream,
 		if ((strcmp(codec_dai->name, "spi-VLV1776:00") == 0) ||
 		    (strcmp(codec_dai->name, "spi-VLV1776:01") == 0)) {
 			switch (params_rate(params)) {
-			case 44100:
-				bclk_val = 1411200;
-				break;
 			case 48000:
 				bclk_val = 1536000;
 				break;
