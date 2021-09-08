@@ -3689,6 +3689,17 @@ static int __spi_validate(struct spi_device *spi, struct spi_message *message)
 			return -EINVAL;
 	}
 
+	if (ctlr->flags & SPI_CONTROLLER_NO_TX_RX_CS) {
+		bool read = false;
+
+		list_for_each_entry(xfer, &message->transfers, transfer_list) {
+			if (read && xfer->tx_buf)
+				return -EINVAL;
+			if (xfer->rx_buf && !xfer->cs_change)
+				read = true;
+		}
+	}
+
 	message->status = -EINPROGRESS;
 
 	return 0;

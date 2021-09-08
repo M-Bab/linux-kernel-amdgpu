@@ -708,6 +708,7 @@ struct regmap *__regmap_init(struct device *dev,
 	struct regmap *map;
 	int ret = -EINVAL;
 	enum regmap_endian reg_endian, val_endian;
+	size_t reg_pad_size;
 	int i, j;
 
 	if (!config)
@@ -805,14 +806,19 @@ struct regmap *__regmap_init(struct device *dev,
 	if (bus) {
 		map->max_raw_read = bus->max_raw_read;
 		map->max_raw_write = bus->max_raw_write;
-		if (bus->addr_affects_max_raw_rw) {
+		if (bus->max_combined_rw) {
+			reg_pad_size = map->format.reg_bytes + map->format.pad_bytes;
+
+			if (map->max_raw_read + reg_pad_size > bus->max_combined_rw)
+				map->max_raw_read -= reg_pad_size;
+			if (map->max_raw_write + reg_pad_size > bus->max_combined_rw)
+				map->max_raw_write -= reg_pad_size;
+
 			if (map->max_raw_read  < map->format.buf_size ||
 			    map->max_raw_write < map->format.buf_size) {
 				ret = -EINVAL;
-				goto err_name;
+				goto err_hwlock;
 			}
-			map->max_raw_read -= (map->format.reg_bytes + map->format.pad_bytes);
-			map->max_raw_write -= (map->format.reg_bytes + map->format.pad_bytes);
 		}
 	}
 	map->dev = dev;
