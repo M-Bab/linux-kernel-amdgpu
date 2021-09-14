@@ -403,10 +403,10 @@ complete:
 		amd_spi_clear_list(amd_spi);
 	/* complete the transaction */
 	msg->status = ret;
-	spi_finalize_current_message(ctrl);
 
 	if (amd_spi->devtype_data->version)
 		amd_spi_clear_chip(amd_spi, msg->spi->chip_select);
+	spi_finalize_current_message(ctrl);
 
 	return ret;
 }
