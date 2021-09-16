@@ -109,7 +109,7 @@ static int amdgpu_ctx_priority_permit(struct drm_file *filp,
 	return -EACCES;
 }
 
-static enum gfx_pipe_priority amdgpu_ctx_prio_to_compute_prio(int32_t prio)
+static enum amdgpu_gfx_pipe_priority amdgpu_ctx_prio_to_compute_prio(int32_t prio)
 {
 	switch (prio) {
 	case AMDGPU_CTX_PRIORITY_HIGH:
@@ -117,6 +117,18 @@ static enum gfx_pipe_priority amdgpu_ctx_prio_to_compute_prio(int32_t prio)
 		return AMDGPU_GFX_PIPE_PRIO_HIGH;
 	default:
 		return AMDGPU_GFX_PIPE_PRIO_NORMAL;
+	}
+}
+
+static enum amdgpu_ring_priority_level amdgpu_ctx_sched_prio_to_ring_prio(int32_t prio)
+{
+	switch (prio) {
+	case AMDGPU_CTX_PRIORITY_HIGH:
+		return AMDGPU_RING_PRIO_1;
+	case AMDGPU_CTX_PRIORITY_VERY_HIGH:
+		return AMDGPU_RING_PRIO_2;
+	default:
+		return AMDGPU_RING_PRIO_0;
 	}
 }
 
@@ -132,6 +144,10 @@ static unsigned int amdgpu_ctx_get_hw_prio(struct amdgpu_ctx *ctx, u32 hw_ip)
 	switch (hw_ip) {
 	case AMDGPU_HW_IP_COMPUTE:
 		hw_prio = amdgpu_ctx_prio_to_compute_prio(ctx_prio);
+		break;
+	case AMDGPU_HW_IP_VCE:
+	case AMDGPU_HW_IP_VCN_ENC:
+		hw_prio = amdgpu_ctx_sched_prio_to_ring_prio(ctx_prio);
 		break;
 	default:
 		hw_prio = AMDGPU_RING_PRIO_DEFAULT;

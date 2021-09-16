@@ -51,6 +51,8 @@
 #include "inc/link_enc_cfg.h"
 #include "inc/link_dpcd.h"
 
+#include "dc/dcn30/dcn30_vpg.h"
+
 #define DC_LOGGER_INIT(logger)
 
 #define LINK_INFO(...) \
@@ -1249,6 +1251,10 @@ bool dc_link_detect(struct dc_link *link, enum dc_detect_reason reason)
 			break;
 		}
 	}
+
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+	dc_z10_restore(dc);
+#endif
 
 	/* get out of low power state */
 	if (!can_apply_seamless_boot && reason != DETECT_REASON_BOOT)
@@ -2606,7 +2612,9 @@ static bool dp_active_dongle_validate_timing(
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	}
 
-	if (dongle_caps->dfp_cap_ext.supported) {
+	if (dpcd_caps->channel_coding_cap.bits.DP_128b_132b_SUPPORTED == 0 &&
+			dpcd_caps->dsc_caps.dsc_basic_caps.fields.dsc_support.DSC_PASSTHROUGH_SUPPORT == 0 &&
+			dongle_caps->dfp_cap_ext.supported) {
 
 		if (dongle_caps->dfp_cap_ext.max_pixel_rate_in_mps < (timing->pix_clk_100hz / 10000))
 			return false;
@@ -2750,13 +2758,21 @@ static struct abm *get_abm_from_stream_res(const struct dc_link *link)
 
 int dc_link_get_backlight_level(const struct dc_link *link)
 {
-
 	struct abm *abm = get_abm_from_stream_res(link);
+	struct panel_cntl *panel_cntl = link->panel_cntl;
+	struct dc  *dc = link->ctx->dc;
+	struct dmcu *dmcu = dc->res_pool->dmcu;
+	bool fw_set_brightness = true;
 
-	if (abm == NULL || abm->funcs->get_current_backlight == NULL)
+	if (dmcu)
+		fw_set_brightness = dmcu->funcs->is_dmcu_initialized(dmcu);
+
+	if (!fw_set_brightness && panel_cntl->funcs->get_current_backlight)
+		return panel_cntl->funcs->get_current_backlight(panel_cntl);
+	else if (abm != NULL && abm->funcs->get_current_backlight != NULL)
+		return (int) abm->funcs->get_current_backlight(abm);
+	else
 		return DC_ERROR_UNEXPECTED;
-
-	return (int) abm->funcs->get_current_backlight(abm);
 }
 
 int dc_link_get_target_backlight_pwm(const struct dc_link *link)
@@ -3455,6 +3471,10 @@ static enum dc_status deallocate_mst_payload(struct pipe_ctx *pipe_ctx)
 static void update_psp_stream_config(struct pipe_ctx *pipe_ctx, bool dpms_off)
 {
 	struct cp_psp *cp_psp = &pipe_ctx->stream->ctx->cp_psp;
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+	struct link_encoder *link_enc = NULL;
+#endif
+
 	if (cp_psp && cp_psp->funcs.update_stream_config) {
 		struct cp_psp_stream_config config = {0};
 		enum dp_panel_mode panel_mode =
@@ -3466,8 +3486,21 @@ static void update_psp_stream_config(struct pipe_ctx *pipe_ctx, bool dpms_off)
 		config.dig_be = pipe_ctx->stream->link->link_enc_hw_inst;
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 		config.stream_enc_idx = pipe_ctx->stream_res.stream_enc->id - ENGINE_ID_DIGA;
-		config.link_enc_idx = pipe_ctx->stream->link->link_enc->transmitter - TRANSMITTER_UNIPHY_A;
-		config.phy_idx = pipe_ctx->stream->link->link_enc->transmitter - TRANSMITTER_UNIPHY_A;
+		if (pipe_ctx->stream->link->ep_type == DISPLAY_ENDPOINT_PHY) {
+			link_enc = pipe_ctx->stream->link->link_enc;
+			config.phy_idx = link_enc->transmitter - TRANSMITTER_UNIPHY_A;
+		} else if (pipe_ctx->stream->link->dc->res_pool->funcs->link_encs_assign) {
+			/* Use link encoder assignment from current DC state - which may differ from the DC state to be
+			 * committed - when updating PSP config.
+			 */
+			link_enc = link_enc_cfg_get_link_enc_used_by_stream(
+					pipe_ctx->stream->link->dc->current_state,
+					pipe_ctx->stream);
+			config.phy_idx = 0; /* Clear phy_idx for non-physical display endpoints. */
+		}
+		ASSERT(link_enc);
+		if (link_enc)
+			config.link_enc_idx = link_enc->transmitter - TRANSMITTER_UNIPHY_A;
 		if (is_dp_128b_132b_signal(pipe_ctx)) {
 			config.stream_enc_idx = pipe_ctx->stream_res.hpo_dp_stream_enc->id - ENGINE_ID_HPO_DP_0;
 			config.link_enc_idx = pipe_ctx->stream->link->hpo_dp_link_enc->inst;
@@ -3572,9 +3605,12 @@ void core_link_enable_stream(
 {
 	struct dc *dc = pipe_ctx->stream->ctx->dc;
 	struct dc_stream_state *stream = pipe_ctx->stream;
+	struct dc_link *link = stream->sink->link;
 	enum dc_status status;
+	struct link_encoder *link_enc;
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	enum otg_out_mux_dest otg_out_dest = OUT_MUX_DIO;
+	struct vpg *vpg = pipe_ctx->stream_res.stream_enc->vpg;
 #endif
 	DC_LOGGER_INIT(pipe_ctx->stream->ctx->logger);
 
@@ -3582,15 +3618,22 @@ void core_link_enable_stream(
 			dc_is_virtual_signal(pipe_ctx->stream->signal))
 		return;
 
+	if (dc->res_pool->funcs->link_encs_assign && stream->link->ep_type != DISPLAY_ENDPOINT_PHY)
+		link_enc = stream->link_enc;
+	else
+		link_enc = stream->link->link_enc;
+	ASSERT(link_enc);
+
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	if (!dc_is_virtual_signal(pipe_ctx->stream->signal)
 			&& !is_dp_128b_132b_signal(pipe_ctx)) {
 #else
 	if (!dc_is_virtual_signal(pipe_ctx->stream->signal)) {
 #endif
-		stream->link->link_enc->funcs->setup(
-			stream->link->link_enc,
-			pipe_ctx->stream->signal);
+		if (link_enc)
+			link_enc->funcs->setup(
+				link_enc,
+				pipe_ctx->stream->signal);
 		pipe_ctx->stream_res.stream_enc->funcs->setup_stereo_sync(
 			pipe_ctx->stream_res.stream_enc,
 			pipe_ctx->stream_res.tg->inst,
@@ -3624,6 +3667,9 @@ void core_link_enable_stream(
 			stream->link->dpcd_caps.dprx_feature.bits.SST_SPLIT_SDP_CAP);
 #endif
 
+	if (dc_is_dp_signal(pipe_ctx->stream->signal))
+		dp_source_sequence_trace(link, DPCD_SOURCE_SEQ_AFTER_DP_STREAM_ATTR);
+
 	if (dc_is_hdmi_tmds_signal(pipe_ctx->stream->signal))
 		pipe_ctx->stream_res.stream_enc->funcs->hdmi_set_stream_attribute(
 			pipe_ctx->stream_res.stream_enc,
@@ -3656,8 +3702,17 @@ void core_link_enable_stream(
 
 		pipe_ctx->stream->apply_edp_fast_boot_optimization = false;
 
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+		// Enable VPG before building infoframe
+		if (vpg && vpg->funcs->vpg_poweron)
+			vpg->funcs->vpg_poweron(vpg);
+#endif
+
 		resource_build_info_frame(pipe_ctx);
 		dc->hwss.update_info_frame(pipe_ctx);
+
+		if (dc_is_dp_signal(pipe_ctx->stream->signal))
+			dp_source_sequence_trace(link, DPCD_SOURCE_SEQ_AFTER_UPDATE_INFO_FRAME);
 
 		/* Do not touch link on seamless boot optimization. */
 		if (pipe_ctx->stream->apply_seamless_boot_optimization) {
@@ -3739,9 +3794,10 @@ void core_link_enable_stream(
 #else
 		if (!dc_is_virtual_signal(pipe_ctx->stream->signal))
 #endif
-			stream->link->link_enc->funcs->setup(
-				stream->link->link_enc,
-				pipe_ctx->stream->signal);
+			if (link_enc)
+				link_enc->funcs->setup(
+					link_enc,
+					pipe_ctx->stream->signal);
 
 		dc->hwss.enable_stream(pipe_ctx);
 
@@ -3798,6 +3854,9 @@ void core_link_disable_stream(struct pipe_ctx *pipe_ctx)
 	struct dc  *dc = pipe_ctx->stream->ctx->dc;
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct dc_link *link = stream->sink->link;
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+	struct vpg *vpg = pipe_ctx->stream_res.stream_enc->vpg;
+#endif
 
 	if (!IS_DIAG_DC(dc->ctx->dce_environment) &&
 			dc_is_virtual_signal(pipe_ctx->stream->signal))
@@ -3880,6 +3939,11 @@ void core_link_disable_stream(struct pipe_ctx *pipe_ctx)
 		if (pipe_ctx->stream_res.tg->funcs->set_out_mux)
 			pipe_ctx->stream_res.tg->funcs->set_out_mux(pipe_ctx->stream_res.tg, OUT_MUX_DIO);
 	}
+#endif
+
+#if defined(CONFIG_DRM_AMD_DC_DCN)
+	if (vpg && vpg->funcs->vpg_powerdown)
+		vpg->funcs->vpg_powerdown(vpg);
 #endif
 }
 
@@ -4173,8 +4237,8 @@ bool dc_link_should_enable_fec(const struct dc_link *link)
 	if ((link->connector_signal != SIGNAL_TYPE_DISPLAY_PORT_MST &&
 			link->local_sink &&
 			link->local_sink->edid_caps.panel_patch.disable_fec) ||
-			(link->connector_signal == SIGNAL_TYPE_EDP &&
-					link->dc->debug.force_enable_edp_fec == false)) // Disable FEC for eDP
+			(link->connector_signal == SIGNAL_TYPE_EDP
+				))
 		is_fec_disable = true;
 
 	if (dc_link_is_fec_supported(link) && !link->dc->debug.disable_fec && !is_fec_disable)

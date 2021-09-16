@@ -45,7 +45,7 @@
 /* forward declaration */
 struct aux_payload;
 
-#define DC_VER "3.2.150"
+#define DC_VER "3.2.152"
 
 #define MAX_SURFACES 3
 #define MAX_PLANES 6
@@ -471,6 +471,8 @@ union mem_low_power_enable_options {
 		bool cm: 1;
 		bool mpc: 1;
 		bool optc: 1;
+		bool vpg: 1;
+		bool afmt: 1;
 	} bits;
 	uint32_t u32All;
 };
@@ -639,10 +641,9 @@ struct dc_debug_options {
 	/* Enable dmub aux for legacy ddc */
 	bool enable_dmub_aux_for_legacy_ddc;
 	bool optimize_edp_link_rate; /* eDP ILR */
-	/* force enable edp FEC */
-	bool force_enable_edp_fec;
 	/* FEC/PSR1 sequence enable delay in 100us */
 	uint8_t fec_enable_delay_in100us;
+	bool enable_driver_sequence_debug;
 #if defined(CONFIG_DRM_AMD_DC_DCN)
 	bool disable_z10;
 	bool enable_sw_cntl_psr;
@@ -1362,7 +1363,7 @@ void dc_hardware_release(struct dc *dc);
 
 bool dc_set_psr_allow_active(struct dc *dc, bool enable);
 #if defined(CONFIG_DRM_AMD_DC_DCN)
-void dc_z10_restore(struct dc *dc);
+void dc_z10_restore(const struct dc *dc);
 void dc_z10_save_init(struct dc *dc);
 #endif
 
