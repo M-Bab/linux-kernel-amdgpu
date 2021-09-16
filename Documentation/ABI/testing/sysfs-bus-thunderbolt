@@ -213,12 +213,15 @@ Description:	When new NVM image is written to the non-active NVM
 		restarted with the new NVM firmware. If the image
 		verification fails an error code is returned instead.
 
-		This file will accept writing values "1" or "2"
+		This file will accept writing values "1", "2" or "3".
 
 		- Writing "1" will flush the image to the storage
 		  area and authenticate the image in one action.
 		- Writing "2" will run some basic validation on the image
 		  and flush it to the storage area.
+		- Writing "3" will authenticate the image that is
+		  currently written in the storage area. This is only
+		  supported with USB4 devices and retimers.
 
 		When read holds status of the last authentication
 		operation if an error occurred during the process. This
@@ -275,6 +278,39 @@ KernelVersion:	4.15
 Contact:	thunderbolt-software@lists.01.org
 Description:	This contains XDomain service specific settings as
 		bitmask. Format: %x
+
+What:		/sys/bus/thunderbolt/devices/usb4_portX/link
+Date:		Sep 2021
+KernelVersion:	v5.14
+Contact:	Mika Westerberg <mika.westerberg@linux.intel.com>
+Description:	Returns the current link mode. Possible values are
+		"usb4", "tbt" and "none".
+
+What:		/sys/bus/thunderbolt/devices/usb4_portX/offline
+Date:		Sep 2021
+KernelVersion:	v5.14
+Contact:	Rajmohan Mani <rajmohan.mani@intel.com>
+Description:	Writing 1 to this attribute puts the USB4 port into
+		offline mode. Only allowed when there is nothing
+		connected to the port (link attribute returns "none").
+		Once the port is in offline mode it does not receive any
+		hotplug events. This is used to update NVM firmware of
+		on-board retimers. Writing 0 puts the port back to
+		online mode.
+
+		This attribute is only visible if the platform supports
+		powering on retimers when there is no cable connected.
+
+What:		/sys/bus/thunderbolt/devices/usb4_portX/rescan
+Date:		Sep 2021
+KernelVersion:	v5.14
+Contact:	Rajmohan Mani <rajmohan.mani@intel.com>
+Description:	When the USB4 port is in offline mode writing 1 to this
+		attribute forces rescan of the sideband for on-board
+		retimers. Each retimer appear under the USB4 port as if
+		the USB4 link was up. These retimers act in the same way
+		as if the cable was connected so upgrading their NVM
+		firmware can be done the usual way.
 
 What:		/sys/bus/thunderbolt/devices/<device>:<port>.<index>/device
 Date:		Oct 2020

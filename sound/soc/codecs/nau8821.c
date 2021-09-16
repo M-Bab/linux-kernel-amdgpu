@@ -7,23 +7,23 @@
  * Co-author: Seven Lee <wtli@nuvoton.com>
  */
 
-#include <linux/module.h>
+#include <linux/acpi.h>
+#include <linux/clk.h>
 #include <linux/delay.h>
+#include <linux/module.h>
 #include <linux/init.h>
 #include <linux/i2c.h>
+#include <linux/math64.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
-#include <linux/clk.h>
-#include <linux/acpi.h>
-#include <linux/math64.h>
 #include <linux/semaphore.h>
-#include <sound/initval.h>
-#include <sound/tlv.h>
 #include <sound/core.h>
+#include <sound/initval.h>
+#include <sound/jack.h>
 #include <sound/pcm.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
-#include <sound/jack.h>
+#include <sound/tlv.h>
 #include "nau8821.h"
 
 #define NAU_FREF_MAX 13500000
@@ -342,7 +342,7 @@ static int nau8821_biq_coeff_get(struct snd_kcontrol *kcontrol,
 	if (!component->regmap)
 		return -EINVAL;
 
-	regmap_raw_read(component->regmap, NAU8821_R41_BIQ1_COF1,
+	regmap_raw_read(component->regmap, NAU8821_R21_BIQ0_COF1,
 		ucontrol->value.bytes.data, params->max);
 
 	return 0;
@@ -363,7 +363,7 @@ static int nau8821_biq_coeff_put(struct snd_kcontrol *kcontrol,
 	if (!data)
 		return -ENOMEM;
 
-	regmap_raw_write(component->regmap, NAU8821_R41_BIQ1_COF1,
+	regmap_raw_write(component->regmap, NAU8821_R21_BIQ0_COF1,
 		data, params->max);
 
 	kfree(data);
@@ -414,6 +414,8 @@ static const struct snd_kcontrol_new nau8821_controls[] = {
 	SOC_ENUM("DAC Oversampling Rate", nau8821_dac_oversampl_enum),
 	SND_SOC_BYTES_EXT("BIQ Coefficients", 20,
 		  nau8821_biq_coeff_get, nau8821_biq_coeff_put),
+	SOC_SINGLE("ADC Phase Switch", NAU8821_R1B_TDM_CTRL,
+		NAU8821_ADCPHS_SFT, 1, 0),
 };
 
 static const struct snd_kcontrol_new nau8821_adc_ch0_dmic =
@@ -437,21 +439,7 @@ static int dmic_clock_control(struct snd_soc_dapm_widget *w,
 		&clk_divider_r03);
 	clk_adc_src = (clk_divider_r03 & NAU8821_CLK_ADC_SRC_MASK)
 		>> NAU8821_CLK_ADC_SRC_SFT;
-
-	switch (clk_adc_src) {
-	case 0:
-		clk_adc = nau8821->fs * 256;
-		break;
-	case 1:
-		clk_adc = (nau8821->fs * 256) >> 1;
-		break;
-	case 2:
-		clk_adc = (nau8821->fs * 256) >> 2;
-		break;
-	case 3:
-		clk_adc = (nau8821->fs * 256) >> 3;
-		break;
-	}
+	clk_adc = (nau8821->fs * 256) >> clk_adc_src;
 
 	for (i = 0 ; i < 4 ; i++) {
 		if ((clk_adc >> dmic_speed_sel[i].param) <=
@@ -885,7 +873,7 @@ static int nau8821_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
 }
 
 static int nau8821_digital_mute(struct snd_soc_dai *dai, int mute,
-	int direction)
+				int direction)
 {
 	struct snd_soc_component *component = dai->component;
 	struct nau8821 *nau8821 = snd_soc_component_get_drvdata(component);
@@ -1488,6 +1476,8 @@ static int nau8821_set_bias_level(struct snd_soc_component *component,
 				NAU8821_IRQ_EJECT_EN | NAU8821_IRQ_INSERT_EN);
 		}
 		break;
+	default:
+		break;
 	}
 
 	return 0;
@@ -1637,7 +1627,7 @@ static int nau8821_read_device_properties(struct device *dev,
 	ret = device_property_read_u32(dev, "nuvoton,dmic-clk-threshold",
 		&nau8821->dmic_clk_threshold);
 	if (ret)
-		nau8821->dmic_clk_threshold = 768000;   //3072000;
+		nau8821->dmic_clk_threshold = 3072000;
 
 	return 0;
 }
@@ -1779,6 +1769,15 @@ static int nau8821_i2c_probe(struct i2c_client *i2c,
 	return ret;
 }
 
+static int nau8821_i2c_remove(struct i2c_client *i2c_client)
+{
+	struct nau8821 *nau8821 = i2c_get_clientdata(i2c_client);
+printk("[seven, nau8821] %s\n",__FUNCTION__);
+	devm_free_irq(nau8821->dev, nau8821->irq, nau8821);
+
+	return 0;
+}
+
 static const struct i2c_device_id nau8821_i2c_ids[] = {
 	{ "nau8821", 0 },
 	{ }
@@ -1815,4 +1814,4 @@ module_i2c_driver(nau8821_driver);
 MODULE_DESCRIPTION("ASoC nau8821 driver");
 MODULE_AUTHOR("John Hsu <kchsu0@nuvoton.com>");
 MODULE_AUTHOR("Seven Lee <wtli@nuvoton.com>");
-MODULE_LICENSE("GPL v2");
+MODULE_LICENSE("GPL");
