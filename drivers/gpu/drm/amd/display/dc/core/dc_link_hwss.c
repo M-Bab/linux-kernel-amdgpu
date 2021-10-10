@@ -87,7 +87,7 @@ void dp_enable_link_phy(
 
 	/* Link should always be assigned encoder when en-/disabling. */
 	if (link->is_dig_mapping_flexible && dc->res_pool->funcs->link_encs_assign)
-		link_enc = link_enc_cfg_get_link_enc_used_by_link(link->dc->current_state, link);
+		link_enc = link_enc_cfg_get_link_enc_used_by_link(dc, link);
 	else
 		link_enc = link->link_enc;
 	ASSERT(link_enc);
@@ -247,7 +247,7 @@ void dp_disable_link_phy(struct dc_link *link, enum signal_type signal)
 
 	/* Link should always be assigned encoder when en-/disabling. */
 	if (link->is_dig_mapping_flexible && dc->res_pool->funcs->link_encs_assign)
-		link_enc = link_enc_cfg_get_link_enc_used_by_link(link->dc->current_state, link);
+		link_enc = link_enc_cfg_get_link_enc_used_by_link(dc, link);
 	else
 		link_enc = link->link_enc;
 	ASSERT(link_enc);
@@ -372,6 +372,9 @@ void dp_set_hw_lane_settings(
 #else
 	encoder->funcs->dp_set_lane_settings(encoder, link_settings);
 #endif
+	memmove(link->cur_lane_setting,
+			link_settings->lane_settings,
+			sizeof(link->cur_lane_setting));
 }
 
 void dp_set_hw_test_pattern(
@@ -391,7 +394,7 @@ void dp_set_hw_test_pattern(
 	 */
 	if (link->is_dig_mapping_flexible &&
 			link->dc->res_pool->funcs->link_encs_assign)
-		encoder = link_enc_cfg_get_link_enc_used_by_link(link->dc->current_state, link);
+		encoder = link_enc_cfg_get_link_enc_used_by_link(link->ctx->dc, link);
 	else
 		encoder = link->link_enc;
 
@@ -607,7 +610,8 @@ void dp_set_dsc_on_stream(struct pipe_ctx *pipe_ctx, bool enable)
 				pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->dp_set_dsc_pps_info_packet(
 										pipe_ctx->stream_res.hpo_dp_stream_enc,
 										false,
-										NULL);
+										NULL,
+										true);
 			else
 #endif
 				if (!IS_FPGA_MAXIMUS_DC(dc->ctx->dce_environment)) {
@@ -615,7 +619,7 @@ void dp_set_dsc_on_stream(struct pipe_ctx *pipe_ctx, bool enable)
 							pipe_ctx->stream_res.stream_enc,
 							OPTC_DSC_DISABLED, 0, 0);
 					pipe_ctx->stream_res.stream_enc->funcs->dp_set_dsc_pps_info_packet(
-								pipe_ctx->stream_res.stream_enc, false, NULL);
+								pipe_ctx->stream_res.stream_enc, false, NULL, true);
 				}
 		}
 
@@ -650,7 +654,16 @@ out:
 	return result;
 }
 
-bool dp_set_dsc_pps_sdp(struct pipe_ctx *pipe_ctx, bool enable)
+/*
+ * For dynamic bpp change case, dsc is programmed with MASTER_UPDATE_LOCK enabled;
+ * hence PPS info packet update need to use frame update instead of immediate update.
+ * Added parameter immediate_update for this purpose.
+ * The decision to use frame update is hard-coded in function dp_update_dsc_config(),
+ * which is the only place where a "false" would be passed in for param immediate_update.
+ *
+ * immediate_update is only applicable when DSC is enabled.
+ */
+bool dp_set_dsc_pps_sdp(struct pipe_ctx *pipe_ctx, bool enable, bool immediate_update)
 {
 	struct display_stream_compressor *dsc = pipe_ctx->stream_res.dsc;
 	struct dc_stream_state *stream = pipe_ctx->stream;
@@ -682,13 +695,15 @@ bool dp_set_dsc_pps_sdp(struct pipe_ctx *pipe_ctx, bool enable)
 				pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->dp_set_dsc_pps_info_packet(
 										pipe_ctx->stream_res.hpo_dp_stream_enc,
 										true,
-										&dsc_packed_pps[0]);
+										&dsc_packed_pps[0],
+										immediate_update);
 			else
 #endif
 				pipe_ctx->stream_res.stream_enc->funcs->dp_set_dsc_pps_info_packet(
 										pipe_ctx->stream_res.stream_enc,
 										true,
-										&dsc_packed_pps[0]);
+										&dsc_packed_pps[0],
+										immediate_update);
 		}
 	} else {
 		/* disable DSC PPS in stream encoder */
@@ -698,11 +713,12 @@ bool dp_set_dsc_pps_sdp(struct pipe_ctx *pipe_ctx, bool enable)
 				pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->dp_set_dsc_pps_info_packet(
 										pipe_ctx->stream_res.hpo_dp_stream_enc,
 										false,
-										NULL);
+										NULL,
+										true);
 			else
 #endif
 				pipe_ctx->stream_res.stream_enc->funcs->dp_set_dsc_pps_info_packet(
-							pipe_ctx->stream_res.stream_enc, false, NULL);
+							pipe_ctx->stream_res.stream_enc, false, NULL, true);
 		}
 	}
 
@@ -720,7 +736,7 @@ bool dp_update_dsc_config(struct pipe_ctx *pipe_ctx)
 		return false;
 
 	dp_set_dsc_on_stream(pipe_ctx, true);
-	dp_set_dsc_pps_sdp(pipe_ctx, true);
+	dp_set_dsc_pps_sdp(pipe_ctx, true, false);
 	return true;
 }
 
