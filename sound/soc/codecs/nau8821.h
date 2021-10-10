@@ -370,7 +370,7 @@
 #define NAU8821_CLASSG_EN_SFT		0
 #define NAU8821_CLASSG_EN		0x1
 
-/* IMM_MODE_CTRL (0x4C) */
+/* IMM_MODE_CTRL (0x4c) */
 #define NAU8821_IMM_THD_SFT		8
 #define NAU8821_IMM_THD_MASK		(0x3f << NAU8821_IMM_THD_SFT)
 #define NAU8821_IMM_GEN_VOL_SFT		6
@@ -512,7 +512,6 @@ struct nau8821 {
 	struct regmap *regmap;
 	struct snd_soc_dapm_context *dapm;
 	struct snd_soc_jack *jack;
-	struct semaphore jd_sem;
 	struct work_struct jdet_work;
 	int irq;
 	int clk_id;
