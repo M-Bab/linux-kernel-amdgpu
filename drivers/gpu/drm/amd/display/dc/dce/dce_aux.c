@@ -42,7 +42,7 @@
 #define DC_LOGGER \
 	engine->ctx->logger
 
-#define DC_TRACE_LEVEL_MESSAGE(...) /* do nothing */
+#define DC_TRACE_LEVEL_MESSAGE(...) do { } while (0)
 #define IS_DC_I2CAUX_LOGGING_ENABLED() (false)
 #define LOG_FLAG_Error_I2cAux LOG_ERROR
 #define LOG_FLAG_I2cAux_DceAux LOG_I2C_AUX
@@ -76,7 +76,7 @@ enum {
 #define DEFAULT_AUX_ENGINE_MULT   0
 #define DEFAULT_AUX_ENGINE_LENGTH 69
 
-#define DC_TRACE_LEVEL_MESSAGE(...) /* do nothing */
+#define DC_TRACE_LEVEL_MESSAGE(...) do { } while (0)
 
 static void release_engine(
 	struct dce_aux *engine)
@@ -627,6 +627,7 @@ int dce_aux_transfer_dmub_raw(struct ddc_service *ddc,
 #define AUX_MAX_I2C_DEFER_RETRIES 7
 #define AUX_MAX_INVALID_REPLY_RETRIES 2
 #define AUX_MAX_TIMEOUT_RETRIES 3
+#define AUX_DEFER_DELAY_FOR_DPIA 4 /*ms*/
 
 static void dce_aux_log_payload(const char *payload_name,
 	unsigned char *payload, uint32_t length, uint32_t max_length_to_log)
@@ -772,6 +773,8 @@ bool dce_aux_transfer_with_retries(struct ddc_service *ddc,
 				/* polling_timeout_period is in us */
 				if (aux110)
 					defer_time_in_ms += aux110->polling_timeout_period / 1000;
+				else
+					defer_time_in_ms += AUX_DEFER_DELAY_FOR_DPIA;
 				++aux_defer_retries;
 				fallthrough;
 			case AUX_TRANSACTION_REPLY_I2C_OVER_AUX_DEFER:
