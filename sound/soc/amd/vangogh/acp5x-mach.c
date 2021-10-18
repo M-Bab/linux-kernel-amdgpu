@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: GPL-2.0+
-//
-// Machine driver for AMD Vangogh platform using NAU8821 & CS35L41
-//
-//Copyright 2021 Advanced Micro Devices, Inc.
+/*
+ * Machine driver for AMD Vangogh platform using NAU8821 & CS35L41
+ * codecs.
+ *
+ * Copyright 2021 Advanced Micro Devices, Inc.
+ */
 
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
@@ -20,16 +22,19 @@
 #include <linux/input.h>
 #include <linux/io.h>
 #include <linux/acpi.h>
+#include <linux/dmi.h>
 
 #include "../../codecs/nau8821.h"
 #include "../../codecs/cs35l41.h"
 
 #include "acp5x.h"
 
-#define DRV_NAME "acp5x_nu8821_cs35l41_mach"
+#define DRV_NAME "acp5x_mach"
 #define DUAL_CHANNEL		2
 #define ACP5X_NUVOTON_CODEC_DAI	"nau8821-hifi"
+#define VG_JUPITER 1
 
+static unsigned long acp5x_machine_id;
 static struct snd_soc_jack vg_headset;
 
 static struct snd_soc_jack_pin acp5x_nau8821_jack_pins[] = {
@@ -315,6 +320,24 @@ static struct snd_soc_card acp5x_card = {
 	.num_controls = ARRAY_SIZE(acp5x_8821_controls),
 };
 
+
+static int acp5x_vg_quirk_cb(const struct dmi_system_id *id)
+{
+	acp5x_machine_id = VG_JUPITER;
+	return 1;
+}
+
+static const struct dmi_system_id acp5x_vg_quirk_table[] = {
+	{
+		.callback = acp5x_vg_quirk_cb,
+		.matches = {
+			DMI_EXACT_MATCH(DMI_BOARD_VENDOR, "Valve"),
+			DMI_EXACT_MATCH(DMI_PRODUCT_NAME, "Jupiter"),
+		}
+	},
+	{}
+};
+
 static int acp5x_probe(struct platform_device *pdev)
 {
 	int ret;
@@ -326,9 +349,15 @@ static int acp5x_probe(struct platform_device *pdev)
 	if (!machine)
 		return -ENOMEM;
 
-	card = &acp5x_card;
-	acp5x_card.dev = &pdev->dev;
-
+	dmi_check_system(acp5x_vg_quirk_table);
+	switch(acp5x_machine_id) {
+	case VG_JUPITER:
+		card = &acp5x_card;
+		acp5x_card.dev = &pdev->dev;
+		break;
+	default:
+		return -ENODEV;
+	}
 	platform_set_drvdata(pdev, card);
 	snd_soc_card_set_drvdata(card, machine);
 
@@ -343,7 +372,7 @@ static int acp5x_probe(struct platform_device *pdev)
 
 static struct platform_driver acp5x_mach_driver = {
 	.driver = {
-		.name = "acp5x_nu8821_cs35l41_mach",
+		.name = "acp5x_mach",
 		.pm = &snd_soc_pm_ops,
 	},
 	.probe = acp5x_probe,

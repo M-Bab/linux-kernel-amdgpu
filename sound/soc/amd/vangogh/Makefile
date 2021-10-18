@@ -3,7 +3,7 @@
 snd-pci-acp5x-objs	:= pci-acp5x.o
 snd-acp5x-i2s-objs	:= acp5x-i2s.o
 snd-acp5x-pcm-dma-objs	:= acp5x-pcm-dma.o
-snd-soc-acp5x-mach-objs := acp5x-nu8821-cs35l41.o
+snd-soc-acp5x-mach-objs := acp5x-mach.o
 
 obj-$(CONFIG_SND_SOC_AMD_ACP5x) += snd-pci-acp5x.o
 obj-$(CONFIG_SND_SOC_AMD_ACP5x)	+= snd-acp5x-i2s.o
