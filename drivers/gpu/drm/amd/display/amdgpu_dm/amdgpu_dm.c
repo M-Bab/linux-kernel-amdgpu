@@ -11194,6 +11194,18 @@ static int amdgpu_dm_atomic_check(struct drm_device *dev,
 			DRM_DEBUG_DRIVER("drm_dp_mst_atomic_check() failed\n");
 			goto fail;
 		}
+
+		/*
+		 * A previously failing atomic check, for example due to a
+		 * interruption from signal, could have changed the
+		 * link encoder assignments in the DC state.
+		 *
+		 * DC expects that link encoder assignments are *not* valid
+		 * when committing a state, so as a workaround it needs to be
+		 * cleared here.
+		 */
+		link_enc_cfg_init(dc, dm_state->context);
+
 		status = dc_validate_global_state(dc, dm_state->context, true);
 		if (status != DC_OK) {
 			DRM_DEBUG_DRIVER("DC global validation failure: %s (%d)",
