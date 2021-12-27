@@ -277,8 +277,12 @@ static int smu_dpm_set_power_gate(void *handle,
 	struct smu_context *smu = handle;
 	int ret = 0;
 
-	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
+	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled) {
+		dev_WARN(smu->adev->dev,
+			 "SMU uninitialized but power %s requested for %u!\n",
+			 gate ? "gate" : "ungate", block_type);
 		return -EOPNOTSUPP;
+	}
 
 	switch (block_type) {
 	/*
@@ -455,6 +459,10 @@ static int smu_get_power_num_states(void *handle,
 
 bool is_support_sw_smu(struct amdgpu_device *adev)
 {
+	/* vega20 is 11.0.2, but it's supported via the powerplay code */
+	if (adev->asic_type == CHIP_VEGA20)
+		return false;
+
 	if (adev->ip_versions[MP1_HWIP][0] >= IP_VERSION(11, 0, 0))
 		return true;
 
@@ -1149,6 +1157,8 @@ static int smu_smc_hw_setup(struct smu_context *smu)
 		case IP_VERSION(11, 5, 0):
 		case IP_VERSION(11, 0, 12):
 			ret = smu_system_features_control(smu, true);
+			if (ret)
+				dev_err(adev->dev, "Failed system features control!\n");
 			break;
 		default:
 			break;
@@ -1273,8 +1283,10 @@ static int smu_smc_hw_setup(struct smu_context *smu)
 	}
 
 	ret = smu_notify_display_change(smu);
-	if (ret)
+	if (ret) {
+		dev_err(adev->dev, "Failed to notify display change!\n");
 		return ret;
+	}
 
 	/*
 	 * Set min deep sleep dce fclk with bootup value from vbios via
@@ -1282,8 +1294,6 @@ static int smu_smc_hw_setup(struct smu_context *smu)
 	 */
 	ret = smu_set_min_dcef_deep_sleep(smu,
 					  smu->smu_table.boot_values.dcefclk / 100);
-	if (ret)
-		return ret;
 
 	return ret;
 }
@@ -1340,7 +1350,6 @@ static int smu_hw_init(void *handle)
 	}
 
 	if (smu->is_apu) {
-		smu_powergate_sdma(&adev->smu, false);
 		smu_dpm_set_vcn_enable(smu, true);
 		smu_dpm_set_jpeg_enable(smu, true);
 		smu_set_gfx_cgpg(&adev->smu, true);
@@ -1464,7 +1473,7 @@ static int smu_disable_dpms(struct smu_context *smu)
 			dev_err(adev->dev, "Failed to disable smu features.\n");
 	}
 
-	if (adev->ip_versions[MP1_HWIP][0] >= IP_VERSION(11, 0, 0) &&
+	if (adev->ip_versions[GC_HWIP][0] >= IP_VERSION(9, 4, 2) &&
 	    adev->gfx.rlc.funcs->stop)
 		adev->gfx.rlc.funcs->stop(adev);
 
@@ -1501,10 +1510,6 @@ static int smu_hw_fini(void *handle)
 
 	if (amdgpu_sriov_vf(adev)&& !amdgpu_sriov_is_pp_one_vf(adev))
 		return 0;
-
-	if (smu->is_apu) {
-		smu_powergate_sdma(&adev->smu, true);
-	}
 
 	smu_dpm_set_vcn_enable(smu, false);
 	smu_dpm_set_jpeg_enable(smu, false);
@@ -1564,9 +1569,7 @@ static int smu_suspend(void *handle)
 
 	smu->watermarks_bitmap &= ~(WATERMARKS_LOADED);
 
-	/* skip CGPG when in S0ix */
-	if (smu->is_apu && !adev->in_s0ix)
-		smu_set_gfx_cgpg(&adev->smu, false);
+	smu_set_gfx_cgpg(&adev->smu, false);
 
 	return 0;
 }
@@ -1597,8 +1600,7 @@ static int smu_resume(void *handle)
 		return ret;
 	}
 
-	if (smu->is_apu)
-		smu_set_gfx_cgpg(&adev->smu, true);
+	smu_set_gfx_cgpg(&adev->smu, true);
 
 	smu->disable_uclk_switch = 0;
 
@@ -2344,9 +2346,10 @@ static int smu_set_power_limit(void *handle, uint32_t limit)
 
 	mutex_lock(&smu->mutex);
 
+	limit &= (1<<24)-1;
 	if (limit_type != SMU_DEFAULT_PPT_LIMIT)
 		if (smu->ppt_funcs->set_power_limit) {
-			ret = smu->ppt_funcs->set_power_limit(smu, limit);
+			ret = smu->ppt_funcs->set_power_limit(smu, limit_type, limit);
 			goto out;
 		}
 
@@ -2362,7 +2365,7 @@ static int smu_set_power_limit(void *handle, uint32_t limit)
 		limit = smu->current_power_limit;
 
 	if (smu->ppt_funcs->set_power_limit) {
-		ret = smu->ppt_funcs->set_power_limit(smu, limit);
+		ret = smu->ppt_funcs->set_power_limit(smu, limit_type, limit);
 		if (!ret && !(smu->user_dpm_profile.flags & SMU_DPM_USER_PROFILE_RESTORE))
 			smu->user_dpm_profile.power_limit = limit;
 	}
@@ -2529,13 +2532,15 @@ static int smu_get_power_profile_mode(void *handle, char *buf)
 	struct smu_context *smu = handle;
 	int ret = 0;
 
-	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
+	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled ||
+	    !smu->ppt_funcs->get_power_profile_mode)
 		return -EOPNOTSUPP;
+	if (!buf)
+		return -EINVAL;
 
 	mutex_lock(&smu->mutex);
 
-	if (smu->ppt_funcs->get_power_profile_mode)
-		ret = smu->ppt_funcs->get_power_profile_mode(smu, buf);
+	ret = smu->ppt_funcs->get_power_profile_mode(smu, buf);
 
 	mutex_unlock(&smu->mutex);
 
@@ -2549,7 +2554,8 @@ static int smu_set_power_profile_mode(void *handle,
 	struct smu_context *smu = handle;
 	int ret = 0;
 
-	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled)
+	if (!smu->pm_enabled || !smu->adev->pm.dpm_enabled ||
+	    !smu->ppt_funcs->set_power_profile_mode)
 		return -EOPNOTSUPP;
 
 	mutex_lock(&smu->mutex);
@@ -3064,6 +3070,20 @@ int smu_set_light_sbr(struct smu_context *smu, bool enable)
 	return ret;
 }
 
+int smu_get_ecc_info(struct smu_context *smu, void *umc_ecc)
+{
+	int ret = -EOPNOTSUPP;
+
+	mutex_lock(&smu->mutex);
+	if (smu->ppt_funcs &&
+		smu->ppt_funcs->get_ecc_info)
+		ret = smu->ppt_funcs->get_ecc_info(smu, umc_ecc);
+	mutex_unlock(&smu->mutex);
+
+	return ret;
+
+}
+
 static int smu_get_prv_buffer_details(void *handle, void **addr, size_t *size)
 {
 	struct smu_context *smu = handle;
@@ -3152,4 +3172,108 @@ int smu_wait_for_event(struct amdgpu_device *adev, enum smu_event_type event,
 	}
 
 	return ret;
+}
+
+int smu_stb_collect_info(struct smu_context *smu, void *buf, uint32_t size)
+{
+
+	if (!smu->ppt_funcs->stb_collect_info || !smu->stb_context.enabled)
+		return -EOPNOTSUPP;
+
+	/* Confirm the buffer allocated is of correct size */
+	if (size != smu->stb_context.stb_buf_size)
+		return -EINVAL;
+
+	/*
+	 * No need to lock smu mutex as we access STB directly through MMIO
+	 * and not going through SMU messaging route (for now at least).
+	 * For registers access rely on implementation internal locking.
+	 */
+	return smu->ppt_funcs->stb_collect_info(smu, buf, size);
+}
+
+#if defined(CONFIG_DEBUG_FS)
+
+static int smu_stb_debugfs_open(struct inode *inode, struct file *filp)
+{
+	struct amdgpu_device *adev = filp->f_inode->i_private;
+	struct smu_context *smu = &adev->smu;
+	unsigned char *buf;
+	int r;
+
+	buf = kvmalloc_array(smu->stb_context.stb_buf_size, sizeof(*buf), GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	r = smu_stb_collect_info(smu, buf, smu->stb_context.stb_buf_size);
+	if (r)
+		goto out;
+
+	filp->private_data = buf;
+
+	return 0;
+
+out:
+	kvfree(buf);
+	return r;
+}
+
+static ssize_t smu_stb_debugfs_read(struct file *filp, char __user *buf, size_t size,
+				loff_t *pos)
+{
+	struct amdgpu_device *adev = filp->f_inode->i_private;
+	struct smu_context *smu = &adev->smu;
+
+
+	if (!filp->private_data)
+		return -EINVAL;
+
+	return simple_read_from_buffer(buf,
+				       size,
+				       pos, filp->private_data,
+				       smu->stb_context.stb_buf_size);
+}
+
+static int smu_stb_debugfs_release(struct inode *inode, struct file *filp)
+{
+	kvfree(filp->private_data);
+	filp->private_data = NULL;
+
+	return 0;
+}
+
+/*
+ * We have to define not only read method but also
+ * open and release because .read takes up to PAGE_SIZE
+ * data each time so and so is invoked multiple times.
+ *  We allocate the STB buffer in .open and release it
+ *  in .release
+ */
+static const struct file_operations smu_stb_debugfs_fops = {
+	.owner = THIS_MODULE,
+	.open = smu_stb_debugfs_open,
+	.read = smu_stb_debugfs_read,
+	.release = smu_stb_debugfs_release,
+	.llseek = default_llseek,
+};
+
+#endif
+
+void amdgpu_smu_stb_debug_fs_init(struct amdgpu_device *adev)
+{
+#if defined(CONFIG_DEBUG_FS)
+
+	struct smu_context *smu = &adev->smu;
+
+	if (!smu->stb_context.stb_buf_size)
+		return;
+
+	debugfs_create_file_size("amdgpu_smu_stb_dump",
+			    S_IRUSR,
+			    adev_to_drm(adev)->primary->debugfs_root,
+			    adev,
+			    &smu_stb_debugfs_fops,
+			    smu->stb_context.stb_buf_size);
+#endif
+
 }
