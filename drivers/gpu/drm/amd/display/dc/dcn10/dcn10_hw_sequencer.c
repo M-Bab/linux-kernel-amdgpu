@@ -77,9 +77,9 @@
 #define PGFSM_POWER_ON 0
 #define PGFSM_POWER_OFF 2
 
-void print_microsec(struct dc_context *dc_ctx,
-	struct dc_log_buffer_ctx *log_ctx,
-	uint32_t ref_cycle)
+static void print_microsec(struct dc_context *dc_ctx,
+			   struct dc_log_buffer_ctx *log_ctx,
+			   uint32_t ref_cycle)
 {
 	const uint32_t ref_clk_mhz = dc_ctx->dc->res_pool->ref_clocks.dchub_ref_clock_inKhz / 1000;
 	static const unsigned int frac = 1000;
@@ -132,7 +132,8 @@ static void log_mpc_crc(struct dc *dc,
 		REG_READ(DPP_TOP0_DPP_CRC_VAL_B_A), REG_READ(DPP_TOP0_DPP_CRC_VAL_R_G));
 }
 
-void dcn10_log_hubbub_state(struct dc *dc, struct dc_log_buffer_ctx *log_ctx)
+static void dcn10_log_hubbub_state(struct dc *dc,
+				   struct dc_log_buffer_ctx *log_ctx)
 {
 	struct dc_context *dc_ctx = dc->ctx;
 	struct dcn_hubbub_wm wm;
@@ -231,7 +232,7 @@ static void dcn10_log_hubp_states(struct dc *dc, void *log_ctx)
 
 		if (!s->blank_en)
 			DTN_INFO("[%2d]:  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh"
-				"%  8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh"
+				"  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh"
 				"  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh  %8xh\n",
 				pool->hubps[i]->inst, dlg_regs->refcyc_h_blank_end, dlg_regs->dlg_vblank_end, dlg_regs->min_dst_y_next_start,
 				dlg_regs->refcyc_per_htotal, dlg_regs->refcyc_x_after_scaler, dlg_regs->dst_y_after_scaler,
@@ -1362,6 +1363,43 @@ void dcn10_init_pipes(struct dc *dc, struct dc_state *context)
 
 		tg->funcs->tg_init(tg);
 	}
+
+	/* Power gate DSCs */
+	if (hws->funcs.dsc_pg_control != NULL) {
+		uint32_t num_opps = 0;
+		uint32_t opp_id_src0 = OPP_ID_INVALID;
+		uint32_t opp_id_src1 = OPP_ID_INVALID;
+
+		// Step 1: To find out which OPTC is running & OPTC DSC is ON
+		for (i = 0; i < dc->res_pool->res_cap->num_timing_generator; i++) {
+			uint32_t optc_dsc_state = 0;
+			struct timing_generator *tg = dc->res_pool->timing_generators[i];
+
+			if (tg->funcs->is_tg_enabled(tg)) {
+				if (tg->funcs->get_dsc_status)
+					tg->funcs->get_dsc_status(tg, &optc_dsc_state);
+				// Only one OPTC with DSC is ON, so if we got one result, we would exit this block.
+				// non-zero value is DSC enabled
+				if (optc_dsc_state != 0) {
+					tg->funcs->get_optc_source(tg, &num_opps, &opp_id_src0, &opp_id_src1);
+					break;
+				}
+			}
+		}
+
+		// Step 2: To power down DSC but skip DSC  of running OPTC
+		for (i = 0; i < dc->res_pool->res_cap->num_dsc; i++) {
+			struct dcn_dsc_state s  = {0};
+
+			dc->res_pool->dscs[i]->funcs->dsc_read_state(dc->res_pool->dscs[i], &s);
+
+			if ((s.dsc_opp_source == opp_id_src0 || s.dsc_opp_source == opp_id_src1) &&
+				s.dsc_clock_en && s.dsc_fw_en)
+				continue;
+
+			hws->funcs.dsc_pg_control(hws, dc->res_pool->dscs[i]->inst, false);
+		}
+	}
 }
 
 void dcn10_init_hw(struct dc *dc)
@@ -1377,6 +1415,12 @@ void dcn10_init_hw(struct dc *dc)
 
 	if (dc->clk_mgr && dc->clk_mgr->funcs->init_clocks)
 		dc->clk_mgr->funcs->init_clocks(dc->clk_mgr);
+
+	/* Align bw context with hw config when system resume. */
+	if (dc->clk_mgr->clks.dispclk_khz != 0 && dc->clk_mgr->clks.dppclk_khz != 0) {
+		dc->current_state->bw_ctx.bw.dcn.clk.dispclk_khz = dc->clk_mgr->clks.dispclk_khz;
+		dc->current_state->bw_ctx.bw.dcn.clk.dppclk_khz = dc->clk_mgr->clks.dppclk_khz;
+	}
 
 	// Initialize the dccg
 	if (dc->res_pool->dccg && dc->res_pool->dccg->funcs->dccg_init)
@@ -1463,7 +1507,7 @@ void dcn10_init_hw(struct dc *dc)
 
 	/* we want to turn off all dp displays before doing detection */
 	if (dc->config.power_down_display_on_boot)
-		blank_all_dp_displays(dc, true);
+		dc_link_blank_all_dp_displays(dc);
 
 	/* If taking control over from VBIOS, we may want to optimize our first
 	 * mode set, so we need to skip powering down pipes until we know which
@@ -1596,7 +1640,7 @@ void dcn10_reset_hw_ctx_wrap(
 
 			dcn10_reset_back_end_for_pipe(dc, pipe_ctx_old, dc->current_state);
 			if (hws->funcs.enable_stream_gating)
-				hws->funcs.enable_stream_gating(dc, pipe_ctx);
+				hws->funcs.enable_stream_gating(dc, pipe_ctx_old);
 			if (old_clk)
 				old_clk->funcs->cs_power_down(old_clk);
 		}
@@ -1929,10 +1973,9 @@ static bool wait_for_reset_trigger_to_occur(
 	return rc;
 }
 
-uint64_t reduceSizeAndFraction(
-	uint64_t *numerator,
-	uint64_t *denominator,
-	bool checkUint32Bounary)
+static uint64_t reduceSizeAndFraction(uint64_t *numerator,
+				      uint64_t *denominator,
+				      bool checkUint32Bounary)
 {
 	int i;
 	bool ret = checkUint32Bounary == false;
@@ -1980,7 +2023,7 @@ uint64_t reduceSizeAndFraction(
 	return ret;
 }
 
-bool is_low_refresh_rate(struct pipe_ctx *pipe)
+static bool is_low_refresh_rate(struct pipe_ctx *pipe)
 {
 	uint32_t master_pipe_refresh_rate =
 		pipe->stream->timing.pix_clk_100hz * 100 /
@@ -1989,7 +2032,8 @@ bool is_low_refresh_rate(struct pipe_ctx *pipe)
 	return master_pipe_refresh_rate <= 30;
 }
 
-uint8_t get_clock_divider(struct pipe_ctx *pipe, bool account_low_refresh_rate)
+static uint8_t get_clock_divider(struct pipe_ctx *pipe,
+				 bool account_low_refresh_rate)
 {
 	uint32_t clock_divider = 1;
 	uint32_t numpipes = 1;
@@ -2009,10 +2053,8 @@ uint8_t get_clock_divider(struct pipe_ctx *pipe, bool account_low_refresh_rate)
 	return clock_divider;
 }
 
-int dcn10_align_pixel_clocks(
-	struct dc *dc,
-	int group_size,
-	struct pipe_ctx *grouped_pipes[])
+static int dcn10_align_pixel_clocks(struct dc *dc, int group_size,
+				    struct pipe_ctx *grouped_pipes[])
 {
 	struct dc_context *dc_ctx = dc->ctx;
 	int i, master = -1, embedded = -1;
@@ -2301,11 +2343,11 @@ static void mmhub_read_vm_context0_settings(struct dcn10_hubp *hubp1,
 }
 
 
-void dcn10_program_pte_vm(struct dce_hwseq *hws, struct hubp *hubp)
+static void dcn10_program_pte_vm(struct dce_hwseq *hws, struct hubp *hubp)
 {
 	struct dcn10_hubp *hubp1 = TO_DCN10_HUBP(hubp);
-	struct vm_system_aperture_param apt = { {{ 0 } } };
-	struct vm_context0_param vm0 = { { { 0 } } };
+	struct vm_system_aperture_param apt = {0};
+	struct vm_context0_param vm0 = {0};
 
 	mmhub_read_vm_system_aperture_settings(hubp1, &apt, hws);
 	mmhub_read_vm_context0_settings(hubp1, &vm0, hws);
@@ -2478,7 +2520,7 @@ void dcn10_update_visual_confirm_color(struct dc *dc, struct pipe_ctx *pipe_ctx,
 void dcn10_update_mpcc(struct dc *dc, struct pipe_ctx *pipe_ctx)
 {
 	struct hubp *hubp = pipe_ctx->plane_res.hubp;
-	struct mpcc_blnd_cfg blnd_cfg = {{0}};
+	struct mpcc_blnd_cfg blnd_cfg = {0};
 	bool per_pixel_alpha = pipe_ctx->plane_state->per_pixel_alpha && pipe_ctx->bottom_pipe;
 	int mpcc_id;
 	struct mpcc *new_mpcc;
@@ -2583,7 +2625,7 @@ static void dcn10_update_dchubp_dpp(
 		/* new calculated dispclk, dppclk are stored in
 		 * context->bw_ctx.bw.dcn.clk.dispclk_khz / dppclk_khz. current
 		 * dispclk, dppclk are from dc->clk_mgr->clks.dispclk_khz.
-		 * dcn_validate_bandwidth compute new dispclk, dppclk.
+		 * dcn10_validate_bandwidth compute new dispclk, dppclk.
 		 * dispclk will put in use after optimize_bandwidth when
 		 * ramp_up_dispclk_with_dpp is called.
 		 * there are two places for dppclk be put in use. One location
@@ -2597,7 +2639,7 @@ static void dcn10_update_dchubp_dpp(
 		 * for example, eDP + external dp,  change resolution of DP from
 		 * 1920x1080x144hz to 1280x960x60hz.
 		 * before change: dispclk = 337889 dppclk = 337889
-		 * change mode, dcn_validate_bandwidth calculate
+		 * change mode, dcn10_validate_bandwidth calculate
 		 *                dispclk = 143122 dppclk = 143122
 		 * update_dchubp_dpp be executed before dispclk be updated,
 		 * dispclk = 337889, but dppclk use new value dispclk /2 =
@@ -3635,7 +3677,7 @@ void dcn10_setup_vupdate_interrupt(struct dc *dc, struct pipe_ctx *pipe_ctx)
 void dcn10_unblank_stream(struct pipe_ctx *pipe_ctx,
 		struct dc_link_settings *link_settings)
 {
-	struct encoder_unblank_param params = { { 0 } };
+	struct encoder_unblank_param params = {0};
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct dc_link *link = stream->link;
 	struct dce_hwseq *hws = link->dc->hwseq;

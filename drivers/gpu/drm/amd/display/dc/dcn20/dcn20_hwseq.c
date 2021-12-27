@@ -615,6 +615,11 @@ void dcn20_disable_plane(struct dc *dc, struct pipe_ctx *pipe_ctx)
 					pipe_ctx->pipe_idx);
 }
 
+void dcn20_disable_pixel_data(struct dc *dc, struct pipe_ctx *pipe_ctx, bool blank)
+{
+	dcn20_blank_pixel_data(dc, pipe_ctx, blank);
+}
+
 static int calc_mpc_flow_ctrl_cnt(const struct dc_stream_state *stream,
 		int opp_cnt)
 {
@@ -1080,10 +1085,8 @@ static void dcn20_power_on_plane(
 	}
 }
 
-void dcn20_enable_plane(
-	struct dc *dc,
-	struct pipe_ctx *pipe_ctx,
-	struct dc_state *context)
+static void dcn20_enable_plane(struct dc *dc, struct pipe_ctx *pipe_ctx,
+			       struct dc_state *context)
 {
 	//if (dc->debug.sanity_checks) {
 	//	dcn10_verify_allow_pstate_change_high(dc);
@@ -1842,6 +1845,11 @@ void dcn20_optimize_bandwidth(
 					dc->res_pool->ref_clocks.dchub_ref_clock_inKhz / 1000,
 					true);
 
+	if (dc->clk_mgr->dc_mode_softmax_enabled)
+		if (dc->clk_mgr->clks.dramclk_khz > dc->clk_mgr->bw_params->dc_mode_softmax_memclk * 1000 &&
+				context->bw_ctx.bw.dcn.clk.dramclk_khz <= dc->clk_mgr->bw_params->dc_mode_softmax_memclk * 1000)
+			dc->clk_mgr->funcs->set_max_memclk(dc->clk_mgr, dc->clk_mgr->bw_params->dc_mode_softmax_memclk);
+
 	dc->clk_mgr->funcs->update_clocks(
 			dc->clk_mgr,
 			context,
@@ -2123,7 +2131,7 @@ void dcn20_update_plane_addr(const struct dc *dc, struct pipe_ctx *pipe_ctx)
 void dcn20_unblank_stream(struct pipe_ctx *pipe_ctx,
 		struct dc_link_settings *link_settings)
 {
-	struct encoder_unblank_param params = { { 0 } };
+	struct encoder_unblank_param params = {0};
 	struct dc_stream_state *stream = pipe_ctx->stream;
 	struct dc_link *link = stream->link;
 	struct dce_hwseq *hws = link->dc->hwseq;
@@ -2270,7 +2278,7 @@ void dcn20_reset_hw_ctx_wrap(
 
 			dcn20_reset_back_end_for_pipe(dc, pipe_ctx_old, dc->current_state);
 			if (hws->funcs.enable_stream_gating)
-				hws->funcs.enable_stream_gating(dc, pipe_ctx);
+				hws->funcs.enable_stream_gating(dc, pipe_ctx_old);
 			if (old_clk)
 				old_clk->funcs->cs_power_down(old_clk);
 		}
@@ -2298,7 +2306,7 @@ void dcn20_update_visual_confirm_color(struct dc *dc, struct pipe_ctx *pipe_ctx,
 void dcn20_update_mpcc(struct dc *dc, struct pipe_ctx *pipe_ctx)
 {
 	struct hubp *hubp = pipe_ctx->plane_res.hubp;
-	struct mpcc_blnd_cfg blnd_cfg = { {0} };
+	struct mpcc_blnd_cfg blnd_cfg = {0};
 	bool per_pixel_alpha = pipe_ctx->plane_state->per_pixel_alpha;
 	int mpcc_id;
 	struct mpcc *new_mpcc;
@@ -2397,6 +2405,9 @@ void dcn20_enable_stream(struct pipe_ctx *pipe_ctx)
 	 * BY this, it is logic clean to separate stream and link
 	 */
 	if (is_dp_128b_132b_signal(pipe_ctx)) {
+		if (pipe_ctx->stream->ctx->dc->hwseq->funcs.setup_hpo_hw_control)
+			pipe_ctx->stream->ctx->dc->hwseq->funcs.setup_hpo_hw_control(
+				pipe_ctx->stream->ctx->dc->hwseq, true);
 		setup_dp_hpo_stream(pipe_ctx, true);
 		pipe_ctx->stream_res.hpo_dp_stream_enc->funcs->enable_stream(
 				pipe_ctx->stream_res.hpo_dp_stream_enc);

@@ -56,12 +56,15 @@
  * These are nbio v7_4_1 registers mask. Temporarily define these here since
  * nbio v7_4_1 header is incomplete.
  */
-#define GPU_HDP_FLUSH_DONE__RSVD_ENG0_MASK	0x00001000L
+#define GPU_HDP_FLUSH_DONE__RSVD_ENG0_MASK	0x00001000L /* Don't use.  Firmware uses this bit internally */
 #define GPU_HDP_FLUSH_DONE__RSVD_ENG1_MASK	0x00002000L
 #define GPU_HDP_FLUSH_DONE__RSVD_ENG2_MASK	0x00004000L
 #define GPU_HDP_FLUSH_DONE__RSVD_ENG3_MASK	0x00008000L
 #define GPU_HDP_FLUSH_DONE__RSVD_ENG4_MASK	0x00010000L
 #define GPU_HDP_FLUSH_DONE__RSVD_ENG5_MASK	0x00020000L
+#define GPU_HDP_FLUSH_DONE__RSVD_ENG6_MASK	0x00040000L
+#define GPU_HDP_FLUSH_DONE__RSVD_ENG7_MASK	0x00080000L
+#define GPU_HDP_FLUSH_DONE__RSVD_ENG8_MASK	0x00100000L
 
 #define mmBIF_MMSCH1_DOORBELL_RANGE                     0x01dc
 #define mmBIF_MMSCH1_DOORBELL_RANGE_BASE_IDX            2
@@ -334,17 +337,34 @@ const struct nbio_hdp_flush_reg nbio_v7_4_hdp_flush_reg = {
 	.ref_and_mask_cp9 = GPU_HDP_FLUSH_DONE__CP9_MASK,
 	.ref_and_mask_sdma0 = GPU_HDP_FLUSH_DONE__SDMA0_MASK,
 	.ref_and_mask_sdma1 = GPU_HDP_FLUSH_DONE__SDMA1_MASK,
-	.ref_and_mask_sdma2 = GPU_HDP_FLUSH_DONE__RSVD_ENG0_MASK,
-	.ref_and_mask_sdma3 = GPU_HDP_FLUSH_DONE__RSVD_ENG1_MASK,
-	.ref_and_mask_sdma4 = GPU_HDP_FLUSH_DONE__RSVD_ENG2_MASK,
-	.ref_and_mask_sdma5 = GPU_HDP_FLUSH_DONE__RSVD_ENG3_MASK,
-	.ref_and_mask_sdma6 = GPU_HDP_FLUSH_DONE__RSVD_ENG4_MASK,
-	.ref_and_mask_sdma7 = GPU_HDP_FLUSH_DONE__RSVD_ENG5_MASK,
+};
+
+const struct nbio_hdp_flush_reg nbio_v7_4_hdp_flush_reg_ald = {
+	.ref_and_mask_cp0 = GPU_HDP_FLUSH_DONE__CP0_MASK,
+	.ref_and_mask_cp1 = GPU_HDP_FLUSH_DONE__CP1_MASK,
+	.ref_and_mask_cp2 = GPU_HDP_FLUSH_DONE__CP2_MASK,
+	.ref_and_mask_cp3 = GPU_HDP_FLUSH_DONE__CP3_MASK,
+	.ref_and_mask_cp4 = GPU_HDP_FLUSH_DONE__CP4_MASK,
+	.ref_and_mask_cp5 = GPU_HDP_FLUSH_DONE__CP5_MASK,
+	.ref_and_mask_cp6 = GPU_HDP_FLUSH_DONE__CP6_MASK,
+	.ref_and_mask_cp7 = GPU_HDP_FLUSH_DONE__CP7_MASK,
+	.ref_and_mask_cp8 = GPU_HDP_FLUSH_DONE__CP8_MASK,
+	.ref_and_mask_cp9 = GPU_HDP_FLUSH_DONE__CP9_MASK,
+	.ref_and_mask_sdma0 = GPU_HDP_FLUSH_DONE__RSVD_ENG1_MASK,
+	.ref_and_mask_sdma1 = GPU_HDP_FLUSH_DONE__RSVD_ENG2_MASK,
+	.ref_and_mask_sdma2 = GPU_HDP_FLUSH_DONE__RSVD_ENG3_MASK,
+	.ref_and_mask_sdma3 = GPU_HDP_FLUSH_DONE__RSVD_ENG4_MASK,
+	.ref_and_mask_sdma4 = GPU_HDP_FLUSH_DONE__RSVD_ENG5_MASK,
+	.ref_and_mask_sdma5 = GPU_HDP_FLUSH_DONE__RSVD_ENG6_MASK,
+	.ref_and_mask_sdma6 = GPU_HDP_FLUSH_DONE__RSVD_ENG7_MASK,
+	.ref_and_mask_sdma7 = GPU_HDP_FLUSH_DONE__RSVD_ENG8_MASK,
 };
 
 static void nbio_v7_4_init_registers(struct amdgpu_device *adev)
 {
-
+	if (amdgpu_sriov_vf(adev))
+		adev->rmmio_remap.reg_offset = SOC15_REG_OFFSET(NBIO, 0,
+			mmBIF_BX_DEV0_EPF0_VF0_HDP_MEM_COHERENCY_FLUSH_CNTL) << 2;
 }
 
 static void nbio_v7_4_handle_ras_controller_intr_no_bifring(struct amdgpu_device *adev)
@@ -673,6 +693,9 @@ static void nbio_v7_4_program_ltr(struct amdgpu_device *adev)
 static void nbio_v7_4_program_aspm(struct amdgpu_device *adev)
 {
 	uint32_t def, data;
+
+	if (adev->ip_versions[NBIO_HWIP][0] == IP_VERSION(7, 4, 4))
+		return;
 
 	def = data = RREG32_PCIE(smnPCIE_LC_CNTL);
 	data &= ~PCIE_LC_CNTL__LC_L1_INACTIVITY_MASK;

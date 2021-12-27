@@ -112,7 +112,12 @@ static bool amdgpu_ras_check_bad_page_unlock(struct amdgpu_ras *con,
 static bool amdgpu_ras_check_bad_page(struct amdgpu_device *adev,
 				uint64_t addr);
 #ifdef CONFIG_X86_MCE_AMD
-static void amdgpu_register_bad_pages_mca_notifier(void);
+static void amdgpu_register_bad_pages_mca_notifier(struct amdgpu_device *adev);
+struct mce_notifier_adev_list {
+	struct amdgpu_device *devs[MAX_GPU_INSTANCE];
+	int num_gpu;
+};
+static struct mce_notifier_adev_list mce_adev_list;
 #endif
 
 void amdgpu_ras_set_error_query_ready(struct amdgpu_device *adev, bool ready)
@@ -862,9 +867,9 @@ static int amdgpu_ras_enable_all_features(struct amdgpu_device *adev,
 /* feature ctl end */
 
 
-void amdgpu_ras_mca_query_error_status(struct amdgpu_device *adev,
-				       struct ras_common_if *ras_block,
-				       struct ras_err_data  *err_data)
+static void amdgpu_ras_mca_query_error_status(struct amdgpu_device *adev,
+					      struct ras_common_if *ras_block,
+					      struct ras_err_data  *err_data)
 {
 	switch (ras_block->sub_block_index) {
 	case AMDGPU_RAS_MCA_BLOCK__MP0:
@@ -887,6 +892,38 @@ void amdgpu_ras_mca_query_error_status(struct amdgpu_device *adev,
 	}
 }
 
+static void amdgpu_ras_get_ecc_info(struct amdgpu_device *adev, struct ras_err_data *err_data)
+{
+	struct amdgpu_ras *ras = amdgpu_ras_get_context(adev);
+	int ret = 0;
+
+	/*
+	 * choosing right query method according to
+	 * whether smu support query error information
+	 */
+	ret = smu_get_ecc_info(&adev->smu, (void *)&(ras->umc_ecc));
+	if (ret == -EOPNOTSUPP) {
+		if (adev->umc.ras_funcs &&
+			adev->umc.ras_funcs->query_ras_error_count)
+			adev->umc.ras_funcs->query_ras_error_count(adev, err_data);
+
+		/* umc query_ras_error_address is also responsible for clearing
+		 * error status
+		 */
+		if (adev->umc.ras_funcs &&
+		    adev->umc.ras_funcs->query_ras_error_address)
+			adev->umc.ras_funcs->query_ras_error_address(adev, err_data);
+	} else if (!ret) {
+		if (adev->umc.ras_funcs &&
+			adev->umc.ras_funcs->ecc_info_query_ras_error_count)
+			adev->umc.ras_funcs->ecc_info_query_ras_error_count(adev, err_data);
+
+		if (adev->umc.ras_funcs &&
+			adev->umc.ras_funcs->ecc_info_query_ras_error_address)
+			adev->umc.ras_funcs->ecc_info_query_ras_error_address(adev, err_data);
+	}
+}
+
 /* query/inject/cure begin */
 int amdgpu_ras_query_error_status(struct amdgpu_device *adev,
 				  struct ras_query_if *info)
@@ -900,15 +937,7 @@ int amdgpu_ras_query_error_status(struct amdgpu_device *adev,
 
 	switch (info->head.block) {
 	case AMDGPU_RAS_BLOCK__UMC:
-		if (adev->umc.ras_funcs &&
-		    adev->umc.ras_funcs->query_ras_error_count)
-			adev->umc.ras_funcs->query_ras_error_count(adev, &err_data);
-		/* umc query_ras_error_address is also responsible for clearing
-		 * error status
-		 */
-		if (adev->umc.ras_funcs &&
-		    adev->umc.ras_funcs->query_ras_error_address)
-			adev->umc.ras_funcs->query_ras_error_address(adev, &err_data);
+		amdgpu_ras_get_ecc_info(adev, &err_data);
 		break;
 	case AMDGPU_RAS_BLOCK__SDMA:
 		if (adev->sdma.funcs->query_ras_error_count) {
@@ -1132,9 +1161,9 @@ int amdgpu_ras_error_inject(struct amdgpu_device *adev,
 
 /**
  * amdgpu_ras_query_error_count -- Get error counts of all IPs
- * adev: pointer to AMD GPU device
- * ce_count: pointer to an integer to be set to the count of correctible errors.
- * ue_count: pointer to an integer to be set to the count of uncorrectible
+ * @adev: pointer to AMD GPU device
+ * @ce_count: pointer to an integer to be set to the count of correctible errors.
+ * @ue_count: pointer to an integer to be set to the count of uncorrectible
  * errors.
  *
  * If set, @ce_count or @ue_count, count and return the corresponding
@@ -1718,6 +1747,16 @@ static void amdgpu_ras_log_on_err_counter(struct amdgpu_device *adev)
 		if (info.head.block == AMDGPU_RAS_BLOCK__PCIE_BIF)
 			continue;
 
+		/*
+		 * this is a workaround for aldebaran, skip send msg to
+		 * smu to get ecc_info table due to smu handle get ecc
+		 * info table failed temporarily.
+		 * should be removed until smu fix handle ecc_info table.
+		 */
+		if ((info.head.block == AMDGPU_RAS_BLOCK__UMC) &&
+			(adev->ip_versions[MP1_HWIP][0] == IP_VERSION(13, 0, 2)))
+			continue;
+
 		amdgpu_ras_query_error_status(adev, &info);
 	}
 }
@@ -1930,9 +1969,11 @@ int amdgpu_ras_save_bad_pages(struct amdgpu_device *adev)
 	if (!con || !con->eh_data)
 		return 0;
 
+	mutex_lock(&con->recovery_lock);
 	control = &con->eeprom_control;
 	data = con->eh_data;
 	save_count = data->count - control->ras_num_recs;
+	mutex_unlock(&con->recovery_lock);
 	/* only new entries are saved */
 	if (save_count > 0) {
 		if (amdgpu_ras_eeprom_append(control,
@@ -2108,7 +2149,7 @@ int amdgpu_ras_recovery_init(struct amdgpu_device *adev)
 #ifdef CONFIG_X86_MCE_AMD
 	if ((adev->asic_type == CHIP_ALDEBARAN) &&
 	    (adev->gmc.xgmi.connected_to_cpu))
-		amdgpu_register_bad_pages_mca_notifier();
+		amdgpu_register_bad_pages_mca_notifier(adev);
 #endif
 	return 0;
 
@@ -2331,7 +2372,11 @@ int amdgpu_ras_init(struct amdgpu_device *adev)
 	}
 
 	/* Init poison supported flag, the default value is false */
-	if (adev->df.funcs &&
+	if (adev->gmc.xgmi.connected_to_cpu) {
+		/* enabled by default when GPU is connected to CPU */
+		con->poison_supported = true;
+	}
+	else if (adev->df.funcs &&
 	    adev->df.funcs->query_ras_poison_mode &&
 	    adev->umc.ras_funcs &&
 	    adev->umc.ras_funcs->query_ras_poison_mode) {
@@ -2472,7 +2517,6 @@ void amdgpu_ras_late_fini(struct amdgpu_device *adev,
 	amdgpu_ras_sysfs_remove(adev, ras_block);
 	if (ih_info->cb)
 		amdgpu_ras_interrupt_remove_handler(adev, ih_info);
-	amdgpu_ras_feature_enable(adev, ras_block, 0);
 }
 
 /* do some init work after IP late init as dependence.
@@ -2605,23 +2649,17 @@ void amdgpu_release_ras_context(struct amdgpu_device *adev)
 #ifdef CONFIG_X86_MCE_AMD
 static struct amdgpu_device *find_adev(uint32_t node_id)
 {
-	struct amdgpu_gpu_instance *gpu_instance;
 	int i;
 	struct amdgpu_device *adev = NULL;
 
-	mutex_lock(&mgpu_info.mutex);
+	for (i = 0; i < mce_adev_list.num_gpu; i++) {
+		adev = mce_adev_list.devs[i];
 
-	for (i = 0; i < mgpu_info.num_gpu; i++) {
-		gpu_instance = &(mgpu_info.gpu_ins[i]);
-		adev = gpu_instance->adev;
-
-		if (adev->gmc.xgmi.connected_to_cpu &&
+		if (adev && adev->gmc.xgmi.connected_to_cpu &&
 		    adev->gmc.xgmi.physical_node_id == node_id)
 			break;
 		adev = NULL;
 	}
-
-	mutex_unlock(&mgpu_info.mutex);
 
 	return adev;
 }
@@ -2718,8 +2756,18 @@ static struct notifier_block amdgpu_bad_page_nb = {
 	.priority       = MCE_PRIO_UC,
 };
 
-static void amdgpu_register_bad_pages_mca_notifier(void)
+static void amdgpu_register_bad_pages_mca_notifier(struct amdgpu_device *adev)
 {
+	/*
+	 * Add the adev to the mce_adev_list.
+	 * During mode2 reset, amdgpu device is temporarily
+	 * removed from the mgpu_info list which can cause
+	 * page retirement to fail.
+	 * Use this list instead of mgpu_info to find the amdgpu
+	 * device on which the UMC error was reported.
+	 */
+	mce_adev_list.devs[mce_adev_list.num_gpu++] = adev;
+
 	/*
 	 * Register the x86 notifier only once
 	 * with MCE subsystem.

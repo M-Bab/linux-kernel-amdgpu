@@ -744,7 +744,7 @@ static void soc15_reg_base_init(struct amdgpu_device *adev)
 		vega10_reg_base_init(adev);
 		break;
 	case CHIP_RENOIR:
-		/* It's safe to do ip discovery here for Renior,
+		/* It's safe to do ip discovery here for Renoir,
 		 * it doesn't support SRIOV. */
 		if (amdgpu_discovery) {
 			r = amdgpu_discovery_reg_base_init(adev);
@@ -778,185 +778,6 @@ void soc15_set_virt_ops(struct amdgpu_device *adev)
 	 * request request full access for sriov before
 	 * set_ip_blocks. */
 	soc15_reg_base_init(adev);
-}
-
-int soc15_set_ip_blocks(struct amdgpu_device *adev)
-{
-	/* for bare metal case */
-	if (!amdgpu_sriov_vf(adev))
-		soc15_reg_base_init(adev);
-
-	if (adev->flags & AMD_IS_APU) {
-		adev->nbio.funcs = &nbio_v7_0_funcs;
-		adev->nbio.hdp_flush_reg = &nbio_v7_0_hdp_flush_reg;
-	} else if (adev->asic_type == CHIP_VEGA20 ||
-		   adev->asic_type == CHIP_ARCTURUS ||
-		   adev->asic_type == CHIP_ALDEBARAN) {
-		adev->nbio.funcs = &nbio_v7_4_funcs;
-		adev->nbio.hdp_flush_reg = &nbio_v7_4_hdp_flush_reg;
-	} else {
-		adev->nbio.funcs = &nbio_v6_1_funcs;
-		adev->nbio.hdp_flush_reg = &nbio_v6_1_hdp_flush_reg;
-	}
-	adev->hdp.funcs = &hdp_v4_0_funcs;
-
-	if (adev->asic_type == CHIP_VEGA20 ||
-	    adev->asic_type == CHIP_ARCTURUS ||
-	    adev->asic_type == CHIP_ALDEBARAN)
-		adev->df.funcs = &df_v3_6_funcs;
-	else
-		adev->df.funcs = &df_v1_7_funcs;
-
-	if (adev->asic_type == CHIP_VEGA20 ||
-	    adev->asic_type == CHIP_ARCTURUS)
-		adev->smuio.funcs = &smuio_v11_0_funcs;
-	else if (adev->asic_type == CHIP_ALDEBARAN)
-		adev->smuio.funcs = &smuio_v13_0_funcs;
-	else
-		adev->smuio.funcs = &smuio_v9_0_funcs;
-
-	adev->rev_id = soc15_get_rev_id(adev);
-
-	switch (adev->asic_type) {
-	case CHIP_VEGA10:
-	case CHIP_VEGA12:
-	case CHIP_VEGA20:
-		amdgpu_device_ip_block_add(adev, &vega10_common_ip_block);
-		amdgpu_device_ip_block_add(adev, &gmc_v9_0_ip_block);
-
-		/* For Vega10 SR-IOV, PSP need to be initialized before IH */
-		if (amdgpu_sriov_vf(adev)) {
-			if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP)) {
-				if (adev->asic_type == CHIP_VEGA20)
-					amdgpu_device_ip_block_add(adev, &psp_v11_0_ip_block);
-				else
-					amdgpu_device_ip_block_add(adev, &psp_v3_1_ip_block);
-			}
-			if (adev->asic_type == CHIP_VEGA20)
-				amdgpu_device_ip_block_add(adev, &vega20_ih_ip_block);
-			else
-				amdgpu_device_ip_block_add(adev, &vega10_ih_ip_block);
-		} else {
-			if (adev->asic_type == CHIP_VEGA20)
-				amdgpu_device_ip_block_add(adev, &vega20_ih_ip_block);
-			else
-				amdgpu_device_ip_block_add(adev, &vega10_ih_ip_block);
-			if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP)) {
-				if (adev->asic_type == CHIP_VEGA20)
-					amdgpu_device_ip_block_add(adev, &psp_v11_0_ip_block);
-				else
-					amdgpu_device_ip_block_add(adev, &psp_v3_1_ip_block);
-			}
-		}
-		amdgpu_device_ip_block_add(adev, &gfx_v9_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &sdma_v4_0_ip_block);
-		if (is_support_sw_smu(adev)) {
-			if (!amdgpu_sriov_vf(adev))
-				amdgpu_device_ip_block_add(adev, &smu_v11_0_ip_block);
-		} else {
-			amdgpu_device_ip_block_add(adev, &pp_smu_ip_block);
-		}
-		if (adev->enable_virtual_display || amdgpu_sriov_vf(adev))
-			amdgpu_device_ip_block_add(adev, &amdgpu_vkms_ip_block);
-#if defined(CONFIG_DRM_AMD_DC)
-		else if (amdgpu_device_has_dc_support(adev))
-			amdgpu_device_ip_block_add(adev, &dm_ip_block);
-#endif
-		if (!(adev->asic_type == CHIP_VEGA20 && amdgpu_sriov_vf(adev))) {
-			amdgpu_device_ip_block_add(adev, &uvd_v7_0_ip_block);
-			amdgpu_device_ip_block_add(adev, &vce_v4_0_ip_block);
-		}
-		break;
-	case CHIP_RAVEN:
-		amdgpu_device_ip_block_add(adev, &vega10_common_ip_block);
-		amdgpu_device_ip_block_add(adev, &gmc_v9_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &vega10_ih_ip_block);
-		if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
-			amdgpu_device_ip_block_add(adev, &psp_v10_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &gfx_v9_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &sdma_v4_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &pp_smu_ip_block);
-		if (adev->enable_virtual_display || amdgpu_sriov_vf(adev))
-			amdgpu_device_ip_block_add(adev, &amdgpu_vkms_ip_block);
-#if defined(CONFIG_DRM_AMD_DC)
-		else if (amdgpu_device_has_dc_support(adev))
-			amdgpu_device_ip_block_add(adev, &dm_ip_block);
-#endif
-		amdgpu_device_ip_block_add(adev, &vcn_v1_0_ip_block);
-		break;
-	case CHIP_ARCTURUS:
-		amdgpu_device_ip_block_add(adev, &vega10_common_ip_block);
-		amdgpu_device_ip_block_add(adev, &gmc_v9_0_ip_block);
-
-		if (amdgpu_sriov_vf(adev)) {
-			if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
-				amdgpu_device_ip_block_add(adev, &psp_v11_0_ip_block);
-			amdgpu_device_ip_block_add(adev, &vega20_ih_ip_block);
-		} else {
-			amdgpu_device_ip_block_add(adev, &vega20_ih_ip_block);
-			if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
-				amdgpu_device_ip_block_add(adev, &psp_v11_0_ip_block);
-		}
-
-		if (adev->enable_virtual_display || amdgpu_sriov_vf(adev))
-			amdgpu_device_ip_block_add(adev, &amdgpu_vkms_ip_block);
-		amdgpu_device_ip_block_add(adev, &gfx_v9_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &sdma_v4_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &smu_v11_0_ip_block);
-
-		if (amdgpu_sriov_vf(adev)) {
-			if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
-				amdgpu_device_ip_block_add(adev, &vcn_v2_5_ip_block);
-		} else {
-			amdgpu_device_ip_block_add(adev, &vcn_v2_5_ip_block);
-		}
-		if (!amdgpu_sriov_vf(adev))
-			amdgpu_device_ip_block_add(adev, &jpeg_v2_5_ip_block);
-		break;
-	case CHIP_RENOIR:
-		amdgpu_device_ip_block_add(adev, &vega10_common_ip_block);
-		amdgpu_device_ip_block_add(adev, &gmc_v9_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &vega10_ih_ip_block);
-		if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
-			amdgpu_device_ip_block_add(adev, &psp_v12_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &smu_v12_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &gfx_v9_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &sdma_v4_0_ip_block);
-		if (adev->enable_virtual_display || amdgpu_sriov_vf(adev))
-			amdgpu_device_ip_block_add(adev, &amdgpu_vkms_ip_block);
-#if defined(CONFIG_DRM_AMD_DC)
-                else if (amdgpu_device_has_dc_support(adev))
-			amdgpu_device_ip_block_add(adev, &dm_ip_block);
-#endif
-		amdgpu_device_ip_block_add(adev, &vcn_v2_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &jpeg_v2_0_ip_block);
-		break;
-	case CHIP_ALDEBARAN:
-		amdgpu_device_ip_block_add(adev, &vega10_common_ip_block);
-		amdgpu_device_ip_block_add(adev, &gmc_v9_0_ip_block);
-
-		if (amdgpu_sriov_vf(adev)) {
-			if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
-				amdgpu_device_ip_block_add(adev, &psp_v13_0_ip_block);
-			amdgpu_device_ip_block_add(adev, &vega20_ih_ip_block);
-		} else {
-			amdgpu_device_ip_block_add(adev, &vega20_ih_ip_block);
-			if (likely(adev->firmware.load_type == AMDGPU_FW_LOAD_PSP))
-				amdgpu_device_ip_block_add(adev, &psp_v13_0_ip_block);
-		}
-
-		amdgpu_device_ip_block_add(adev, &gfx_v9_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &sdma_v4_0_ip_block);
-
-		amdgpu_device_ip_block_add(adev, &smu_v13_0_ip_block);
-		amdgpu_device_ip_block_add(adev, &vcn_v2_6_ip_block);
-		amdgpu_device_ip_block_add(adev, &jpeg_v2_6_ip_block);
-		break;
-	default:
-		return -EINVAL;
-	}
-
-	return 0;
 }
 
 static bool soc15_need_full_reset(struct amdgpu_device *adev)
@@ -1150,8 +971,10 @@ static int soc15_common_early_init(void *handle)
 #define MMIO_REG_HOLE_OFFSET (0x80000 - PAGE_SIZE)
 	struct amdgpu_device *adev = (struct amdgpu_device *)handle;
 
-	adev->rmmio_remap.reg_offset = MMIO_REG_HOLE_OFFSET;
-	adev->rmmio_remap.bus_addr = adev->rmmio_base + MMIO_REG_HOLE_OFFSET;
+	if (!amdgpu_sriov_vf(adev)) {
+		adev->rmmio_remap.reg_offset = MMIO_REG_HOLE_OFFSET;
+		adev->rmmio_remap.bus_addr = adev->rmmio_base + MMIO_REG_HOLE_OFFSET;
+	}
 	adev->smc_rreg = NULL;
 	adev->smc_wreg = NULL;
 	adev->pcie_rreg = &soc15_pcie_rreg;
@@ -1415,7 +1238,9 @@ static int soc15_common_sw_init(void *handle)
 	if (amdgpu_sriov_vf(adev))
 		xgpu_ai_mailbox_add_irq_id(adev);
 
-	adev->df.funcs->sw_init(adev);
+	if (adev->df.funcs &&
+	    adev->df.funcs->sw_init)
+		adev->df.funcs->sw_init(adev);
 
 	return 0;
 }
@@ -1427,7 +1252,10 @@ static int soc15_common_sw_fini(void *handle)
 	if (adev->nbio.ras_funcs &&
 	    adev->nbio.ras_funcs->ras_fini)
 		adev->nbio.ras_funcs->ras_fini(adev);
-	adev->df.funcs->sw_fini(adev);
+
+	if (adev->df.funcs &&
+	    adev->df.funcs->sw_fini)
+		adev->df.funcs->sw_fini(adev);
 	return 0;
 }
 
@@ -1464,7 +1292,7 @@ static int soc15_common_hw_init(void *handle)
 	 * for the purpose of expose those registers
 	 * to process space
 	 */
-	if (adev->nbio.funcs->remap_hdp_registers)
+	if (adev->nbio.funcs->remap_hdp_registers && !amdgpu_sriov_vf(adev))
 		adev->nbio.funcs->remap_hdp_registers(adev);
 
 	/* enable the doorbell aperture */
